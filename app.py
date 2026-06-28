@@ -172,6 +172,24 @@ def healthz():
     return "ok", 200
 
 
+# The Otlobly mark, served as the browser-tab icon (favicon) for every page.
+LOGO_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    '<rect width="100" height="100" rx="26" fill="#111"/>'
+    '<circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>'
+    '<circle cx="46" cy="52" r="6" fill="#fff"/>'
+    '<circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>'
+)
+
+
+@app.route("/favicon.svg")
+@app.route("/favicon.ico")
+def favicon():
+    resp = app.response_class(LOGO_SVG, mimetype="image/svg+xml")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @app.route("/logout")
 @login_required
 def logout():
