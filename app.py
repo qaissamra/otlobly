@@ -1107,17 +1107,19 @@ def api_track():
         po, pk = purchases.find_by_customer_tracking(pdb, q)
         if pk:
             pairs = [(po, pk)]
-    else:                                         # must be the customer's FULL mobile number
-        digits = re.sub(r"\D", "", q)
-        pin = normalize.normalize_phone(q)
-        if len(digits) < 9 or not pin:
+    else:                                         # the customer's FULL mobile number
+        # Match country-code-agnostically: 0599…, 970599…, 972599…, +9720599… all match
+        # (Palestinian numbers live under both +970 and +972). No partials, no name search.
+        core = normalize.phone_core(q)
+        if len(core) < 9:
             return jsonify({"found": False,
                             "error": "Please enter your full mobile number (e.g. 0599xxxxxx)."}), 400
-        for o in db.list_orders():               # exact match only — no partials, no name search
-            ph = store.primary_phone(o)
-            if ph and ph["e164"] == pin["e164"]:
-                names.add((o["customer"]["name"] or "").strip().lower())
-                oids.add(o["order_id"])
+        for o in db.list_orders():
+            for ph in (o.get("customer", {}).get("phones") or []):
+                if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
+                    names.add((o["customer"]["name"] or "").strip().lower())
+                    oids.add(o["order_id"])
+                    break
         pairs = purchases.find_packages_for(pdb, names, oids)
     # de-dupe + cap
     seen, uniq = set(), []

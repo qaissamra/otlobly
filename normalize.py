@@ -143,6 +143,20 @@ def _join(base, loc):
     return urlunsplit((b.scheme, b.netloc, loc, "", ""))
 
 
+def phone_core(raw):
+    """Reduce a phone to its national subscriber digits for country-code-agnostic
+    matching: drop the +970/+972 (Palestine/Israel) prefix and any leading zero,
+    so 0599…, 970599…, 972599…, +9720599… all collapse to the same 9-digit core."""
+    d = re.sub(r"\D", "", ascii_digits(str(raw or "")))
+    if d.startswith("00"):
+        d = d[2:]
+    for cc in ("970", "972"):
+        if d.startswith(cc):
+            d = d[len(cc):]
+            break
+    return d.lstrip("0")
+
+
 def clean_amazon_url(url, expand=False):
     """Return a canonical https://www.amazon.com/dp/<ASIN> URL when an ASIN can
     be found, else a junk-stripped version of the original.
