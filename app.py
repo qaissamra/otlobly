@@ -1079,8 +1079,10 @@ def api_track():
     for po, pk in uniq:
         otl = pk.get("customer_tracking")
         gwd = (pk.get("tracking_number") or "").strip()
-        items = [(it.get("title") or it.get("asin") or "").strip()
-                 for it in pk.get("items", []) if (it.get("title") or it.get("asin"))][:3]
+        items = [{"title": (it.get("title") or it.get("asin") or "").strip(),
+                  "image": it.get("image") or None}
+                 for it in pk.get("items", [])
+                 if (it.get("title") or it.get("asin") or it.get("image"))][:4]
         if not gwd:
             shipments.append({"tracking": otl, "items": items, "events": [],
                               "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}})

@@ -39,7 +39,9 @@
   .foot{margin-top:16px;color:var(--muted);font-size:11.5px;text-align:center}
   .multi{font-weight:800;font-size:14px;margin-bottom:12px}
   .ship + .ship{margin-top:18px;border-top:1px dashed var(--line);padding-top:18px}
-  .items{color:var(--muted);font-size:12.5px;margin:9px 0 0;line-height:1.4}
+  .items{margin:10px 0 0;display:flex;flex-direction:column;gap:8px}
+  .prod{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink)}
+  .prod img,.prod .ph{width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f1efe8;border:1px solid var(--line);flex:none}
 </style>
 <div class="card">
   <div class="brand">
@@ -64,7 +66,10 @@ function fmt(s){ if(!s) return ""; const d=new Date(s); if(isNaN(d)) return s;
 function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function shipmentCard(s){
   const cur=s.current||{};
-  const items=(s.items||[]).length?`<div class="items" dir="auto">${s.items.map(esc).join(' · ')}</div>`:'';
+  const items=(s.items||[]).length?`<div class="items">${s.items.map(it=>{
+      const t=(typeof it==='string')?it:(it.title||''); const img=(typeof it==='object')?it.image:null;
+      return `<div class="prod">${img?`<img src="${esc(img)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(t)}</span></div>`;
+    }).join("")}</div>`:'';
   const tnum=s.tracking?`<div class="tnum">رقم التتبّع · ${esc(s.tracking)}</div>`:'';
   const eta=s.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(s.est_delivery).split(' · ')[0]}</b></div>`:'';
   const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
