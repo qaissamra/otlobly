@@ -29,23 +29,26 @@ CODE_LABEL = {
     "D1": ("Delivered", "delivered"),
 }
 
-# CUSTOMER-FACING default map: GAASH code OR status text → friendly label + colour.
-# Deliberately vague where the internal status is operational (e.g. "needs ID" →
-# "In clearance"). Editable from the admin Settings table; anything unmatched falls
-# back to DEFAULT_CUSTOMER_LABEL so customers never see raw internal text.
+# CUSTOMER-FACING default map (Arabic): match by GAASH status TEXT first (reliable),
+# then code. The customs/authority steps all read "in clearance" so the customer is
+# never shown the internal detail (e.g. "Required customer ID"). GAASH's codes are
+# reused/ambiguous (AJ was wrongly "out for delivery"), so TEXT wins. Editable from
+# the admin Settings table; anything unmatched falls back to DEFAULT_CUSTOMER_LABEL.
 DEFAULT_STATUS_MAP = [
-    {"match": "VM", "label": "On its way to your country", "bucket": "transit"},
-    {"match": "K3", "label": "Arrived in your country", "bucket": "arrived"},
-    {"match": "CD", "label": "In clearance", "bucket": "customs"},
-    {"match": "K2", "label": "Customs cleared", "bucket": "cleared"},
-    {"match": "AJ", "label": "Out for delivery", "bucket": "transit"},
-    {"match": "D1", "label": "Delivered", "bucket": "delivered"},
-    {"match": "MOC - Palestinian authority", "label": "In customs", "bucket": "customs"},
-    {"match": "Required customer ID", "label": "In clearance", "bucket": "customs"},
-    {"match": "Cleared customs", "label": "Customs cleared", "bucket": "cleared"},
-    {"match": "Delivered", "label": "Delivered", "bucket": "delivered"},
+    # the real statuses seen on this account (exact text)
+    {"match": "Parcel is on the way to destination country", "label": "في الطريق إلى بلدك", "bucket": "transit"},
+    {"match": "Required customer ID", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    {"match": "MOC - Palestinian authority", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    {"match": "Ministry of Transportation", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    {"match": "Ministry of Communications", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    {"match": "Cleared customs", "label": "تم التخليص الجمركي", "bucket": "cleared"},
+    {"match": "Delivered", "label": "تم التسليم", "bucket": "delivered"},
+    # reliable code fallbacks for stages this account hasn't reached yet
+    {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "arrived"},
+    {"match": "K2", "label": "تم التخليص الجمركي", "bucket": "cleared"},
+    {"match": "D1", "label": "تم التسليم", "bucket": "delivered"},
 ]
-DEFAULT_CUSTOMER_LABEL = "In transit"
+DEFAULT_CUSTOMER_LABEL = "قيد الشحن"
 
 
 def get_session():
@@ -128,13 +131,20 @@ def timeline(tn, lang="en"):
 
 
 def _match_row(ev, status_map):
-    """First map row matching the event by its code OR its text (case-insensitive)."""
+    """Best map row for an event. EXACT TEXT match wins (GAASH's codes are reused
+    and unreliable); the code is only a fallback."""
     code = (ev.get("code") or "").strip().upper()
     text = (ev.get("text") or "").strip().lower()
-    for row in status_map:
-        m = (row.get("match") or "").strip()
-        if m and ((code and m.upper() == code) or (text and m.lower() == text)):
-            return row
+    if text:
+        for row in status_map:
+            m = (row.get("match") or "").strip()
+            if m and m.lower() == text:
+                return row
+    if code:
+        for row in status_map:
+            m = (row.get("match") or "").strip()
+            if m and m.upper() == code:
+                return row
     return None
 
 

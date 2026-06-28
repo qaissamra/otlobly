@@ -71,10 +71,10 @@ async function track(){
   const tnum=`<div class="tnum">رقم التتبّع · ${d.tracking||tn}</div>`;
   const eta=d.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(d.est_delivery).split(' · ')[0]}</b></div>`:'';
   const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
-      <div><div class="big">${cur.label||'In transit'}</div><small>الحالة الحالية · current status</small></div></div>`;
+      <div><div class="big" dir="auto">${cur.label||'قيد الشحن'}</div><small>الحالة الحالية · current status</small></div></div>`;
   const evs=(d.events||[]).slice().reverse();   // newest first
   const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'} ${i===0?'cur':''}">
-      <span class="dot"></span><div class="body"><div class="lab">${e.label}</div>
+      <span class="dot"></span><div class="body"><div class="lab" dir="auto">${e.label}</div>
       <div class="when">${fmt(e.date)}</div></div></li>`).join("")}</ul>`:'';
   $("out").innerHTML=`<div class="result">${now}${tnum}${eta}${tl}</div>`;
 }
