@@ -29,6 +29,7 @@ from flask_limiter.util import get_remote_address
 import activity
 import amazon_import
 import auth
+import az
 import customers as cust_mod
 import db
 import estimate
@@ -158,6 +159,13 @@ def login():
             return redirect(url_for("index"))
         return render_template("login.html", error="Wrong username or password.")
     return render_template("login.html")
+
+
+@app.route("/healthz")
+def healthz():
+    """Always-200 health check for the host (independent of login/setup state) so
+    the platform never restart-loops while the app is mid-boot or has no admin yet."""
+    return "ok", 200
 
 
 @app.route("/logout")
@@ -362,6 +370,89 @@ def api_extract_asin():
         return jsonify({"error": "no url"}), 400
     clean = normalize.clean_amazon_url(url, expand=True)
     return jsonify({"asin": normalize.extract_asin(clean), "clean_url": clean})
+
+
+# ── Multilogin "AZ tool" bridge (the 🖥 profile popup + 🤖 auto-get-tracking) ──
+# These reach the LOCAL AZ tool on 127.0.0.1:8765, so they only do real work when
+# this app runs on the Mac next to Multilogin. On the server they return a clean
+# "not reachable" message (the frontend just shows it). Fulfillment-level action.
+def _az_user():
+    try:
+        return current_user.username
+    except Exception:
+        return None
+
+
+@app.route("/api/az/profile")
+@auth.require("edit_fulfillment")
+def api_az_profile():
+    fresh = request.args.get("fresh", "0") in ("1", "true", "yes")
+    return jsonify(az.profile_info(request.args.get("box", ""), force=fresh))
+
+
+@app.route("/api/az/rotate_status")
+@auth.require("edit_fulfillment")
+def api_az_rotate_status():
+    return jsonify(az.rotate_status(request.args.get("job_id", "")))
+
+
+@app.route("/api/az/track_fetch_status")
+@auth.require("edit_fulfillment")
+def api_az_track_fetch_status():
+    return jsonify(az.track_fetch_status(request.args.get("job_id", "")))
+
+
+@app.route("/api/az/ip", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_az_ip():
+    b = request.get_json(force=True, silent=True) or {}
+    return jsonify(az.check_ip(b.get("box", "")))
+
+
+@app.route("/api/az/launch", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_az_launch():
+    b = request.get_json(force=True, silent=True) or {}
+    res = az.launch(b.get("box", ""))
+    if res.get("ok"):
+        activity.log("set", "purchase", b.get("box", ""), "Profile " + b.get("box", ""),
+                     detail="started Multilogin profile", user=_az_user())
+    return jsonify(res)
+
+
+@app.route("/api/az/stop", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_az_stop():
+    b = request.get_json(force=True, silent=True) or {}
+    res = az.stop(b.get("box", ""))
+    if res.get("ok"):
+        activity.log("set", "purchase", b.get("box", ""), "Profile " + b.get("box", ""),
+                     detail="closed Multilogin profile", user=_az_user())
+    return jsonify(res)
+
+
+@app.route("/api/az/rotate", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_az_rotate():
+    b = request.get_json(force=True, silent=True) or {}
+    box = b.get("box", "")
+    res = az.rotate_start(box, b.get("target_risk", 25), b.get("max_tries", 8))
+    if res.get("job_id"):
+        activity.log("set", "purchase", box, "Profile " + box,
+                     detail="rotating IP", user=_az_user())
+    return jsonify(res)
+
+
+@app.route("/api/az/track_fetch", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_az_track_fetch():
+    b = request.get_json(force=True, silent=True) or {}
+    box = b.get("box", "")
+    res = az.track_fetch_start(box, b.get("items", []), b.get("max_items", 12))
+    if res.get("job_id"):
+        activity.log("set", "purchase", box, "Profile " + box,
+                     detail="auto-fetching Amazon tracking", user=_az_user())
+    return jsonify(res)
 
 
 @app.route("/api/message")
