@@ -11,6 +11,7 @@ to the customer order that requested it, by ASIN.
 
 import argparse
 import json
+import random
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -200,6 +201,51 @@ def find(db, po_id):
     return next((p for p in db["purchase_orders"] if p["po_id"] == po_id), None)
 
 
+def _all_customer_tracking(db):
+    """Every OTL customer-tracking number currently in use (for uniqueness)."""
+    s = set()
+    for po in db.get("purchase_orders", []):
+        for pk in po.get("packages", []):
+            ct = (pk.get("customer_tracking") or "").strip().upper()
+            if ct:
+                s.add(ct)
+    return s
+
+
+def gen_customer_tracking(db):
+    """Mint a fresh, unique customer-facing tracking number 'OTL' + 6 digits
+    (distinct from the OTL-#### order ids — no dash)."""
+    used = _all_customer_tracking(db)
+    for _ in range(50):
+        n = "OTL" + "".join(random.choices("0123456789", k=6))
+        if n not in used:
+            return n
+    return "OTL" + uuid.uuid4().hex[:6].upper()
+
+
+def find_by_customer_tracking(db, otl):
+    """Resolve an OTL number → (po, package), or (None, None)."""
+    key = (otl or "").strip().upper()
+    if not key:
+        return None, None
+    for po in db.get("purchase_orders", []):
+        for pk in po.get("packages", []):
+            if (pk.get("customer_tracking") or "").strip().upper() == key:
+                return po, pk
+    return None, None
+
+
+def ensure_customer_tracking(db, po):
+    """Auto-mint an OTL number for every package that has a GWD but none yet.
+    Returns the number of packages newly numbered."""
+    n = 0
+    for pk in po.get("packages", []):
+        if (pk.get("tracking_number") or "").strip() and not (pk.get("customer_tracking") or "").strip():
+            pk["customer_tracking"] = gen_customer_tracking(db)
+            n += 1
+    return n
+
+
 def _norm_packages(packages):
     out = []
     for i, p in enumerate(packages or [], 1):
@@ -207,6 +253,7 @@ def _norm_packages(packages):
             "package_no": p.get("package_no") or i,
             "arrival": (p.get("arrival") or "").strip(),
             "tracking_number": (p.get("tracking_number") or "").strip() or None,
+            "customer_tracking": (p.get("customer_tracking") or "").strip().upper() or None,
             "tracking_status": p.get("tracking_status"),
             "items": [_norm_item(it) for it in p.get("items", [])],
         })
@@ -234,6 +281,7 @@ def save_full(db, po_dict, orders):
         "updated_at": now_iso(),
     }
     attach_matches(po, orders)
+    ensure_customer_tracking(db, po)   # auto-mint OTL numbers for newly-tracked packages
     if existing:
         db["purchase_orders"][db["purchase_orders"].index(existing)] = po
         return po, "updated"

@@ -58,6 +58,8 @@
   /* MISSING tracking # lights up red (live, via :placeholder-shown) — it's important. */
   .po-tbl .trk-cell:placeholder-shown,.pkg-head .trk-input:placeholder-shown{border-color:#dc2626;background:#fef2f2;box-shadow:0 0 0 2px rgba(220,38,38,.12)}
   .po-tbl .trk-cell::placeholder,.pkg-head .trk-input::placeholder{color:#dc2626;opacity:.8}
+  .ctk{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:11.5px}
+  .ctk b{font-size:11.5px}.ctk a{text-decoration:none;color:#4f46e5}
   .trk-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin:0 4px;white-space:nowrap}
   .trk-pill.ok{color:#15803d;background:#ecfdf5;border:1px solid #86efac}
   .trk-pill.warn{color:#b91c1c;background:#fef2f2;border:1px solid #fca5a5;animation:trkpulse 1.8s ease-in-out infinite}
@@ -504,6 +506,17 @@
           ⚠ SerpApi returns the Amazon <b>item price</b> only — it can’t read Amazon’s real shipping/import to Palestine. Set your typical shipping &amp; import here; the exact number comes from checkout / WhatsApp.</div>
         <div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="saveSettings(this)">Save settings</button></div>
       </div>
+    </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📦 Customer tracking labels</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">How GAASH statuses appear to <b>customers</b> on the public tracking page. Rename or hide any — the customer never sees the raw internal status. Match by the GAASH code (e.g. <code>CD</code>) or its text (e.g. <code>Required customer ID</code>).</div>
+      <table style="width:100%;font-size:12.5px;border-collapse:collapse">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>GAASH status (code or text)</th><th>Customer sees</th><th>Colour</th><th style="text-align:center">Hide</th><th></th></tr></thead>
+        <tbody id="lblRows"></tbody></table>
+      <button class="po-btn" style="margin-top:8px" onclick="lblAddRow()">＋ Add status</button>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:8px"><label class="fld" style="margin:0">Anything unknown shows:</label>
+        <input id="s_deflabel" style="width:200px" placeholder="In transit"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save tracking labels</button></div>
     </div>
   </div>
 
@@ -1025,14 +1038,28 @@ async function loadSettings(){
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
   $("s_imptype").value=s.import_rule.type; $("s_impval").value=s.import_rule.value;
   $("s_custmode").value=s.customer_mode?"1":"";
+  lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
 }
+function lblBucketSel(v){ return ['transit','arrived','customs','cleared','delivered'].map(b=>`<option ${b===v?'selected':''}>${b}</option>`).join(""); }
+function lblRowHtml(r){ r=r||{}; return `<tr>
+  <td><input class="l-match mono" style="width:100%" value="${poEsc(r.match||'')}" placeholder="CD  /  Required customer ID"></td>
+  <td><input class="l-label" style="width:100%" value="${poEsc(r.label||'')}" placeholder="In clearance"></td>
+  <td><select class="l-bucket">${lblBucketSel(r.bucket||'transit')}</select></td>
+  <td style="text-align:center"><input type="checkbox" class="l-hide" ${r.hidden?'checked':''}></td>
+  <td><button class="iconbtn" title="remove" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
+function lblRender(map){ if($("lblRows"))$("lblRows").innerHTML=(map||[]).map(lblRowHtml).join(""); }
+function lblAddRow(){ $("lblRows").insertAdjacentHTML('beforeend', lblRowHtml({})); }
+function lblCollect(){ return [...document.querySelectorAll('#lblRows tr')].map(tr=>({
+  match:tr.querySelector('.l-match').value.trim(), label:tr.querySelector('.l-label').value.trim(),
+  bucket:tr.querySelector('.l-bucket').value, hidden:tr.querySelector('.l-hide').checked })).filter(r=>r.match); }
 async function saveSettings(b){
   b.disabled=true;
   const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100, business_whatsapp:$("s_wa").value,
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
-    customer_mode:!!$("s_custmode").value };
+    customer_mode:!!$("s_custmode").value,
+    tracking_status_map:lblCollect(), tracking_default_label:($("s_deflabel")||{}).value||"In transit" };
   const r=await post("/api/settings",body); b.disabled=false;
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
 }
@@ -1268,6 +1295,11 @@ async function azTrackFetch(btn, poId, pi){
     }
   }, 1500);
 }
+function copyCtk(num){ (navigator.clipboard?navigator.clipboard.writeText(num):Promise.reject()).then(()=>toast("Copied "+num)).catch(()=>toast(num)); }
+async function genCtk(poId,pkgNo){
+  let r; try{ r=await post("/api/customer_tracking/generate",{po_id:poId,package_no:pkgNo}); }catch(e){ r={}; }
+  if(r&&r.ok){ const p=poFind(poId); const pk=(p&&p.packages||[]).find(x=>x.package_no===pkgNo); if(pk)pk.customer_tracking=r.customer_tracking; renderPurchases(); toast("Customer tracking #: "+r.customer_tracking); }
+  else toast("Couldn't generate: "+((r&&r.error)||"")); }
 function custOptions(sel){ return ['<option value="">⚠ unmatched</option>'].concat(PO_CUSTNAMES.map(n=>`<option ${n===sel?'selected':''}>${poEsc(n)}</option>`)).join(""); }
 function statusOptions(sel){ return PO_STATUSES.map(s=>`<option ${s===sel?'selected':''}>${s}</option>`).join(""); }
 function boxOptions(sel){ return ['<option value="">—</option>'].concat(PO_BOXES.map(b=>`<option ${b===sel?'selected':''}>${b}</option>`)).join(""); }
@@ -1327,6 +1359,9 @@ function poPkgHtml(p,pk,pi){
     <input type="date" value="${poEsc(pk.arrival)}" onchange="poPkgSet('${p.po_id}',${pi},'arrival',this.value)">
     <span class="trk-lbl">TRACKING #</span>
     <input value="${poEsc(pk.tracking_number)}" placeholder="GWD tracking #" style="width:140px" class="mono trk-input" onchange="poPkgSet('${p.po_id}',${pi},'tracking_number',this.value)">
+    ${pk.customer_tracking
+      ? `<span class="ctk" title="customer tracking number — give this to the customer; it maps to the GAASH # privately"><b class="mono">🎟 ${poEsc(pk.customer_tracking)}</b><a href="#" onclick="copyCtk('${poEsc(pk.customer_tracking)}');return false" title="copy">📋</a><a href="/track?t=${poEsc(pk.customer_tracking)}" target="_blank" rel="noopener" title="open the customer tracking page">↗</a></span>`
+      : `<button class="po-btn" title="create a customer tracking number now (otherwise one is made automatically when you add the GWD #)" onclick="genCtk('${p.po_id}',${pk.package_no})">🎟 Customer #</button>`}
     ${pk.tracking_status&&!pk.tracking_status.error?`<span class="trk-badge trk-${pk.tracking_status.bucket||'transit'}" title="${poEsc(pk.tracking_status.time||'')}">🚚 ${poEsc(pk.tracking_status.text||pk.tracking_status.label||pk.tracking_status.code||'')}</span>`:''}
     <span class="muted">${pk.items.length} product(s)</span><span class="spacer"></span>
     ${p.profile_box?`<button class="po-btn" title="auto-get this package's tracking #s from Amazon (profile ${p.profile_box})" onclick="azTrackFetch(this,'${p.po_id}',${pi})">🤖 Get tracking</button>`:''}

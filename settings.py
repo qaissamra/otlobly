@@ -12,6 +12,7 @@ Shared by dashboard.py (local) and app.py (hosted).
 import re
 
 import cfg
+import tracking
 
 
 def _f(v, default=0.0):
@@ -34,6 +35,10 @@ def read(config=None):
         "import_rule": cfg.get(config, "estimate.import_rule", {"type": "pct", "value": 0}),
         "customer_mode": bool(cfg.get(config, "estimate.customer_mode", False)),
         "business_whatsapp": cfg.get(config, "business.whatsapp", ""),
+        "tracking_status_map": cfg.get(config, "customer_tracking.status_map",
+                                       tracking.DEFAULT_STATUS_MAP),
+        "tracking_default_label": cfg.get(config, "customer_tracking.default_label",
+                                          tracking.DEFAULT_CUSTOMER_LABEL),
     }
 
 
@@ -58,6 +63,21 @@ def apply(body, config=None, persist=True):
     if "business_whatsapp" in body:
         cfg.set_path(config, "business.whatsapp",
                      re.sub(r"[^\d+]", "", str(body["business_whatsapp"])))
+    if isinstance(body.get("tracking_status_map"), list):
+        rows = []
+        for r in body["tracking_status_map"]:
+            if not isinstance(r, dict):
+                continue
+            match = str(r.get("match", "")).strip()
+            if not match:
+                continue
+            rows.append({"match": match, "label": str(r.get("label", "")).strip(),
+                         "bucket": (str(r.get("bucket", "transit")).strip() or "transit"),
+                         "hidden": bool(r.get("hidden"))})
+        cfg.set_path(config, "customer_tracking.status_map", rows)
+    if "tracking_default_label" in body:
+        cfg.set_path(config, "customer_tracking.default_label",
+                     str(body["tracking_default_label"]).strip() or "In transit")
     if persist:
         cfg.save(config)
     return read(config)

@@ -19,7 +19,7 @@ DEFAULT_API = "https://gaashwd.com/wp-json/gaash-parcel-status-tracker/v1"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 REQUEST_GAP = 0.7
 
-# GAASH MappedStatusCode → (human label, colour bucket) for the UI.
+# GAASH MappedStatusCode → (human label, colour bucket) for the INTERNAL staff UI.
 CODE_LABEL = {
     "VM": ("On the way to the country", "transit"),
     "K3": ("Arrived in the country", "arrived"),
@@ -28,6 +28,24 @@ CODE_LABEL = {
     "AJ": ("Out for last-mile / pickup", "transit"),
     "D1": ("Delivered", "delivered"),
 }
+
+# CUSTOMER-FACING default map: GAASH code OR status text → friendly label + colour.
+# Deliberately vague where the internal status is operational (e.g. "needs ID" →
+# "In clearance"). Editable from the admin Settings table; anything unmatched falls
+# back to DEFAULT_CUSTOMER_LABEL so customers never see raw internal text.
+DEFAULT_STATUS_MAP = [
+    {"match": "VM", "label": "On its way to your country", "bucket": "transit"},
+    {"match": "K3", "label": "Arrived in your country", "bucket": "arrived"},
+    {"match": "CD", "label": "In clearance", "bucket": "customs"},
+    {"match": "K2", "label": "Customs cleared", "bucket": "cleared"},
+    {"match": "AJ", "label": "Out for delivery", "bucket": "transit"},
+    {"match": "D1", "label": "Delivered", "bucket": "delivered"},
+    {"match": "MOC - Palestinian authority", "label": "In customs", "bucket": "customs"},
+    {"match": "Required customer ID", "label": "In clearance", "bucket": "customs"},
+    {"match": "Cleared customs", "label": "Customs cleared", "bucket": "cleared"},
+    {"match": "Delivered", "label": "Delivered", "bucket": "delivered"},
+]
+DEFAULT_CUSTOMER_LABEL = "In transit"
 
 
 def get_session():
@@ -86,6 +104,57 @@ def track(tn, lang="en"):
         return {"error": data["_error"]}
     s = latest_status(data)
     return s or {"error": "no status yet for this parcel"}
+
+
+def timeline(tn, lang="en"):
+    """One GWD number → the FULL event list (oldest→newest), raw. Returns
+    {ok, events:[{code, text, time}]} or {ok:False, error}."""
+    if not clean_tracking(tn):
+        return {"ok": False, "error": "no tracking number"}
+    try:
+        api_url, nonce = get_session()
+    except Exception as e:  # noqa
+        return {"ok": False, "error": f"GAASH session failed: {e}"}
+    data = fetch_one(tn, api_url, nonce, lang)
+    if "_error" in data:
+        return {"ok": False, "error": data["_error"]}
+    statuses = (data or {}).get("Statuses") or []
+    events = sorted(
+        ({"code": (s.get("MappedStatusCode") or "").strip(),
+          "text": (s.get("StatusDescription") or "").strip(),
+          "time": s.get("StatusTime")} for s in statuses),
+        key=lambda e: e.get("time") or "")
+    return {"ok": True, "events": events}
+
+
+def _match_row(ev, status_map):
+    """First map row matching the event by its code OR its text (case-insensitive)."""
+    code = (ev.get("code") or "").strip().upper()
+    text = (ev.get("text") or "").strip().lower()
+    for row in status_map:
+        m = (row.get("match") or "").strip()
+        if m and ((code and m.upper() == code) or (text and m.lower() == text)):
+            return row
+    return None
+
+
+def customer_timeline(events, status_map=None, default_label=None):
+    """Remap raw GAASH events → a customer-friendly timeline: rename via status_map,
+    drop hidden rows, collapse consecutive duplicates (keep when the state BEGAN),
+    fall back to a safe generic label. Returns {events:[{label, bucket, date}], current}."""
+    status_map = status_map if status_map is not None else DEFAULT_STATUS_MAP
+    default_label = default_label or DEFAULT_CUSTOMER_LABEL
+    out = []
+    for ev in events or []:
+        row = _match_row(ev, status_map)
+        if row and row.get("hidden"):
+            continue
+        label = (row or {}).get("label") or default_label
+        bucket = (row or {}).get("bucket") or "transit"
+        if out and out[-1]["label"] == label:
+            continue  # same state as before → keep the first occurrence's date
+        out.append({"label": label, "bucket": bucket, "date": ev.get("time")})
+    return {"events": out, "current": (out[-1] if out else None)}
 
 
 def track_many(tns, lang="en"):

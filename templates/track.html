@@ -1,32 +1,42 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Otlobly — تتبع طلبك</title>
+<title>Otlobly — تتبّع شحنتك · Track your package</title>
 <style>
-  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--good:#16a34a;--bad:#dc2626}
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff}
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     display:flex;align-items:flex-start;justify-content:center;padding:28px 14px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;
-    width:420px;max-width:100%;box-shadow:0 8px 30px rgba(30,25,10,.07)}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;
+    width:440px;max-width:100%;box-shadow:0 8px 30px rgba(30,25,10,.07)}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
   .brand h1{font-size:19px;margin:0;font-weight:800}.brand .ly{color:var(--accent)}
   .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
-  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:12px 0 4px}
-  input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
-  button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:10px;background:var(--accent);
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:10px 0 4px}
+  input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;
+    text-align:center;font-weight:700;letter-spacing:1px}
+  button{width:100%;margin-top:14px;padding:12px;border:none;border-radius:10px;background:var(--accent);
     color:#fff;font:inherit;font-weight:700;cursor:pointer}
-  .err{background:#fef2f2;color:var(--bad);border:1px solid #f3c0c0;border-radius:9px;padding:9px 12px;font-size:13px;margin-top:12px}
-  .result{margin-top:18px;border-top:1px solid var(--line);padding-top:16px;direction:rtl;text-align:right}
-  .result h2{font-size:16px;margin:0 0 4px}
-  .amt{color:var(--accent);font-weight:800}
-  .tl{list-style:none;padding:0;margin:14px 0 0}
-  .tl li{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px;color:var(--muted)}
-  .tl li.done{color:var(--ink);font-weight:600}
-  .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex:none}
-  .tl li.done .dot{background:var(--good);border-color:var(--good)}
-  .cancel{color:var(--bad);font-weight:700}
+  button:disabled{opacity:.6}
+  .err{background:#fef2f2;color:#b91c1c;border:1px solid #f3c0c0;border-radius:9px;padding:11px 12px;font-size:13.5px;margin-top:14px;text-align:center}
+  .result{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+  .now{display:flex;align-items:center;gap:12px;background:#fafaf7;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .now .big{font-size:18px;font-weight:800}
+  .now small{color:var(--muted);display:block;font-weight:500;font-size:12px}
+  .tnum{text-align:center;color:var(--muted);font-size:12px;margin:6px 0 0}
+  .eta{margin-top:10px;background:#ecfdf5;border:1px solid #86efac;color:#15803d;border-radius:10px;padding:9px 12px;font-size:13.5px;text-align:center}
+  .tl{list-style:none;padding:0;margin:18px 0 0;position:relative}
+  .tl:before{content:"";position:absolute;left:11px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .tl li{display:flex;gap:14px;padding:9px 0;position:relative}
+  .tl .dot{width:24px;height:24px;border-radius:50%;border:3px solid var(--line);background:#fff;flex:none;z-index:1}
+  .tl .body .lab{font-weight:700;font-size:14.5px}
+  .tl .body .when{color:var(--muted);font-size:12px}
+  .tl li.cur .lab{color:var(--accent)}
+  .b-transit .dot{border-color:#3b82f6}.b-arrived .dot{border-color:#3b82f6;background:#3b82f6}
+  .b-customs .dot{border-color:#d97706;background:#fff7ed}.b-cleared .dot{border-color:#16a34a;background:#ecfdf5}
+  .b-delivered .dot{border-color:#16a34a;background:#16a34a}
+  .foot{margin-top:16px;color:var(--muted);font-size:11.5px;text-align:center}
 </style>
 <div class="card">
   <div class="brand">
@@ -35,28 +45,40 @@
       <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
     <h1>Otlob<span class="ly">ly</span></h1>
   </div>
-  <p class="sub">تتبّع طلبك · أدخل رقم الطلب ورقم الواتساب</p>
-  <label>Order ID · رقم الطلب</label>
-  <input id="oid" placeholder="OTL-0001" autofocus>
-  <label>WhatsApp · رقم الواتساب</label>
-  <input id="phone" placeholder="0599…">
-  <button onclick="track()">تتبّع · Track</button>
+  <p class="sub">تتبّع شحنتك · Track your package</p>
+  <label>رقم التتبّع · Tracking number</label>
+  <input id="t" placeholder="OTL123456" autocapitalize="characters" autofocus
+         onkeydown="if(event.key==='Enter')track()">
+  <button id="btn" onclick="track()">تتبّع · Track</button>
   <div id="out"></div>
+  <div class="foot">Otlobly · لأي استفسار تواصل معنا · contact us anytime</div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
+function fmt(s){ if(!s) return ""; const d=new Date(s); if(isNaN(d)) return s;
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+
+    ' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
 async function track(){
+  const tn=$("t").value.trim(); if(!tn) return;
+  const btn=$("btn"); btn.disabled=true; const old=btn.textContent; btn.textContent="…";
   $("out").innerHTML="";
-  const r=await fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({order_id:$("oid").value,phone:$("phone").value})});
-  const d=await r.json();
-  if(d.error){$("out").innerHTML=`<div class="err">${d.error}</div>`;return;}
-  const amt=d.amount_to_collect_usd!=null?`$${d.amount_to_collect_usd.toFixed(2)}`:'—';
-  const tracking=d.tracking_number?`<div>رقم الشحنة: <b>${d.tracking_number}</b></div>`:'';
-  const eta=d.est_delivery_customer?`<div class="eta">🚚 موعد التوصيل المتوقع: <b>${d.est_delivery_customer}</b></div>`:'';
-  const tl=d.cancelled?`<div class="cancel">❌ تم إلغاء الطلب</div>`
-    :`<ul class="tl">${d.timeline.map(s=>`<li class="${s.done?'done':''}"><span class="dot"></span>${s.ar}</li>`).join("")}</ul>`;
-  $("out").innerHTML=`<div class="result"><h2>${d.order_id}</h2>
-    <div>المبلغ المطلوب: <span class="amt">${amt}</span></div>${eta}${tracking}${tl}</div>`;
+  let d; try{ d=await (await fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({tracking:tn})})).json(); }catch(e){ d={error:"Network error — try again."}; }
+  btn.disabled=false; btn.textContent=old;
+  if(d.error && !d.found){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
+  if(d.error){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
+  const cur=d.current||{};
+  const tnum=`<div class="tnum">رقم التتبّع · ${d.tracking||tn}</div>`;
+  const eta=d.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(d.est_delivery).split(' · ')[0]}</b></div>`:'';
+  const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
+      <div><div class="big">${cur.label||'In transit'}</div><small>الحالة الحالية · current status</small></div></div>`;
+  const evs=(d.events||[]).slice().reverse();   // newest first
+  const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'} ${i===0?'cur':''}">
+      <span class="dot"></span><div class="body"><div class="lab">${e.label}</div>
+      <div class="when">${fmt(e.date)}</div></div></li>`).join("")}</ul>`:'';
+  $("out").innerHTML=`<div class="result">${now}${tnum}${eta}${tl}</div>`;
 }
+// auto-track when opened via a shared link /track?t=OTL123456
+const _q=new URLSearchParams(location.search).get('t');
+if(_q){ $("t").value=_q.toUpperCase().trim(); track(); }
 </script>

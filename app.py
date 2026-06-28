@@ -30,6 +30,7 @@ import activity
 import amazon_import
 import auth
 import az
+import cfg
 import customers as cust_mod
 import db
 import estimate
@@ -38,8 +39,10 @@ import messages
 import normalize
 import pnl as pnl_mod
 import pricing
+import purchases
 import report as report_mod
 import store
+import tracking
 import trash
 
 
@@ -1021,29 +1024,52 @@ def track_page():
 
 
 @app.route("/api/track", methods=["POST"])
-@limiter.limit("8 per minute")
+@limiter.limit("20 per minute")
 def api_track():
+    """Public parcel tracking: customer enters OUR OTL number → friendly timeline.
+    Resolves OTL → package → GAASH (GWD) → remapped customer events. Exposes NO PII."""
     b = request.get_json(force=True, silent=True) or {}
-    o = db.get_order((b.get("order_id") or "").strip().upper())
-    pin = normalize.normalize_phone(b.get("phone", ""))
-    ph = store.primary_phone(o) if o else None
-    if not o or not pin or not ph or ph["e164"] != pin["e164"]:
-        return jsonify({"error": "No order matches that number + order ID."}), 404
-    STEPS = ["REQUESTED", "QUOTED", "PAID", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"]
-    cur = o["status"]
-    idx = STEPS.index(cur) if cur in STEPS else -1
-    return jsonify({
-        "order_id": o["order_id"],
-        "status": cur,
-        "status_ar": messages.STATUS_AR.get(cur, cur),
-        "amount_to_collect_usd": o.get("amount_to_collect_usd"),
-        "est_delivery_customer": o.get("est_delivery_customer"),
-        "items": [{"asin": it.get("asin")} for it in o["items"]],
-        "tracking_number": o.get("tracking_number"),
-        "timeline": [{"step": s, "ar": messages.STATUS_AR.get(s, s), "done": i <= idx}
-                     for i, s in enumerate(STEPS)],
-        "cancelled": cur == "CANCELLED",
-    })
+    otl = (b.get("tracking") or "").strip().upper()
+    if not otl:
+        return jsonify({"found": False, "error": "Enter your tracking number."}), 400
+    pdb = purchases.load()
+    po, pk = purchases.find_by_customer_tracking(pdb, otl)
+    if not pk:
+        return jsonify({"found": False,
+                        "error": "We couldn't find that tracking number. Please check it."}), 404
+    gwd = (pk.get("tracking_number") or "").strip()
+    if not gwd:
+        return jsonify({"found": True, "tracking": otl, "preparing": True,
+                        "current": {"label": "We're preparing your order", "bucket": "transit"},
+                        "events": []})
+    cfgd = cfg.load()
+    smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
+    dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
+    tl = tracking.timeline(gwd)
+    if not tl.get("ok"):
+        return jsonify({"found": True, "tracking": otl,
+                        "error": "Tracking is temporarily unavailable — please try again shortly."})
+    ct = tracking.customer_timeline(tl["events"], smap, dlabel)
+    return jsonify({"found": True, "tracking": otl,
+                    "current": ct["current"], "events": ct["events"],
+                    "est_delivery": pk.get("arrival") or None})
+
+
+@app.route("/api/customer_tracking/generate", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_gen_customer_tracking():
+    """Staff: mint an OTL number for a package early (before its GAASH # is added)."""
+    b = request.get_json(force=True, silent=True) or {}
+    pdb = purchases.load()
+    po = purchases.find(pdb, b.get("po_id"))
+    pk = next((p for p in (po or {}).get("packages", [])
+               if p.get("package_no") == b.get("package_no")), None) if po else None
+    if not pk:
+        return jsonify({"error": "package not found"}), 404
+    if not (pk.get("customer_tracking") or "").strip():
+        pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
+        purchases.save(pdb)
+    return jsonify({"ok": True, "customer_tracking": pk["customer_tracking"]})
 
 
 if __name__ == "__main__":
