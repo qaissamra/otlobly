@@ -235,6 +235,23 @@ def find_by_customer_tracking(db, otl):
     return None, None
 
 
+def find_packages_for(db, names=None, order_ids=None):
+    """Every (po, package) holding an item that belongs to one of these customer
+    names or order ids — so a customer can find their shipments by name/phone→order."""
+    names = {(n or "").strip().lower() for n in (names or []) if (n or "").strip()}
+    oids = {(o or "").strip().upper() for o in (order_ids or []) if (o or "").strip()}
+    out = []
+    for po in db.get("purchase_orders", []):
+        for pk in po.get("packages", []):
+            for it in pk.get("items", []):
+                nm = (it.get("customer_name") or "").strip().lower()
+                oid = (it.get("customer_order_id") or "").strip().upper()
+                if (nm and nm in names) or (oid and oid in oids):
+                    out.append((po, pk))
+                    break
+    return out
+
+
 def ensure_customer_tracking(db, po):
     """Auto-mint an OTL number for every package that has a GWD but none yet.
     Returns the number of packages newly numbered."""

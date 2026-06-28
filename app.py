@@ -15,6 +15,7 @@ First run with no users redirects to /setup to create the first admin.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -1026,33 +1027,73 @@ def track_page():
 @app.route("/api/track", methods=["POST"])
 @limiter.limit("20 per minute")
 def api_track():
-    """Public parcel tracking: customer enters OUR OTL number → friendly timeline.
-    Resolves OTL → package → GAASH (GWD) → remapped customer events. Exposes NO PII."""
+    """Public self-service tracking: customer enters their MOBILE, NAME, or an OTL
+    number → we find their package(s) → friendly status timeline for each. Exposes
+    NO PII (no name/ID/address) — only the masked status."""
     b = request.get_json(force=True, silent=True) or {}
-    otl = (b.get("tracking") or "").strip().upper()
-    if not otl:
-        return jsonify({"found": False, "error": "Enter your tracking number."}), 400
+    q = (b.get("query") or b.get("tracking") or b.get("phone") or "").strip()
+    if not q:
+        return jsonify({"found": False, "error": "Enter your mobile number or name."}), 400
     pdb = purchases.load()
-    po, pk = purchases.find_by_customer_tracking(pdb, otl)
-    if not pk:
-        return jsonify({"found": False,
-                        "error": "We couldn't find that tracking number. Please check it."}), 404
-    gwd = (pk.get("tracking_number") or "").strip()
-    if not gwd:
-        return jsonify({"found": True, "tracking": otl, "preparing": True,
-                        "current": {"label": "We're preparing your order", "bucket": "transit"},
-                        "events": []})
+    pairs = []                                    # [(po, package)]
+    if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number
+        po, pk = purchases.find_by_customer_tracking(pdb, q)
+        if pk:
+            pairs = [(po, pk)]
+    else:                                         # phone or name → their order(s) → packages
+        names, oids = set(), set()
+        if len(re.sub(r"\D", "", q)) >= 7:        # looks like a phone
+            pin = normalize.normalize_phone(q)
+            for o in db.list_orders():
+                ph = store.primary_phone(o)
+                if pin and ph and ph["e164"] == pin["e164"]:
+                    names.add((o["customer"]["name"] or "").strip().lower())
+                    oids.add(o["order_id"])
+        if not names and not oids:                # name lookup (or phone with no hit)
+            ql = q.strip().lower()
+            if len(ql) >= 3:
+                for o in db.list_orders():
+                    nm = (o["customer"]["name"] or "").strip().lower()
+                    if nm and (ql == nm or ql in nm):
+                        names.add(nm)
+                        oids.add(o["order_id"])
+        pairs = purchases.find_packages_for(pdb, names, oids)
+    # de-dupe + cap
+    seen, uniq = set(), []
+    for po, pk in pairs:
+        key = (pk.get("customer_tracking") or "").upper() or id(pk)
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append((po, pk))
+    uniq = uniq[:8]
+    if not uniq:
+        return jsonify({"found": False, "error": "We couldn't find a package for that. "
+                        "Check your mobile number or name, or contact us."}), 404
     cfgd = cfg.load()
     smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
-    tl = tracking.timeline(gwd)
-    if not tl.get("ok"):
-        return jsonify({"found": True, "tracking": otl,
-                        "error": "Tracking is temporarily unavailable — please try again shortly."})
-    ct = tracking.customer_timeline(tl["events"], smap, dlabel)
-    return jsonify({"found": True, "tracking": otl,
-                    "current": ct["current"], "events": ct["events"],
-                    "est_delivery": pk.get("arrival") or None})
+    gwds = [pk.get("tracking_number") for _, pk in uniq if (pk.get("tracking_number") or "").strip()]
+    tls = tracking.timelines(gwds) if gwds else {}
+    shipments = []
+    for po, pk in uniq:
+        otl = pk.get("customer_tracking")
+        gwd = (pk.get("tracking_number") or "").strip()
+        items = [(it.get("title") or it.get("asin") or "").strip()
+                 for it in pk.get("items", []) if (it.get("title") or it.get("asin"))][:3]
+        if not gwd:
+            shipments.append({"tracking": otl, "items": items, "events": [],
+                              "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}})
+            continue
+        tl = tls.get(gwd, {})
+        if tl.get("ok"):
+            ct = tracking.customer_timeline(tl["events"], smap, dlabel)
+            shipments.append({"tracking": otl, "items": items, "current": ct["current"],
+                              "events": ct["events"], "est_delivery": pk.get("arrival") or None})
+        else:
+            shipments.append({"tracking": otl, "items": items, "events": [],
+                              "current": {"label": "قيد الشحن", "bucket": "transit"}})
+    return jsonify({"found": True, "count": len(shipments), "shipments": shipments})
 
 
 @app.route("/api/customer_tracking/generate", methods=["POST"])

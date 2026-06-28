@@ -37,6 +37,9 @@
   .b-customs .dot{border-color:#d97706;background:#fff7ed}.b-cleared .dot{border-color:#16a34a;background:#ecfdf5}
   .b-delivered .dot{border-color:#16a34a;background:#16a34a}
   .foot{margin-top:16px;color:var(--muted);font-size:11.5px;text-align:center}
+  .multi{font-weight:800;font-size:14px;margin-bottom:12px}
+  .ship + .ship{margin-top:18px;border-top:1px dashed var(--line);padding-top:18px}
+  .items{color:var(--muted);font-size:12.5px;margin:9px 0 0;line-height:1.4}
 </style>
 <div class="card">
   <div class="brand">
@@ -46,10 +49,10 @@
     <h1>Otlob<span class="ly">ly</span></h1>
   </div>
   <p class="sub">تتبّع شحنتك · Track your package</p>
-  <label>رقم التتبّع · Tracking number</label>
-  <input id="t" placeholder="OTL123456" autocapitalize="characters" autofocus
+  <label>رقم الجوال أو الاسم · Mobile number or name</label>
+  <input id="t" placeholder="05xxxxxxxx  ·  أو الاسم" autofocus
          onkeydown="if(event.key==='Enter')track()">
-  <button id="btn" onclick="track()">تتبّع · Track</button>
+  <button id="btn" onclick="track()">تتبّع شحنتي · Track</button>
   <div id="out"></div>
   <div class="foot">Otlobly · لأي استفسار تواصل معنا · contact us anytime</div>
 </div>
@@ -58,27 +61,32 @@ const $=id=>document.getElementById(id);
 function fmt(s){ if(!s) return ""; const d=new Date(s); if(isNaN(d)) return s;
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+
     ' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function shipmentCard(s){
+  const cur=s.current||{};
+  const items=(s.items||[]).length?`<div class="items" dir="auto">${s.items.map(esc).join(' · ')}</div>`:'';
+  const tnum=s.tracking?`<div class="tnum">رقم التتبّع · ${esc(s.tracking)}</div>`:'';
+  const eta=s.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(s.est_delivery).split(' · ')[0]}</b></div>`:'';
+  const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
+      <div><div class="big" dir="auto">${esc(cur.label)||'قيد الشحن'}</div><small>الحالة الحالية · current status</small></div></div>`;
+  const evs=(s.events||[]).slice().reverse();
+  const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'} ${i===0?'cur':''}">
+      <span class="dot"></span><div class="body"><div class="lab" dir="auto">${esc(e.label)}</div>
+      <div class="when">${fmt(e.date)}</div></div></li>`).join("")}</ul>`:'';
+  return `<div class="ship">${now}${items}${tnum}${eta}${tl}</div>`;
+}
 async function track(){
-  const tn=$("t").value.trim(); if(!tn) return;
+  const q=$("t").value.trim(); if(!q) return;
   const btn=$("btn"); btn.disabled=true; const old=btn.textContent; btn.textContent="…";
   $("out").innerHTML="";
   let d; try{ d=await (await fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({tracking:tn})})).json(); }catch(e){ d={error:"Network error — try again."}; }
+    body:JSON.stringify({query:q})})).json(); }catch(e){ d={error:"Network error — try again."}; }
   btn.disabled=false; btn.textContent=old;
-  if(d.error && !d.found){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
-  if(d.error){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
-  const cur=d.current||{};
-  const tnum=`<div class="tnum">رقم التتبّع · ${d.tracking||tn}</div>`;
-  const eta=d.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(d.est_delivery).split(' · ')[0]}</b></div>`:'';
-  const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
-      <div><div class="big" dir="auto">${cur.label||'قيد الشحن'}</div><small>الحالة الحالية · current status</small></div></div>`;
-  const evs=(d.events||[]).slice().reverse();   // newest first
-  const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'} ${i===0?'cur':''}">
-      <span class="dot"></span><div class="body"><div class="lab" dir="auto">${e.label}</div>
-      <div class="when">${fmt(e.date)}</div></div></li>`).join("")}</ul>`:'';
-  $("out").innerHTML=`<div class="result">${now}${tnum}${eta}${tl}</div>`;
+  if(!d.found || d.error){ $("out").innerHTML=`<div class="err">${esc(d.error)||'Not found'}</div>`; return; }
+  const head=(d.count>1)?`<div class="multi">وجدنا ${d.count} شحنات · ${d.count} shipments</div>`:'';
+  $("out").innerHTML=`<div class="result">${head}${(d.shipments||[]).map(shipmentCard).join("")}</div>`;
 }
-// auto-track when opened via a shared link /track?t=OTL123456
-const _q=new URLSearchParams(location.search).get('t');
-if(_q){ $("t").value=_q.toUpperCase().trim(); track(); }
+// auto-track when opened via a shared link /track?t=OTL123456 or ?q=…
+const _p=new URLSearchParams(location.search); const _q=_p.get('t')||_p.get('q');
+if(_q){ $("t").value=_q.trim(); track(); }
 </script>

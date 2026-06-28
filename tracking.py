@@ -130,6 +130,30 @@ def timeline(tn, lang="en"):
     return {"ok": True, "events": events}
 
 
+def timelines(gwds, lang="en"):
+    """Full timeline for several GWDs reusing ONE GAASH session (one nonce scrape).
+    Returns {gwd: {ok, events} | {ok:False, error}}."""
+    out = {}
+    try:
+        api_url, nonce = get_session()
+    except Exception as e:  # noqa
+        return {g: {"ok": False, "error": f"GAASH session failed: {e}"} for g in gwds}
+    for i, g in enumerate(gwds):
+        if i:
+            time.sleep(REQUEST_GAP)
+        data = fetch_one(g, api_url, nonce, lang)
+        if "_error" in data:
+            out[g] = {"ok": False, "error": data["_error"]}
+            continue
+        statuses = (data or {}).get("Statuses") or []
+        out[g] = {"ok": True, "events": sorted(
+            ({"code": (s.get("MappedStatusCode") or "").strip(),
+              "text": (s.get("StatusDescription") or "").strip(),
+              "time": s.get("StatusTime")} for s in statuses),
+            key=lambda e: e.get("time") or "")}
+    return out
+
+
 def _match_row(ev, status_map):
     """Best map row for an event. EXACT TEXT match wins (GAASH's codes are reused
     and unreliable); the code is only a fallback."""
