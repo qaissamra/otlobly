@@ -16,9 +16,12 @@ First run with no users redirects to /setup to create the first admin.
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
+import time
 import uuid
+from functools import wraps
 from pathlib import Path
 from urllib.parse import quote as _urlquote
 
@@ -27,6 +30,7 @@ from flask import (Flask, request, jsonify, redirect, url_for, render_template,
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import check_password_hash
 
 import activity
 import amazon_import
@@ -39,6 +43,7 @@ import estimate
 import settings as settings_mod
 import messages
 import normalize
+import notify
 import pnl as pnl_mod
 import pricing
 import purchases
@@ -1109,43 +1114,23 @@ def api_order_intake():
     return jsonify({"ok": True, "order_id": o["order_id"]})
 
 
-@app.route("/track", methods=["GET"])
-def track_page():
-    return render_template("track.html")
+def _phone_pairs(core, pdb):
+    """A normalized phone core → ([(po, package)], names, oids) for that customer's orders.
+    Matches 970/972/leading-0 forms (normalize.phone_core)."""
+    names, oids = set(), set()
+    for o in db.list_orders():
+        for ph in (o.get("customer", {}).get("phones") or []):
+            if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
+                names.add((o["customer"]["name"] or "").strip().lower())
+                oids.add(o["order_id"])
+                break
+    return purchases.find_packages_for(pdb, names, oids), names, oids
 
 
-@app.route("/api/track", methods=["POST"])
-@limiter.limit("20 per minute")
-def api_track():
-    """Public self-service tracking: customer enters their MOBILE, NAME, or an OTL
-    number → we find their package(s) → friendly status timeline for each. Exposes
-    NO PII (no name/ID/address) — only the masked status."""
-    b = request.get_json(force=True, silent=True) or {}
-    q = (b.get("query") or b.get("tracking") or b.get("phone") or "").strip()
-    if not q:
-        return jsonify({"found": False, "error": "Enter your full mobile number."}), 400
-    pdb = purchases.load()
-    pairs = []                                    # [(po, package)]
-    names, oids = set(), set()                    # the customer's identifiers (empty for a raw OTL lookup)
-    if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number
-        po, pk = purchases.find_by_customer_tracking(pdb, q)
-        if pk:
-            pairs = [(po, pk)]
-    else:                                         # the customer's FULL mobile number
-        # Match country-code-agnostically: 0599…, 970599…, 972599…, +9720599… all match
-        # (Palestinian numbers live under both +970 and +972). No partials, no name search.
-        core = normalize.phone_core(q)
-        if len(core) < 9:
-            return jsonify({"found": False,
-                            "error": "Please enter your full mobile number (e.g. 0599xxxxxx)."}), 400
-        for o in db.list_orders():
-            for ph in (o.get("customer", {}).get("phones") or []):
-                if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
-                    names.add((o["customer"]["name"] or "").strip().lower())
-                    oids.add(o["order_id"])
-                    break
-        pairs = purchases.find_packages_for(pdb, names, oids)
-    # de-dupe + cap
+def _shipments_for(pairs, names, oids):
+    """[(po, package)] → friendly shipment cards: de-dupe, show ONLY this customer's items,
+    one GAASH session for all timelines. Shared by /api/track and the customer dashboard.
+    Exposes NO PII — only the masked status + the customer's own item names/images."""
     seen, uniq = set(), []
     for po, pk in pairs:
         key = (pk.get("customer_tracking") or "").upper() or id(pk)
@@ -1155,8 +1140,7 @@ def api_track():
         uniq.append((po, pk))
     uniq = uniq[:8]
     if not uniq:
-        return jsonify({"found": False, "error": "No package found for that number. "
-                        "Make sure you entered your full mobile number, or contact us."}), 404
+        return []
     cfgd = cfg.load()
     smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
@@ -1167,7 +1151,7 @@ def api_track():
         otl = pk.get("customer_tracking")
         gwd = (pk.get("tracking_number") or "").strip()
         # A package holds items for SEVERAL customers — show ONLY this customer's.
-        if names or oids:                         # phone/name lookup → we know who they are
+        if names or oids:                         # phone lookup → we know who they are
             pk_items = [it for it in pk.get("items", [])
                         if (it.get("customer_name") or "").strip().lower() in names
                         or (it.get("customer_order_id") or "").strip().upper() in oids]
@@ -1189,7 +1173,168 @@ def api_track():
         else:
             shipments.append({"tracking": otl, "items": items, "events": [],
                               "current": {"label": "قيد الشحن", "bucket": "transit"}})
+    return shipments
+
+
+@app.route("/track", methods=["GET"])
+def track_page():
+    return render_template("track.html")
+
+
+@app.route("/api/track", methods=["POST"])
+@limiter.limit("20 per minute")
+def api_track():
+    """Public self-service tracking: customer enters their MOBILE or an OTL number → we
+    find their package(s) → friendly status timeline. Exposes NO PII — only the status."""
+    b = request.get_json(force=True, silent=True) or {}
+    q = (b.get("query") or b.get("tracking") or b.get("phone") or "").strip()
+    if not q:
+        return jsonify({"found": False, "error": "Enter your full mobile number."}), 400
+    pdb = purchases.load()
+    names, oids = set(), set()
+    if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number
+        po, pk = purchases.find_by_customer_tracking(pdb, q)
+        pairs = [(po, pk)] if pk else []
+    else:                                         # the customer's FULL mobile number
+        core = normalize.phone_core(q)
+        if len(core) < 9:
+            return jsonify({"found": False,
+                            "error": "Please enter your full mobile number (e.g. 0599xxxxxx)."}), 400
+        pairs, names, oids = _phone_pairs(core, pdb)
+    shipments = _shipments_for(pairs, names, oids)
+    if not shipments:
+        return jsonify({"found": False, "error": "No package found for that number. "
+                        "Make sure you entered your full mobile number, or contact us."}), 404
     return jsonify({"found": True, "count": len(shipments), "shipments": shipments})
+
+
+# ---- Customer account portal: phone + WhatsApp OTP login -------------------- #
+OTP_TTL = 600                  # code valid for 10 minutes
+OTP_MAX_ATTEMPTS = 5
+
+
+def customer_required(fn):
+    """Guard customer-portal API: 401 unless a customer session is established."""
+    @wraps(fn)
+    def wrapper(*a, **k):
+        if not session.get("cust_phone"):
+            abort(401)
+        return fn(*a, **k)
+    return wrapper
+
+
+def _match_customer(core):
+    """(matched?, name) for a phone core — only KNOWN customers (with an order) can log in."""
+    for o in db.list_orders():
+        for ph in (o.get("customer", {}).get("phones") or []):
+            if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
+                return True, (o.get("customer", {}).get("name") or "").strip()
+    return False, ""
+
+
+def _customer_orders(core):
+    """The customer's orders (newest first) with status + ETA + items. NO money fields."""
+    out = []
+    for o in db.list_orders():
+        if not any(normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core
+                   for ph in (o.get("customer", {}).get("phones") or [])):
+            continue
+        out.append({
+            "order_id": o.get("order_id"),
+            "status": o.get("status"),
+            "est_delivery": o.get("est_delivery_customer"),
+            "created_at": o.get("created_at"),
+            "items": [{"title": (it.get("title") or it.get("asin") or "").strip(),
+                       "image": it.get("image") or None, "qty": it.get("qty") or 1}
+                      for it in (o.get("items") or [])
+                      if (it.get("title") or it.get("asin") or it.get("image"))][:8],
+        })
+    out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return out
+
+
+@app.route("/account", methods=["GET"])
+def account_page():
+    return render_template("account.html")
+
+
+@app.route("/api/customer/me")
+def api_customer_me():
+    if session.get("cust_phone"):
+        return jsonify({"logged_in": True, "name": session.get("cust_name") or ""})
+    return jsonify({"logged_in": False})
+
+
+@app.route("/api/customer/otp/request", methods=["POST"])
+@limiter.limit("5 per 10 minutes")
+def api_customer_otp_request():
+    b = request.get_json(force=True, silent=True) or {}
+    core = normalize.phone_core(b.get("phone") or "")
+    if len(core) < 9:
+        return jsonify({"ok": False,
+                        "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    matched, name = _match_customer(core)
+    if not matched:
+        return jsonify({"ok": False,
+                        "error": "لا توجد طلبات لهذا الرقم · No orders found for this number."}), 404
+    code = f"{secrets.randbelow(1000000):06d}"
+    db.set_setting(f"otp:{core}", {"hash": auth.hash_pw(code),
+                                   "expires": time.time() + OTP_TTL, "attempts": 0, "name": name})
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164") or ("+" + core)
+    res = notify.send_whatsapp_otp(e164, code)
+    if res.get("ok"):
+        return jsonify({"ok": True, "sent": "whatsapp"})
+    app.logger.warning("OTP for %s = %s (whatsapp not sent: %s)", core, code, res.get("error"))
+    if os.environ.get("OTLOBLY_OTP_DEV"):         # testing before the live WhatsApp API is set up
+        return jsonify({"ok": True, "sent": "dev", "dev_code": code})
+    return jsonify({"ok": False,
+                    "error": "تعذّر إرسال الرمز حالياً · Couldn't send the code right now."}), 502
+
+
+@app.route("/api/customer/otp/verify", methods=["POST"])
+@limiter.limit("10 per 10 minutes")
+def api_customer_otp_verify():
+    b = request.get_json(force=True, silent=True) or {}
+    core = normalize.phone_core(b.get("phone") or "")
+    code = re.sub(r"\D", "", b.get("code") or "")
+    rec = db.get_setting(f"otp:{core}")
+    if not rec or not code:
+        return jsonify({"ok": False, "error": "أدخل الرمز · Enter the code."}), 400
+    if time.time() > (rec.get("expires") or 0):
+        return jsonify({"ok": False,
+                        "error": "انتهت صلاحية الرمز · Code expired — request a new one."}), 400
+    if (rec.get("attempts") or 0) >= OTP_MAX_ATTEMPTS:
+        return jsonify({"ok": False,
+                        "error": "محاولات كثيرة · Too many attempts — request a new code."}), 429
+    if not check_password_hash(rec.get("hash") or "", code):
+        rec["attempts"] = (rec.get("attempts") or 0) + 1
+        db.set_setting(f"otp:{core}", rec)
+        return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
+    db.set_setting(f"otp:{core}", {"used": True, "expires": 0})   # one-time
+    session["cust_phone"] = core
+    session["cust_name"] = rec.get("name") or _match_customer(core)[1]
+    session.permanent = True
+    return jsonify({"ok": True, "name": session["cust_name"]})
+
+
+@app.route("/api/customer/logout", methods=["POST"])
+def api_customer_logout():
+    session.pop("cust_phone", None)
+    session.pop("cust_name", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/customer/orders")
+@customer_required
+def api_customer_orders():
+    core = session["cust_phone"]
+    pdb = purchases.load()
+    pairs, names, oids = _phone_pairs(core, pdb)
+    shipments = _shipments_for(pairs, names, oids)
+    return jsonify({"name": session.get("cust_name") or "",
+                    "orders": _customer_orders(core),
+                    "shipments": shipments, "count": len(shipments)})
 
 
 @app.route("/api/customer_tracking/generate", methods=["POST"])

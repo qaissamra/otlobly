@@ -1,0 +1,214 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — حسابي · My account</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#111111">
+<style>
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;
+        --good:#16a34a;--transit:#2563eb;--customs:#d97706;--cleared:#16a34a;--delivered:#16a34a;--arrived:#7c3aed}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    display:flex;justify-content:center;padding:22px 14px 60px}
+  .card{width:100%;max-width:560px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+    box-shadow:0 10px 40px rgba(20,18,12,.06);padding:22px 20px}
+  .brand{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+  .brand h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .brand .ly{color:var(--accent)}
+  .lang{margin-inline-end:auto;display:flex;gap:6px}
+  .lang span{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);
+    border-radius:20px;padding:3px 11px}
+  .lang span.on{background:#111;color:#fff;border-color:#111}
+  .sub{color:var(--muted);font-size:13px;margin:6px 0 16px;text-align:start}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;text-align:start}
+  input{width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);border-radius:12px;
+    background:#fbfaf6;text-align:center;letter-spacing:1px}
+  input:focus{outline:none;border-color:var(--accent);background:#fff}
+  button{width:100%;margin-top:14px;font-size:15px;font-weight:800;color:#fff;background:var(--accent);
+    border:0;border-radius:12px;padding:14px;cursor:pointer}
+  button:disabled{opacity:.6}
+  .ghost{background:none;color:var(--muted);font-weight:600;font-size:12.5px;padding:8px;margin-top:6px}
+  .hint{color:var(--muted);font-size:11.5px;text-align:center;margin-top:8px}
+  .err{background:#fef2f2;border:1px solid #f3c9c9;color:#b42318;border-radius:10px;padding:10px 12px;
+    font-size:13px;margin-top:12px;text-align:center}
+  .dev{background:#fffbe6;border:1px dashed #e6c200;border-radius:10px;padding:8px 12px;font-size:12px;
+    margin-top:10px;text-align:center;color:#8a6d00}
+  .hello{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .hello b{font-size:18px}
+  .hello .out{cursor:pointer;color:var(--muted);font-size:12px;border:1px solid var(--line);
+    border-radius:20px;padding:4px 11px;background:none;width:auto;margin:0;font-weight:600}
+  h2.sec{font-size:14px;font-weight:800;margin:20px 0 10px;text-align:start}
+  .ship{border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:12px;background:#fbfaf6}
+  .now{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .now .dot{width:13px;height:13px;border-radius:50%;flex:none;background:var(--transit)}
+  .now .big{font-weight:800;font-size:16px}
+  .now small{color:var(--muted);font-size:11px;display:block}
+  .b-transit .dot,.b-transit.dotc{background:var(--transit)}
+  .b-customs .dot,.b-customs.dotc{background:var(--customs)}
+  .b-cleared .dot,.b-cleared.dotc{background:var(--cleared)}
+  .b-arrived .dot,.b-arrived.dotc{background:var(--arrived)}
+  .b-delivered .dot,.b-delivered.dotc{background:var(--delivered)}
+  .items{display:flex;flex-direction:column;gap:7px;margin:8px 0 2px}
+  .prod{display:flex;align-items:center;gap:9px;font-size:12.5px}
+  .prod img,.prod .ph{width:38px;height:38px;border-radius:8px;object-fit:contain;background:#f0ede4;
+    border:1px solid var(--line);flex:none}
+  .tnum{color:var(--muted);font-size:11.5px;text-align:start;margin-top:6px}
+  .eta{margin-top:8px;background:#ecfdf3;border:1px solid #bbf7d0;color:#15803d;border-radius:9px;
+    padding:7px 10px;font-size:12.5px}
+  .tl{list-style:none;margin:11px 0 0;padding:0}
+  .tl li{position:relative;padding:0 0 14px 18px;margin:0}
+  .tl li::before{content:"";position:absolute;inset-inline-start:4px;top:14px;bottom:-2px;width:2px;background:var(--line)}
+  .tl li:last-child::before{display:none}
+  .tl .dot{position:absolute;inset-inline-start:0;top:3px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .tl .lab{font-weight:650;font-size:12.5px}
+  .tl .when{color:var(--muted);font-size:11px}
+  .ord{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;
+    padding:9px 11px;margin-bottom:8px;background:#fff}
+  .ord .thumb{width:42px;height:42px;border-radius:8px;object-fit:contain;background:#f0ede4;border:1px solid var(--line);flex:none}
+  .ord .t{flex:1;min-width:0;font-size:12.5px;font-weight:600;line-height:1.3;max-height:2.6em;overflow:hidden}
+  .pill{font-size:10.5px;font-weight:800;border-radius:20px;padding:3px 9px;white-space:nowrap}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:18px}
+  .foot{margin-top:18px;color:var(--muted);font-size:11.5px;text-align:center}
+  [dir=rtl] .tl li{padding:0 18px 14px 0}
+</style>
+<div class="card">
+  <div class="brand">
+    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
+    <h1>Otlob<span class="ly">ly</span></h1>
+    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
+      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+  </div>
+
+  <!-- STATE 1: enter phone -->
+  <div id="s_phone" style="display:none">
+    <p class="sub" id="t_introphone"></p>
+    <label id="t_phonelbl"></label>
+    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" autofocus
+           onkeydown="if(event.key==='Enter')sendCode()">
+    <button id="b_send" onclick="sendCode()"></button>
+    <div class="hint" id="t_phonehint"></div>
+    <div id="out1"></div>
+  </div>
+
+  <!-- STATE 2: enter code -->
+  <div id="s_code" style="display:none">
+    <p class="sub" id="t_introcode"></p>
+    <label id="t_codelbl"></label>
+    <input id="code" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
+           onkeydown="if(event.key==='Enter')verifyCode()">
+    <button id="b_verify" onclick="verifyCode()"></button>
+    <button class="ghost" id="b_resend" onclick="backToPhone()"></button>
+    <div id="out2"></div>
+  </div>
+
+  <!-- STATE 3: dashboard -->
+  <div id="s_dash" style="display:none">
+    <div class="hello"><b id="t_hello"></b><button class="out" id="b_logout" onclick="logout()"></button></div>
+    <h2 class="sec" id="t_deliveries"></h2>
+    <div id="shipments"></div>
+    <h2 class="sec" id="t_orders"></h2>
+    <div id="orders"></div>
+  </div>
+
+  <div class="foot" id="t_foot"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let LANG="ar", PHONE="";
+const T={
+  ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"إرسال رمز الدخول",
+      phonehint:"سنرسل رمزاً إلى رقمك على واتساب.",
+      introcode:"أدخل الرمز المكوّن من 6 أرقام المُرسل إلى واتساب.", codelbl:"رمز الدخول",
+      verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", logout:"خروج",
+      deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
+      curr:"الحالة الحالية", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
+      foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
+  en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
+      phonehint:"We'll send a code to your number on WhatsApp.",
+      introcode:"Enter the 6-digit code sent to your WhatsApp.", codelbl:"Login code",
+      verify:"Sign in", resend:"Change number", hello:"Hi", logout:"Log out",
+      deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
+      curr:"current status", track:"Tracking #", eta:"🚚 Expected arrival", prep:"We're preparing your order",
+      foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
+};
+const STAT={ // order status → {ar,en,color,bg}
+  REQUESTED:{ar:"قيد المراجعة",en:"Reviewing",c:"#92400e",b:"#fef3c7"},
+  QUOTED:{ar:"بانتظار التأكيد",en:"Awaiting confirm",c:"#92400e",b:"#fef3c7"},
+  PAID:{ar:"مدفوع",en:"Paid",c:"#3730a3",b:"#e0e7ff"},
+  ORDERED:{ar:"تم الطلب",en:"Ordered",c:"#3730a3",b:"#e0e7ff"},
+  SHIPPED:{ar:"تم الشحن",en:"Shipped",c:"#1d4ed8",b:"#dbeafe"},
+  ARRIVED:{ar:"وصلت بلدك",en:"Arrived",c:"#6d28d9",b:"#ede9fe"},
+  DELIVERED:{ar:"تم التسليم",en:"Delivered",c:"#15803d",b:"#dcfce7"},
+  COLLECTED:{ar:"مكتمل",en:"Completed",c:"#15803d",b:"#dcfce7"},
+  CANCELLED:{ar:"ملغى",en:"Cancelled",c:"#b42318",b:"#fee2e2"}
+};
+function t(k){return (T[LANG]||T.en)[k];}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(d){ if(!d)return""; const x=new Date(d); if(isNaN(x))return esc(d);
+  return x.toLocaleDateString(LANG==="ar"?"ar":"en-GB",{day:"2-digit",month:"short",year:"numeric"}); }
+function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
+  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
+function paint(){
+  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
+  $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
+  $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
+}
+function show(state){ ["s_phone","s_code","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none"); }
+async function sendCode(){
+  const p=$("phone").value.trim(); if(!p)return; PHONE=p;
+  const b=$("b_send"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("out1").innerHTML="";
+  let d; try{ d=await (await fetch("/api/customer/otp/request",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p})})).json(); }catch(e){ d={error:"network"}; }
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("out1").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  paint(); show("s_code"); $("code").focus();
+  if(d.dev_code){ $("out2").innerHTML=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("code").value=d.dev_code; }
+}
+function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; $("phone").focus(); }
+async function verifyCode(){
+  const c=($("code").value||"").trim(); if(!c)return;
+  const b=$("b_verify"); b.disabled=true; const o=b.textContent; b.textContent=t("verifying"); $("out2").innerHTML="";
+  let d; try{ d=await (await fetch("/api/customer/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:PHONE,code:c})})).json(); }catch(e){ d={error:"network"}; }
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("out2").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  loadDashboard();
+}
+async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} backToPhone(); show("s_phone"); }
+function shipCard(s){
+  const cur=s.current||{}; const bucket=cur.bucket||"transit";
+  const items=(s.items||[]).map(it=>`<div class="prod">${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(it.title)}</span></div>`).join("");
+  const tnum=s.tracking?`<div class="tnum">${t("track")} · ${esc(s.tracking)}</div>`:"";
+  const eta=s.est_delivery?`<div class="eta">${t("eta")}: <b>${fmt(s.est_delivery)}</b></div>`:"";
+  const evs=(s.events||[]).slice().reverse();
+  const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'}"><span class="dot dotc b-${e.bucket||'transit'}"></span><div class="lab" dir="auto">${esc(e.label)}</div><div class="when">${fmt(e.date)}</div></li>`).join("")}</ul>`:"";
+  return `<div class="ship">
+    <div class="now b-${bucket}"><span class="dot"></span><div><div class="big" dir="auto">${esc(cur.label)||t("prep")}</div><small>${t("curr")}</small></div></div>
+    ${items?`<div class="items">${items}</div>`:""}${tnum}${eta}${tl}</div>`;
+}
+function orderRow(o){
+  const st=STAT[o.status]||{ar:o.status,en:o.status,c:"#555",b:"#eee"};
+  const it=(o.items||[])[0]||{};
+  const more=(o.items||[]).length>1?` +${o.items.length-1}`:"";
+  const eta=o.est_delivery?` · ${t("eta").replace('🚚 ','')} ${fmt(o.est_delivery)}`:"";
+  return `<div class="ord">
+    ${it.image?`<img class="thumb" src="${esc(it.image)}" alt="">`:'<div class="thumb"></div>'}
+    <div class="t" dir="auto">${esc(it.title||o.order_id)}${more}<div style="color:var(--muted);font-weight:500;font-size:11px">${esc(o.order_id)}${eta}</div></div>
+    <span class="pill" style="color:${st.c};background:${st.b}">${LANG==="ar"?st.ar:st.en}</span></div>`;
+}
+async function loadDashboard(){
+  let d; try{ d=await (await fetch("/api/customer/orders")).json(); }catch(e){ d=null; }
+  if(!d){ backToPhone(); return; }
+  paint(); show("s_dash");
+  $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
+  $("shipments").innerHTML=(d.shipments&&d.shipments.length)?d.shipments.map(shipCard).join(""):`<div class="empty">${t("noship")}</div>`;
+  $("orders").innerHTML=(d.orders&&d.orders.length)?d.orders.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
+}
+async function init(){
+  setLang("ar");
+  let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
+  if(me&&me.logged_in){ loadDashboard(); } else { show("s_phone"); $("phone").focus(); }
+}
+init();
+</script>

@@ -40,6 +40,16 @@ services:
         sync: false
       - key: META_ACCESS_TOKEN
         sync: false
+      # ── Customer-login WhatsApp OTP (Phase 14). Leave OTLOBLY_OTP_DEV=1 until the ──
+      # ── WhatsApp template + token are ready, then set the 3 WHATSAPP_* and remove it. ──
+      - key: OTLOBLY_OTP_DEV       # 1 = show the login code on screen (no WhatsApp needed yet)
+        value: "1"
+      - key: WHATSAPP_TOKEN        # permanent token for the WhatsApp Business number
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_OTP_TEMPLATE # approved authentication template name
+        sync: false
     disk:
       name: otlobly-data
       mountPath: /var/data
