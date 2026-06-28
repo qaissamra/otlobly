@@ -1033,7 +1033,7 @@ def api_track():
     b = request.get_json(force=True, silent=True) or {}
     q = (b.get("query") or b.get("tracking") or b.get("phone") or "").strip()
     if not q:
-        return jsonify({"found": False, "error": "Enter your mobile number or name."}), 400
+        return jsonify({"found": False, "error": "Enter your full mobile number."}), 400
     pdb = purchases.load()
     pairs = []                                    # [(po, package)]
     names, oids = set(), set()                    # the customer's identifiers (empty for a raw OTL lookup)
@@ -1041,22 +1041,17 @@ def api_track():
         po, pk = purchases.find_by_customer_tracking(pdb, q)
         if pk:
             pairs = [(po, pk)]
-    else:                                         # phone or name → their order(s) → packages
-        if len(re.sub(r"\D", "", q)) >= 7:        # looks like a phone
-            pin = normalize.normalize_phone(q)
-            for o in db.list_orders():
-                ph = store.primary_phone(o)
-                if pin and ph and ph["e164"] == pin["e164"]:
-                    names.add((o["customer"]["name"] or "").strip().lower())
-                    oids.add(o["order_id"])
-        if not names and not oids:                # name lookup (or phone with no hit)
-            ql = q.strip().lower()
-            if len(ql) >= 3:
-                for o in db.list_orders():
-                    nm = (o["customer"]["name"] or "").strip().lower()
-                    if nm and (ql == nm or ql in nm):
-                        names.add(nm)
-                        oids.add(o["order_id"])
+    else:                                         # must be the customer's FULL mobile number
+        digits = re.sub(r"\D", "", q)
+        pin = normalize.normalize_phone(q)
+        if len(digits) < 9 or not pin:
+            return jsonify({"found": False,
+                            "error": "Please enter your full mobile number (e.g. 0599xxxxxx)."}), 400
+        for o in db.list_orders():               # exact match only — no partials, no name search
+            ph = store.primary_phone(o)
+            if ph and ph["e164"] == pin["e164"]:
+                names.add((o["customer"]["name"] or "").strip().lower())
+                oids.add(o["order_id"])
         pairs = purchases.find_packages_for(pdb, names, oids)
     # de-dupe + cap
     seen, uniq = set(), []
@@ -1068,8 +1063,8 @@ def api_track():
         uniq.append((po, pk))
     uniq = uniq[:8]
     if not uniq:
-        return jsonify({"found": False, "error": "We couldn't find a package for that. "
-                        "Check your mobile number or name, or contact us."}), 404
+        return jsonify({"found": False, "error": "No package found for that number. "
+                        "Make sure you entered your full mobile number, or contact us."}), 404
     cfgd = cfg.load()
     smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
