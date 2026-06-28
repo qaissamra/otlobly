@@ -1036,12 +1036,12 @@ def api_track():
         return jsonify({"found": False, "error": "Enter your mobile number or name."}), 400
     pdb = purchases.load()
     pairs = []                                    # [(po, package)]
+    names, oids = set(), set()                    # the customer's identifiers (empty for a raw OTL lookup)
     if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number
         po, pk = purchases.find_by_customer_tracking(pdb, q)
         if pk:
             pairs = [(po, pk)]
     else:                                         # phone or name → their order(s) → packages
-        names, oids = set(), set()
         if len(re.sub(r"\D", "", q)) >= 7:        # looks like a phone
             pin = normalize.normalize_phone(q)
             for o in db.list_orders():
@@ -1079,10 +1079,17 @@ def api_track():
     for po, pk in uniq:
         otl = pk.get("customer_tracking")
         gwd = (pk.get("tracking_number") or "").strip()
+        # A package holds items for SEVERAL customers — show ONLY this customer's.
+        if names or oids:                         # phone/name lookup → we know who they are
+            pk_items = [it for it in pk.get("items", [])
+                        if (it.get("customer_name") or "").strip().lower() in names
+                        or (it.get("customer_order_id") or "").strip().upper() in oids]
+        else:                                     # raw OTL lookup → no customer context → no item list
+            pk_items = []
         items = [{"title": (it.get("title") or it.get("asin") or "").strip(),
                   "image": it.get("image") or None}
-                 for it in pk.get("items", [])
-                 if (it.get("title") or it.get("asin") or it.get("image"))][:4]
+                 for it in pk_items
+                 if (it.get("title") or it.get("asin") or it.get("image"))][:6]
         if not gwd:
             shipments.append({"tracking": otl, "items": items, "events": [],
                               "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}})
