@@ -217,6 +217,10 @@
   .qthumb input{display:none}
   .qhint{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
   #quoteView[dir="rtl"] .qhint{text-align:right}
+  .qthumb.proof{border-color:var(--accent);background-color:#fff5f0}
+  .qthumb.proof.has{background-color:#fff}
+  .qproof{display:block;width:100%;max-height:300px;object-fit:contain;border:1px solid var(--line);
+    border-radius:10px;margin:-2px 0 10px;background:#fff}
   a.po-btn{display:inline-flex;align-items:center;text-decoration:none}
   .need-order{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:11px;background:var(--card)}
   .need-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -929,20 +933,22 @@ async function loadNeedOrder(){
   }).join("");
 }
 let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0;
-const qBlank=()=>({title:"",link:"",qty:1,price:"",image:null});
+const qBlank=()=>({title:"",link:"",qty:1,price:"",image:null,proof:null});
 let QROWS=[qBlank()];
 const QSTR={
   ar:{title:"تقدير السعر السريع", intro:"ابحث عن المنتج في أمازون، أدخل السعر يدويًا، وأضف صورة المنتج (الصق صورة، ارفعها، أو اجلبها من الرابط).",
       add:"＋ إضافة منتج", build:"تجهيز عرض السعر", link:"رابط أمازون (اختياري)", qty:"الكمية", price:"السعر $", name:"اسم المنتج",
       total:"الإجمالي للعميل", subtotal:"المجموع", markup:"هامش",
-      paste:"💡 الصق صورة المنتج (Ctrl/Cmd+V) في الصف المحدد، أو اضغط على المربّع لرفع صورة، أو ↓ لجلبها من الرابط.",
+      paste:"💡 🧾 = صورة الفاتورة من أمازون (الصق Ctrl/Cmd+V أو ارفع) — تظهر كبيرة للعميل.  🖼 = صورة المنتج (ارفع أو ↓ من الرابط) — تظهر صغيرة.",
+      proofBox:"صورة الفاتورة من أمازون (الصق أو ارفع)", imgBox:"صورة المنتج (ارفع أو ↓ من الرابط)",
       disclaimer:"السعر يُؤكَّد عند الطلب.", whatsapp:"📱 واتساب", createOrder:"➕ إنشاء طلب من هذا",
       intakeLink:"🔗 رابط تعبئة بيانات العميل", linkCopied:"تم نسخ الرابط ✓", linkOnly:"الرابط متاح على النسخة المنشورة فقط",
       empty:"أدخل سعرًا واحدًا على الأقل.", imgFetched:"تمت إضافة الصورة ✓", imgFail:"تعذّر جلب الصورة — الصقها أو ارفعها يدويًا", fetchImg:"جلب الصورة من الرابط"},
   en:{title:"Quick price quote", intro:"Search the product on Amazon, type the price manually, and add the product image (paste, upload, or fetch from the link).",
       add:"＋ add item", build:"Build quote", link:"Amazon link (optional)", qty:"Qty", price:"Price $", name:"Product name",
       total:"Customer total", subtotal:"Subtotal", markup:"markup",
-      paste:"💡 Paste a product image (Ctrl/Cmd+V) into the selected row, click the box to upload, or ↓ to fetch from the link.",
+      paste:"💡 🧾 = Amazon checkout screenshot (paste Ctrl/Cmd+V or upload) — shown LARGE to the customer.  🖼 = product photo (upload or ↓ from link) — shown small.",
+      proofBox:"Amazon checkout screenshot (paste or upload)", imgBox:"Product photo (upload or ↓ from link)",
       disclaimer:"Final price confirmed at order time.", whatsapp:"📱 WhatsApp", createOrder:"➕ Create order from this",
       intakeLink:"🔗 Customer intake link", linkCopied:"Link copied ✓", linkOnly:"Available on the deployed (hosted) app only",
       empty:"Enter at least one price.", imgFetched:"Image added ✓", imgFail:"Couldn’t fetch image — paste or upload it", fetchImg:"Get image from link"}
@@ -964,7 +970,9 @@ async function loadQuote(){
 }
 function renderQuoteRows(){
   $("quoteRows").innerHTML=QROWS.map((r,i)=>`<div class="qrow" onmousedown="ACTIVE_QROW=${i}">
-    <label class="qthumb ${r.image?'has':''}" style="${r.image?`background-image:url('${r.image}')`:''}" title="${qt('paste')}">
+    <label class="qthumb proof ${r.proof?'has':''}" style="${r.proof?`background-image:url('${r.proof}')`:''}" title="${qt('proofBox')}">
+      ${r.proof?'':'🧾'}<input type="file" accept="image/*" onchange="qPickProof(${i},this)"></label>
+    <label class="qthumb ${r.image?'has':''}" style="${r.image?`background-image:url('${r.image}')`:''}" title="${qt('imgBox')}">
       ${r.image?'':'🖼'}<input type="file" accept="image/*" onchange="qPickImage(${i},this)"></label>
     <input value="${poEsc(r.title)}" placeholder="${qt('name')}" style="flex:2;min-width:130px" oninput="QROWS[${i}].title=this.value" onfocus="ACTIVE_QROW=${i}">
     <input value="${poEsc(r.link)}" placeholder="${qt('link')}" style="flex:1;min-width:90px" oninput="QROWS[${i}].link=this.value;qRowLinkBtn(${i})" onfocus="ACTIVE_QROW=${i}">
@@ -977,17 +985,18 @@ function renderQuoteRows(){
 function qRowLinkBtn(i){ const b=$("qfi"+i); if(b) b.style.visibility=(QROWS[i].link||"").trim()?"visible":"hidden"; }
 function qAddRow(){ QROWS.push(qBlank()); ACTIVE_QROW=QROWS.length-1; renderQuoteRows(); }
 function qRemoveRow(i){ QROWS.splice(i,1); if(!QROWS.length)QROWS=[qBlank()]; ACTIVE_QROW=Math.min(ACTIVE_QROW,QROWS.length-1); renderQuoteRows(); }
-function qResizeImage(file,cb){
+function qResizeImage(file,cb,max){
   const fr=new FileReader();
   fr.onload=()=>{ const im=new Image(); im.onload=()=>{
-    const max=760, sc=Math.min(1,max/Math.max(im.width,im.height));
+    const M=max||760, sc=Math.min(1,M/Math.max(im.width,im.height));
     const c=document.createElement('canvas'); c.width=Math.round(im.width*sc)||1; c.height=Math.round(im.height*sc)||1;
-    try{ c.getContext('2d').drawImage(im,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.82)); }
+    try{ c.getContext('2d').drawImage(im,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',max?0.88:0.82)); }
     catch(e){ cb(fr.result); } };
     im.onerror=()=>cb(fr.result); im.src=fr.result; };
   fr.onerror=()=>cb(null); fr.readAsDataURL(file);
 }
 function qPickImage(i,inp){ const f=inp.files&&inp.files[0]; if(!f)return; qResizeImage(f,d=>{ if(d){QROWS[i].image=d; renderQuoteRows();} }); }
+function qPickProof(i,inp){ const f=inp.files&&inp.files[0]; if(!f)return; qResizeImage(f,d=>{ if(d){QROWS[i].proof=d; renderQuoteRows();} }, 1400); }
 async function qFetchImg(i){
   const link=(QROWS[i].link||"").trim(); if(!link)return;
   let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(link))).json(); }catch(e){ d={}; }
@@ -999,7 +1008,7 @@ function qPasteImage(e){
   const items=(e.clipboardData&&e.clipboardData.items)||[];
   for(const it of items){ if(it.type&&it.type.indexOf("image")===0){ const f=it.getAsFile();
     if(f){ e.preventDefault(); const i=Math.min(Math.max(ACTIVE_QROW,0),QROWS.length-1);
-      qResizeImage(f,d=>{ if(d){QROWS[i].image=d; renderQuoteRows(); toast(qt("imgFetched"));} }); }
+      qResizeImage(f,d=>{ if(d){QROWS[i].proof=d; renderQuoteRows(); toast(qt("imgFetched"));} }, 1400); }
     return; } }
 }
 window.addEventListener("paste", qPasteImage);
@@ -1008,7 +1017,7 @@ function qBuildQuote(){
   if(!rows.length){ toast(qt("empty")); return; }
   const markup=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0;
   const items=rows.map(r=>{ const qty=parseInt(r.qty)||1, price=parseFloat(r.price)||0;
-    return {title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null,
+    return {title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null, proof:r.proof||null,
             qty, item_usd:price, line:+(price*qty).toFixed(2)}; });
   const subtotal=+items.reduce((s,it)=>s+it.line,0).toFixed(2);
   const total=+(subtotal*(1+markup)).toFixed(2);
@@ -1020,13 +1029,14 @@ function renderQuoteResult(d){
   const cards=d.items.map(it=>{
     const img=it.image?`<img src="${poEsc(it.image)}">`:'<div class="noimg"></div>';
     const qline=it.qty>1?`<div class="muted2" style="font-size:11.5px;margin-top:3px">${money(it.item_usd)} × ${it.qty}</div>`:"";
+    const proof=it.proof?`<img class="qproof" src="${poEsc(it.proof)}" alt="">`:"";
     return `<div class="qcard">${img}
       <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.link||'—')}</div>${qline}</div>
-      <div class="qsub">${money(it.line)}</div></div>`;
+      <div class="qsub">${money(it.line)}</div></div>${proof}`;
   }).join("");
   const wa=qWhatsappLink(d);
   const info=JSON.stringify({total:d.total_usd||0,links:d.items.map(i=>i.link).filter(Boolean),
-    products:d.items.map(i=>({image:i.image,title:i.title,item_usd:i.item_usd,qty:i.qty,link:i.link}))}).replace(/'/g,"&#39;");
+    products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,item_usd:i.item_usd,qty:i.qty,link:i.link}))}).replace(/'/g,"&#39;");
   const breakdown=(!cust&&d.markup>0)?`<div class="muted2" style="font-size:11.5px;margin-top:7px">${qt("subtotal")} ${money(d.subtotal)} · ${qt("markup")} ${Math.round(d.markup*1000)/10}%</div>`:"";
   $("quoteResult").innerHTML=`<div class="qcards">${cards}</div>
     <div class="qtotal"><span>${qt("total")}</span><b>${money(d.total_usd)}</b></div>${breakdown}

@@ -20,6 +20,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from urllib.parse import quote as _urlquote
 
 from flask import (Flask, request, jsonify, redirect, url_for, render_template,
                    send_file, abort, session)
@@ -1034,6 +1035,29 @@ def order_intake_page(draft_id):
     return render_template("order.html")
 
 
+# A sample "Amazon checkout" screenshot for the /order/demo preview (so the big proof
+# image is visible). Real quotes use a pasted/uploaded screenshot instead.
+_DEMO_PROOF = "data:image/svg+xml;charset=utf-8," + _urlquote(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="400" '
+    'font-family="Arial,Helvetica,sans-serif">'
+    '<rect width="560" height="400" fill="rgb(255,255,255)"/>'
+    '<rect width="560" height="56" fill="rgb(35,47,62)"/>'
+    '<text x="24" y="36" fill="rgb(255,255,255)" font-size="22" font-weight="bold">amazon</text>'
+    '<text x="24" y="94" fill="rgb(17,17,17)" font-size="20" font-weight="bold">Order Summary</text>'
+    '<line x1="24" y1="112" x2="536" y2="112" stroke="rgb(227,227,227)"/>'
+    '<text x="24" y="152" fill="rgb(51,51,51)" font-size="17">Items (1):</text>'
+    '<text x="436" y="152" fill="rgb(51,51,51)" font-size="17">$89.00</text>'
+    '<text x="24" y="190" fill="rgb(51,51,51)" font-size="17">Shipping / handling:</text>'
+    '<text x="436" y="190" fill="rgb(51,51,51)" font-size="17">$18.40</text>'
+    '<text x="24" y="228" fill="rgb(51,51,51)" font-size="17">Import Fees Deposit:</text>'
+    '<text x="436" y="228" fill="rgb(51,51,51)" font-size="17">$11.60</text>'
+    '<line x1="24" y1="250" x2="536" y2="250" stroke="rgb(227,227,227)"/>'
+    '<text x="24" y="292" fill="rgb(177,39,4)" font-size="22" font-weight="bold">Order total:</text>'
+    '<text x="404" y="292" fill="rgb(177,39,4)" font-size="22" font-weight="bold">$119.00</text>'
+    '<text x="24" y="348" fill="rgb(136,136,136)" font-size="13">'
+    'Sample Amazon checkout — مثال صورة الفاتورة</text></svg>')
+
+
 @app.route("/api/draft/<draft_id>", methods=["GET"])
 @limiter.limit("20 per minute")
 def api_draft_get(draft_id):
@@ -1041,7 +1065,7 @@ def api_draft_get(draft_id):
         return jsonify({"products": [{
             "title": "Apple AirPods Pro (2nd Generation) — مثال / sample",
             "image": "https://m.media-amazon.com/images/I/61SUj2aKoEL._AC_SL1500_.jpg",
-            "qty": 1}], "amount": 119.0, "used": False, "demo": True})
+            "proof": _DEMO_PROOF, "qty": 1}], "amount": 119.0, "used": False, "demo": True})
     d = db.get_setting(f"draft:{draft_id}")
     if not d:
         return jsonify({"error": "not found"}), 404

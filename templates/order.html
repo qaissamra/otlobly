@@ -20,7 +20,10 @@
   .lang span.on{background:#15140f;color:#fff;border-color:#15140f}
   .sub{color:var(--muted);font-size:13px;margin:6px 0 14px}
   .prod{display:flex;gap:11px;align-items:center;border:1px solid var(--line);border-radius:11px;padding:9px;background:#fbfaf6;margin-bottom:8px}
-  .prod img,.prod .ph{width:50px;height:50px;object-fit:contain;border-radius:8px;background:#f0ede4;border:1px solid var(--line);flex:none}
+  .prod img,.prod .ph{width:58px;height:58px;object-fit:contain;border-radius:8px;background:#f0ede4;border:1px solid var(--line);flex:none}
+  /* the Amazon checkout screenshot — large so the customer can read the price numbers */
+  .proof{display:block;width:100%;max-height:55vh;object-fit:contain;border:1px solid var(--line);
+    border-radius:12px;background:#fff;margin:0 0 9px;cursor:zoom-in}
   .prod .t{font-size:12.5px;font-weight:650;line-height:1.35;max-height:2.7em;overflow:hidden}
   .total{display:flex;justify-content:space-between;font-weight:700;margin:6px 2px 14px;padding-top:10px;border-top:1px solid var(--line)}
   .total b{color:var(--accent);font-size:18px}
@@ -76,7 +79,9 @@ function render(){
   $("intro").textContent=t("intro"); $("lbl_name").textContent=t("name"); $("lbl_phone").textContent=t("phone");
   $("lbl_city").textContent=t("city"); $("lbl_addr").textContent=t("addr"); $("submitBtn").textContent=t("submit");
   if(DRAFT){
-    $("products").innerHTML=(DRAFT.products||[]).map(p=>`<div class="prod">
+    $("products").innerHTML=(DRAFT.products||[]).map(p=>`
+      ${p.proof?`<img class="proof" src="${p.proof}" alt="" onclick="window.open(this.src,'_blank')">`:''}
+      <div class="prod">
       ${p.image?`<img src="${p.image}">`:'<div class="ph"></div>'}
       <div class="t">${(p.title||p.asin||'').replace(/</g,'&lt;')}${p.qty>1?` ×${p.qty}`:''}</div></div>`).join("");
     if(DRAFT.amount!=null){ $("totalRow").style.display="flex"; $("totalLbl").textContent=t("total");
