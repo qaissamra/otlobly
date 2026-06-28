@@ -50,6 +50,7 @@
   .pkg-head .trk-input{border-color:var(--line);background:#fff}
   .pkg-head .trk-lbl{color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.02em}
   .po-tbl .trk-cell{border-color:var(--line);background:#fff;width:104px;font-size:11px}
+  .po-head .pobox{width:88px;font-size:11px;border-color:var(--line);background:#fff}
   /* Paste-an-Amazon-link cell → ASIN auto-fills next door. */
   .po-tbl .linkc{white-space:nowrap}
   .po-tbl .linkin{border-color:var(--line);background:#fff;width:150px;font-size:11px;text-overflow:ellipsis}
@@ -325,13 +326,20 @@
       <select id="batchFilter" onchange="render()"><option value="">All batches</option></select>
       <span class="spacer"></span>
     </div>
+    <div id="bulkBar" class="hidden" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;margin-bottom:8px">
+      <b id="bulkCount" style="color:#b91c1c">0 selected</b>
+      <button class="po-btn danger" onclick="deleteSelectedOrders()">🗑 Delete selected</button>
+      <button class="po-btn" onclick="clearOrderSel()">Clear</button>
+      <span class="muted2" style="font-size:11.5px">deleted orders move to 🗑 Trash — you can restore them</span>
+    </div>
     <table id="tbl">
       <thead><tr>
+        <th style="width:26px"><input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)" title="select all shown"></th>
         <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th>
         <th>Box</th><th>Batch</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
       </tr></thead>
       <tbody id="rows"></tbody>
-      <tfoot><tr><td colspan="3">Total outstanding</td><td class="amt" id="footAmt"></td><td colspan="5"></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td colspan="5"></td></tr></tfoot>
     </table>
   </div>
 
@@ -669,6 +677,7 @@ function render(){
       ? `${money(o.amount_to_collect_usd)} <a title="re-quote from a new checkout total" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="quoteOrder('${o.order_id}')">✎</a>`
       : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
     return `<tr class="row">
+      <td><input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="toggleOrderSel('${o.order_id}',this.checked)"></td>
       <td class="mono">${o.order_id}</td>
       <td><b>${o.customer||"—"}</b><br><span class="mono" style="color:var(--muted)">${o.phone||""}</span></td>
       <td>${itemsCell(o)}</td>
@@ -683,6 +692,29 @@ function render(){
       <td>${waMenu(o)}</td>
     </tr>`;}).join("");
   $("footAmt").textContent=money(out);
+  VISIBLE_ORDER_IDS=rows.map(o=>o.order_id);
+  updateBulkBar();
+}
+
+// ── Bulk select + delete orders ──
+let SELECTED_ORDERS=new Set(), VISIBLE_ORDER_IDS=[];
+function toggleOrderSel(id,on){ on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id); updateBulkBar(); }
+function toggleSelAll(on){ VISIBLE_ORDER_IDS.forEach(id=>on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id));
+  document.querySelectorAll('#rows .ordsel').forEach(cb=>cb.checked=on); updateBulkBar(); }
+function clearOrderSel(){ SELECTED_ORDERS.clear(); document.querySelectorAll('#rows .ordsel').forEach(cb=>cb.checked=false);
+  const sa=$("selAll"); if(sa)sa.checked=false; updateBulkBar(); }
+function updateBulkBar(){
+  const n=SELECTED_ORDERS.size, bar=$("bulkBar");
+  if(bar){ bar.classList.toggle("hidden", n===0); $("bulkCount").textContent=`${n} selected`; }
+  const sa=$("selAll");
+  if(sa) sa.checked = VISIBLE_ORDER_IDS.length>0 && VISIBLE_ORDER_IDS.every(id=>SELECTED_ORDERS.has(id));
+}
+async function deleteSelectedOrders(){
+  const ids=[...SELECTED_ORDERS]; if(!ids.length) return;
+  if(!confirm(`Delete ${ids.length} order${ids.length>1?'s':''}? They move to 🗑 Trash — you can restore them.`)) return;
+  let r; try{ r=await post("/api/orders/delete",{ids}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast(`🗑 ${r.deleted} order${r.deleted>1?'s':''} moved to Trash`); SELECTED_ORDERS.clear(); await load(); }
+  else toast("Delete failed: "+((r&&r.error)||"try again"));
 }
 
 function renderPicking(){
@@ -1240,10 +1272,16 @@ function custOptions(sel){ return ['<option value="">⚠ unmatched</option>'].co
 function statusOptions(sel){ return PO_STATUSES.map(s=>`<option ${s===sel?'selected':''}>${s}</option>`).join(""); }
 function boxOptions(sel){ return ['<option value="">—</option>'].concat(PO_BOXES.map(b=>`<option ${b===sel?'selected':''}>${b}</option>`)).join(""); }
 
+function boxDatalist(){   // autocomplete hints: the known boxes + any already used on POs
+  const used=new Set(PO_BOXES);
+  (POS||[]).forEach(p=>{ if((p.profile_box||'').trim()) used.add(p.profile_box.trim()); });
+  return `<datalist id="poBoxList">${[...used].sort().map(b=>`<option value="${poEsc(b)}">`).join("")}</datalist>`;
+}
+function poSetBox(id,v){ const p=poFind(id); if(p){ p.profile_box=(v||'').trim(); poSave(p); renderPurchases(); } }
 function renderPurchases(){
   if(!POS) return;
   if(!POS.length){ $("poTree").innerHTML=`<div class="panel" style="color:var(--muted)">No purchase orders yet. Click "+ Purchase order".</div>`; return; }
-  $("poTree").innerHTML=POS.map(poCardHtml).join("");
+  $("poTree").innerHTML=boxDatalist()+POS.map(poCardHtml).join("");
 }
 function poTrkCounts(p){   // products still missing a tracking # (item's own OR its package's)
   let tot=0,need=0;
@@ -1261,7 +1299,7 @@ function poCardHtml(p){
     <span class="caret" onclick="poToggle('${poKey(p.po_id)}')">${collapsed?'▸':'▾'}</span>
     <input class="ordnum" value="${poEsc(p.amazon_order_number)}" placeholder="Order #…" onchange="poSet('${p.po_id}','amazon_order_number',this.value)">
     <span class="muted">ship</span><input value="${poEsc(p.ship_to)}" placeholder="ship to" style="width:110px" onchange="poSet('${p.po_id}','ship_to',this.value)">
-    <select onchange="poSet('${p.po_id}','profile_box',this.value)">${boxOptions(p.profile_box)}</select>
+    <span class="muted">profile</span><input class="pobox mono" list="poBoxList" value="${poEsc(p.profile_box)}" placeholder="type box…" title="type any Multilogin profile/box name — free text" onchange="poSetBox('${p.po_id}',this.value)">
     ${p.profile_box?`<button class="po-btn" title="check IP / open this Multilogin profile" onclick="openAzModal('${p.profile_box}')">🖥</button>`:''}
     ${p.profile_box?`<button class="po-btn" title="auto-get every product's tracking # — opens the ${p.profile_box} profile and reads Amazon Your Orders" onclick="azTrackFetch(this,'${p.po_id}',null)">🤖 Get tracking</button>`:''}
     <span class="muted">$</span><input value="${p.total_usd!=null?p.total_usd:''}" style="width:60px" placeholder="USD" onchange="poSet('${p.po_id}','total_usd',this.value)">

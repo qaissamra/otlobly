@@ -533,6 +533,29 @@ def api_sync_sheet():
                     "removed": len(res.get("removed", []))})
 
 
+@app.route("/api/orders/delete", methods=["POST"])
+@auth.require("edit_order")
+def api_orders_delete():
+    """Bulk-delete orders → move each to Trash (restorable), then drop from the DB."""
+    b = request.get_json(force=True, silent=True) or {}
+    ids = [str(i) for i in (b.get("ids") or []) if i]
+    tdb = trash.load()
+    n = 0
+    for oid in ids:
+        o = db.get_order(oid)
+        if not o:
+            continue
+        name = (o.get("customer") or {}).get("name", "")
+        trash.add(tdb, "order", f"{o['order_id']} · {name}", o, actor=_user())
+        activity.log("deleted", "order", o["order_id"], f"{o['order_id']} · {name}",
+                     detail="moved to Trash", user=_user())
+        db.delete_order(o["order_id"])
+        n += 1
+    trash.save(tdb)
+    db.audit(auth.actor(), "delete_orders", "orders", ",".join(ids[:20]), f"{n} → trash")
+    return jsonify({"ok": True, "deleted": n})
+
+
 @app.route("/api/purchases")
 @auth.require("view_orders")
 def api_purchases():
