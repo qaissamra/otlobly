@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — أكمل طلبك / Complete your order</title>
+<style>
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--good:#16a34a;--bad:#dc2626}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;align-items:flex-start;justify-content:center;padding:28px 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;
+    width:440px;max-width:100%;box-shadow:0 8px 30px rgba(30,25,10,.07)}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .brand h1{font-size:19px;margin:0;font-weight:800}.brand .ly{color:var(--accent)}
+  .lang{margin-left:auto;display:flex;gap:6px}
+  .lang span{font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:20px;cursor:pointer;color:var(--muted)}
+  .lang span.on{background:#15140f;color:#fff;border-color:#15140f}
+  .sub{color:var(--muted);font-size:13px;margin:6px 0 14px}
+  .prod{display:flex;gap:11px;align-items:center;border:1px solid var(--line);border-radius:11px;padding:9px;background:#fbfaf6;margin-bottom:8px}
+  .prod img,.prod .ph{width:50px;height:50px;object-fit:contain;border-radius:8px;background:#f0ede4;border:1px solid var(--line);flex:none}
+  .prod .t{font-size:12.5px;font-weight:650;line-height:1.35;max-height:2.7em;overflow:hidden}
+  .total{display:flex;justify-content:space-between;font-weight:700;margin:6px 2px 14px;padding-top:10px;border-top:1px solid var(--line)}
+  .total b{color:var(--accent);font-size:18px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:11px 0 4px}
+  input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+  button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:10px;background:var(--accent);
+    color:#fff;font:inherit;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6}
+  .err{background:#fef2f2;color:var(--bad);border:1px solid #f3c0c0;border-radius:9px;padding:9px 12px;font-size:13px;margin-top:12px}
+  .ok{margin-top:16px;border-top:1px solid var(--line);padding-top:16px;text-align:center}
+  .ok h2{color:var(--good);font-size:17px;margin:0 0 6px}
+  .ordid{font-size:22px;font-weight:800;letter-spacing:1px}
+  body[dir=rtl]{direction:rtl}
+</style>
+<div class="card" id="card">
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
+      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+    <h1>Otlob<span class="ly">ly</span></h1>
+    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
+  </div>
+  <p class="sub" id="intro"></p>
+  <div id="products"></div>
+  <div id="totalRow" class="total" style="display:none"><span id="totalLbl"></span><b id="totalVal"></b></div>
+  <div id="form">
+    <label id="lbl_name"></label><input id="f_name">
+    <label id="lbl_phone"></label><input id="f_phone" placeholder="0599…">
+    <label id="lbl_city"></label><input id="f_city">
+    <label id="lbl_addr"></label><input id="f_addr">
+    <button id="submitBtn" onclick="submitIntake(this)"></button>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const DRAFT_ID=location.pathname.split("/").pop();
+let LANG="ar", DRAFT=null;
+const T={
+  ar:{intro:"أكمل بياناتك لتأكيد طلبك. سيتواصل معك فريق أطلبلي.",total:"الإجمالي المتوقع",
+      name:"الاسم الكامل",phone:"رقم الواتساب",city:"المدينة",addr:"العنوان بالتفصيل",
+      submit:"تأكيد الطلب",expired:"انتهت صلاحية هذا الرابط.",need:"الاسم ورقم هاتف صحيح مطلوبان.",
+      ok:"تم استلام طلبك ✓",okmsg:"احتفظ برقم الطلب لتتبّعه:",err:"تعذّر الإرسال"},
+  en:{intro:"Complete your details to confirm your order. The Otlobly team will contact you.",total:"Estimated total",
+      name:"Full name",phone:"WhatsApp number",city:"City",addr:"Full address",
+      submit:"Confirm order",expired:"This link has expired.",need:"Name and a valid phone are required.",
+      ok:"Order received ✓",okmsg:"Keep your order number to track it:",err:"Couldn’t submit"}
+};
+function t(k){return (T[LANG]||T.en)[k];}
+function setLang(l){LANG=l; document.body.setAttribute("dir", l==="ar"?"rtl":"ltr");
+  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); render();}
+function render(){
+  $("intro").textContent=t("intro"); $("lbl_name").textContent=t("name"); $("lbl_phone").textContent=t("phone");
+  $("lbl_city").textContent=t("city"); $("lbl_addr").textContent=t("addr"); $("submitBtn").textContent=t("submit");
+  if(DRAFT){
+    $("products").innerHTML=(DRAFT.products||[]).map(p=>`<div class="prod">
+      ${p.image?`<img src="${p.image}">`:'<div class="ph"></div>'}
+      <div class="t">${(p.title||p.asin||'').replace(/</g,'&lt;')}${p.qty>1?` ×${p.qty}`:''}</div></div>`).join("");
+    if(DRAFT.amount!=null){ $("totalRow").style.display="flex"; $("totalLbl").textContent=t("total");
+      $("totalVal").textContent="$"+Number(DRAFT.amount).toFixed(2); }
+  }
+}
+async function load(){
+  setLang("ar");
+  const r=await fetch("/api/draft/"+DRAFT_ID);
+  if(!r.ok){ $("form").style.display="none"; $("out").innerHTML=`<div class="err">${t("expired")}</div>`; return; }
+  DRAFT=await r.json(); render();
+}
+async function submitIntake(btn){
+  if(!$("f_name").value.trim()||!$("f_phone").value.trim()){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }
+  btn.disabled=true;
+  const r=await fetch("/api/order/intake",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({draft_id:DRAFT_ID,name:$("f_name").value,phone:$("f_phone").value,city:$("f_city").value,address:$("f_addr").value})});
+  const d=await r.json(); btn.disabled=false;
+  if(d.error){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
+  $("form").style.display="none"; $("products").style.display="none"; $("totalRow").style.display="none"; $("intro").style.display="none";
+  $("out").innerHTML=`<div class="ok"><h2>${t("ok")}</h2><div>${t("okmsg")}</div><div class="ordid">${d.order_id}</div></div>`;
+}
+load();
+</script>

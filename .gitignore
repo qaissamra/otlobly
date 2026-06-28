@@ -1,0 +1,26 @@
+.env
+config.json
+orders.json
+reports/
+*.pyc
+__pycache__/
+.venv/
+orders_export.csv
+service-account*.json
+otlobly.db
+otlobly.db-wal
+otlobly.db-shm
+customer_ids/
+meta_spend.json
+purchases.json
+po_images/
+trash.json
+activity.jsonl
+customers.json
+drafts.json
+*.csv
+*.db-journal
+.DS_Store
+# committed seeds (force-keep, in case a broad rule above ever matches):
+!config.example.json
+!config.default.json

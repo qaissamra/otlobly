@@ -1,0 +1,87 @@
+{
+  "_comment": "Copy to config.json and fill in. IDs (list/field/option) are discovered with `python3 clickup.py --discover` once the ClickUp fields exist. Money is in USD.",
+
+  "pricing": {
+    "markup_pct": 0.10,
+    "_markup_note": "Flat markup on the Amazon CHECKOUT total (item + shipping + import fees). 0.10 = +10%."
+  },
+
+  "clickup": {
+    "list_id": "PASTE_LIST_ID",
+    "_list_note": "Recommended: the existing 'AZ Orders Batch (2)' list so an order keeps one task its whole life.",
+    "fields": {
+      "customer":          "PASTE_FIELD_ID",
+      "phone":             "PASTE_FIELD_ID",
+      "address":           "PASTE_FIELD_ID",
+      "product_links":     "PASTE_FIELD_ID",
+      "amount_to_collect": "PASTE_FIELD_ID",
+      "deposit":           "PASTE_FIELD_ID",
+      "profile_box":       "PASTE_NAME_DROPDOWN_FIELD_ID",
+      "order_status":      "PASTE_ORDER_STATUS_DROPDOWN_FIELD_ID"
+    },
+    "order_status_options": {
+      "_note": "logical order-lifecycle state -> ClickUp dropdown option id (filled by --discover)",
+      "REQUESTED":  "PASTE_OPTION_ID",
+      "QUOTED":     "PASTE_OPTION_ID",
+      "ORDERED":    "PASTE_OPTION_ID",
+      "SHIPPED":    "PASTE_OPTION_ID",
+      "ARRIVED":    "PASTE_OPTION_ID",
+      "DELIVERED":  "PASTE_OPTION_ID",
+      "COLLECTED":  "PASTE_OPTION_ID",
+      "CANCELLED":  "PASTE_OPTION_ID"
+    }
+  },
+
+  "sheets": {
+    "mode": "csv",
+    "_mode_note": "'csv' = write a clean orders_export.csv (zero-dependency). 'api' = write straight to a Google Sheet via a service account (needs GOOGLE_APPLICATION_CREDENTIALS + google-api-python-client).",
+    "spreadsheet_id": "",
+    "worksheet": "Orders"
+  },
+
+  "profiles": {
+    "_note": "Multilogin profile/box -> daily order-capacity cap (anti-detection). order_placer assigns the box with remaining capacity.",
+    "B19": { "folder_id": "", "profile_id": "", "daily_cap": 3 },
+    "B22": { "folder_id": "", "profile_id": "", "daily_cap": 3 },
+    "B27": { "folder_id": "", "profile_id": "", "daily_cap": 3 },
+    "B31": { "folder_id": "", "profile_id": "", "daily_cap": 3 },
+    "B85": { "folder_id": "", "profile_id": "", "daily_cap": 3 }
+  },
+
+  "serpapi": {
+    "enabled": false,
+    "_note": "Optional pre-order ESTIMATE only (item price, not landed). Keys come from .env (SERPAPI_KEY / _2 / _3). Each call costs ~30 credits — estimates are cached.",
+    "amazon_domain": "amazon.com",
+    "cache_ttl_hours": 168
+  },
+
+  "fx": {
+    "_note": "USD is the P&L currency. Rates convert any genuinely non-USD figure. The Amazon 'Total Amount' is already USD (value_is_usd:true), so no rate applies to it.",
+    "aed_per_usd": 3.6725,
+    "ils_per_usd": 3.7
+  },
+
+  "pnl": {
+    "amazon_cost": {
+      "_note": "Otloble AMAZON space -> Orders list. 'Total Amount' is labelled ILS but values are USD.",
+      "list_id": "901523915172",
+      "field_id": "c7243d42-56b6-4a85-8634-e2f948f72be5",
+      "customer_field_id": "6f1542fd-c52f-4bda-acf4-60f9bc4f36fa",
+      "value_is_usd": true
+    },
+    "revenue": {
+      "_note": "Master customer-orders Google Sheet. mode 'sheet' reads it live (needs GOOGLE_APPLICATION_CREDENTIALS); 'orders' uses the local orders.json instead.",
+      "mode": "orders",
+      "spreadsheet_id": "",
+      "worksheet": "Orders",
+      "amount_column": "amount to be collected IN $ USD",
+      "date_column": "",
+      "currency_is_usd": true
+    },
+    "meta": {
+      "_note": "Meta ad spend. mode 'api' pulls via the Marketing API (META_* in .env); 'manual' reads meta_spend.json { 'YYYY-MM': amount_usd }.",
+      "mode": "manual",
+      "spend_currency": "USD"
+    }
+  }
+}

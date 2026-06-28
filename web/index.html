@@ -1,0 +1,1506 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — Orders</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%23111'/%3E%3Ccircle cx='46' cy='52' r='20' fill='none' stroke='%23fff' stroke-width='9'/%3E%3Ccircle cx='46' cy='52' r='6' fill='%23fff'/%3E%3Ccircle cx='72' cy='30' r='9' fill='%23ff5a1f'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f7f5ef; --card:#fff; --ink:#15140f; --muted:#7a766c; --line:#e8e4d8;
+    --accent:#ff5a1f; --ink2:#111; --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --info:#0ea5e9; --indigo:#6366f1; --cyan:#0891b2;
+    --shadow:0 1px 3px rgba(30,25,10,.07),0 8px 24px rgba(30,25,10,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1240px;margin:0 auto;padding:22px}
+  header{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .brand h1 .ly{color:var(--accent)}
+  .brand .sub{color:var(--muted);font-size:12px;margin-top:1px}
+  .spacer{flex:1}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);
+    color:var(--ink);padding:8px 13px;border-radius:9px;cursor:pointer;font-weight:600}
+  button:hover{border-color:#cfc9b8}
+  button.primary{background:var(--ink2);border-color:var(--ink2);color:#fff}
+  button.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.55;cursor:progress}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:14px 16px;box-shadow:var(--shadow)}
+  .card .n{font-size:25px;font-weight:800;letter-spacing:-.5px}
+  .card .n.money{color:var(--accent)}
+  .card .n.neg{color:var(--bad)}
+  .card .n.good{color:var(--good)}
+  .card .l{color:var(--muted);font-size:12px;margin-top:2px}
+  #pnlChart{display:flex;align-items:flex-end;gap:7px;height:96px;padding:6px 0;margin-bottom:6px}
+  #pnlSources .qchip b{font-weight:750}
+  /* Purchases tree-table */
+  .po-card{background:var(--card);border:1px solid var(--line);border-radius:13px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden}
+  .po-head{display:flex;align-items:center;gap:7px;padding:10px 12px;background:#fbfaf6;flex-wrap:wrap}
+  .caret{cursor:pointer;user-select:none;width:22px;color:var(--ink);font-size:18px;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center}
+  .caret:hover{color:var(--accent)}
+  .po-head input,.pkg-head input,.po-tbl input,.po-tbl select,.po-head select{border:1px solid transparent;background:transparent;border-radius:6px;padding:3px 6px;font:inherit;color:var(--ink)}
+  .po-head input:hover,.pkg-head input:hover,.po-tbl input:hover,.po-tbl select:hover,.po-head select:hover{border-color:var(--line);background-color:#fff}
+  .po-head input:focus,.pkg-head input:focus,.po-tbl input:focus,.po-tbl select:focus,.po-head select:focus{border-color:var(--accent);background-color:#fff;outline:none}
+  /* Tracking # always looks like an editable field (not static text). */
+  .pkg-head .trk-input{border-color:var(--line);background:#fff}
+  .pkg-head .trk-lbl{color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.02em}
+  .po-tbl .trk-cell{border-color:var(--line);background:#fff;width:104px;font-size:11px}
+  /* Paste-an-Amazon-link cell → ASIN auto-fills next door. */
+  .po-tbl .linkc{white-space:nowrap}
+  .po-tbl .linkin{border-color:var(--line);background:#fff;width:150px;font-size:11px;text-overflow:ellipsis}
+  .po-tbl .linkopen{margin-left:4px;text-decoration:none;color:var(--accent);font-weight:700;font-size:13px}
+  /* MISSING tracking # lights up red (live, via :placeholder-shown) — it's important. */
+  .po-tbl .trk-cell:placeholder-shown,.pkg-head .trk-input:placeholder-shown{border-color:#dc2626;background:#fef2f2;box-shadow:0 0 0 2px rgba(220,38,38,.12)}
+  .po-tbl .trk-cell::placeholder,.pkg-head .trk-input::placeholder{color:#dc2626;opacity:.8}
+  .trk-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin:0 4px;white-space:nowrap}
+  .trk-pill.ok{color:#15803d;background:#ecfdf5;border:1px solid #86efac}
+  .trk-pill.warn{color:#b91c1c;background:#fef2f2;border:1px solid #fca5a5;animation:trkpulse 1.8s ease-in-out infinite}
+  @keyframes trkpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.20)}}
+  /* Dropdowns always look like dropdowns: visible border + a clear caret. */
+  .po-head select,.pkg-head select,.po-tbl select{-webkit-appearance:none;appearance:none;
+    border:1px solid var(--line);background-color:#fff;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23777' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;
+    padding:5px 28px 5px 9px;min-width:128px;font-size:13px;cursor:pointer}
+  .po-head .ordnum{font-weight:750;width:160px}
+  .po-head .muted{color:var(--muted);font-size:12px}
+  /* keep the action buttons together as one group (wrap as a unit, not just Delete) */
+  .po-actions{display:flex;align-items:center;gap:7px;margin-left:auto;flex-wrap:nowrap}
+  .po-body{padding:4px 12px 12px}
+  .pkg{border:1px solid var(--line);border-radius:10px;margin-top:8px}
+  .pkg-head{display:flex;align-items:center;gap:7px;padding:6px 9px;background:#fcfbf7;font-size:12.5px;flex-wrap:wrap}
+  .pkg-body{padding:0 6px 6px;overflow-x:auto}
+  .po-tbl{width:100%;border-collapse:collapse}
+  .po-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:5px 6px}
+  .po-tbl td{padding:3px 6px;border-top:1px solid var(--line);vertical-align:middle}
+  .po-tbl .thumb{width:64px;height:64px;object-fit:contain;border-radius:8px;background:#f0ede4;display:block}
+  .po-tbl .namec input{width:100%;min-width:150px}
+  .po-tbl .asinc input{width:90px;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+  .po-tbl .qtyc input{width:40px;text-align:center}
+  .po-tbl select.custc{max-width:150px}
+  .iconbtn{border:none;background:transparent;cursor:pointer;font-size:13px;padding:2px 5px;border-radius:6px;color:var(--muted)}
+  .iconbtn:hover{background:#ece9e0;color:var(--ink)}
+  .po-help{background:#fff7ee;border:1px solid #f3d9be;border-radius:11px;padding:11px 14px;
+    font-size:12.5px;line-height:1.6;color:#6b5a45;margin-bottom:12px;position:relative}
+  .po-help .hk{background:#fff;border:1px solid #e8c9a8;border-radius:6px;padding:1px 6px;white-space:nowrap;font-weight:600;color:var(--ink)}
+  .po-help .dismiss{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--muted);font-size:11px}
+  .po-btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:4px 10px;
+    font:inherit;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .po-btn:hover{border-color:#cfc9b8}
+  .po-btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  .po-btn.danger{color:var(--bad)}
+  .po-btn:disabled{opacity:.6;cursor:progress}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid #d7d2c4;border-top-color:var(--accent);
+    border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .trk-badge{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:2px 9px;font-size:11.5px;font-weight:650}
+  .trk-delivered{background:#ecfdf5;color:var(--good)} .trk-arrived,.trk-cleared{background:#fff7ed;color:var(--warn)}
+  .trk-customs{background:#fef2f2;color:var(--bad)} .trk-transit{background:#e0f2fe;color:var(--cyan)}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:15px 16px;box-shadow:var(--shadow)}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+    color:var(--muted);margin:0 0 12px}
+  .kv{display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+  .kv:first-of-type{border-top:none}
+  .kv b{font-variant-numeric:tabular-nums}
+  .bar{display:flex;align-items:center;gap:9px;margin:6px 0}
+  .bar .name{width:120px;font-size:12.5px;display:flex;gap:6px;align-items:center}
+  .bar .track{flex:1;background:#f0ede4;border-radius:6px;height:13px;overflow:hidden}
+  .bar .fill{display:block;height:100%;border-radius:6px;background:var(--accent)}
+  .bar .c{width:104px;text-align:right;font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;white-space:nowrap}
+  .queue{display:flex;flex-wrap:wrap;gap:8px}
+  .qchip{display:flex;gap:7px;align-items:center;background:#fbfaf6;border:1px solid var(--line);
+    border-radius:20px;padding:5px 12px;font-size:12.5px}
+  .qchip b{font-weight:750}
+  .qchip.alert{border-color:#f3c89a;background:#fff7ee}
+  .qchip.alert b{color:var(--warn)}
+  .toolbar{display:flex;gap:9px;margin:6px 0 10px;flex-wrap:wrap;align-items:center}
+  input,select,textarea{font:inherit;padding:8px 11px;border:1px solid var(--line);
+    border-radius:9px;background:var(--card);color:var(--ink)}
+  .search{flex:1;min-width:170px}
+  table{width:100%;border-collapse:collapse;background:var(--card);
+    border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+  th,td{text-align:left;padding:9px 11px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;background:#fbfaf6;cursor:pointer}
+  tr.row:hover{background:#fdfcf8}
+  .amt{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
+    font-size:11px;font-weight:700;white-space:nowrap;border:1px solid transparent}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .lk{display:block;font-size:11.5px;color:var(--accent);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .warnflag{color:var(--warn);font-weight:700}
+  .minibtn{padding:3px 8px;font-size:11.5px;border-radius:7px}
+  .row-actions{display:flex;gap:5px;flex-wrap:wrap}
+  select.statussel{padding:3px 6px;font-size:11.5px;border-radius:7px;font-weight:700}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .form-grid .full{grid-column:1/3}
+  label.fld{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:3px}
+  textarea{width:100%;min-height:64px;resize:vertical}
+  .hidden{display:none}
+  tfoot td{background:#fbfaf6;font-weight:800;border-top:2px solid var(--line)}
+  tfoot .amt{color:var(--accent)}
+  /* picking list */
+  .batchgroup{margin-bottom:16px}
+  .batchgroup h3{margin:0 0 8px;font-size:14px}
+  .batchgroup .box{font-size:11px;color:var(--muted);font-weight:600}
+  #toast{position:fixed;right:18px;bottom:18px;background:#15140f;color:#fff;
+    padding:11px 15px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;
+    opacity:0;transform:translateY(8px);transition:.25s;max-width:440px;white-space:pre-line;z-index:50}
+  #toast.show{opacity:1;transform:none}
+  @media(max-width:860px){.cards{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:1fr}}
+  @media print{
+    body{background:#fff}.cards,.grid3,.toolbar,header button,#ordersView,.no-print{display:none!important}
+    .panel{box-shadow:none}
+  }
+  /* Activity feed + Trash (Phase 9) */
+  .seeall{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}
+  .seeall:hover{text-decoration:underline}
+  .actfeed{display:flex;flex-direction:column}
+  .act-row{display:flex;align-items:flex-start;gap:10px;padding:9px 2px;border-top:1px solid var(--line);font-size:13px}
+  .act-row:first-child{border-top:none}
+  .avatar{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:#ece7fb;color:#6d49d6;
+    font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;letter-spacing:.3px}
+  .act-body{flex:1;min-width:0;line-height:1.45}
+  .act-on{color:var(--muted);font-size:11.5px}
+  .act-sub{color:var(--muted);font-size:11.5px;margin-top:1px}
+  .act-time{flex:0 0 auto;color:var(--muted);font-size:11.5px;white-space:nowrap;padding-top:1px}
+  .empty{color:var(--muted);font-size:13px;padding:18px 6px;text-align:center}
+  .chips{display:inline-flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11.5px;padding:3px 11px;border-radius:20px;border:1px solid var(--line);
+    background:var(--card);color:var(--muted);cursor:pointer;user-select:none}
+  .chip.on{background:var(--ink2);border-color:var(--ink2);color:#fff;font-weight:650}
+  .minibtn.danger{color:var(--bad);border-color:#f0cfcf}
+  .trash-tbl{width:100%;border-collapse:collapse}
+  .trash-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:7px 8px}
+  .trash-tbl td{padding:8px;border-top:1px solid var(--line);vertical-align:middle;font-size:13px}
+  .trash-tbl .ttype{font-weight:650;white-space:nowrap}
+  .trash-act{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}
+  /* Customer ID gallery */
+  .idsum{font-size:13px;color:var(--muted);margin-bottom:12px}
+  .id-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .id-card{border:1px solid var(--line);border-radius:11px;padding:8px;background:var(--card);text-align:center;box-shadow:var(--shadow)}
+  .id-card img{width:100%;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#f0ede4;cursor:zoom-in;display:block}
+  .id-card .noid{width:100%;height:120px;border:1.5px dashed var(--line);border-radius:8px;display:flex;
+    align-items:center;justify-content:center;color:var(--muted);font-size:12.5px;background:#fbfaf6;cursor:pointer}
+  .id-card .noid:hover{border-color:var(--accent);color:var(--accent)}
+  .id-card .nm{font-weight:650;font-size:12.5px;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .id-card .ph{color:var(--muted);font-size:11px;font-family:ui-monospace,Menlo,monospace}
+  /* Quick Quote estimator */
+  .muted2{color:var(--muted)}
+  .qcards{display:flex;flex-direction:column;gap:8px}
+  .qcard{display:flex;gap:11px;align-items:center;border:1px solid var(--line);border-radius:11px;padding:9px 11px;background:#fbfaf6}
+  .qcard img,.qcard .noimg{width:54px;height:54px;flex:0 0 auto;object-fit:contain;border-radius:8px;background:#f0ede4;border:1px solid var(--line)}
+  .qcard .qtitle{font-weight:650;font-size:13px;line-height:1.35;max-height:2.7em;overflow:hidden}
+  .qcard .qsub{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .qtotal{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;
+    border-top:2px solid var(--line);font-size:15px;font-weight:700}
+  .qtotal b{font-size:22px;color:var(--accent);font-variant-numeric:tabular-nums}
+  #quoteView[dir="rtl"] .qcard .qtitle,#quoteView[dir="rtl"] #q_intro{text-align:right}
+  .qcard.noship{background:#fef4f2;border-color:#f0cfcf;opacity:.92}
+  .qcard.noship img,.qcard.noship .noimg{filter:grayscale(.7)}
+  .qcard .noshipmsg{color:var(--bad);font-size:11.5px;font-weight:650;margin-top:4px}
+  a.po-btn{display:inline-flex;align-items:center;text-decoration:none}
+  .need-order{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:11px;background:var(--card)}
+  .need-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+    background:#eef2ff;color:#6366f1;border-radius:20px;padding:2px 9px;margin-left:6px}
+  /* AZ / Multilogin profile popup */
+  .az-modal{position:fixed;inset:0;background:rgba(20,18,12,.4);display:flex;align-items:center;justify-content:center;z-index:60}
+  .az-modal.hidden{display:none}   /* 2-class specificity beats .az-modal so 'hidden' actually hides it */
+  .az-box{background:var(--card);border:1px solid var(--line);border-radius:14px;width:380px;max-width:94vw;box-shadow:var(--shadow);overflow:hidden}
+  .az-head{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#fbfaf6;border-bottom:1px solid var(--line);font-size:15px}
+  .az-x{cursor:pointer;color:var(--muted);font-size:14px}
+  #azBody{padding:15px 16px}
+  .az-kv{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+  .az-kv:first-child{border-top:none}
+  .az-kv b{font-variant-numeric:tabular-nums}
+  .az-fraud{font-weight:700;padding:1px 8px;border-radius:20px;font-size:12px}
+  .az-actions{display:flex;gap:8px;margin-top:14px}
+  .az-actions button{flex:1}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="brand">
+      <svg width="40" height="40" viewBox="0 0 100 100" aria-hidden="true">
+        <rect width="100" height="100" rx="26" fill="#111"/>
+        <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+        <circle cx="46" cy="52" r="6" fill="#fff"/>
+        <circle cx="72" cy="30" r="9" fill="#ff5a1f"/>
+      </svg>
+      <span><h1>Otlob<span class="ly">ly</span> · Orders</h1>
+        <div class="sub" id="sub">loading…</div></span>
+    </span>
+    <span class="spacer"></span>
+    <button class="accent" onclick="toggleForm()">+ Add order</button>
+    <button onclick="toggleQuote()" id="quoteBtn" title="estimate a customer's price from Amazon links">💰 Quote</button>
+    <button onclick="toggleNeedOrder()" id="needBtn" title="orders waiting to be placed on Amazon">💡 To order</button>
+    <button onclick="toggleCustomers()" id="custBtn">👤 Customers</button>
+    <button onclick="togglePurchases()" id="poBtn">📦 Purchases</button>
+    <button onclick="togglePnl()" id="pnlBtn">📊 P&amp;L</button>
+    <button onclick="togglePicking()" id="pickBtn">🧾 Picking list</button>
+    <button onclick="toggleActivity()" id="activityBtn" title="see who changed what, and when">🕑 Activity</button>
+    <button onclick="toggleTrash()" id="trashBtn" title="deleted items — restore anything here">🗑 Trash</button>
+    <button onclick="syncSheet(this)" id="sheetBtn">⤓ Sync Sheet</button>
+    <button onclick="exportCsv(this)" id="exportBtn">⬇ Export CSV</button>
+    <button onclick="syncClickup(this)" id="clickupBtn">↗ Sync ClickUp</button>
+    <button onclick="toggleSettings()" id="settingsBtn" title="markup, shipping/import rules, WhatsApp number">⚙ Settings</button>
+    <button class="primary" onclick="load()">↻ Refresh</button>
+    <span id="userChip" style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"></span>
+  </header>
+
+  <!-- Intake form -->
+  <div class="panel hidden" id="formPanel" style="margin-bottom:14px">
+    <h2>New order</h2>
+    <div class="form-grid">
+      <div><label class="fld">Customer name</label><input id="f_name" style="width:100%"></div>
+      <div><label class="fld">City (optional)</label><input id="f_city" style="width:100%"></div>
+      <div><label class="fld">Phone</label><input id="f_phone" style="width:100%" placeholder="0599…"></div>
+      <div><label class="fld">Phone 2 (optional)</label><input id="f_phone2" style="width:100%"></div>
+      <div class="full"><label class="fld">Address</label><input id="f_address" style="width:100%"></div>
+      <div class="full"><label class="fld">Amazon links (one per line — a.co is fine)</label>
+        <textarea id="f_links" oninput="document.getElementById('impPreview').innerHTML=''"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+          <button onclick="importAmazon(this)" id="impBtn">⤓ Fetch from Amazon</button>
+          <span style="font-size:11.5px;color:var(--muted)">auto-fills title, price &amp; suggested quote (1st link)</span>
+        </div>
+        <div id="impPreview"></div></div>
+      <div class="full" style="font-size:11.5px;color:var(--muted);background:#fbfaf6;border:1px solid var(--line);border-radius:8px;padding:7px 10px">
+        ℹ️ Box &amp; batch are assigned automatically when you record the Amazon purchase. The “how much I pay Amazon” lives on the <b>Purchases</b> page, not here.</div>
+      <div><label class="fld">Amazon checkout total (USD)</label>
+        <input id="f_checkout" style="width:100%" placeholder="item + shipping + import, from checkout" oninput="recalcQuote()">
+        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">the order total Amazon shows at checkout (shipping to Palestine)</div></div>
+      <div><label class="fld">Final price to collect (USD)</label>
+        <input id="f_amount" style="width:100%" placeholder="auto = checkout + markup">
+        <div id="quoteBreak" style="font-size:11px;color:var(--good);margin-top:3px"></div></div>
+      <div><label class="fld">Deposit note (عربون)</label><input id="f_deposit" style="width:100%" placeholder="50 ILS"></div>
+      <div class="full" style="display:flex;gap:9px;justify-content:flex-end">
+        <button onclick="toggleForm()">Cancel</button>
+        <button class="accent" id="addBtn" onclick="addOrder(this)">Save order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="cards">
+    <div class="card"><div class="n" id="c_total">–</div><div class="l">Orders</div></div>
+    <div class="card"><div class="n money" id="c_out">–</div><div class="l">Outstanding (USD)</div></div>
+    <div class="card"><div class="n" id="c_need">–</div><div class="l">Need to order</div></div>
+    <div class="card"><div class="n" id="c_ready">–</div><div class="l">Arrived · to collect</div></div>
+  </div>
+
+  <div class="grid3">
+    <div class="panel">
+      <h2>💵 Money / collection</h2>
+      <div id="money"></div>
+    </div>
+    <div class="panel">
+      <h2>📌 Action queue</h2>
+      <div class="queue" id="queue"></div>
+    </div>
+    <div class="panel">
+      <h2>📦 Load by profile / box</h2>
+      <div id="profiles"></div>
+    </div>
+  </div>
+
+  <!-- Latest Activity (home) -->
+  <div class="panel" id="homeActivity" style="margin-bottom:14px">
+    <h2 style="display:flex;align-items:center">🕑 Latest Activity
+      <a class="seeall" onclick="toggleActivity()">View all →</a></h2>
+    <div id="homeActivityList" class="actfeed"></div>
+  </div>
+
+  <!-- Orders -->
+  <div id="ordersView">
+    <div class="toolbar">
+      <input class="search" id="search" placeholder="Search name, phone, ASIN, address…" oninput="render()">
+      <select id="statusFilter" onchange="render()"><option value="">All statuses</option></select>
+      <select id="batchFilter" onchange="render()"><option value="">All batches</option></select>
+      <span class="spacer"></span>
+    </div>
+    <table id="tbl">
+      <thead><tr>
+        <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th>
+        <th>Box</th><th>Batch</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot><tr><td colspan="3">Total outstanding</td><td class="amt" id="footAmt"></td><td colspan="5"></td></tr></tfoot>
+    </table>
+  </div>
+
+  <!-- Profit / P&L -->
+  <div id="pnlView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">📊 Profit / P&amp;L
+        <span style="color:var(--muted);font-weight:500;font-size:12px">· all USD</span></h2>
+      <span class="spacer"></span>
+      <span id="pnlSources" class="chips" style="margin:0"></span>
+      <button onclick="refreshPnl(this)" id="pnlRefresh">↻ Refresh sources</button>
+    </div>
+    <div class="cards" id="pnlCards"
+         style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+    <div class="panel">
+      <h2>Revenue by bulk order (batch)</h2>
+      <div id="pnlChart"></div>
+      <table style="margin-top:6px"><thead><tr>
+        <th>Batch</th><th style="text-align:right">Revenue</th>
+        <th style="text-align:right">% of revenue</th></tr></thead>
+        <tbody id="pnlRows"></tbody></table>
+      <div id="pnlNote" style="color:var(--muted);font-size:12px;margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Customer CRM -->
+  <div id="customersView" class="hidden">
+    <div class="toolbar">
+      <input class="search" id="custSearch" placeholder="Search customer, phone, city…" oninput="custSearchInput()">
+      <span class="spacer"></span>
+      <button onclick="toggleIdGallery()" id="idToggleBtn" title="see every uploaded ID document in one place">🪪 View IDs</button>
+      <button onclick="toggleCustForm()" class="accent">+ Add customer</button>
+      <button onclick="syncCustomers(this)">↻ Sync from orders</button>
+      <input type="file" id="custIdInput" accept="image/*" style="display:none">
+    </div>
+    <div class="panel hidden" id="custFormPanel" style="margin-bottom:12px">
+      <h2>New / edit customer</h2>
+      <div class="form-grid">
+        <div><label class="fld">Name</label><input id="c_name" style="width:100%"></div>
+        <div><label class="fld">WhatsApp</label><input id="c_whatsapp" style="width:100%" placeholder="0599…"></div>
+        <div><label class="fld">Email</label><input id="c_email" style="width:100%"></div>
+        <div><label class="fld">City</label><input id="c_city" style="width:100%"></div>
+        <div class="full"><label class="fld">Address</label><input id="c_address" style="width:100%"></div>
+        <div><label class="fld">Preferred payment</label><select id="c_payment"></select></div>
+        <div><label class="fld">VIP</label><select id="c_vip"><option value="">No</option><option value="1">★ VIP</option></select></div>
+        <div class="full"><label class="fld">Notes</label><input id="c_notes" style="width:100%"></div>
+        <div class="full" style="display:flex;gap:9px;justify-content:flex-end">
+          <button onclick="toggleCustForm()">Cancel</button>
+          <button class="accent" onclick="addCustomer(this)">Save customer</button>
+        </div>
+      </div>
+    </div>
+    <div class="grid2" id="custGrid" style="display:grid;grid-template-columns:1.3fr .7fr;gap:14px">
+      <table class="cust-tbl"><thead><tr><th>Customer</th><th>City</th>
+        <th style="text-align:right">Orders</th><th style="text-align:right">Total spent</th>
+        <th style="text-align:center">ID</th><th style="text-align:center">VIP</th></tr></thead>
+        <tbody id="custRows"></tbody></table>
+      <div class="panel" id="custProfile" style="align-self:start">
+        <h2>Profile</h2>
+        <div style="color:var(--muted);font-size:13px">Click a customer to see their profile &amp; order history.</div>
+      </div>
+    </div>
+    <div id="custGallery" class="hidden"></div>
+  </div>
+
+  <!-- Amazon Purchase Orders -->
+  <div id="purchasesView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">📦 Amazon purchase orders</h2>
+      <span style="color:var(--muted);font-size:12px">click any cell to edit · auto-saves</span>
+      <span class="spacer"></span>
+      <button onclick="importClickup(this)" id="impCuBtn" title="pull existing Amazon orders from the ClickUp Otloble space">↙ Import from ClickUp</button>
+      <button onclick="poCollapseAll(true)" class="minibtn">⊟ Collapse all</button>
+      <button onclick="poCollapseAll(false)" class="minibtn">⊞ Expand all</button>
+      <button onclick="addPO()" class="accent">+ New order</button>
+      <input type="file" id="poImgInput" accept="image/*" style="display:none">
+    </div>
+    <div class="po-help" id="poHelp">
+      <b>How this works:</b> each box below is one Amazon order. Inside it are <b>packages</b>
+      (one per delivery), and inside each package are the <b>products</b>.
+      <b>Click any cell to type</b> — it saves by itself.
+      Use <span class="hk">⤓ Get photo</span> to pull a product's picture &amp; name,
+      <span class="hk">🔎 Check shipping</span> to see where a package is, and
+      <span class="hk">↗ Send to ClickUp</span> when the order is ready.
+      Click <b>▾</b> next to a row to fold it away.
+      <a class="dismiss" onclick="document.getElementById('poHelp').style.display='none'">✕ hide</a>
+    </div>
+    <div id="poTree"></div>
+  </div>
+
+  <!-- Picking list -->
+  <div id="pickingView" class="hidden">
+    <div class="panel">
+      <h2>🧾 Picking list — group by batch → box  <button class="minibtn no-print" onclick="window.print()" style="float:right">🖨 Print</button></h2>
+      <div id="picking"></div>
+    </div>
+  </div>
+
+  <!-- Activity log -->
+  <div id="activityView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🕑 Activity</h2>
+      <span style="color:var(--muted);font-size:12px">who changed what · newest first</span>
+      <span class="spacer"></span>
+      <span class="chips" id="actFilters" style="margin:0"></span>
+      <button onclick="loadActivity()" class="minibtn">↻ Refresh</button>
+    </div>
+    <div class="panel"><div id="activityFeed" class="actfeed"></div></div>
+  </div>
+
+  <!-- Quick Quote estimator (bilingual) -->
+  <div id="quoteView" class="hidden">
+    <div class="toolbar">
+      <h2 id="q_h" style="margin:0;font-size:17px;font-weight:800">💰 Quick quote</h2>
+      <span class="spacer"></span>
+      <span class="chips" style="margin:0">
+        <span class="chip" id="qlang_ar" onclick="setQLang('ar')">عربي</span>
+        <span class="chip" id="qlang_en" onclick="setQLang('en')">EN</span></span>
+    </div>
+    <div class="panel" id="quotePanel">
+      <div id="q_intro" class="muted2"></div>
+      <div id="quoteRows" style="margin-top:10px"></div>
+      <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
+      <div style="margin-top:12px;display:flex;gap:9px;align-items:center">
+        <button class="accent" id="q_btn" onclick="qEstimate(this)">Estimate</button>
+        <span id="q_note" class="muted2" style="font-size:11.5px"></span>
+      </div>
+      <div id="quoteResult" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- Need to order (demand queue) -->
+  <div id="needorderView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">💡 Need to order</h2>
+      <span class="muted2" id="needSub" style="font-size:12px"></span>
+      <span class="spacer"></span>
+      <button onclick="loadNeedOrder()" class="minibtn">↻ Refresh</button>
+    </div>
+    <div class="panel"><div id="needList"></div></div>
+  </div>
+
+  <!-- Admin Settings -->
+  <div id="settingsView" class="hidden">
+    <div class="toolbar"><h2 style="margin:0;font-size:17px;font-weight:800">⚙ Settings</h2>
+      <span class="muted2" style="font-size:12px">the pricing logic behind quotes &amp; estimates</span></div>
+    <div class="panel" style="max-width:620px">
+      <div class="form-grid">
+        <div><label class="fld">Markup %</label><input id="s_markup" type="number" step="0.5" style="width:100%" placeholder="10"></div>
+        <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
+        <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
+        <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
+        <div><label class="fld">Shipping estimate</label>
+          <div style="display:flex;gap:6px"><select id="s_shiptype"><option value="flat">flat $</option><option value="pct">% of item</option></select>
+          <input id="s_shipval" type="number" step="0.5" style="width:90px" placeholder="15"></div></div>
+        <div><label class="fld">Import estimate</label>
+          <div style="display:flex;gap:6px"><select id="s_imptype"><option value="flat">flat $</option><option value="pct">% of item</option></select>
+          <input id="s_impval" type="number" step="0.5" style="width:90px" placeholder="0"></div></div>
+        <div class="full"><label class="fld">Customer mode</label>
+          <select id="s_custmode"><option value="">Off — staff see full breakdown</option><option value="1">On — customers see only the final total</option></select></div>
+        <div class="full" style="background:#fff7ee;border:1px solid #f3d9be;border-radius:9px;padding:9px 11px;font-size:12px;color:var(--muted)">
+          ⚠ SerpApi returns the Amazon <b>item price</b> only — it can’t read Amazon’s real shipping/import to Palestine. Set your typical shipping &amp; import here; the exact number comes from checkout / WhatsApp.</div>
+        <div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="saveSettings(this)">Save settings</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trash / Recycle bin -->
+  <div id="trashView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🗑 Trash</h2>
+      <span style="color:var(--muted);font-size:12px">deleted items are kept here until you remove them · nothing is lost</span>
+      <span class="spacer"></span>
+      <button onclick="emptyTrash(this)" id="emptyTrashBtn" class="minibtn danger">Empty trash</button>
+    </div>
+    <div class="panel"><div id="trashList"></div></div>
+  </div>
+</div>
+
+<div id="azModal" class="az-modal hidden" onclick="if(event.target===this)closeAz()">
+  <div class="az-box">
+    <div class="az-head"><b id="azTitle">Profile</b><span class="az-x" onclick="closeAz()">✕</span></div>
+    <div id="azBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let DATA = null;
+const STATUS_COLOR = {
+  REQUESTED:["#6b7280","#f3f4f6"], QUOTED:["#0891b2","#e0f2fe"],
+  ORDERED:["#6366f1","#eef2ff"], SHIPPED:["#0ea5e9","#e0f2fe"],
+  ARRIVED:["#d97706","#fff7ed"], DELIVERED:["#ff5a1f","#fff1ea"],
+  COLLECTED:["#16a34a","#ecfdf5"], CANCELLED:["#dc2626","#fef2f2"]
+};
+const $ = id => document.getElementById(id);
+const money = n => "$" + (Number(n||0)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+let MARKUP_PCT=0.10;
+function recalcQuote(){
+  const t=parseFloat(String($("f_checkout").value).replace(/[^0-9.]/g,''));
+  const br=$("quoteBreak");
+  if(isNaN(t)||t<=0){ br.textContent=""; return; }
+  const final=Math.round(t*(1+MARKUP_PCT)*100)/100;
+  $("f_amount").value=final.toFixed(2);
+  br.textContent=`= ${money(final)} to collect  (checkout ${money(t)} + ${Math.round(MARKUP_PCT*100)}% markup)`;
+}
+function quoteOrder(id){
+  const t=prompt("Amazon checkout total in USD\n(the order total Amazon shows at checkout — item + shipping + Import Fees Deposit):");
+  if(t===null) return;
+  const total=parseFloat(String(t).replace(/[^0-9.]/g,''));
+  if(isNaN(total)||total<=0){ toast("Enter the checkout total as a number"); return; }
+  post("/api/quote",{id,total}).then(r=>{
+    if(r.ok){ toast(`${id} → ${money(r.amount)} to collect  (checkout ${money(total)} + ${Math.round(r.markup_pct*100)}%)`); load(); }
+    else toast("Quote failed: "+(r.error||"")); });
+}
+
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),3500);}
+
+let ME=null;
+async function applyRole(){
+  if(ME) return;
+  ME={local:true};                       // default: local no-auth dashboard → show all
+  try{ const r=await fetch("/api/me"); if(r.ok){const j=await r.json(); if(j&&j.perms) ME=j;} }catch(e){}
+  if(ME.local) return;                    // local dashboard (8788): no logins, show everything
+  const p=ME.perms;
+  const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
+  hide("pnlBtn", p.includes("view_pnl"));
+  hide("exportBtn", p.includes("admin_actions"));
+  hide("clickupBtn", p.includes("admin_actions"));
+  $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b> · ${ME.role} · <a href="/logout">logout</a>`;
+}
+async function load(){
+  await applyRole();
+  const r = await fetch("/api/report"); DATA = await r.json();
+  buildFilters(); renderSummary(); render(); renderPicking();
+  $("sub").textContent = `${DATA.summary.total} orders · ${money(DATA.summary.money.outstanding_usd)} outstanding · updated ${new Date(DATA.generated_at).toLocaleString()}`;
+  fillBoxSelect();
+  loadHomeActivity();
+  try{ const p=await (await fetch("/api/pricing")).json(); if(p.markup_pct!=null) MARKUP_PCT=p.markup_pct; }catch(e){}
+}
+
+function buildFilters(){
+  const sf=$("statusFilter"), bf=$("batchFilter");
+  const curS=sf.value, curB=bf.value;
+  sf.innerHTML='<option value="">All statuses</option>'+DATA.statuses.map(s=>`<option ${s===curS?'selected':''}>${s}</option>`).join("");
+  const batches=[...new Set(DATA.orders.map(o=>o.batch).filter(Boolean))].sort();
+  bf.innerHTML='<option value="">All batches</option>'+batches.map(b=>`<option ${b===curB?'selected':''}>${b}</option>`).join("");
+}
+function fillBoxSelect(){
+  if(!$("f_box")) return;   // box is no longer on the create-order form (assigned at PO time)
+  const boxes=[...new Set(DATA.orders.map(o=>o.profile_box).filter(Boolean))];
+  ["B19","B22","B27","B31","B85"].forEach(b=>{if(!boxes.includes(b))boxes.push(b);});
+  $("f_box").innerHTML='<option value="">—</option>'+boxes.sort().map(b=>`<option>${b}</option>`).join("");
+}
+
+function renderSummary(){
+  const s=DATA.summary, m=s.money, q=s.action_queue;
+  $("c_total").textContent=s.total;
+  $("c_out").textContent=money(m.outstanding_usd);
+  $("c_need").textContent=q.need_order;
+  $("c_ready").textContent=q.arrived_not_collected;
+
+  $("money").innerHTML=[
+    ["Outstanding", money(m.outstanding_usd)],
+    ["Collected", money(m.collected_usd)],
+    ["Total value", money(m.total_value_usd)],
+    ["By batch", ""]
+  ].map(([k,v])=>`<div class="kv"><span>${k}</span><b>${v}</b></div>`).join("")
+   + Object.entries(s.by_batch).map(([b,v])=>
+      `<div class="kv"><span>&nbsp;&nbsp;Batch ${b} · ${v.count}</span><b>${money(v.usd)}</b></div>`).join("");
+
+  const qi=[
+    ["Need to order", q.need_order, false],
+    ["Ordered · not shipped", q.ordered_not_shipped, false],
+    ["In transit", q.in_transit, false],
+    ["Arrived · to collect", q.arrived_not_collected, false],
+    ["⚠ a.co to expand", q.needs_expand, q.needs_expand>0],
+    ["⚠ Unpriced", q.unpriced, q.unpriced>0],
+  ];
+  $("queue").innerHTML=qi.map(([l,n,a])=>`<span class="qchip ${a?'alert':''}">${l} <b>${n}</b></span>`).join("");
+
+  const maxc=Math.max(1,...Object.values(s.by_profile).map(v=>v.count));
+  $("profiles").innerHTML=Object.entries(s.by_profile).map(([b,v])=>`
+    <div class="bar"><span class="name">${b}</span>
+      <span class="track"><span class="fill" style="width:${100*v.count/maxc}%"></span></span>
+      <span class="c">${v.count} · ${money(v.usd)}</span></div>`).join("");
+}
+
+function statusPill(s){const[c,bg]=STATUS_COLOR[s]||["#555","#eee"];
+  return `<span class="pill" style="color:${c};background:${bg};border-color:${c}33">${s}</span>`;}
+
+function statusSelect(o){
+  return `<select class="statussel" onchange="setStatus('${o.order_id}',this.value)">`+
+    DATA.statuses.map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join("")+`</select>`;
+}
+
+function itemsCell(o){
+  const flag=o.needs_expand?` <span class="warnflag" title="a.co link needs expanding">⚠</span>`:"";
+  const links=o.items.map(it=>{
+    const label=it.asin||it.url||"link";
+    return `<a class="lk mono" href="${it.url||'#'}" target="_blank">${label}</a>`;}).join("");
+  return `<div><b>${o.n_items}</b> item${o.n_items!=1?'s':''}${flag}</div>${links}`;
+}
+
+function waMenu(o){
+  return `<select class="statussel" onchange="sendWa('${o.order_id}',this.value);this.selectedIndex=0">
+    <option>💬 message…</option>
+    <option value="quote">Quote</option>
+    <option value="confirmation">Confirmation</option>
+    <option value="payment_due">Amount due</option>
+    <option value="order_placed">Order placed</option>
+    <option value="status_update">Status update</option>
+    <option value="ready_for_pickup">Ready for pickup</option></select>`;
+}
+
+function render(){
+  if(!DATA) return;
+  const term=$("search").value.trim().toLowerCase();
+  const fs=$("statusFilter").value, fb=$("batchFilter").value;
+  let rows=DATA.orders.filter(o=>{
+    if(fs && o.status!==fs) return false;
+    if(fb && o.batch!==fb) return false;
+    if(!term) return true;
+    const hay=[o.customer,o.phone,o.address,o.order_id,
+      ...o.items.map(i=>i.asin)].join(" ").toLowerCase();
+    return hay.includes(term);
+  });
+  let out=0;
+  $("rows").innerHTML=rows.map(o=>{
+    if(["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"].includes(o.status))
+      out+=o.amount_to_collect_usd||0;
+    const amt=o.amount_to_collect_usd!=null
+      ? `${money(o.amount_to_collect_usd)} <a title="re-quote from a new checkout total" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="quoteOrder('${o.order_id}')">✎</a>`
+      : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
+    return `<tr class="row">
+      <td class="mono">${o.order_id}</td>
+      <td><b>${o.customer||"—"}</b><br><span class="mono" style="color:var(--muted)">${o.phone||""}</span></td>
+      <td>${itemsCell(o)}</td>
+      <td class="amt">${amt}</td>
+      <td><input value="${o.profile_box||''}" style="width:54px;padding:3px 6px;font-size:11.5px"
+            onchange="setBox('${o.order_id}',this.value)"></td>
+      <td>${o.batch||"—"}</td>
+      <td>${statusSelect(o)}</td>
+      <td><input value="${o.amazon_order_number||''}" placeholder="113-…" class="mono"
+            style="width:104px;padding:3px 6px;font-size:11px"
+            onchange="setAmazon('${o.order_id}',this.value)"></td>
+      <td>${waMenu(o)}</td>
+    </tr>`;}).join("");
+  $("footAmt").textContent=money(out);
+}
+
+function renderPicking(){
+  const by={};
+  DATA.orders.filter(o=>["REQUESTED","QUOTED"].includes(o.status)||true).forEach(o=>{
+    const b=o.batch||"—"; (by[b]=by[b]||[]).push(o);
+  });
+  $("picking").innerHTML=Object.entries(by).sort().map(([b,os])=>{
+    const boxes={}; os.forEach(o=>{(boxes[o.profile_box||"—"]=boxes[o.profile_box||"—"]||[]).push(o);});
+    return `<div class="batchgroup"><h3>Batch ${b} — ${os.length} order(s)</h3>`+
+      Object.entries(boxes).map(([box,oo])=>`
+        <div class="box">Box ${box}</div>
+        <table style="margin:4px 0 10px"><thead><tr><th>Order</th><th>Customer</th><th>ASINs</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>${oo.map(o=>`<tr><td class="mono">${o.order_id}</td><td>${o.customer}</td>
+          <td class="mono">${o.items.map(i=>i.asin||'?').join(", ")}</td>
+          <td class="amt">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</td>
+          <td>${statusPill(o.status)}</td></tr>`).join("")}</tbody></table>`).join("")+
+      `</div>`;
+  }).join("");
+}
+
+async function setStatus(id,status){await post("/api/status",{id,status});toast(`${id} → ${status}`);load();}
+async function setBox(id,box){await post("/api/assign",{id,box});toast(`${id} box → ${box||'—'}`);load();}
+
+async function sendWa(id,kind){
+  if(!kind) return;
+  const r=await fetch(`/api/message?id=${id}&kind=${kind}`); const m=await r.json();
+  if(m.error){toast("No phone for this order");return;}
+  try{await navigator.clipboard.writeText(m.text);}catch(e){}
+  if(m.wa_link) window.open(m.wa_link,"_blank");
+  toast("WhatsApp opened · text copied to clipboard");
+}
+
+async function addOrder(btn){
+  btn.disabled=true;
+  // Box + Batch are assigned automatically when you record the Amazon purchase (PO) —
+  // not entered here. Only customer + product + quote are captured at order time.
+  const body={
+    name:$("f_name").value, city:($("f_city")?$("f_city").value:""),
+    phone:$("f_phone").value, phone2:$("f_phone2").value,
+    address:$("f_address").value, links:$("f_links").value,
+    deposit_note:$("f_deposit").value, amount:$("f_amount").value,
+    products:PENDING_PRODUCTS
+  };
+  const r=await post("/api/order",body); btn.disabled=false;
+  if(r.ok){toast(`Saved ${r.order_id} (${r.how})`);PENDING_PRODUCTS=null;["f_name","f_city","f_phone","f_phone2","f_address","f_links","f_deposit","f_amount"].forEach(i=>{if($(i))$(i).value="";});$("impPreview").innerHTML="";toggleForm();load();}
+  else toast("Could not save order");
+}
+
+async function exportCsv(b){b.disabled=true;const r=await post("/api/export",{});b.disabled=false;toast(r.output||"exported");}
+async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const r=await post("/api/clickup",{});b.disabled=false;toast(r.output||"done");load();}
+async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…");const r=await post("/api/sync_sheet",{});b.disabled=false;if(r.ok)toast(`Sheet synced · ${r.updated} updated · ${r.created} new`+(r.removed?` · ${r.removed} removed → Trash`:""));else toast("Sync failed: "+(r.error||""));load();}
+
+function toggleForm(){$("formPanel").classList.toggle("hidden");}
+let VIEW="orders";
+function setView(v){
+  VIEW=v;
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder");
+  document.querySelector(".cards").classList.toggle("hidden",full);
+  document.querySelector(".grid3").classList.toggle("hidden",full);
+  $("homeActivity").classList.toggle("hidden",v!=="orders");
+  $("ordersView").classList.toggle("hidden",v!=="orders");
+  $("pickingView").classList.toggle("hidden",v!=="picking");
+  $("pnlView").classList.toggle("hidden",v!=="pnl");
+  $("customersView").classList.toggle("hidden",v!=="customers");
+  $("purchasesView").classList.toggle("hidden",v!=="purchases");
+  $("activityView").classList.toggle("hidden",v!=="activity");
+  $("trashView").classList.toggle("hidden",v!=="trash");
+  $("quoteView").classList.toggle("hidden",v!=="quote");
+  $("settingsView").classList.toggle("hidden",v!=="settings");
+  $("needorderView").classList.toggle("hidden",v!=="needorder");
+  $("pickBtn").textContent=v==="picking"?"📋 Orders table":"🧾 Picking list";
+  $("pnlBtn").textContent=v==="pnl"?"📋 Orders":"📊 P&L";
+  $("custBtn").textContent=v==="customers"?"📋 Orders":"👤 Customers";
+  $("poBtn").textContent=v==="purchases"?"📋 Orders":"📦 Purchases";
+  $("activityBtn").textContent=v==="activity"?"📋 Orders":"🕑 Activity";
+  $("trashBtn").textContent=v==="trash"?"📋 Orders":"🗑 Trash";
+  $("quoteBtn").textContent=v==="quote"?"📋 Orders":"💰 Quote";
+  $("settingsBtn").textContent=v==="settings"?"📋 Orders":"⚙ Settings";
+  $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
+  if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
+  if(v==="customers"){ loadCustomers(); }
+  if(v==="purchases"){ loadPurchases(); }
+  if(v==="activity"){ loadActivity(); }
+  if(v==="trash"){ loadTrash(); }
+  if(v==="quote"){ loadQuote(); }
+  if(v==="settings"){ loadSettings(); }
+  if(v==="needorder"){ loadNeedOrder(); }
+}
+function togglePicking(){ setView(VIEW==="picking"?"orders":"picking"); }
+function togglePnl(){ setView(VIEW==="pnl"?"orders":"pnl"); }
+function toggleCustomers(){ setView(VIEW==="customers"?"orders":"customers"); }
+function togglePurchases(){ setView(VIEW==="purchases"?"orders":"purchases"); }
+function toggleActivity(){ setView(VIEW==="activity"?"orders":"activity"); }
+function toggleTrash(){ setView(VIEW==="trash"?"orders":"trash"); }
+
+// ---- Activity + Trash ---------------------------------------------------- //
+let ACT_FILTER="";
+const ACT_ICON={created:"✨",set:"✏️",added:"➕",removed:"➖",deleted:"🗑",
+  restored:"♻️",uploaded:"📎",synced:"↗"};
+function relTime(iso){ if(!iso)return""; const t=new Date(iso), s=(Date.now()-t)/1000;
+  if(s<60)return"just now"; if(s<3600)return Math.floor(s/60)+"m ago";
+  if(s<86400)return Math.floor(s/3600)+"h ago"; if(s<604800)return Math.floor(s/86400)+"d ago";
+  return t.toLocaleDateString(); }
+function actText(e){
+  if(e.action==="set"&&e.field) return `set <b>${poEsc(e.field)}</b> to <b>${poEsc(e.new||"—")}</b>`;
+  if(e.action==="added")   return `added ${poEsc(e.detail||"an item")}`;
+  if(e.action==="created") return `created <b>${poEsc(e.label)}</b>`;
+  if(e.action==="deleted") return poEsc(e.detail||"deleted something");
+  if(e.action==="restored")return `restored <b>${poEsc(e.label)}</b>`;
+  if(e.action==="uploaded")return `uploaded a file`;
+  if(e.action==="synced")  return `sent to ClickUp`;
+  return poEsc(e.detail||e.action);
+}
+function actRow(e){
+  const who=(e.user||"You"); const ini=who.trim().slice(0,2).toUpperCase();
+  const sub=(e.action==="set"||e.action==="deleted")&&e.detail&&e.action==="set"
+    ? `<div class="act-sub">on ${poEsc(e.detail)}</div>`:"";
+  return `<div class="act-row">
+    <span class="avatar">${poEsc(ini)}</span>
+    <div class="act-body"><div><b>${poEsc(who)}</b> ${actText(e)}
+      <span class="act-on">· ${poEsc(e.label||"")}</span></div>${sub}</div>
+    <span class="act-time">${relTime(e.ts)}</span></div>`;
+}
+async function loadActivity(){
+  const q=ACT_FILTER?("?entity="+ACT_FILTER):"";
+  const d=await (await fetch("/api/activity"+q)).json();
+  const evs=d.activity||[];
+  const chips=[["","All"],["order","Orders"],["purchase","Purchases"],["customer","Customers"]];
+  $("actFilters").innerHTML=chips.map(([v,l])=>
+    `<span class="chip ${v===ACT_FILTER?'on':''}" onclick="ACT_FILTER='${v}';loadActivity()">${l}</span>`).join("");
+  $("activityFeed").innerHTML=evs.length?evs.map(actRow).join("")
+    :`<div class="empty">No activity yet. Edits you make will show up here.</div>`;
+}
+async function loadHomeActivity(){
+  try{ const d=await (await fetch("/api/activity?limit=6")).json();
+    const evs=d.activity||[];
+    $("homeActivityList").innerHTML=evs.length?evs.map(actRow).join("")
+      :`<div class="empty">No activity yet — changes you make will appear here.</div>`;
+  }catch(e){}
+}
+const TRASH_ICON={purchase_order:"📦",po_package:"🚚",po_item:"🏷",order:"🧾",customer:"👤"};
+async function loadTrash(){
+  const d=await (await fetch("/api/trash")).json(); const rows=d.trash||[];
+  $("emptyTrashBtn").style.display=rows.length?"":"none";
+  if(!rows.length){ $("trashList").innerHTML=`<div class="empty">🗑 Trash is empty. Anything you delete will land here so you can restore it.</div>`; return; }
+  $("trashList").innerHTML=`<table class="trash-tbl"><thead><tr>
+    <th>Type</th><th>Item</th><th>Deleted</th><th>By</th><th></th></tr></thead><tbody>`+
+    rows.map(r=>`<tr>
+      <td><span class="ttype">${TRASH_ICON[r.kind]||"•"} ${poEsc(r.kind_label)}</span></td>
+      <td>${poEsc(r.label)}</td>
+      <td title="${poEsc(r.deleted_at||'')}">${relTime(r.deleted_at)}</td>
+      <td>${poEsc(r.deleted_by||"You")}</td>
+      <td class="trash-act">
+        <button class="po-btn" onclick="restoreTrash(this,'${r.trash_id}')">♻️ Restore</button>
+        <button class="po-btn danger" onclick="purgeTrash(this,'${r.trash_id}')">✕ Delete permanently</button>
+      </td></tr>`).join("")+`</tbody></table>`;
+}
+async function restoreTrash(btn,id){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Restoring…';
+  const r=await post("/api/trash/restore",{id});
+  if(r.ok){ toast("Restored to "+(r.where||"its place")); loadTrash(); loadHomeActivity(); }
+  else { toast("Restore failed: "+(r.error||"")); btn.disabled=false; btn.textContent="♻️ Restore"; } }
+async function purgeTrash(btn,id){ if(!confirm("Delete this permanently? This cannot be undone."))return;
+  btn.disabled=true; const r=await post("/api/trash/purge",{id}); if(r.ok){ toast("Deleted permanently"); loadTrash(); } }
+async function emptyTrash(btn){ if(!confirm("Empty the whole trash? Everything in it is gone for good."))return;
+  const r=await post("/api/trash/empty",{}); if(r.ok){ toast(`Emptied (${r.removed} removed)`); loadTrash(); } }
+
+// ---- Quick Quote estimator (bilingual) + Settings -------------------------- //
+function toggleQuote(){ setView(VIEW==="quote"?"orders":"quote"); }
+function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
+function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
+async function loadNeedOrder(){
+  const d=await (await fetch("/api/needorder")).json();
+  $("needSub").textContent=`${d.count} order(s) · ${d.products} product(s) to place`;
+  if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
+  $("needList").innerHTML=d.orders.map(o=>{
+    const items=o.items.map(it=>`<div class="qcard" style="padding:7px 9px">
+      ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
+      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||it.asin||'—')}</div>
+        <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
+      ${it.link?`<a class="po-btn" href="${poEsc(it.link)}" target="_blank">open</a>`:''}</div>`).join("");
+    return `<div class="need-order">
+      <div class="need-head">
+        <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
+          <span class="pill">${o.status}</span></div>
+        <div style="text-align:right"><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
+          <div class="muted2" style="font-size:11px">${o.order_id}${o.est_delivery_customer?` · ETA ${o.est_delivery_customer}`:''}</div></div>
+      </div>
+      <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
+  }).join("");
+}
+let QLANG="ar", QSETTINGS=null, QROWS=[{link:"",qty:1}];
+const QSTR={
+  ar:{title:"تقدير السعر السريع", intro:"الصق رابط المنتج من أمازون لتقدير السعر النهائي للعميل (شامل الشحن والجمارك التقديرية).",
+      add:"＋ إضافة منتج", estimate:"احسب السعر", estimating:"جاري الحساب…", link:"رابط أمازون", qty:"الكمية",
+      total:"السعر التقديري الإجمالي", item:"سعر المنتج", shipping:"الشحن", import:"الجمارك",
+      disclaimer:"هذا تقدير تقريبي — السعر النهائي يُؤكَّد عند الطلب. لرقم أدق أو لكميات أكبر راسلنا على واتساب.",
+      whatsapp:"📱 راسلنا على واتساب لسعر دقيق", createOrder:"➕ إنشاء طلب من هذا",
+      note:"سعر المنتج مباشر من أمازون؛ الشحن والجمارك تقديرية.", empty:"أضف رابطًا ثم اضغط احسب السعر.", err:"تعذّر الحساب",
+      noship:"⚠ هذا المنتج لا يُشحن إلى فلسطين (بائع خارجي)", notAvail:"غير متوفر للشحن", noshipNote:"⚠ بعض المنتجات لا تُشحن إلى فلسطين ولم تُحتسب في الإجمالي.",
+      intakeLink:"🔗 رابط تعبئة بيانات العميل", linkCopied:"تم نسخ الرابط ✓", linkOnly:"الرابط متاح على النسخة المنشورة فقط"},
+  en:{title:"Quick price quote", intro:"Paste an Amazon product link to estimate the customer’s final price (incl. estimated shipping & import).",
+      add:"＋ add item", estimate:"Estimate", estimating:"Estimating…", link:"Amazon link", qty:"Qty",
+      total:"Estimated total", item:"Item", shipping:"Shipping", import:"Import",
+      disclaimer:"Rough estimate — the exact price is confirmed at order time. For an exact number or multiple items, message us on WhatsApp.",
+      whatsapp:"📱 WhatsApp us for an exact price", createOrder:"➕ Create order from this",
+      note:"Item price is live from Amazon; shipping & import are estimates.", empty:"Add a link, then press Estimate.", err:"Couldn’t estimate",
+      noship:"⚠ This item doesn’t ship to Palestine (third-party seller)", notAvail:"Not available to ship", noshipNote:"⚠ Some items don’t ship to Palestine and aren’t in the total.",
+      intakeLink:"🔗 Customer intake link", linkCopied:"Link copied ✓", linkOnly:"Available on the deployed (hosted) app only"}
+};
+function qt(k){ return (QSTR[QLANG]||QSTR.en)[k]||k; }
+let QLAST=null;
+function setQLang(l){ QLANG=l; renderQuoteChrome(); if(QLAST) renderQuoteResult(QLAST); }
+function renderQuoteChrome(){
+  const rtl=QLANG==="ar"; $("quoteView").dir=rtl?"rtl":"ltr";
+  $("q_h").textContent="💰 "+qt("title"); $("q_intro").textContent=qt("intro");
+  $("q_add").textContent=qt("add"); $("q_btn").textContent=qt("estimate"); $("q_note").textContent=qt("note");
+  $("qlang_ar").classList.toggle("on",QLANG==="ar"); $("qlang_en").classList.toggle("on",QLANG==="en");
+  renderQuoteRows();
+}
+async function loadQuote(){
+  try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){ QSETTINGS={}; }
+  if(!QROWS.length) QROWS=[{link:"",qty:1}];
+  renderQuoteChrome(); $("quoteResult").innerHTML="";
+}
+function renderQuoteRows(){
+  $("quoteRows").innerHTML=QROWS.map((r,i)=>`<div style="display:flex;gap:8px;margin-bottom:7px;align-items:center">
+    <input value="${poEsc(r.link)}" placeholder="${qt("link")}" style="flex:1" oninput="QROWS[${i}].link=this.value">
+    <input type="number" min="1" value="${r.qty||1}" title="${qt("qty")}" style="width:64px" oninput="QROWS[${i}].qty=this.value">
+    <button class="iconbtn" onclick="qRemoveRow(${i})" ${QROWS.length<2?'style="visibility:hidden"':''}>✕</button></div>`).join("");
+}
+function qAddRow(){ QROWS.push({link:"",qty:1}); renderQuoteRows(); }
+function qRemoveRow(i){ QROWS.splice(i,1); if(!QROWS.length)QROWS=[{link:"",qty:1}]; renderQuoteRows(); }
+async function qEstimate(btn){
+  const items=QROWS.filter(r=>(r.link||"").trim()).map(r=>({link:r.link.trim(),qty:parseInt(r.qty)||1}));
+  if(!items.length){ toast(qt("empty")); return; }
+  btn.disabled=true; const old=btn.textContent; btn.innerHTML='<span class="spin"></span> '+qt("estimating");
+  let d; try{ d=await post("/api/estimate",{items}); }catch(e){ d={error:"network"}; }
+  btn.disabled=false; btn.textContent=old;
+  if(d.error){ $("quoteResult").innerHTML=`<div class="warnflag">${qt("err")}: ${poEsc(d.error)}</div>`; return; }
+  renderQuoteResult(d);
+}
+function renderQuoteResult(d){
+  QLAST=d;
+  const cust=!!(QSETTINGS&&QSETTINGS.customer_mode);
+  const cards=d.items.map(it=>{
+    if(it.error) return `<div class="qcard"><div class="warnflag">${poEsc(it.error)}</div></div>`;
+    const img=it.image?`<img src="${poEsc(it.image)}">`:'<div class="noimg"></div>';
+    if(it.ships===false){
+      return `<div class="qcard noship">${img}
+        <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.asin)}</div>
+          <div class="noshipmsg">${qt("noship")}</div></div>
+        <div class="qsub muted2" style="font-size:12px">${qt("notAvail")}</div></div>`;
+    }
+    const breakdown=cust?"":`<div class="muted2" style="font-size:11.5px;margin-top:4px">
+      ${qt("item")} ${money(it.item_usd)}${it.qty>1?` ×${it.qty}`:""} · ${qt("shipping")} ${money(it.shipping_usd)} · ${qt("import")} ${money(it.import_usd)}</div>`;
+    const sub=cust?"":`<div class="qsub">${money(it.landed_usd)}</div>`;
+    return `<div class="qcard">${img}
+      <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.asin)}</div>${breakdown}</div>${sub}</div>`;
+  }).join("");
+  const wa=qWhatsappLink(d);
+  const shippable=d.items.filter(i=>!i.error&&i.ships!==false);
+  const info=JSON.stringify({total:d.total_usd||0,links:shippable.map(i=>i.link),
+    products:shippable.map(i=>({asin:i.asin,image:i.image,title:i.title,item_usd:i.item_usd,qty:i.qty}))}).replace(/'/g,"&#39;");
+  const totalHtml=d.total_usd!=null
+    ? `<div class="qtotal"><span>${qt("total")}</span><b>${money(d.total_usd)}</b></div>`
+    : `<div class="qtotal"><span>${qt("total")}</span><b class="muted2" style="font-size:15px">${qt("notAvail")}</b></div>`;
+  const noteHtml=d.any_unshippable?`<div class="warnflag" style="font-size:11.5px;margin-top:7px">${qt("noshipNote")}</div>`:"";
+  $("quoteResult").innerHTML=`<div class="qcards">${cards}</div>
+    ${totalHtml}${noteHtml}
+    <div class="muted2" style="font-size:11.5px;margin-top:6px">${qt("disclaimer")}</div>
+    <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+      ${wa?`<a class="po-btn accent" href="${wa}" target="_blank">${qt("whatsapp")}</a>`:""}
+      ${shippable.length?`<button class="po-btn" onclick='qCreateOrder(${info})'>${qt("createOrder")}</button>`:""}
+      ${shippable.length?`<button class="po-btn" onclick='qSendIntake(this,${info})'>${qt("intakeLink")}</button>`:""}</div>`;
+}
+async function qSendIntake(btn,info){
+  btn.disabled=true;
+  let r; try{ r=await post("/api/draft",{products:info.products,amount:info.total}); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(r&&r.ok&&r.url){
+    try{ await navigator.clipboard.writeText(r.url); toast(qt("linkCopied")+"  "+r.url); }
+    catch(e){ prompt(qt("linkCopied"), r.url); }
+  } else { toast(qt("linkOnly")); }   // /api/draft is hosted-only
+}
+function qWhatsappLink(d){
+  const num=((QSETTINGS&&QSETTINGS.business_whatsapp)||"").replace(/[^\d]/g,"");
+  if(!num) return "";
+  const lines=d.items.filter(i=>!i.error).map(i=>`• ${i.link}${i.qty>1?` x${i.qty}`:""}`).join("\n");
+  const msg=(QLANG==="ar"?"مرحبا، أريد سعرًا دقيقًا لهذه المنتجات:\n":"Hi, I’d like an exact price for:\n")+lines;
+  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+}
+let PENDING_PRODUCTS=null;
+function qCreateOrder(info){
+  setView("orders"); $("formPanel").classList.remove("hidden");
+  $("f_links").value=(info.links||[]).join("\n");
+  $("f_amount").value=Number(info.total||0).toFixed(2);
+  PENDING_PRODUCTS=info.products||null;          // carry image/title/price/qty into the order
+  if($("f_checkout")) $("f_checkout").value="";
+  if($("quoteBreak")) $("quoteBreak").textContent="";
+  window.scrollTo(0,0); toast(QLANG==="ar"?"تم تعبئة نموذج الطلب — راجع واحفظ":"Order form filled — review & save");
+}
+async function loadSettings(){
+  const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
+  const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
+  $("s_wa").value=s.business_whatsapp||""; $("s_dest").value=s.destination.shipping_location||"";
+  $("s_destlabel").value=s.destination.label||"";
+  $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
+  $("s_imptype").value=s.import_rule.type; $("s_impval").value=s.import_rule.value;
+  $("s_custmode").value=s.customer_mode?"1":"";
+}
+async function saveSettings(b){
+  b.disabled=true;
+  const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100, business_whatsapp:$("s_wa").value,
+    destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
+    shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
+    import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
+    customer_mode:!!$("s_custmode").value };
+  const r=await post("/api/settings",body); b.disabled=false;
+  if(r.ok){ MARKUP_PCT=r.settings.markup_pct; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
+}
+
+let POS=null, PO_STATUSES=["ORDERED","SHIPPED","ARRIVED","DELIVERED","RETURNED","CANCELLED"];
+let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
+let PO_CUSTNAMES=[]; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
+function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function importClickup(btn){
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Importing…';
+  let r; try{ r=await post("/api/purchase/import_clickup",{}); }catch(e){ r={ok:false,error:"network"}; }
+  btn.disabled=false; btn.innerHTML=old;
+  if(r.ok){ const n=r.imported.length;
+    toast(n?`Imported ${n} order(s) from ClickUp · ${r.skipped.length} already here`:`Nothing new — all ${r.skipped.length} order(s) already imported`);
+    await loadPurchases(); }
+  else toast("Import failed: "+(r.error||"")); }
+// ---- AZ / Multilogin profile popup ---------------------------------------- //
+let AZ_BOX=null;
+function closeAz(){ $("azModal").classList.add("hidden"); }
+function azFraudColor(f){ if(f==null)return['#6b7280','#f3f4f6']; if(f>=50)return['#dc2626','#fef2f2']; if(f>=25)return['#d97706','#fff7ed']; return['#16a34a','#ecfdf5']; }
+async function openAzModal(box,fresh){
+  AZ_BOX=box; $("azTitle").textContent="🖥 Profile "+box;
+  $("azBody").innerHTML='<div class="empty"><span class="spin"></span> loading…</div>';
+  $("azModal").classList.remove("hidden");
+  const url="/api/az/profile?box="+encodeURIComponent(box)+(fresh?"&fresh=1":"");
+  let d; try{ d=await (await fetch(url)).json(); }catch(e){ d={error:"network"}; }
+  if(d.error){ $("azBody").innerHTML=`<div class="warnflag" style="font-size:13px">${poEsc(d.error)}</div>
+    <div class="az-actions"><button class="po-btn" onclick="closeAz()">Close</button></div>`; return; }
+  const [fc,fb]=azFraudColor(d.fraud);
+  const fraud=(d.fraud!=null)?d.fraud:0, fraudHigh=fraud>=33;   // moderate+ → suggest rotating
+  const budget=(d.runs_24h!=null)?`${d.runs_24h}/${d.max_runs} today`:'—';
+  $("azBody").innerHTML=`
+    <div class="az-kv"><span>Last IP</span><b class="mono">${poEsc(d.last_ip||'—')}</b></div>
+    <div class="az-kv"><span>Fraud score</span><b><span class="az-fraud" style="color:${fc};background:${fb}">${d.fraud!=null?d.fraud:'—'}</span></b></div>
+    <div class="az-kv"><span>Proxy</span><b class="mono" style="font-size:11px">${poEsc(d.proxy||'—')}</b></div>
+    <div class="az-kv"><span>Folder</span><b>${poEsc(d.folder||'—')}</b></div>
+    <div class="az-kv"><span>Status</span><b>${d.running?'🟢 running':'⚪ idle'}</b></div>
+    <div class="az-kv"><span>Runs (budget)</span><b>${budget}</b></div>
+    <div id="azIpOut" class="muted2" style="font-size:12px;margin-top:9px"></div>
+    ${fraudHigh?`<div class="warnflag" style="font-size:11.5px;margin-top:8px">⚠ Fraud score is ${fraud} — rotate the IP before using this profile.</div>`:''}
+    <div class="az-actions">
+      <button class="po-btn" onclick="azCheckIp(this)">🔍 Check IP</button>
+      <button class="po-btn ${fraudHigh?'accent':''}" onclick="azRotate(this)">♻️ Rotate IP</button>
+    </div>
+    <div class="az-actions" style="margin-top:8px">
+      <button class="po-btn accent" onclick="azLaunch(this,${fraud})">▶ Start profile</button>
+      <button class="po-btn danger" onclick="azStop(this)">⏹ Close profile</button>
+    </div>
+    <div class="muted2" style="font-size:11px;margin-top:9px">Start opens the Multilogin browser (leaves it open to grab GAASH tracking); Close stops it.</div>`;
+}
+async function azCheckIp(btn){
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> checking…';
+  let d; try{ d=await post("/api/az/ip",{box:AZ_BOX}); }catch(e){ d={ok:false,error:"network"}; }
+  btn.disabled=false; btn.innerHTML=old;
+  const ip=d.ip||d.exit_ip||d.outbound_ip;
+  $("azIpOut").innerHTML=(d.ok&&ip)?`✅ live IP: <b>${poEsc(ip)}</b>${d.latency_ms?` · ${d.latency_ms}ms`:''}`:`⚠ ${poEsc(d.error||'IP check failed')}`;
+}
+async function azLaunch(btn,fraud){
+  if(fraud>=50 && !confirm(`⚠ ${AZ_BOX} fraud score is ${fraud} (high). Start it anyway?`)) return;
+  if(!confirm("Start the Multilogin profile browser? (uses one of today's runs)")) return;
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> starting…';
+  let d; try{ d=await post("/api/az/launch",{box:AZ_BOX}); }catch(e){ d={ok:false,error:"network"}; }
+  btn.disabled=false; btn.innerHTML=old;
+  if(d.ok){ toast(`✅ ${AZ_BOX} started — the browser is open`); $("azIpOut").innerHTML=`🟢 started (port ${poEsc(String(d.port||''))})`; }
+  else toast("Start failed: "+(d.error||""));
+}
+async function azStop(btn){
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> closing…';
+  let d; try{ d=await post("/api/az/stop",{box:AZ_BOX}); }catch(e){ d={ok:false,error:"network"}; }
+  btn.disabled=false; btn.innerHTML=old;
+  if(d.ok){ toast(`✅ ${AZ_BOX} profile closed`); $("azIpOut").innerHTML=`⚪ profile stopped`; }
+  else toast("Close failed: "+(d.error||""));
+}
+async function azRotate(btn){
+  if(!confirm(`Rotate the IP for ${AZ_BOX}? It tries fresh IPs until the fraud score drops.`)) return;
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> rotating…';
+  let r; try{ r=await post("/api/az/rotate",{box:AZ_BOX}); }catch(e){ r={}; }
+  if(!r||!r.job_id){ btn.disabled=false; btn.innerHTML=old; toast("Rotate failed: "+((r&&r.error)||"AZ tool not reachable")); return; }
+  const t=setInterval(async()=>{
+    let s; try{ s=await (await fetch("/api/az/rotate_status?job_id="+r.job_id)).json(); }catch(e){ return; }
+    if(s.status==="done"||s.status==="unknown"){
+      clearInterval(t); btn.disabled=false; btn.innerHTML=old;
+      const res=(s.results&&s.results[0])||{};
+      if(res.error){ $("azIpOut").innerHTML=`⚠ ${poEsc(res.error)}`; }
+      else { $("azIpOut").innerHTML=`♻️ ${poEsc(res.old_ip||'?')} → <b>${poEsc(res.new_ip||'?')}</b> · fraud now <b>${res.new_risk!=null?res.new_risk:'?'}</b> ${res.target_met?'✅':'· best of '+(res.tries||'?')}${res.committed===false?' ⚠ not committed':''}`;
+        setTimeout(()=>openAzModal(AZ_BOX,true),1200); }   // refresh the profile info (force-fresh, bypass 60s cache)
+    } else { $("azIpOut").innerHTML=`<span class="spin"></span> rotating… ${s.done||0}/${s.total||1}`; }
+  }, 1500);
+}
+async function loadPurchases(){
+  const d=await (await fetch("/api/purchases")).json();
+  POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
+  try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
+  renderPurchases();
+}
+function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
+function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
+function poCollapseAll(on){ PO_COLLAPSED=new Set(); if(on){ POS.forEach(p=>{PO_COLLAPSED.add(poKey(p.po_id)); (p.packages||[]).forEach(pk=>PO_COLLAPSED.add(poKey(p.po_id,pk.package_no)));}); } localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
+function poFind(id){ return POS.find(p=>p.po_id===id); }
+function poSave(po){ clearTimeout(poSaveTimers[po.po_id||'new']); poSaveTimers[po.po_id||'new']=setTimeout(async()=>{
+  const r=await post("/api/purchase",po);
+  if(r.ok && r.purchase_order){ const i=POS.findIndex(x=>x.po_id===r.po_id); if(i>=0) POS[i]=r.purchase_order; }
+},700); }
+function poSet(id,f,v){ const p=poFind(id); if(p){ p[f]=v; poSave(p); } }
+function poPkgSet(id,pi,f,v){ const p=poFind(id); if(!p)return; p.packages[pi][f]=v;
+  if(f==='tracking_number'){
+    (p.packages[pi].items||[]).forEach(it=>it.tracking_number=(v||'').trim()||null);  // keep the package's products in sync
+    if(poMergeDupTracking(p,pi)) return;   // merge handles its own save+render
+  }
+  poSave(p); }
+// One GWD tracking # = one physical shipment. If a package's tracking matches
+// other package(s) in the same PO, offer to combine them into a single package.
+function poMergeDupTracking(p,changedIdx){
+  const norm=s=>(s||'').trim().toUpperCase();
+  const t=norm(p.packages[changedIdx].tracking_number);
+  if(!t) return false;
+  const idxs=p.packages.map((_,i)=>i).filter(i=>norm(p.packages[i].tracking_number)===t);
+  if(idxs.length<2) return false;
+  const lo=Math.min(...idxs), target=p.packages[lo];
+  const tot=idxs.reduce((n,i)=>n+(p.packages[i].items||[]).length,0);
+  if(!confirm(`${idxs.length} packages share tracking ${t}.\nCombine them into one package with ${tot} product(s)?`)){
+    poSave(p); return true;   // keep the typed tracking; leave packages separate
+  }
+  idxs.filter(i=>i!==lo).sort((a,b)=>b-a).forEach(i=>{   // high→low so splice stays valid
+    const src=p.packages[i];
+    target.items=(target.items||[]).concat(src.items||[]);
+    if(!target.arrival && src.arrival) target.arrival=src.arrival;
+    if(!target.tracking_status && src.tracking_status) target.tracking_status=src.tracking_status;
+    p.packages.splice(i,1);
+  });
+  p.packages.forEach((pk,i)=>pk.package_no=i+1);
+  poSave(p); renderPurchases();
+  toast(`Merged ${idxs.length} packages → Package ${target.package_no} (${target.items.length} products)`);
+  return true;
+}
+function poItemSet(id,pi,ii,f,v){ const p=poFind(id); if(!p)return; const it=p.packages[pi].items[ii]; it[f]=v; if(f==='customer_name'){it.matched=!!v;} poSave(p); }
+function extractAsinClient(url){   // /dp/, /gp/product/, /product/ … → 10-char ASIN (no network)
+  const m=/\/(?:dp|gp\/product|gp\/aw\/d|gp\/offer-listing|product)\/([A-Z0-9]{10})/i.exec(url||'');
+  return m?m[1].toUpperCase():(/^[A-Z0-9]{10}$/i.test((url||'').trim())?url.trim().toUpperCase():null);
+}
+// Paste a product link → auto-extract the ASIN. Tries instantly client-side; for
+// a.co/amzn.to short links it asks the backend to expand+parse (NO SerpApi credit).
+async function poItemLink(id,pi,ii,url){
+  const p=poFind(id); if(!p)return; const it=p.packages[pi].items[ii];
+  url=(url||'').trim(); it.clean_url=url||null;
+  if(!url){ poSave(p); renderPurchases(); return; }
+  let asin=extractAsinClient(url);
+  if(asin){ it.asin=asin; it.clean_url='https://www.amazon.com/dp/'+asin;
+    poSave(p); renderPurchases(); toast(`ASIN ${asin} ✓`); return; }
+  let d; try{ d=await (await fetch('/api/extract_asin?url='+encodeURIComponent(url))).json(); }catch(e){ d={}; }
+  if(d&&d.asin){ it.asin=d.asin; it.clean_url=d.clean_url||url; poSave(p); renderPurchases(); toast(`ASIN ${d.asin} ✓`); }
+  else { poSave(p); toast("Couldn't find an ASIN in that link — paste the /dp/ product URL"); }
+}
+// Per-PRODUCT tracking #: typing a product's GWD auto-moves it into the package
+// that already carries that tracking (one GWD = one package), creating a new
+// package if none matches. Products with the same tracking end up together.
+function poItemTracking(id,pi,ii,v){
+  const p=poFind(id); if(!p)return;
+  const norm=s=>(s||'').trim().toUpperCase();
+  const t=v.trim(); const src=p.packages[pi]; const it=src.items[ii];
+  it.tracking_number=t||null;
+  if(!t){ poSave(p); renderPurchases(); return; }     // cleared → leave it where it is (refresh the red count)
+  let tgt=p.packages.findIndex(pk=>norm(pk.tracking_number)===norm(t));
+  if(tgt===pi){                                       // already in the right package
+    if(!norm(src.tracking_number)) src.tracking_number=t;
+    poSave(p); renderPurchases(); return;
+  }
+  if(tgt<0){                                          // no package has this tracking yet
+    if(src.items.length===1){                         // this product is alone → adopt here
+      src.tracking_number=t; poSave(p); renderPurchases();
+      toast(`Tracking ${t} set on Package ${src.package_no}`); return;
+    }
+    p.packages.push({package_no:p.packages.length+1,arrival:src.arrival||"",tracking_number:t,items:[]});
+    tgt=p.packages.length-1;
+  }
+  src.items.splice(ii,1);                             // move the product into the target package
+  p.packages[tgt].items.push(it);
+  if(src.items.length===0) p.packages=p.packages.filter(pk=>pk!==src);  // drop the now-empty source
+  p.packages.forEach((pk,i)=>pk.package_no=i+1);
+  poSave(p); renderPurchases();
+  toast(`Moved to the package with tracking ${t}`);
+}
+
+// Write scraped tracking #s back onto the right items, then auto-sort into packages.
+function poApplyTrackings(p, rows){
+  const norm=s=>(s||'').trim().toUpperCase();
+  let applied=0;
+  (rows||[]).forEach(r=>{
+    if(!r||!r.tracking) return;
+    let it=null;
+    if(r.item_id){ for(const pk of p.packages){ it=pk.items.find(x=>x.item_id===r.item_id); if(it) break; } }
+    if(!it && r.asin){ for(const pk of p.packages){ it=pk.items.find(x=>norm(x.asin)===norm(r.asin) && norm(x.tracking_number)!==norm(r.tracking)); if(it) break; } }
+    if(!it) return;
+    it.tracking_number=r.tracking; if(r.carrier) it.tracking_carrier=r.carrier; applied++;
+    let tgt=p.packages.findIndex(pk=>norm(pk.tracking_number)===norm(r.tracking));
+    if(tgt<0){ p.packages.push({package_no:p.packages.length+1,arrival:"",tracking_number:r.tracking,items:[]}); tgt=p.packages.length-1; }
+    const tgtPkg=p.packages[tgt];
+    p.packages.forEach(pk=>{ if(pk!==tgtPkg){ const idx=pk.items.indexOf(it); if(idx>=0) pk.items.splice(idx,1); } });
+    if(tgtPkg.items.indexOf(it)<0) tgtPkg.items.push(it);
+  });
+  p.packages=p.packages.filter(pk=>pk.items.length>0);
+  p.packages.forEach((pk,i)=>pk.package_no=i+1);
+  return applied;
+}
+// 🤖 Auto-get tracking: open the box's Multilogin profile (via the AZ tool), read
+// Amazon "Your Orders", click Track package on each product, scrape the GWD…/1Z…,
+// and fill it in (items auto-sort into packages). pi=null → the whole order.
+async function azTrackFetch(btn, poId, pi){
+  const p=poFind(poId); if(!p) return;
+  if(!p.profile_box){ toast("Pick the profile box (B19…) for this order first"); return; }
+  const pkgs = (pi==null) ? (p.packages||[]) : [p.packages[pi]];
+  const items=[];
+  pkgs.forEach(pk=>(pk.items||[]).forEach(it=>{ if((it.asin||'').trim()||(it.title||'').trim())
+    items.push({item_id:it.item_id, asin:it.asin, title:it.title}); }));
+  if(!items.length){ toast("No products with an ASIN or name to look up"); return; }
+  const scope = (pi==null) ? `all ${items.length} product(s) in this order` : `${items.length} product(s) in Package ${p.packages[pi].package_no}`;
+  if(!confirm(`Auto-get tracking for ${scope}?\n\nThis opens the ${p.profile_box} Multilogin profile, checks its IP, then reads Amazon "Your Orders" and clicks Track package on each product. It never signs in or buys anything.`)) return;
+  const old=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spin"></span> starting…';
+  let r; try{ r=await post("/api/az/track_fetch",{box:p.profile_box, items}); }catch(e){ r={}; }
+  if(!r||!r.job_id){ btn.disabled=false; btn.innerHTML=old; toast("Couldn't start: "+((r&&r.error)||"AZ tool not reachable on :8765 — is it open?")); return; }
+  const t=setInterval(async()=>{
+    let s; try{ s=await (await fetch("/api/az/track_fetch_status?job_id="+r.job_id)).json(); }catch(e){ return; }
+    if(s.status==="done"||s.status==="unknown"){
+      clearInterval(t); btn.disabled=false; btn.innerHTML=old;
+      const res=s.result||{};
+      if(!res.ok){ toast("⚠ "+(res.error||"tracking fetch failed")); return; }
+      const applied=poApplyTrackings(p, res.results||[]);
+      poSave(p); renderPurchases();
+      const miss=(res.not_found&&res.not_found.length)?` · ${res.not_found.length} not found`:'';
+      toast(applied?`✅ got ${res.found||applied} tracking #${(res.found||applied)===1?'':'s'}${miss}`:`No tracking found yet${miss} — try again later`);
+    } else {
+      btn.innerHTML=`<span class="spin"></span> scraping ${s.done||0}/${s.total||1}…`;
+    }
+  }, 1500);
+}
+function custOptions(sel){ return ['<option value="">⚠ unmatched</option>'].concat(PO_CUSTNAMES.map(n=>`<option ${n===sel?'selected':''}>${poEsc(n)}</option>`)).join(""); }
+function statusOptions(sel){ return PO_STATUSES.map(s=>`<option ${s===sel?'selected':''}>${s}</option>`).join(""); }
+function boxOptions(sel){ return ['<option value="">—</option>'].concat(PO_BOXES.map(b=>`<option ${b===sel?'selected':''}>${b}</option>`)).join(""); }
+
+function renderPurchases(){
+  if(!POS) return;
+  if(!POS.length){ $("poTree").innerHTML=`<div class="panel" style="color:var(--muted)">No purchase orders yet. Click "+ Purchase order".</div>`; return; }
+  $("poTree").innerHTML=POS.map(poCardHtml).join("");
+}
+function poTrkCounts(p){   // products still missing a tracking # (item's own OR its package's)
+  let tot=0,need=0;
+  (p.packages||[]).forEach(pk=>(pk.items||[]).forEach(it=>{ tot++;
+    if(!((it.tracking_number||pk.tracking_number||'').trim())) need++; }));
+  return {tot,need};
+}
+function poCardHtml(p){
+  const collapsed=PO_COLLAPSED.has(poKey(p.po_id));
+  const tc=poTrkCounts(p);
+  const trkPill=tc.tot? (tc.need
+    ? `<span class="trk-pill warn" title="these products still need a GWD tracking #">🚚 ${tc.need} need tracking #</span>`
+    : `<span class="trk-pill ok" title="every product has a tracking #">🚚 all tracked</span>`) : '';
+  const head=`<div class="po-head">
+    <span class="caret" onclick="poToggle('${poKey(p.po_id)}')">${collapsed?'▸':'▾'}</span>
+    <input class="ordnum" value="${poEsc(p.amazon_order_number)}" placeholder="Order #…" onchange="poSet('${p.po_id}','amazon_order_number',this.value)">
+    <span class="muted">ship</span><input value="${poEsc(p.ship_to)}" placeholder="ship to" style="width:110px" onchange="poSet('${p.po_id}','ship_to',this.value)">
+    <select onchange="poSet('${p.po_id}','profile_box',this.value)">${boxOptions(p.profile_box)}</select>
+    ${p.profile_box?`<button class="po-btn" title="check IP / open this Multilogin profile" onclick="openAzModal('${p.profile_box}')">🖥</button>`:''}
+    ${p.profile_box?`<button class="po-btn" title="auto-get every product's tracking # — opens the ${p.profile_box} profile and reads Amazon Your Orders" onclick="azTrackFetch(this,'${p.po_id}',null)">🤖 Get tracking</button>`:''}
+    <span class="muted">$</span><input value="${p.total_usd!=null?p.total_usd:''}" style="width:60px" placeholder="USD" onchange="poSet('${p.po_id}','total_usd',this.value)">
+    <span class="muted">AED</span><input value="${p.total_aed!=null?p.total_aed:''}" style="width:62px" onchange="poSet('${p.po_id}','total_aed',this.value)">
+    <span class="muted">${p.n_items} items · <span style="color:${p.n_unmatched?'var(--warn)':'var(--good)'}">${p.n_matched}/${p.n_items}</span></span>
+    ${trkPill}
+    <span class="spacer"></span>
+    <span class="po-actions">
+    ${p.screenshot?`<img class="thumb" src="/api/po_image?file=${p.screenshot}" style="width:26px;height:26px" title="attached screenshot">`:''}
+    <button class="po-btn" title="attach the Amazon order screenshot" onclick="poUpload(this,'${p.po_id}')">📷 Screenshot</button>
+    <button class="po-btn" title="see what will be created in ClickUp" onclick="clickupPO(this,'${p.po_id}',true)">👁 Preview</button>
+    <button class="po-btn accent" title="create this order in ClickUp" onclick="clickupPO(this,'${p.po_id}',false)">↗ Send to ClickUp</button>
+    <button class="po-btn danger" title="delete this whole order" onclick="poDelete('${p.po_id}')">🗑 Delete</button></span></div>`;
+  if(collapsed) return `<div class="po-card">${head}</div>`;
+  const pkgs=(p.packages||[]).map((pk,pi)=>poPkgHtml(p,pk,pi)).join("");
+  return `<div class="po-card">${head}<div class="po-body">${pkgs}
+    <button class="po-btn" style="margin-top:8px" onclick="poAddPkg('${p.po_id}')">＋ Add package</button>
+    <div id="cu_${p.po_id}" style="font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-line"></div></div></div>`;
+}
+function poPkgHtml(p,pk,pi){
+  const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
+  const head=`<div class="pkg-head">
+    <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
+    <b>📦 Package ${pk.package_no}</b><span class="muted">arrives</span>
+    <input type="date" value="${poEsc(pk.arrival)}" onchange="poPkgSet('${p.po_id}',${pi},'arrival',this.value)">
+    <span class="trk-lbl">TRACKING #</span>
+    <input value="${poEsc(pk.tracking_number)}" placeholder="GWD tracking #" style="width:140px" class="mono trk-input" onchange="poPkgSet('${p.po_id}',${pi},'tracking_number',this.value)">
+    ${pk.tracking_status&&!pk.tracking_status.error?`<span class="trk-badge trk-${pk.tracking_status.bucket||'transit'}" title="${poEsc(pk.tracking_status.time||'')}">🚚 ${poEsc(pk.tracking_status.text||pk.tracking_status.label||pk.tracking_status.code||'')}</span>`:''}
+    <span class="muted">${pk.items.length} product(s)</span><span class="spacer"></span>
+    ${p.profile_box?`<button class="po-btn" title="auto-get this package's tracking #s from Amazon (profile ${p.profile_box})" onclick="azTrackFetch(this,'${p.po_id}',${pi})">🤖 Get tracking</button>`:''}
+    <button class="po-btn" title="check where this package is (GAASH)" onclick="trackPkg(this,'${p.po_id}',${pi})">🔎 Check shipping</button>
+    <button class="po-btn" title="add a product to this package" onclick="poAddItem('${p.po_id}',${pi})">＋ Add product</button>
+    <button class="po-btn danger" title="delete this package" onclick="poDelPkg('${p.po_id}',${pi})">🗑</button></div>`;
+  if(collapsed) return `<div class="pkg">${head}</div>`;
+  const rows=pk.items.map((it,ii)=>`<tr>
+    <td>${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}</td>
+    <td class="namec"><input value="${poEsc(it.title)}" placeholder="product name" onchange="poItemSet('${p.po_id}',${pi},${ii},'title',this.value)"></td>
+    <td class="linkc"><input class="linkin" value="${poEsc(it.clean_url)}" placeholder="paste Amazon link →" title="paste the product link — the ASIN fills in automatically" onchange="poItemLink('${p.po_id}',${pi},${ii},this.value)">${it.clean_url?`<a class="linkopen" href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="open this product on Amazon">↗</a>`:''}</td>
+    <td class="asinc"><input value="${poEsc(it.asin)}" placeholder="B0…" onchange="poItemSet('${p.po_id}',${pi},${ii},'asin',this.value.toUpperCase())"><button class="po-btn pofetch" title="pull the photo & name from Amazon" onclick="poFetch(this,'${p.po_id}',${pi},${ii})">⤓ Get photo</button></td>
+    <td><select class="custc" onchange="poItemSet('${p.po_id}',${pi},${ii},'customer_name',this.value)">${custOptions(it.customer_name)}</select></td>
+    <td class="qtyc"><input type="number" min="1" value="${it.qty||1}" onchange="poItemSet('${p.po_id}',${pi},${ii},'qty',this.value)"></td>
+    <td class="trkc"><input class="mono trk-cell" value="${poEsc(it.tracking_number||pk.tracking_number||'')}" placeholder="GWD…" title="enter this product's tracking # — it auto-moves to the matching package" onchange="poItemTracking('${p.po_id}',${pi},${ii},this.value)"></td>
+    <td><select onchange="poItemSet('${p.po_id}',${pi},${ii},'status',this.value)">${statusOptions(it.status)}</select></td>
+    <td><input value="${poEsc(it.notes)}" placeholder="—" style="width:84px" onchange="poItemSet('${p.po_id}',${pi},${ii},'notes',this.value)"></td>
+    <td><button class="iconbtn" title="remove this product" onclick="poDelItem('${p.po_id}',${pi},${ii})">✕</button></td></tr>`).join("");
+  return `<div class="pkg">${head}<div class="pkg-body"><table class="po-tbl">
+    <thead><tr><th>Photo</th><th>Product name</th><th>Link (auto-fills ASIN)</th><th>ASIN (Amazon code)</th><th>Customer (who ordered it)</th><th>Qty</th><th>Tracking #</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
+}
+function poAddPkg(id){ const p=poFind(id); p.packages=p.packages||[]; p.packages.push({package_no:p.packages.length+1,arrival:"",tracking_number:"",items:[]}); poSave(p); renderPurchases(); }
+async function poDelPkg(id,pi){ if(!confirm("Delete this package? It moves to Trash — you can restore it."))return;
+  const r=await post("/api/purchase/package/delete",{id,pi});
+  if(r.ok){ const p=poFind(id); p.packages.splice(pi,1); p.packages.forEach((pk,i)=>pk.package_no=i+1); renderPurchases(); toast("Package moved to Trash"); loadHomeActivity(); } }
+function poAddItem(id,pi){ const p=poFind(id); p.packages[pi].items.push({title:"",asin:"",qty:1,status:"ORDERED"}); poSave(p); renderPurchases(); }
+async function poDelItem(id,pi,ii){ const r=await post("/api/purchase/item/delete",{id,pi,ii});
+  if(r.ok){ const p=poFind(id); p.packages[pi].items.splice(ii,1); renderPurchases(); toast("Product moved to Trash"); loadHomeActivity(); } }
+async function addPO(){ const r=await post("/api/purchase",{amazon_order_number:"",ship_to:"",packages:[{package_no:1,arrival:"",tracking_number:"",items:[]}]}); if(r.ok) await loadPurchases(); }
+async function poDelete(id){ if(!confirm("Delete this purchase order? It moves to Trash — you can restore it."))return; const r=await post("/api/purchase/delete",{id}); if(r.ok){ POS=POS.filter(p=>p.po_id!==id); renderPurchases(); toast("Moved to Trash"); loadHomeActivity(); } }
+async function poFetch(btn,id,pi,ii){ const p=poFind(id); const it=p.packages[pi].items[ii];
+  if(!it.asin){toast("Type the ASIN (the B0… code) first, then click Get photo");return;}
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Getting…';
+  let d; try{ d=await (await fetch("/api/import?url="+encodeURIComponent(it.asin))).json(); }catch(e){ d={error:"network error"}; }
+  if(d.error){ toast(d.error); btn.disabled=false; btn.textContent="⤓ Get photo"; return; }
+  it.image=d.image||it.image; if(!it.title && d.title) it.title=d.title;
+  poSave(p); renderPurchases(); toast(d.cached?"Got it ✓ (no credit used)":"Got it ✓"); }
+async function trackPkg(btn,id,pi){ const p=poFind(id); const pk=p.packages[pi];
+  if(!pk.tracking_number){toast("Add the GWD tracking number first, then click Check shipping");return;}
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…';
+  let s; try{ s=await (await fetch("/api/track_gwd?tracking="+encodeURIComponent(pk.tracking_number))).json(); }catch(e){ s={error:"network error"}; }
+  if(s.error){ toast("Shipping: "+s.error); btn.disabled=false; btn.textContent="🔎 Check shipping"; return; }
+  pk.tracking_status=s; poSave(p); renderPurchases(); toast("Shipping: "+(s.text||s.label||s.code||"updated")); }
+function poUpload(btn,id){ const inp=$("poImgInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
+  btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Uploading…';
+  const rd=new FileReader(); rd.onload=async()=>{ const r=await post("/api/po_image",{po_id:id,filename:f.name,data_base64:rd.result});
+    if(r.ok){ const p=poFind(id); if(p)p.screenshot=r.file; renderPurchases(); toast("Screenshot attached ✓"); }
+    else { toast("Upload failed"); btn.disabled=false; btn.innerHTML=old; } }; rd.readAsDataURL(f); }; inp.click(); }
+async function clickupPO(btn,id,dry){ btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> '+(dry?'Preparing…':'Sending…');
+  const r=await post("/api/purchase/clickup",{id,dry_run:dry}); const out=$("cu_"+id);
+  if(r.plan){ if(out) out.textContent="Preview — this is what will be created in ClickUp:\n"+r.plan.join("\n"); btn.disabled=false; btn.innerHTML=old; }
+  else if(r.ok){ if(out) out.textContent=`✓ Sent to ClickUp — 1 order + ${r.subtasks} products created`; toast("Sent to ClickUp ✓"); loadPurchases(); }
+  else { toast("⚠ "+(r.error||"failed")); if(out) out.textContent="⚠ "+(r.error||"failed"); btn.disabled=false; btn.innerHTML=old; } }
+
+let CUST=null;
+async function loadCustomers(){ const r=await fetch("/api/customers"); CUST=await r.json(); fillPayments();
+  CUSTSUB="list"; $("custGrid").style.display="grid"; $("custGallery").classList.add("hidden");
+  $("idToggleBtn").textContent="🪪 View IDs"; renderCustomers(); }
+function fillPayments(){ $("c_payment").innerHTML=(CUST.payment_methods||[]).map(p=>`<option>${p}</option>`).join(""); }
+function renderCustomers(){
+  if(!CUST) return;
+  const term=$("custSearch").value.trim().toLowerCase();
+  const rows=CUST.customers.filter(c=>!term||[c.name,c.whatsapp,c.city,c.email].join(" ").toLowerCase().includes(term));
+  $("custRows").innerHTML=rows.length?rows.map(c=>`<tr class="row" onclick="showProfile('${c.customer_id}')">
+    <td><b>${poEsc(c.name)||'—'}</b><br><span class="mono" style="color:var(--muted)">${poEsc(c.whatsapp)||''}</span></td>
+    <td>${poEsc(c.city)||'—'}</td>
+    <td class="amt" style="text-align:right">${c.order_count}</td>
+    <td class="amt" style="text-align:right">${money(c.total_spent_usd)}</td>
+    <td style="text-align:center;color:${c.id_image?'inherit':'var(--muted)'}" title="${c.id_image?'ID on file':'no ID uploaded'}">${c.id_image?'🪪':'—'}</td>
+    <td style="text-align:center">${c.vip?'★':''}</td></tr>`).join("")
+    :`<tr><td colspan="6" style="color:var(--muted)">No customers. Click “Sync from orders”.</td></tr>`;
+}
+function showProfile(id){
+  const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
+  const orders=(c.previous_orders||[]).map(o=>`<div class="kv"><span>${o.order_id} · ${o.status}</span><b>${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b></div>`).join("")||'<div style="color:var(--muted);font-size:12px">No orders yet.</div>';
+  const wa=c.wa?`<a href="https://wa.me/${c.wa}" target="_blank">${c.whatsapp}</a>`:(c.whatsapp||'—');
+  $("custProfile").innerHTML=`<h2>${c.name||'—'} ${c.vip?'★':''}</h2>
+    <div class="kv"><span>WhatsApp</span><b>${wa}</b></div>
+    <div class="kv"><span>Email</span><b>${c.email||'—'}</b></div>
+    <div class="kv"><span>City</span><b>${c.city||'—'}</b></div>
+    <div class="kv"><span>Address</span><b style="max-width:160px;text-align:right">${c.address||'—'}</b></div>
+    <div class="kv"><span>Payment</span><b>${c.payment_method||'—'}</b></div>
+    <div class="kv"><span>Orders</span><b>${c.order_count}</b></div>
+    <div class="kv"><span>Total spent</span><b style="color:var(--accent)">${money(c.total_spent_usd)}</b></div>
+    ${c.notes?`<div class="kv"><span>Notes</span><b style="max-width:160px;text-align:right">${c.notes}</b></div>`:''}
+    <div class="kv"><span>ID document</span><b>${c.id_image
+        ? `<a href="/api/customer_image?file=${encodeURIComponent(c.id_image)}" target="_blank" title="open full size"><img src="/api/customer_image?file=${encodeURIComponent(c.id_image)}" style="height:46px;border-radius:6px;border:1px solid var(--line);vertical-align:middle"></a>`
+        : `<span style="color:var(--muted)">none</span>`}</b></div>
+    <h2 style="margin-top:12px">Order history</h2>${orders}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="minibtn" onclick="editCustomer('${c.customer_id}')">✎ Edit</button>
+      <button class="minibtn" onclick="custIdUpload('${c.customer_id}')">🪪 ${c.id_image?'Replace':'Upload'} ID</button>
+    </div>`;
+}
+function editCustomer(id){
+  const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
+  $("c_name").value=c.name||'';$("c_whatsapp").value=c.whatsapp||'';$("c_email").value=c.email||'';
+  $("c_city").value=c.city||'';$("c_address").value=c.address||'';$("c_notes").value=c.notes||'';
+  $("c_vip").value=c.vip?'1':'';
+  fillPayments(); $("c_payment").value=c.payment_method||'Cash on delivery';
+  $("custFormPanel").classList.remove("hidden");
+}
+let CUSTSUB="list", ID_MISS=false;
+function custSearchInput(){ CUSTSUB==="gallery"?renderIdGallery():renderCustomers(); }
+function setCustSub(s){ CUSTSUB=s;
+  $("custGrid").style.display=(s==="list")?"grid":"none";   // inline display beats .hidden
+  $("custGallery").classList.toggle("hidden",s!=="gallery");
+  $("idToggleBtn").textContent=s==="gallery"?"📋 Customer list":"🪪 View IDs";
+  s==="gallery"?renderIdGallery():renderCustomers(); }
+function toggleIdGallery(){ setCustSub(CUSTSUB==="gallery"?"list":"gallery"); }
+function renderIdGallery(){
+  if(!CUST) return;
+  const term=$("custSearch").value.trim().toLowerCase();
+  const list=CUST.customers.filter(c=>!term||[c.name,c.whatsapp,c.city].join(" ").toLowerCase().includes(term));
+  const have=CUST.customers.filter(c=>c.id_image).length, total=CUST.customers.length;
+  const show=ID_MISS?list.filter(c=>!c.id_image):list;
+  const cards=show.map(c=>{
+    const src=c.id_image?`/api/customer_image?file=${encodeURIComponent(c.id_image)}`:null;
+    const top=src?`<img src="${src}" onclick="window.open('${src}','_blank')" title="open full size">`
+      :`<div class="noid" onclick="custIdUpload('${c.customer_id}')" title="upload an ID for this customer">＋ Upload ID</div>`;
+    return `<div class="id-card">${top}
+      <div class="nm" title="${poEsc(c.name)}">${poEsc(c.name)||'—'}</div>
+      <div class="ph">${poEsc(c.whatsapp)||''}</div></div>`;
+  }).join("");
+  $("custGallery").innerHTML=`<div class="idsum">🪪 <b>${have}</b> of <b>${total}</b> customers have an ID on file.
+      <a class="seeall" onclick="ID_MISS=!ID_MISS;renderIdGallery()">${ID_MISS?'Show all':`Show only missing (${total-have})`}</a></div>
+    <div class="id-gallery">${cards||'<div class="empty">No matches.</div>'}</div>`;
+}
+function custIdUpload(id){ const inp=$("custIdInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
+  toast("Uploading ID…");
+  const rd=new FileReader(); rd.onload=async()=>{
+    const r=await post("/api/customer_image",{customer_id:id,filename:f.name,data_base64:rd.result});
+    if(r.ok){ toast("ID uploaded ✓"); await loadCustomers(); showProfile(id); }
+    else toast("Upload failed: "+(r.error||"")); };
+  rd.readAsDataURL(f); }; inp.click(); }
+function toggleCustForm(){ $("custFormPanel").classList.toggle("hidden"); }
+async function addCustomer(b){
+  b.disabled=true;
+  const body={name:$("c_name").value,whatsapp:$("c_whatsapp").value,email:$("c_email").value,
+    city:$("c_city").value,address:$("c_address").value,notes:$("c_notes").value,
+    payment_method:$("c_payment").value,vip:$("c_vip").value};
+  const r=await post("/api/customer",body); b.disabled=false;
+  if(r.ok){toast(`Saved ${r.customer_id} (${r.how})`);["c_name","c_whatsapp","c_email","c_city","c_address","c_notes"].forEach(i=>$(i).value="");toggleCustForm();loadCustomers();}
+}
+async function syncCustomers(b){ b.disabled=true; const r=await post("/api/customers/sync",{}); b.disabled=false; toast(`${r.created} new · ${r.total} total`); loadCustomers(); }
+async function setAmazon(id,n){ await post("/api/amazon_number",{id,amazon_order_number:n}); toast(`${id} Amazon # saved`); }
+async function importAmazon(b){
+  const links=$("f_links").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if(!links.length){toast("Paste an Amazon link first");return;}
+  b.disabled=true; b.textContent="Fetching…";
+  let d; try{ d=await (await fetch("/api/import?url="+encodeURIComponent(links[0]))).json(); }
+  catch(e){ d={error:"fetch failed"}; }
+  b.disabled=false; b.textContent="⤓ Fetch from Amazon";
+  if(d.error){ $("impPreview").innerHTML=`<div style="color:var(--warn);font-size:12px;margin-top:8px">${d.error}</div>`; return; }
+  if(d.suggested_quote_usd && !$("f_amount").value) $("f_amount").value=d.suggested_quote_usd;
+  const link=d.link||(d.asin?`https://www.amazon.com/dp/${d.asin}`:'#');
+  $("impPreview").innerHTML=`<div style="display:flex;gap:12px;margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfaf6">
+    ${d.image?`<img src="${d.image}" style="width:64px;height:64px;object-fit:contain;border-radius:8px">`:''}
+    <div style="flex:1;font-size:12.5px">
+      <div style="font-weight:600">${(d.title||'').slice(0,90)}</div>
+      <div style="color:var(--muted);margin-top:3px">ASIN ${d.asin}${d.prime?' · ✓ Prime':''}${d.seller?' · '+d.seller:''}</div>
+      ${d.delivery?`<div style="color:var(--muted)">🚚 ${d.delivery}</div>`:''}
+      <div style="margin-top:4px">Item price <b>${d.price_usd!=null?money(d.price_usd):'—'}</b>
+        · rough estimate <b>${d.suggested_quote_usd!=null?money(d.suggested_quote_usd):'—'}</b>
+        <span style="color:var(--muted)">(item only — no shipping/import)</span>${d.cached?' · cached':''}</div>
+      <div style="margin-top:5px"><a href="${link}" target="_blank" style="font-weight:600;color:var(--accent)">Open on Amazon →</a>
+        <span style="color:var(--muted)">add to cart → checkout (Palestine) → type the <b>order total</b> in “Amazon checkout total” above for the exact price.</span></div>
+    </div></div>`;
+}
+
+let PNL=null;
+async function loadPnl(){ const r=await fetch("/api/pnl"); PNL=await r.json(); renderPnl(); }
+function renderPnl(){
+  if(!PNL) return;
+  const t=PNL.totals, s=PNL.sources;
+  const card=(l,v,cls="")=>`<div class="card"><div class="n ${cls}">${v}</div><div class="l">${l}</div></div>`;
+  $("pnlCards").innerHTML=
+    card("Revenue", money(t.revenue_usd))+
+    card("Amazon cost", money(t.cogs_usd))+
+    card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg")+
+    card("Meta spend", money(t.meta_usd))+
+    card("Net profit", money(t.net_profit_usd), t.net_profit_usd>=0?"good":"neg")+
+    card("Net margin", t.net_margin_pct==null?"—":t.net_margin_pct+"%")+
+    card("Cost / customer", t.cost_per_customer_usd==null?"—":money(t.cost_per_customer_usd));
+  const badge=k=>`<span class="qchip">${k}: <b style="color:${s[k].connected?'var(--good)':'var(--warn)'}">${s[k].connected?'connected':'connect'}</b></span>`;
+  $("pnlSources").innerHTML=badge("revenue")+badge("cogs")+badge("meta");
+  const batches=Object.entries(PNL.revenue_by_batch||{});
+  const totalRev=t.revenue_usd||0;
+  $("pnlRows").innerHTML=batches.length?batches.map(([b,v])=>`<tr>
+    <td>${b==='—'?'(no batch)':'Order '+b}</td>
+    <td class="amt">${money(v)}</td>
+    <td class="amt" style="color:var(--muted)">${totalRev?(100*v/totalRev).toFixed(1)+'%':'—'}</td></tr>`).join("")
+    :`<tr><td colspan="3" style="color:var(--muted)">No batch data.</td></tr>`;
+  const maxV=Math.max(1,...batches.map(([,v])=>v));
+  $("pnlChart").innerHTML=batches.map(([b,v])=>{
+    const h=Math.round(74*v/maxV)+4;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end" title="Order ${b}: ${money(v)}">
+      <div style="width:58%;max-width:60px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
+      <div style="font-size:10px;color:var(--muted)">${b==='—'?'—':'#'+b}</div></div>`;}).join("");
+  const miss=["revenue","cogs","meta"].filter(k=>!s[k].connected);
+  $("pnlNote").innerHTML=(miss.length
+    ? `⚠ Not connected: ${miss.join(", ")}. `
+    : `Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · ${s.meta.detail}. `)
+    + `COGS &amp; Meta are account totals (not split per batch).`;
+}
+async function refreshPnl(b){b.disabled=true;toast("Refreshing P&L sources…");await post("/api/pnl/refresh",{});b.disabled=false;loadPnl();toast("P&L refreshed");}
+let pnlTimer=null;
+function startPnlAuto(){ stopPnlAuto(); refreshPnlSilent(); pnlTimer=setInterval(refreshPnlSilent,180000); }
+function stopPnlAuto(){ if(pnlTimer){clearInterval(pnlTimer);pnlTimer=null;} }
+async function refreshPnlSilent(){ try{await post("/api/pnl/refresh",{});}catch(e){} loadPnl(); }
+async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json();}
+
+load();
+</script>

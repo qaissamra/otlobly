@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.otlobly.sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/leluxegroup2/Desktop/SHOPIFY-LUXELLA/otlobly-orders/run.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>10800</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/leluxegroup2/Desktop/SHOPIFY-LUXELLA/otlobly-orders/sync.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/leluxegroup2/Desktop/SHOPIFY-LUXELLA/otlobly-orders/sync.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

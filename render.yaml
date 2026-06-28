@@ -1,0 +1,46 @@
+# Render Blueprint — deploys the hosted Otlobly staff app: a public HTTPS URL,
+# employee logins (Admin / Sales / Fulfillment), and a PERSISTENT disk so orders,
+# customers, users, and uploads survive restarts and redeploys.
+#
+# When you connect this GitHub repo to Render, it reads this file automatically.
+# Secrets marked `sync: false` are NOT stored here — Render prompts you to type
+# them into its dashboard (so passwords/tokens never live in the repo).
+services:
+  - type: web
+    name: otlobly
+    runtime: python
+    plan: starter                 # ~$7/mo: always-on + required to attach a disk
+    region: frankfurt             # closest to Palestine/Israel; change if you like
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: OTLOBLY_SECRET        # session-cookie signing key — Render generates it
+        generateValue: true
+      - key: OTLOBLY_SECURE        # force HTTPS-only login cookies (Render is HTTPS)
+        value: "1"
+      - key: OTLOBLY_DATA_DIR      # all writable data lives on the disk below
+        value: /var/data
+      - key: OTLOBLY_WORKER_TOKEN  # the Mac order-placer uses this to authenticate
+        generateValue: true
+      # ── Optional integrations: fill these in Render's dashboard if you use them ──
+      - key: CLICKUP_API_TOKEN     # needed for ClickUp sync + P&L cost
+        sync: false
+      - key: SERPAPI_KEY           # optional: price estimates
+        sync: false
+      - key: SERPAPI_KEY_2
+        sync: false
+      - key: SERPAPI_KEY_3
+        sync: false
+      - key: META_AD_ACCOUNT_ID    # optional: P&L ad spend
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
+    disk:
+      name: otlobly-data
+      mountPath: /var/data
+      sizeGB: 1
