@@ -973,6 +973,46 @@ def worker_seed():
 # --------------------------------------------------------------------------- #
 # Customer portal — read-only, order # + WhatsApp lookup, rate-limited
 # --------------------------------------------------------------------------- #
+@app.route("/api/product_image")
+@auth.require("view_orders")
+def api_product_image():
+    """FREE product-image grab for the Quick Quote tool (no SerpApi credits): fetch the
+    Amazon product page and pull its main image + title from the page meta. Best-effort —
+    Amazon may block; the staff can always paste/upload an image instead."""
+    from urllib import request as _u
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "no url"}), 400
+    try:
+        clean = normalize.clean_amazon_url(url, expand=True) or url
+    except Exception:
+        clean = url
+    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9"}
+    try:
+        with _u.urlopen(_u.Request(clean, headers=headers), timeout=15) as r:
+            html = r.read(800000).decode("utf-8", "replace")
+    except Exception as e:  # noqa
+        return jsonify({"error": f"fetch failed: {e}"})
+    img = None
+    for pat in (r'data-old-hires=["\'](https://[^"\']+)',
+                r'"hiRes":"(https://[^"\\]+)"',
+                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
+                r'id=["\']landingImage["\'][^>]+src=["\'](https://[^"\']+)'):
+        m = re.search(pat, html)
+        if m:
+            img = m.group(1).replace("\\/", "/")
+            break
+    tm = re.search(r'<meta[^>]+name=["\']title["\'][^>]+content=["\']([^"\']+)', html) \
+        or re.search(r'<title>([^<]+)</title>', html)
+    title = tm.group(1).strip()[:120] if tm else None
+    if title:
+        title = re.sub(r"\s*[:|-]\s*Amazon\.com.*$", "", title).strip()
+    if not img:
+        return jsonify({"error": "no image found"})
+    return jsonify({"image": img, "title": title})
+
+
 @app.route("/api/draft", methods=["POST"])
 @auth.require("view_orders")
 def api_draft():
