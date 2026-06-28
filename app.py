@@ -997,6 +997,11 @@ def order_intake_page(draft_id):
 @app.route("/api/draft/<draft_id>", methods=["GET"])
 @limiter.limit("20 per minute")
 def api_draft_get(draft_id):
+    if draft_id == "demo":                         # stable preview link (no real quote behind it)
+        return jsonify({"products": [{
+            "title": "Apple AirPods Pro (2nd Generation) — مثال / sample",
+            "image": "https://m.media-amazon.com/images/I/61SUj2aKoEL._AC_SL1500_.jpg",
+            "qty": 1}], "amount": 119.0, "used": False, "demo": True})
     d = db.get_setting(f"draft:{draft_id}")
     if not d:
         return jsonify({"error": "not found"}), 404
@@ -1010,6 +1015,9 @@ def api_order_intake():
     """Public: a customer submits their contact for a pre-filled draft → creates the
     REQUESTED order (in 'Need to order') carrying the quoted products + amount."""
     b = request.get_json(force=True, silent=True) or {}
+    if (b.get("draft_id") or "") == "demo":         # preview link — never creates a real order
+        return jsonify({"error": "هذا رابط تجريبي للعرض فقط · This is a demo preview — "
+                        "generate a real link from the dashboard."}), 400
     d = db.get_setting(f"draft:{(b.get('draft_id') or '')}")
     if not d:
         return jsonify({"error": "This link has expired."}), 404
