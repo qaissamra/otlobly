@@ -876,6 +876,55 @@ def worker_result():
     return jsonify({"ok": bool(o)})
 
 
+@app.route("/api/worker/seed", methods=["POST"])
+def worker_seed():
+    """One-time data import from the Mac → server (orders / customers / purchases).
+    Same bearer-token channel as the worker; idempotent upserts so it's safe to
+    re-run. Customer data travels Mac→server over HTTPS, never through the repo."""
+    if not _worker_ok():
+        abort(401)
+    b = request.get_json(force=True, silent=True) or {}
+    out = {"customers": 0, "orders": 0, "linked": 0, "purchases": 0}
+    for c in b.get("customers", []):
+        try:
+            db.upsert_customer(c)
+            out["customers"] += 1
+        except Exception:
+            pass
+    orders = b.get("orders", [])
+    for o in orders:
+        try:
+            db.upsert_order(o)
+            out["orders"] += 1
+        except Exception:
+            pass
+    try:  # link orders → customers (mirrors migrate_json_to_db)
+        with db.connect() as conn:
+            key_to_id = {r["match_key"]: r["id"]
+                         for r in conn.execute("SELECT id, match_key FROM customers")}
+            for o in orders:
+                ph = store.primary_phone(o)
+                key = ph["e164"] if ph else ("name:" + o["customer"]["name"].strip().lower())
+                cid = key_to_id.get(key)
+                if cid:
+                    conn.execute("UPDATE orders SET customer_id=? WHERE order_code=?",
+                                 (cid, o["order_id"]))
+                    out["linked"] += 1
+    except Exception as e:
+        out["link_error"] = str(e)[:80]
+    pos = b.get("purchases")
+    if pos is not None:
+        try:
+            import purchases as _pur
+            pdb = _pur.load()
+            pdb["purchase_orders"] = pos
+            _pur.save(pdb)
+            out["purchases"] = len(pos)
+        except Exception as e:
+            out["purchase_error"] = str(e)[:80]
+    return jsonify({"ok": True, **out})
+
+
 # --------------------------------------------------------------------------- #
 # Customer portal — read-only, order # + WhatsApp lookup, rate-limited
 # --------------------------------------------------------------------------- #
