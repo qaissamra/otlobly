@@ -995,12 +995,39 @@ def worker_seed():
 # --------------------------------------------------------------------------- #
 # Customer portal — read-only, order # + WhatsApp lookup, rate-limited
 # --------------------------------------------------------------------------- #
+def _amz_image_from_html(html):
+    """Pull the main product image URL out of an Amazon product page's HTML."""
+    for pat in (r'data-old-hires=["\'](https://[^"\']+)',
+                r'"hiRes":"(https://[^"\\]+)"',
+                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
+                r'id=["\']landingImage["\'][^>]+src=["\'](https://[^"\']+)'):
+        m = re.search(pat, html)
+        if m:
+            return m.group(1).replace("\\/", "/")
+    # last resort: first product image on Amazon's CDN, upgraded to a large size
+    m = re.search(r'm\.media-amazon\.com/images/I/([A-Za-z0-9+_-]{6,})\._', html)
+    if m:
+        return f"https://m.media-amazon.com/images/I/{m.group(1)}._AC_SL1500_.jpg"
+    return None
+
+
+def _amz_title_from_html(html):
+    tm = (re.search(r'<meta[^>]+name=["\']title["\'][^>]+content=["\']([^"\']+)', html)
+          or re.search(r'<title>([^<]+)</title>', html))
+    title = tm.group(1).strip()[:140] if tm else None
+    if title:
+        title = re.sub(r"\s*[:|-]\s*Amazon\.com.*$", "", title)
+        title = title.replace("Amazon.com:", "").strip()
+    return title or None
+
+
 @app.route("/api/product_image")
 @auth.require("view_orders")
 def api_product_image():
-    """FREE product-image grab for the Quick Quote tool (no SerpApi credits): fetch the
-    Amazon product page and pull its main image + title from the page meta. Best-effort —
-    Amazon may block; the staff can always paste/upload an image instead."""
+    """FREE product-image grab for the Quick Quote tool (no SerpApi credits). Tries a direct
+    Amazon fetch first; if that's blocked (cloud/datacenter IPs like Render usually are), falls
+    back to a free reader proxy that fetches Amazon from its own IP. Staff can always paste/
+    upload instead."""
     from urllib import request as _u
     url = (request.args.get("url") or "").strip()
     if not url:
@@ -1009,29 +1036,32 @@ def api_product_image():
         clean = normalize.clean_amazon_url(url, expand=True) or url
     except Exception:
         clean = url
-    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9"}
-    try:
-        with _u.urlopen(_u.Request(clean, headers=headers), timeout=15) as r:
-            html = r.read(800000).decode("utf-8", "replace")
-    except Exception as e:  # noqa
-        return jsonify({"error": f"fetch failed: {e}"})
-    img = None
-    for pat in (r'data-old-hires=["\'](https://[^"\']+)',
-                r'"hiRes":"(https://[^"\\]+)"',
-                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
-                r'id=["\']landingImage["\'][^>]+src=["\'](https://[^"\']+)'):
-        m = re.search(pat, html)
-        if m:
-            img = m.group(1).replace("\\/", "/")
+    ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+    def _fetch(u, hdrs, timeout, cap):
+        try:
+            with _u.urlopen(_u.Request(u, headers=hdrs), timeout=timeout) as r:
+                return r.read(cap).decode("utf-8", "replace")
+        except Exception:  # noqa
+            return ""
+
+    attempts = [
+        (clean, {"User-Agent": ua, "Accept-Language": "en-US,en;q=0.9"}, 15, 900000),
+        ("https://r.jina.ai/" + clean,                       # proxy fetches from a non-blocked IP
+         {"User-Agent": ua, "Accept-Language": "en-US,en;q=0.9", "X-Return-Format": "html"}, 30, 1200000),
+    ]
+    img = title = None
+    for u, hdrs, timeout, cap in attempts:
+        html = _fetch(u, hdrs, timeout, cap)
+        if not html:
+            continue
+        img = _amz_image_from_html(html)
+        if img:
+            title = _amz_title_from_html(html)
             break
-    tm = re.search(r'<meta[^>]+name=["\']title["\'][^>]+content=["\']([^"\']+)', html) \
-        or re.search(r'<title>([^<]+)</title>', html)
-    title = tm.group(1).strip()[:120] if tm else None
-    if title:
-        title = re.sub(r"\s*[:|-]\s*Amazon\.com.*$", "", title).strip()
     if not img:
-        return jsonify({"error": "no image found"})
+        return jsonify({"error": "Amazon blocked the image fetch — paste or upload the photo."})
     return jsonify({"image": img, "title": title})
 
 
