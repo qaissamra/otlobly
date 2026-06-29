@@ -249,6 +249,16 @@ def count_users():
         return c.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
 
 
+def set_user_active(uid, active):
+    with connect() as c:
+        c.execute("UPDATE users SET active=? WHERE id=?", (1 if active else 0, uid))
+
+
+def set_user_password(uid, password_hash):
+    with connect() as c:
+        c.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, uid))
+
+
 def get_setting(key, default=None):
     with connect() as c:
         r = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()

@@ -878,7 +878,7 @@ def api_clickup():
 # --------------------------------------------------------------------------- #
 # Admin: user management
 # --------------------------------------------------------------------------- #
-@app.route("/api/users", methods=["GET", "POST"])
+@app.route("/api/users", methods=["GET", "POST", "PATCH"])
 @auth.require("manage_users")
 def api_users():
     if request.method == "POST":
@@ -892,6 +892,22 @@ def api_users():
         except Exception as e:  # noqa (unique violation)
             return jsonify({"ok": False, "error": f"{e}"}), 400
         db.audit(auth.actor(), "create_user", "user", b["username"], b["role"])
+        return jsonify({"ok": True})
+    if request.method == "PATCH":                 # deactivate/reactivate or reset password
+        b = request.get_json(force=True, silent=True) or {}
+        u = db.get_user_by_id(int(b["id"])) if str(b.get("id", "")).isdigit() else None
+        if not u:
+            return jsonify({"ok": False, "error": "user not found"}), 404
+        if "active" in b:
+            if not b["active"] and u["id"] == current_user.id:
+                return jsonify({"ok": False, "error": "you can't deactivate yourself"}), 400
+            db.set_user_active(u["id"], bool(b["active"]))
+            db.audit(auth.actor(), "user_active", "user", u["username"], str(bool(b["active"])))
+        if b.get("password"):
+            if len(b["password"]) < 6:
+                return jsonify({"ok": False, "error": "password must be 6+ chars"}), 400
+            db.set_user_password(u["id"], auth.hash_pw(b["password"]))
+            db.audit(auth.actor(), "user_reset_pw", "user", u["username"], "")
         return jsonify({"ok": True})
     return jsonify({"users": db.list_users(), "roles": auth.ROLES})
 

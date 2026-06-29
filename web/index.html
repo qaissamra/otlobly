@@ -267,6 +267,7 @@
     <button onclick="exportCsv(this)" id="exportBtn">⬇ Export CSV</button>
     <button onclick="syncClickup(this)" id="clickupBtn">↗ Sync ClickUp</button>
     <button onclick="toggleSettings()" id="settingsBtn" title="markup, shipping/import rules, WhatsApp number">⚙ Settings</button>
+    <button onclick="toggleTeam()" id="teamBtn" style="display:none" title="manage staff accounts &amp; roles">👥 Team</button>
     <button class="primary" onclick="load()">↻ Refresh</button>
     <span id="userChip" style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"></span>
   </header>
@@ -543,6 +544,31 @@
     </div>
     <div class="panel"><div id="trashList"></div></div>
   </div>
+
+  <!-- Team / staff users (admin only) -->
+  <div id="teamView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">👥 Team</h2>
+      <span style="color:var(--muted);font-size:12px">staff accounts · the role decides what each person can see</span>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2 style="margin:0 0 10px;font-size:15px">Add a team member</h2>
+      <div class="form-grid">
+        <div><label class="fld">Full name</label><input id="u_name" style="width:100%" placeholder="e.g. Sara"></div>
+        <div><label class="fld">Username (for login)</label><input id="u_username" style="width:100%" placeholder="e.g. sara"></div>
+        <div><label class="fld">Password (6+ characters)</label><input id="u_password" type="text" style="width:100%" placeholder="a starter password to share with them"></div>
+        <div><label class="fld">Role</label>
+          <select id="u_role" style="width:100%">
+            <option value="sales">Sales — quotes, orders, customers (no profit/cost)</option>
+            <option value="fulfillment">Fulfillment — order queue, status &amp; tracking (no money totals)</option>
+            <option value="admin">Admin — full access</option>
+          </select></div>
+      </div>
+      <button class="accent" style="margin-top:12px" onclick="addStaff(this)">＋ Create account</button>
+      <div id="u_out" style="margin-top:9px;font-size:12.5px"></div>
+    </div>
+    <div class="panel"><div id="teamList"></div></div>
+  </div>
 </div>
 
 <div id="azModal" class="az-modal hidden" onclick="if(event.target===this)closeAz()">
@@ -597,6 +623,7 @@ async function applyRole(){
   hide("pnlBtn", p.includes("view_pnl"));
   hide("exportBtn", p.includes("admin_actions"));
   hide("clickupBtn", p.includes("admin_actions"));
+  hide("teamBtn", p.includes("manage_users"));
   $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b> · ${ME.role} · <a href="/logout">logout</a>`;
 }
 async function load(){
@@ -798,7 +825,7 @@ function toggleForm(){$("formPanel").classList.toggle("hidden");}
 let VIEW="orders";
 function setView(v){
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -812,6 +839,7 @@ function setView(v){
   $("quoteView").classList.toggle("hidden",v!=="quote");
   $("settingsView").classList.toggle("hidden",v!=="settings");
   $("needorderView").classList.toggle("hidden",v!=="needorder");
+  $("teamView").classList.toggle("hidden",v!=="team");
   $("pickBtn").textContent=v==="picking"?"📋 Orders table":"🧾 Picking list";
   $("pnlBtn").textContent=v==="pnl"?"📋 Orders":"📊 P&L";
   $("custBtn").textContent=v==="customers"?"📋 Orders":"👤 Customers";
@@ -821,6 +849,7 @@ function setView(v){
   $("quoteBtn").textContent=v==="quote"?"📋 Orders":"💰 Quote";
   $("settingsBtn").textContent=v==="settings"?"📋 Orders":"⚙ Settings";
   $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
+  $("teamBtn").textContent=v==="team"?"📋 Orders":"👥 Team";
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
   if(v==="purchases"){ loadPurchases(); }
@@ -829,6 +858,46 @@ function setView(v){
   if(v==="quote"){ loadQuote(); }
   if(v==="settings"){ loadSettings(); }
   if(v==="needorder"){ loadNeedOrder(); }
+  if(v==="team"){ loadTeam(); }
+}
+function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
+const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
+async function patchUsers(body){ try{ return await (await fetch("/api/users",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json(); }catch(e){ return {error:"network"}; } }
+async function loadTeam(){
+  let d; try{ d=await (await fetch("/api/users")).json(); }catch(e){ d={users:[]}; }
+  const rows=(d.users||[]).map(u=>`<tr style="${u.active?'':'opacity:.5'};border-bottom:1px solid var(--line)">
+    <td style="padding:9px 6px"><b>${poEsc(u.name||u.username)}</b></td>
+    <td style="padding:9px 6px" class="mono">${poEsc(u.username)}</td>
+    <td style="padding:9px 6px">${ROLE_LABEL[u.role]||u.role}</td>
+    <td style="padding:9px 6px">${u.active?'<span style="color:var(--good)">● active</span>':'<span style="color:var(--muted)">○ disabled</span>'}</td>
+    <td style="padding:9px 6px;text-align:right;white-space:nowrap">
+      <button class="po-btn" onclick="resetPw(${u.id},'${poEsc(u.username)}')">🔑 reset password</button>
+      <button class="po-btn" onclick="toggleActive(${u.id},${u.active?0:1})">${u.active?'🚫 disable':'✓ enable'}</button>
+    </td></tr>`).join("");
+  $("teamList").innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line)">
+      <th style="padding:6px">Name</th><th style="padding:6px">Username</th><th style="padding:6px">Role</th><th style="padding:6px">Status</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No staff yet.</td></tr>'}</tbody></table>`;
+}
+async function addStaff(btn){
+  const name=$("u_name").value.trim(), username=$("u_username").value.trim(),
+        password=$("u_password").value, role=$("u_role").value;
+  if(!username||password.length<6){ $("u_out").innerHTML='<span style="color:var(--bad)">Username and a 6+ character password are required.</span>'; return; }
+  btn.disabled=true;
+  let r; try{ r=await post("/api/users",{name,username,password,role}); }catch(e){ r={error:"network"}; }
+  btn.disabled=false;
+  if(r.ok){ toast(`Created ${username} (${role})`);
+    $("u_out").innerHTML=`<span style="color:var(--good)">✓ ${poEsc(name||username)} can sign in at the same login page with username <b>${poEsc(username)}</b> and the password you set.</span>`;
+    ["u_name","u_username","u_password"].forEach(i=>$(i).value=""); loadTeam(); }
+  else { $("u_out").innerHTML=`<span style="color:var(--bad)">${poEsc(r.error||'Could not create')}</span>`; }
+}
+async function toggleActive(id,active){
+  const r=await patchUsers({id,active}); if(r.ok){ toast(active?"Enabled":"Disabled"); loadTeam(); } else toast(r.error||"failed");
+}
+async function resetPw(id,username){
+  const p=prompt("New password for "+username+" (6+ characters):"); if(p===null) return;
+  if((p||"").length<6){ toast("Password must be 6+ characters"); return; }
+  const r=await patchUsers({id,password:p}); if(r.ok){ toast("Password reset — share it with them"); } else toast(r.error||"failed");
 }
 function togglePicking(){ setView(VIEW==="picking"?"orders":"picking"); }
 function togglePnl(){ setView(VIEW==="pnl"?"orders":"pnl"); }
