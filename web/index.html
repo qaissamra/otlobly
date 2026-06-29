@@ -578,6 +578,39 @@
   </div>
 </div>
 
+<!-- Price-image editor: repaint the Amazon checkout's right price box with the marked-up numbers -->
+<div id="priceImgModal" class="az-modal hidden" onclick="if(event.target===this)closePriceImg()">
+  <div class="az-box" style="width:860px;max-width:97vw">
+    <div class="az-head"><b>🧾 تعديل أسعار الفاتورة · Marked-up price image</b><span class="az-x" onclick="closePriceImg()">✕</span></div>
+    <div style="padding:14px 16px">
+      <div id="piStart">
+        <p class="muted2" style="margin:0 0 10px;font-size:12.5px">ارفع/الصق صورة فاتورة أمازون، ثم أدخل الأرقام واسحب المربّع فوق القسم الأصلي.<br>Upload/paste the Amazon checkout screenshot, type the numbers, then drag the box over the original.</p>
+        <label class="qthumb proof" style="width:100%;height:130px;border-radius:10px;font-size:30px">
+          🧾<input type="file" accept="image/*" onchange="piUpload(this)"></label>
+      </div>
+      <div id="piEdit" style="display:none">
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px"><canvas id="piCanvas" style="border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:move;max-width:100%"></canvas></div>
+          <div style="width:240px">
+            <label class="fld">Items $</label><input id="pi_items" type="number" step="0.01" style="width:100%" oninput="piRecalc()">
+            <label class="fld" style="margin-top:8px">Shipping &amp; handling $</label><input id="pi_ship" type="number" step="0.01" style="width:100%" oninput="piRecalc()">
+            <label class="fld" style="margin-top:8px">Import $ (الأصلي / original)</label><input id="pi_import" type="number" step="0.01" value="0" style="width:100%" oninput="piRecalc()">
+            <label class="fld" style="margin-top:8px">Import line label</label><input id="pi_implabel" value="Import fees" style="width:100%" oninput="piRecalc()">
+            <div id="piReadout" style="margin-top:10px;font-size:12.5px;background:#fbfaf6;border:1px solid var(--line);border-radius:8px;padding:9px"></div>
+            <label class="fld" style="margin-top:8px">حجم المربّع · Box size</label>
+            <input id="pi_scale" type="range" min="55" max="190" value="100" style="width:100%" oninput="piRecalc()">
+          </div>
+        </div>
+        <div class="az-actions" style="margin-top:14px">
+          <button class="po-btn" onclick="piReset()">↻ تغيير الصورة · Change image</button>
+          <button class="po-btn" onclick="piUse(true)">✂️ اقتصاص المربّع · Crop to box</button>
+          <button class="accent" onclick="piUse(false)">✓ استخدام هذه الصورة · Use this image</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1021,6 +1054,7 @@ const QSTR={
       total:"الإجمالي للعميل", subtotal:"المجموع", markup:"هامش",
       paste:"💡 🧾 = صورة الفاتورة من أمازون (الصق Ctrl/Cmd+V أو ارفع) — تظهر كبيرة للعميل.  🖼 = صورة المنتج (ارفع أو ↓ من الرابط) — تظهر صغيرة.",
       proofBox:"صورة الفاتورة من أمازون (الصق أو ارفع)", imgBox:"صورة المنتج (ارفع أو ↓ من الرابط)",
+      editPrice:"✏️ تعديل الأسعار على صورة الفاتورة (إضافة الهامش)",
       disclaimer:"السعر يُؤكَّد عند الطلب.", whatsapp:"📱 واتساب", createOrder:"➕ إنشاء طلب من هذا",
       intakeLink:"🔗 رابط تعبئة بيانات العميل", linkCopied:"تم نسخ الرابط ✓", linkOnly:"الرابط متاح على النسخة المنشورة فقط",
       empty:"أدخل سعرًا واحدًا على الأقل.", imgFetched:"تمت إضافة الصورة ✓", imgFail:"تعذّر جلب الصورة — الصقها أو ارفعها يدويًا", fetchImg:"جلب الصورة من الرابط"},
@@ -1029,6 +1063,7 @@ const QSTR={
       total:"Customer total", subtotal:"Subtotal", markup:"markup",
       paste:"💡 🧾 = Amazon checkout screenshot (paste Ctrl/Cmd+V or upload) — shown LARGE to the customer.  🖼 = product photo (upload or ↓ from link) — shown small.",
       proofBox:"Amazon checkout screenshot (paste or upload)", imgBox:"Product photo (upload or ↓ from link)",
+      editPrice:"✏️ Edit prices on the checkout image (add markup)",
       disclaimer:"Final price confirmed at order time.", whatsapp:"📱 WhatsApp", createOrder:"➕ Create order from this",
       intakeLink:"🔗 Customer intake link", linkCopied:"Link copied ✓", linkOnly:"Available on the deployed (hosted) app only",
       empty:"Enter at least one price.", imgFetched:"Image added ✓", imgFail:"Couldn’t fetch image — paste or upload it", fetchImg:"Get image from link"}
@@ -1052,6 +1087,7 @@ function renderQuoteRows(){
   $("quoteRows").innerHTML=QROWS.map((r,i)=>`<div class="qrow" onmousedown="ACTIVE_QROW=${i}">
     <label class="qthumb proof ${r.proof?'has':''}" style="${r.proof?`background-image:url('${r.proof}')`:''}" title="${qt('proofBox')}">
       ${r.proof?'':'🧾'}<input type="file" accept="image/*" onchange="qPickProof(${i},this)"></label>
+    <button class="iconbtn" title="${qt('editPrice')}" onclick="openPriceImg(${i})">✏️</button>
     <label class="qthumb ${r.image?'has':''}" style="${r.image?`background-image:url('${r.image}')`:''}" title="${qt('imgBox')}">
       ${r.image?'':'🖼'}<input type="file" accept="image/*" onchange="qPickImage(${i},this)"></label>
     <input value="${poEsc(r.title)}" placeholder="${qt('name')}" style="flex:2;min-width:130px" oninput="QROWS[${i}].title=this.value" onfocus="ACTIVE_QROW=${i}">
@@ -1084,14 +1120,124 @@ async function qFetchImg(i){
   else toast(qt("imgFail"));
 }
 function qPasteImage(e){
-  if(VIEW!=="quote")return;
+  const modalOpen = !$("priceImgModal").classList.contains("hidden");
+  if(VIEW!=="quote" && !modalOpen) return;
   const items=(e.clipboardData&&e.clipboardData.items)||[];
   for(const it of items){ if(it.type&&it.type.indexOf("image")===0){ const f=it.getAsFile();
-    if(f){ e.preventDefault(); const i=Math.min(Math.max(ACTIVE_QROW,0),QROWS.length-1);
+    if(f){ e.preventDefault();
+      if(modalOpen){ const fr=new FileReader(); fr.onload=()=>piLoadImage(fr.result); fr.readAsDataURL(f); return; }
+      const i=Math.min(Math.max(ACTIVE_QROW,0),QROWS.length-1);
       qResizeImage(f,d=>{ if(d){QROWS[i].proof=d; renderQuoteRows(); toast(qt("imgFetched"));} }, 1400); }
     return; } }
 }
 window.addEventListener("paste", qPasteImage);
+
+// ---- Marked-up price-image editor (repaint the checkout's right price box) ---- //
+let PI=null;
+function closePriceImg(){ $("priceImgModal").classList.add("hidden"); PI=null; }
+function piReset(){ $("piStart").style.display="block"; $("piEdit").style.display="none"; }
+function openPriceImg(i){
+  PI={ row:i, img:null, card:{x:0,y:0,w:0,h:0}, baseW:0,
+       items:0, ship:0, newImport:0, newTotal:0, implabel:"Import fees" };
+  $("priceImgModal").classList.remove("hidden");
+  piReset();
+  $("pi_items").value=""; $("pi_ship").value=""; $("pi_import").value="0";
+  $("pi_implabel").value="Import fees"; $("pi_scale").value=100;
+  if(QROWS[i].proof) piLoadImage(QROWS[i].proof);   // start from the row's existing screenshot
+}
+function piUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return; const fr=new FileReader(); fr.onload=()=>piLoadImage(fr.result); fr.readAsDataURL(f); }
+function piLoadImage(src){
+  const im=new Image();
+  im.onload=()=>{
+    PI.img=im;
+    const DW=Math.min(560, im.naturalWidth);
+    const c=$("piCanvas"); c.width=DW; c.height=Math.round(im.naturalHeight*DW/im.naturalWidth);
+    PI.disp=DW/im.naturalWidth;
+    PI.baseW=Math.round(c.width*0.44);
+    PI.card={x:Math.round(c.width*0.54), y:Math.round(c.height*0.10), w:PI.baseW, h:0};
+    $("piStart").style.display="none"; $("piEdit").style.display="block";
+    piRecalc();
+  };
+  im.onerror=()=>toast("Couldn't load that image"); im.src=src;
+}
+function roundRect(ctx,x,y,w,h,r){ ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function piDrawCard(ctx,card){
+  const w=card.w, pad=w*0.055, fs=Math.max(9,w*0.05), lh=fs*1.75;
+  const lines=[["Items",PI.items],["Shipping & handling",PI.ship],[PI.implabel,PI.newImport]];
+  const h=pad*2 + lh*lines.length + lh*1.35;
+  card.h=h; const x=card.x, y=card.y;
+  ctx.save();
+  ctx.fillStyle="#ffffff"; roundRect(ctx,x,y,w,h,Math.max(4,w*0.02)); ctx.fill();
+  ctx.strokeStyle="#dddddd"; ctx.lineWidth=Math.max(1,w*0.004); ctx.stroke();
+  ctx.textBaseline="middle"; ctx.font=fs+"px Arial,Helvetica,sans-serif";
+  let cy=y+pad+lh/2;
+  for(const [lab,val] of lines){
+    ctx.fillStyle="#565959"; ctx.textAlign="left"; ctx.fillText(lab+":", x+pad, cy);
+    ctx.fillStyle="#0F1111"; ctx.textAlign="right"; ctx.fillText("USD "+Number(val).toFixed(2), x+w-pad, cy);
+    cy+=lh;
+  }
+  ctx.strokeStyle="#dddddd"; ctx.beginPath(); ctx.moveTo(x+pad,cy-lh*0.35); ctx.lineTo(x+w-pad,cy-lh*0.35); ctx.stroke();
+  cy+=lh*0.15;
+  ctx.font="bold "+(fs*1.2)+"px Arial,Helvetica,sans-serif"; ctx.fillStyle="#0F1111";
+  ctx.textAlign="left"; ctx.fillText("Order total:", x+pad, cy);
+  ctx.textAlign="right"; ctx.fillText("USD "+Number(PI.newTotal).toFixed(2), x+w-pad, cy);
+  ctx.restore();
+}
+function piDraw(){
+  if(!PI||!PI.img)return; const c=$("piCanvas"), ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(PI.img,0,0,c.width,c.height);
+  piDrawCard(ctx, PI.card);
+}
+function piRecalc(){
+  if(!PI)return;
+  const items=+($("pi_items").value)||0, ship=+($("pi_ship").value)||0, imp=+($("pi_import").value)||0;
+  const mk=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0.10;
+  const sub=items+ship+imp, add=Math.round(sub*mk*100)/100;
+  PI.items=items; PI.ship=ship; PI.implabel=$("pi_implabel").value||"Import fees";
+  PI.newImport=Math.round((imp+add)*100)/100; PI.newTotal=Math.round((sub+add)*100)/100;
+  PI.card.w=Math.round(PI.baseW*(+($("pi_scale").value)/100));
+  $("piReadout").innerHTML=`الهامش · markup ${Math.round(mk*100)}% → +${money(add)}<br><b>Order total: ${money(PI.newTotal)}</b>`;
+  piDraw();
+}
+function piCompose(crop){
+  const im=PI.img, f=1/PI.disp;
+  const card={x:PI.card.x*f, y:PI.card.y*f, w:PI.card.w*f, h:PI.card.h*f};
+  const out=document.createElement('canvas'); const ctx=out.getContext('2d');
+  if(crop){
+    const m=card.w*0.06;
+    out.width=Math.round(card.w+m*2); out.height=Math.round(card.h+m*2);
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out.width,out.height);
+    piDrawCard(ctx,{x:m,y:m,w:card.w,h:0});
+  }else{
+    out.width=im.naturalWidth; out.height=im.naturalHeight;
+    ctx.drawImage(im,0,0); piDrawCard(ctx,{x:card.x,y:card.y,w:card.w,h:0});
+  }
+  return out.toDataURL('image/jpeg',0.92);
+}
+function piUse(crop){
+  if(!PI||!PI.img){ toast("Add a screenshot first"); return; }
+  QROWS[PI.row].proof=piCompose(crop); renderQuoteRows(); closePriceImg();
+  toast(QLANG==="ar"?"تم تحديث صورة الفاتورة ✓":"Price image updated ✓");
+}
+// drag the price box around the canvas (mouse + touch)
+(function(){
+  let drag=null;
+  const c=()=>$("piCanvas");
+  function at(e){ const r=c().getBoundingClientRect(); const sx=c().width/r.width, sy=c().height/r.height;
+    return { x:((e.touches?e.touches[0].clientX:e.clientX)-r.left)*sx, y:((e.touches?e.touches[0].clientY:e.clientY)-r.top)*sy }; }
+  function down(e){ if(!PI||!PI.img)return; const p=at(e); const k=PI.card;
+    if(p.x>=k.x&&p.x<=k.x+k.w&&p.y>=k.y&&p.y<=k.y+k.h){ drag={dx:p.x-k.x, dy:p.y-k.y}; e.preventDefault(); } }
+  function move(e){ if(!drag||!PI)return; const p=at(e); const k=PI.card;
+    k.x=Math.max(0,Math.min(c().width-k.w, p.x-drag.dx)); k.y=Math.max(0,Math.min(c().height-k.h, p.y-drag.dy));
+    piDraw(); e.preventDefault(); }
+  function up(){ drag=null; }
+  document.addEventListener("DOMContentLoaded",()=>{});
+  const el=document.getElementById("piCanvas");
+  el.addEventListener("mousedown",down); window.addEventListener("mousemove",move); window.addEventListener("mouseup",up);
+  el.addEventListener("touchstart",down,{passive:false}); el.addEventListener("touchmove",move,{passive:false}); el.addEventListener("touchend",up);
+})();
 function qBuildQuote(){
   const rows=QROWS.filter(r=>parseFloat(r.price)>0);
   if(!rows.length){ toast(qt("empty")); return; }
