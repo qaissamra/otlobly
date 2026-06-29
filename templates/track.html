@@ -69,6 +69,8 @@ const $=id=>document.getElementById(id);
 function fmt(s){ if(!s) return ""; const d=new Date(s); if(isNaN(d)) return s;
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+
     ' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+function fmtRange(a,b){ const f=d=>new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  return f(a)+' – '+f(b)+' '+new Date(b).getFullYear(); }
 function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function shipmentCard(s){
   const cur=s.current||{};
@@ -77,7 +79,9 @@ function shipmentCard(s){
       return `<div class="prod">${img?`<img src="${esc(img)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(t)}</span></div>`;
     }).join("")}</div>`:'';
   const tnum=s.tracking?`<div class="tnum">رقم التتبّع · ${esc(s.tracking)}</div>`:'';
-  const eta=s.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(s.est_delivery).split(' · ')[0]}</b></div>`:'';
+  const eta=(s.est_from&&s.est_to)
+    ?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmtRange(s.est_from,s.est_to)}</b></div>`
+    :(s.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(s.est_delivery).split(' · ')[0]}</b></div>`:'');
   const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
       <div><div class="big" dir="auto">${esc(cur.label)||'قيد الشحن'}</div><small>الحالة الحالية · current status</small></div></div>`;
   const evs=(s.events||[]).slice().reverse();

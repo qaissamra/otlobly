@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from urllib.parse import quote as _urlquote
@@ -1173,6 +1174,19 @@ def _phone_pairs(core, pdb):
     return purchases.find_packages_for(pdb, names, oids), names, oids
 
 
+def _delivery_window(arrival):
+    """Customer-facing delivery RANGE from a package arrival date: end = arrival + 1 week,
+    start = 2 weeks before the end (= arrival − 1 week). e.g. 2026-07-08 → 2026-07-01 .. 2026-07-15."""
+    if not arrival:
+        return None, None
+    try:
+        d = datetime.strptime(str(arrival)[:10], "%Y-%m-%d")
+    except Exception:  # noqa
+        return None, None
+    end = d + timedelta(days=7)
+    return (end - timedelta(days=14)).strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
 def _shipments_for(pairs, names, oids):
     """[(po, package)] → friendly shipment cards: de-dupe, show ONLY this customer's items,
     one GAASH session for all timelines. Shared by /api/track and the customer dashboard.
@@ -1214,8 +1228,10 @@ def _shipments_for(pairs, names, oids):
         tl = tls.get(gwd, {})
         if tl.get("ok"):
             ct = tracking.customer_timeline(tl["events"], smap, dlabel)
+            ef, et = _delivery_window(pk.get("arrival"))
             shipments.append({"tracking": otl, "items": items, "current": ct["current"],
-                              "events": ct["events"], "est_delivery": pk.get("arrival") or None})
+                              "events": ct["events"], "est_delivery": pk.get("arrival") or None,
+                              "est_from": ef, "est_to": et})
         else:
             shipments.append({"tracking": otl, "items": items, "events": [],
                               "current": {"label": "قيد الشحن", "bucket": "transit"}})

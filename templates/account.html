@@ -149,6 +149,9 @@ function t(k){return (T[LANG]||T.en)[k];}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(d){ if(!d)return""; const x=new Date(d); if(isNaN(x))return esc(d);
   return x.toLocaleDateString(LANG==="ar"?"ar":"en-GB",{day:"2-digit",month:"short",year:"numeric"}); }
+function fmtRange(a,b){ const loc=LANG==="ar"?"ar":"en-GB";
+  const f=d=>new Date(d).toLocaleDateString(loc,{day:"2-digit",month:"short"});
+  return f(a)+" – "+f(b)+" "+new Date(b).getFullYear(); }
 function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
   $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
 function paint(){
@@ -180,7 +183,8 @@ function shipCard(s){
   const cur=s.current||{}; const bucket=cur.bucket||"transit";
   const items=(s.items||[]).map(it=>`<div class="prod">${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(it.title)}</span></div>`).join("");
   const tnum=s.tracking?`<div class="tnum">${t("track")} · ${esc(s.tracking)}</div>`:"";
-  const eta=s.est_delivery?`<div class="eta">${t("eta")}: <b>${fmt(s.est_delivery)}</b></div>`:"";
+  const eta=(s.est_from&&s.est_to)?`<div class="eta">${t("eta")}: <b>${fmtRange(s.est_from,s.est_to)}</b></div>`
+    :(s.est_delivery?`<div class="eta">${t("eta")}: <b>${fmt(s.est_delivery)}</b></div>`:"");
   const evs=(s.events||[]).slice().reverse();
   const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'}"><span class="dot dotc b-${e.bucket||'transit'}"></span><div class="lab" dir="auto">${esc(e.label)}</div><div class="when">${fmt(e.date)}</div></li>`).join("")}</ul>`:"";
   return `<div class="ship">
