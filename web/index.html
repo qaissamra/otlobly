@@ -613,6 +613,9 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),3500);}
 
 let ME=null;
+// Roles that get a LIMITED console: only these nav buttons + views, landing on `home`.
+const RESTRICTED_NAV={ sales:{ nav:["quoteBtn","needBtn"], views:["quote","needorder"], home:"quote" } };
+let RESTRICTED=null;
 async function applyRole(){
   if(ME) return;
   ME={local:true};                       // default: local no-auth dashboard → show all
@@ -624,10 +627,16 @@ async function applyRole(){
   hide("exportBtn", p.includes("admin_actions"));
   hide("clickupBtn", p.includes("admin_actions"));
   hide("teamBtn", p.includes("manage_users"));
+  RESTRICTED = RESTRICTED_NAV[ME.role] || null;
+  if(RESTRICTED){                                  // limited console: keep only the allowed nav buttons
+    const keep=new Set(RESTRICTED.nav);
+    document.querySelectorAll("header button").forEach(b=>{ b.style.display = keep.has(b.id) ? "" : "none"; });
+  }
   $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b> · ${ME.role} · <a href="/logout">logout</a>`;
 }
 async function load(){
   await applyRole();
+  if(RESTRICTED){ setView(RESTRICTED.home); }       // limited roles land on their page, never the orders dashboard
   const r = await fetch("/api/report"); DATA = await r.json();
   buildFilters(); renderSummary(); render(); renderPicking();
   $("sub").textContent = `${DATA.summary.total} orders · ${money(DATA.summary.money.outstanding_usd)} outstanding · updated ${new Date(DATA.generated_at).toLocaleString()}`;
@@ -824,6 +833,7 @@ async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…"
 function toggleForm(){$("formPanel").classList.toggle("hidden");}
 let VIEW="orders";
 function setView(v){
+  if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
   const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team");
   document.querySelector(".cards").classList.toggle("hidden",full);
@@ -850,6 +860,7 @@ function setView(v){
   $("settingsBtn").textContent=v==="settings"?"📋 Orders":"⚙ Settings";
   $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
   $("teamBtn").textContent=v==="team"?"📋 Orders":"👥 Team";
+  if(RESTRICTED){ $("quoteBtn").textContent="💰 Quote"; $("needBtn").textContent="💡 To order"; }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
   if(v==="purchases"){ loadPurchases(); }
@@ -1112,7 +1123,7 @@ function renderQuoteResult(d){
     <div class="muted2" style="font-size:11.5px;margin-top:6px">${qt("disclaimer")}</div>
     <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
       ${wa?`<a class="po-btn accent" href="${wa}" target="_blank">${qt("whatsapp")}</a>`:""}
-      <button class="po-btn" onclick='qCreateOrder(${info})'>${qt("createOrder")}</button>
+      ${RESTRICTED?"":`<button class="po-btn" onclick='qCreateOrder(${info})'>${qt("createOrder")}</button>`}
       <button class="po-btn" onclick='qSendIntake(this,${info})'>${qt("intakeLink")}</button></div>`;
 }
 async function qSendIntake(btn,info){

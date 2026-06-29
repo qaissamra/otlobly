@@ -23,8 +23,9 @@ ROLE_PERMS = {
     "admin": {"view_orders", "view_money", "view_cost", "view_pnl", "edit_order",
               "edit_fulfillment", "view_customers", "manage_customers",
               "manage_users", "admin_actions"},
-    "sales": {"view_orders", "view_money", "edit_order",
-              "view_customers", "manage_customers"},
+    # Sales is a limited console — Quote + To-order only (see the UI nav lock in
+    # web/index.html). view_orders lets the two pages load; view_money shows prices.
+    "sales": {"view_orders", "view_money"},
     "fulfillment": {"view_orders", "edit_fulfillment", "view_customers"},
 }
 ROLES = list(ROLE_PERMS.keys())
