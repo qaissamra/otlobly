@@ -673,7 +673,14 @@ async function applyRole(){
 async function load(){
   await applyRole();
   if(RESTRICTED){ setView(RESTRICTED.home); }       // limited roles land on their page, never the orders dashboard
-  const r = await fetch("/api/report"); DATA = await r.json();
+  try{                                              // a server blip shouldn't leave the page frozen at "loading…"
+    const r = await fetch("/api/report"); if(!r.ok) throw new Error("HTTP "+r.status);
+    DATA = await r.json();
+  }catch(e){
+    $("sub").innerHTML='⚠ تعذّر الاتصال بالخادم · couldn\'t reach the server — '
+      +'<a href="#" onclick="location.reload();return false" style="color:var(--accent);font-weight:700">إعادة المحاولة · Retry</a>';
+    return;
+  }
   buildFilters(); renderSummary(); render(); renderPicking();
   $("sub").textContent = `${DATA.summary.total} orders · ${money(DATA.summary.money.outstanding_usd)} outstanding · updated ${new Date(DATA.generated_at).toLocaleString()}`;
   fillBoxSelect();
