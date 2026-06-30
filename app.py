@@ -585,6 +585,50 @@ def api_orders_delete():
     return jsonify({"ok": True, "deleted": n})
 
 
+@app.route("/api/order/edit", methods=["POST"])
+@auth.require("edit_order")
+def api_order_edit():
+    """Edit an order: replace its product list (edit / add / remove items) and optionally
+    the customer name + amount. Used by the To-order page's Edit button."""
+    b = request.get_json(force=True, silent=True) or {}
+    o = db.get_order(str(b.get("order_id") or ""))
+    if not o:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    changes = {}
+    if isinstance(b.get("items"), list):
+        new_items = []
+        for it in b["items"]:
+            link = (it.get("link") or it.get("clean_url") or "").strip()
+            asin = (it.get("asin") or "").strip().upper() or (normalize.extract_asin(link) if link else None)
+            if not (link or (it.get("title") or "").strip() or it.get("image")):
+                continue                                   # skip blank rows
+            new_items.append({
+                "raw_url": link or it.get("raw_url"),
+                "clean_url": (normalize.clean_amazon_url(link) if link else it.get("clean_url")) or (link or None),
+                "asin": asin,
+                "title": (it.get("title") or "").strip() or None,
+                "qty": max(1, int(it.get("qty") or 1)),
+                "image": it.get("image") or None,
+                "item_usd": it.get("item_usd"),
+            })
+        changes["items"] = new_items
+    if b.get("amount") not in (None, ""):
+        try:
+            changes["amount_to_collect_usd"] = round(float(b["amount"]), 2)
+        except (TypeError, ValueError):
+            pass
+    if (b.get("name") or "").strip():
+        cust = dict(o.get("customer") or {})
+        cust["name"] = b["name"].strip()
+        changes["customer"] = cust
+    if not changes:
+        return jsonify({"ok": False, "error": "nothing to change"}), 400
+    db.update_order(o["order_id"], changes, auth.actor())
+    activity.log("set", "order", o["order_id"], _olabel(o), field="products",
+                 detail="edited order", user=_user())
+    return jsonify({"ok": True})
+
+
 @app.route("/api/order/item_image", methods=["POST"])
 @auth.require("edit_order")
 def api_order_item_image():

@@ -616,6 +616,26 @@
   </div>
 </div>
 
+<!-- Edit order (products / amount / customer) -->
+<div id="orderEditModal" class="az-modal hidden" onclick="if(event.target===this)closeOrderEdit()">
+  <div class="az-box" style="width:680px;max-width:96vw">
+    <div class="az-head"><b id="oeTitle">✏️ تعديل الطلب · Edit order</b><span class="az-x" onclick="closeOrderEdit()">✕</span></div>
+    <div style="padding:14px 16px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div style="flex:2;min-width:180px"><label class="fld">اسم العميل · Customer</label><input id="oe_name" style="width:100%"></div>
+        <div style="flex:1;min-width:120px"><label class="fld">الإجمالي للعميل · Amount $</label><input id="oe_amount" type="number" step="0.01" style="width:100%"></div>
+      </div>
+      <label class="fld">المنتجات · Products</label>
+      <div id="oeRows"></div>
+      <button class="minibtn" onclick="oeAddRow()" style="margin-top:6px">＋ إضافة منتج · add product</button>
+      <div class="az-actions" style="margin-top:14px">
+        <button class="po-btn" onclick="closeOrderEdit()">إلغاء · Cancel</button>
+        <button class="accent" onclick="oeSave(this)">💾 حفظ · Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1037,8 +1057,10 @@ async function emptyTrash(btn){ if(!confirm("Empty the whole trash? Everything i
 function toggleQuote(){ setView(VIEW==="quote"?"orders":"quote"); }
 function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
+let NEED_ORDERS=[];
 async function loadNeedOrder(){
   const d=await (await fetch("/api/needorder")).json();
+  NEED_ORDERS=d.orders||[];
   $("needSub").textContent=`${d.count} order(s) · ${d.products} product(s) to place`;
   if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
   $("needList").innerHTML=d.orders.map(o=>{
@@ -1055,6 +1077,7 @@ async function loadNeedOrder(){
         <div style="text-align:right;display:flex;align-items:center;gap:8px">
           <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
             <div class="muted2" style="font-size:11px">${poEsc(o.order_id)}${o.est_delivery_customer?` · ETA ${poEsc(o.est_delivery_customer)}`:''}</div></div>
+          <button class="po-btn" title="تعديل الطلب · edit order" onclick="openOrderEdit('${poEsc(o.order_id)}')">✏️</button>
           <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>
         </div>
       </div>
@@ -1079,6 +1102,45 @@ async function neImg(orderId,index,link,btn){
     if(btn) btn.remove();
     toast(QLANG==="ar"?"تمت إضافة الصورة ✓":"Image added ✓");
   } else { if(btn){ btn.disabled=false; btn.textContent="📷"; } toast(d&&d.error?d.error:(QLANG==="ar"?"تعذّر جلب الصورة":"Couldn't fetch image")); }
+}
+// ---- Edit order (products / amount / customer) on the To-order page ---------- //
+let OE=null;
+function closeOrderEdit(){ $("orderEditModal").classList.add("hidden"); OE=null; }
+const oeBlank=()=>({title:"",link:"",qty:1,image:null,asin:""});
+function openOrderEdit(orderId){
+  const o=NEED_ORDERS.find(x=>x.order_id===orderId);
+  if(!o){ toast("Order not found — refresh and try again"); return; }
+  OE={ order_id:orderId, items:(o.items||[]).map(it=>({title:it.title||"",link:it.link||"",qty:it.qty||1,image:it.image||null,asin:it.asin||""})) };
+  if(!OE.items.length) OE.items=[oeBlank()];
+  $("oe_name").value=o.customer||""; $("oe_amount").value=(o.amount_to_collect_usd!=null?o.amount_to_collect_usd:"");
+  oeRender(); $("orderEditModal").classList.remove("hidden");
+}
+function oeRender(){
+  $("oeRows").innerHTML=OE.items.map((it,i)=>`<div style="display:flex;gap:7px;margin-bottom:7px;align-items:center;flex-wrap:wrap">
+    ${it.image?`<img src="${poEsc(it.image)}" style="width:38px;height:38px;border-radius:7px;object-fit:contain;border:1px solid var(--line);flex:none">`:'<div class="noimg" style="width:38px;height:38px;border-radius:7px;flex:none"></div>'}
+    <input value="${poEsc(it.title)}" placeholder="اسم المنتج · product name" style="flex:2;min-width:140px" oninput="OE.items[${i}].title=this.value">
+    <input value="${poEsc(it.link)}" placeholder="رابط أمازون · Amazon link" style="flex:2;min-width:140px" oninput="OE.items[${i}].link=this.value">
+    <input type="number" min="1" value="${it.qty||1}" title="qty" style="width:54px" oninput="OE.items[${i}].qty=this.value">
+    <button class="iconbtn" title="جلب الصورة · get photo" onclick="oeImg(${i},this)">📷</button>
+    <button class="iconbtn" onclick="oeRemoveRow(${i})">✕</button></div>`).join("");
+}
+function oeAddRow(){ OE.items.push(oeBlank()); oeRender(); }
+function oeRemoveRow(i){ OE.items.splice(i,1); if(!OE.items.length)OE.items=[oeBlank()]; oeRender(); }
+async function oeImg(i,btn){
+  const link=(OE.items[i].link||"").trim(); if(!link){ toast(QLANG==="ar"?"أضف رابط أمازون أولاً":"Add the Amazon link first"); return; }
+  if(btn){ btn.disabled=true; btn.textContent="…"; }
+  let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(link))).json(); }catch(e){ d={}; }
+  if(d&&d.image){ OE.items[i].image=d.image; if(d.title&&!(OE.items[i].title||"").trim())OE.items[i].title=d.title; oeRender(); }
+  else { if(btn){ btn.disabled=false; btn.textContent="📷"; } toast(d&&d.error?d.error:(QLANG==="ar"?"تعذّر جلب الصورة":"Couldn't fetch image")); }
+}
+async function oeSave(btn){
+  if(!OE) return; btn.disabled=true;
+  const body={ order_id:OE.order_id, name:$("oe_name").value, amount:$("oe_amount").value,
+    items:OE.items.map(it=>({title:(it.title||"").trim(),link:(it.link||"").trim(),qty:parseInt(it.qty)||1,image:it.image||null,asin:it.asin||""})) };
+  let r; try{ r=await post("/api/order/edit",body); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(r&&r.ok){ toast(QLANG==="ar"?"تم الحفظ ✓":"Saved ✓"); closeOrderEdit(); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
+  else toast("Save failed: "+((r&&r.error)||""));
 }
 let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0, QMARKUP=0.10;
 function qSetMarkup(v){ QMARKUP=Math.max(0,(parseFloat(v)||0))/100; }
