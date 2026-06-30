@@ -479,8 +479,10 @@
       <div id="q_intro" class="muted2"></div>
       <div id="quoteRows" style="margin-top:10px"></div>
       <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
-      <div style="margin-top:12px;display:flex;gap:9px;align-items:center">
+      <div style="margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
         <button class="accent" id="q_btn" onclick="qBuildQuote()">Build quote</button>
+        <span style="font-size:12.5px;color:var(--muted)" id="q_markup_lbl">markup</span>
+        <input id="q_markup" type="number" min="0" step="1" style="width:62px" title="0 = no extra charge" oninput="qSetMarkup(this.value)"><span style="color:var(--muted)">%</span>
         <span id="q_note" class="muted2" style="font-size:11.5px"></span>
       </div>
       <div id="quoteResult" style="margin-top:14px"></div>
@@ -596,6 +598,7 @@
             <label class="fld" style="margin-top:8px">Shipping &amp; handling $</label><input id="pi_ship" type="number" step="0.01" style="width:100%" oninput="piRecalc()">
             <label class="fld" style="margin-top:8px">Import $ (الأصلي / original)</label><input id="pi_import" type="number" step="0.01" value="0" style="width:100%" oninput="piRecalc()">
             <label class="fld" style="margin-top:8px">Import line label</label><input id="pi_implabel" value="Import fees" style="width:100%" oninput="piRecalc()">
+            <label class="fld" style="margin-top:8px">هامش · Markup %</label><input id="pi_markup" type="number" min="0" step="1" value="10" style="width:100%" oninput="piRecalc()">
             <div id="piReadout" style="margin-top:10px;font-size:12.5px;background:#fbfaf6;border:1px solid var(--line);border-radius:8px;padding:9px"></div>
             <label class="fld" style="margin-top:8px">حجم المربّع · Box size</label>
             <input id="pi_scale" type="range" min="55" max="190" value="100" style="width:100%" oninput="piRecalc()">
@@ -1045,7 +1048,8 @@ async function loadNeedOrder(){
       <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
   }).join("");
 }
-let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0;
+let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0, QMARKUP=0.10;
+function qSetMarkup(v){ QMARKUP=Math.max(0,(parseFloat(v)||0))/100; }
 const qBlank=()=>({title:"",link:"",qty:1,price:"",image:null,proof:null});
 let QROWS=[qBlank()];
 const QSTR={
@@ -1075,11 +1079,14 @@ function renderQuoteChrome(){
   const rtl=QLANG==="ar"; $("quoteView").dir=rtl?"rtl":"ltr";
   $("q_h").textContent="💰 "+qt("title"); $("q_intro").textContent=qt("intro");
   $("q_add").textContent=qt("add"); $("q_btn").textContent=qt("build"); $("q_note").textContent="";
+  $("q_markup_lbl").textContent=qt("markup");
   $("qlang_ar").classList.toggle("on",QLANG==="ar"); $("qlang_en").classList.toggle("on",QLANG==="en");
   renderQuoteRows();
 }
 async function loadQuote(){
   try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){ QSETTINGS={}; }
+  QMARKUP=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0.10;
+  $("q_markup").value=Math.round(QMARKUP*1000)/10;     // default from Settings, editable per quote
   if(!QROWS.length) QROWS=[qBlank()];
   renderQuoteChrome(); $("quoteResult").innerHTML="";
 }
@@ -1146,6 +1153,7 @@ function openPriceImg(i){
   piReset();
   $("pi_items").value=""; $("pi_ship").value=""; $("pi_import").value="0";
   $("pi_implabel").value="Import fees"; $("pi_scale").value=100;
+  $("pi_markup").value=Math.round((QMARKUP||0.10)*1000)/10;   // default to the quote's markup
   if(QROWS[i].proof) piLoadImage(QROWS[i].proof);   // start from the row's existing screenshot
 }
 function piUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return; const fr=new FileReader(); fr.onload=()=>piLoadImage(fr.result); fr.readAsDataURL(f); }
@@ -1196,12 +1204,12 @@ function piDraw(){
 function piRecalc(){
   if(!PI)return;
   const items=+($("pi_items").value)||0, ship=+($("pi_ship").value)||0, imp=+($("pi_import").value)||0;
-  const mk=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0.10;
+  const mk=Math.max(0,(+($("pi_markup").value)||0))/100;
   const sub=items+ship+imp, add=Math.round(sub*mk*100)/100;
   PI.items=items; PI.ship=ship; PI.implabel=$("pi_implabel").value||"Import fees";
   PI.newImport=Math.round((imp+add)*100)/100; PI.newTotal=Math.round((sub+add)*100)/100;
   PI.card.w=Math.round(PI.baseW*(+($("pi_scale").value)/100));
-  $("piReadout").innerHTML=`الهامش · markup ${Math.round(mk*100)}% → +${money(add)}<br><b>Order total: ${money(PI.newTotal)}</b>`;
+  $("piReadout").innerHTML=`الهامش · markup ${Math.round(mk*1000)/10}% → +${money(add)}<br><b>Order total: ${money(PI.newTotal)}</b>`;
   piDraw();
 }
 function piCompose(crop){
@@ -1244,7 +1252,8 @@ function piUse(crop){
 function qBuildQuote(){
   const rows=QROWS.filter(r=>parseFloat(r.price)>0);
   if(!rows.length){ toast(qt("empty")); return; }
-  const markup=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0;
+  qSetMarkup($("q_markup").value);                   // honor the per-quote markup field (0 = no charge)
+  const markup=QMARKUP;
   const items=rows.map(r=>{ const qty=parseInt(r.qty)||1, price=parseFloat(r.price)||0;
     return {title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null, proof:r.proof||null,
             qty, item_usd:price, line:+(price*qty).toFixed(2)}; });
