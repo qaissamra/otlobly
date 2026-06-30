@@ -1042,20 +1042,43 @@ async function loadNeedOrder(){
   $("needSub").textContent=`${d.count} order(s) · ${d.products} product(s) to place`;
   if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
   $("needList").innerHTML=d.orders.map(o=>{
-    const items=o.items.map(it=>`<div class="qcard" style="padding:7px 9px">
+    const items=o.items.map((it,ix)=>`<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
       ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
       <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||it.asin||'—')}</div>
         <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
+      ${(!it.image&&it.link)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(it.link)}',this)">📷</button>`:''}
       ${it.link?`<a class="po-btn" href="${poEsc(it.link)}" target="_blank">open</a>`:''}</div>`).join("");
     return `<div class="need-order">
       <div class="need-head">
         <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
           <span class="pill">${o.status}</span></div>
-        <div style="text-align:right"><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
-          <div class="muted2" style="font-size:11px">${o.order_id}${o.est_delivery_customer?` · ETA ${o.est_delivery_customer}`:''}</div></div>
+        <div style="text-align:right;display:flex;align-items:center;gap:8px">
+          <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
+            <div class="muted2" style="font-size:11px">${poEsc(o.order_id)}${o.est_delivery_customer?` · ETA ${poEsc(o.est_delivery_customer)}`:''}</div></div>
+          <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>
+        </div>
       </div>
       <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
   }).join("");
+}
+async function neDelete(orderId,name){
+  if(!confirm(`حذف الطلب · Delete order ${orderId}${name?(' ('+name+')'):''}?\nيُنقل إلى سلة المهملات · It moves to Trash (restorable).`)) return;
+  const r=await post("/api/orders/delete",{ids:[orderId]});
+  if(r&&r.ok){ toast("تم النقل إلى سلة المهملات · moved to Trash"); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
+  else toast("Delete failed: "+((r&&r.error)||""));
+}
+async function neImg(orderId,index,link,btn){
+  if(btn){ btn.disabled=true; btn.textContent="…"; }
+  toast(QLANG==="ar"?"جاري جلب الصورة…":"Fetching image…");
+  let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(link))).json(); }catch(e){ d={}; }
+  if(d&&d.image){
+    await post("/api/order/item_image",{order_id:orderId,index,image:d.image});   // persist
+    const card=$("ne_"+orderId+"_"+index);
+    if(card){ const old=card.querySelector(".noimg, img");
+      if(old){ const img=document.createElement("img"); img.src=d.image; img.style.cssText="width:44px;height:44px"; old.replaceWith(img); } }
+    if(btn) btn.remove();
+    toast(QLANG==="ar"?"تمت إضافة الصورة ✓":"Image added ✓");
+  } else { if(btn){ btn.disabled=false; btn.textContent="📷"; } toast(d&&d.error?d.error:(QLANG==="ar"?"تعذّر جلب الصورة":"Couldn't fetch image")); }
 }
 let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0, QMARKUP=0.10;
 function qSetMarkup(v){ QMARKUP=Math.max(0,(parseFloat(v)||0))/100; }

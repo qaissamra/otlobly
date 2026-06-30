@@ -585,6 +585,28 @@ def api_orders_delete():
     return jsonify({"ok": True, "deleted": n})
 
 
+@app.route("/api/order/item_image", methods=["POST"])
+@auth.require("edit_order")
+def api_order_item_image():
+    """Persist a product image onto one of an order's items (used by the To-order page's
+    'get image' button so the photo sticks and carries into the PO/customer view)."""
+    b = request.get_json(force=True, silent=True) or {}
+    o = db.get_order(str(b.get("order_id") or ""))
+    if not o:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    items = o.get("items") or []
+    try:
+        idx = int(b.get("index"))
+    except (TypeError, ValueError):
+        idx = -1
+    img = (b.get("image") or "").strip()
+    if not (0 <= idx < len(items)) or not img:
+        return jsonify({"ok": False, "error": "bad item or image"}), 400
+    items[idx]["image"] = img
+    db.upsert_order(o)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/purchases")
 @auth.require("view_orders")
 def api_purchases():
