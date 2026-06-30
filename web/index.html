@@ -480,9 +480,11 @@
       <div id="quoteRows" style="margin-top:10px"></div>
       <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
       <div style="margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12.5px;color:var(--muted)" id="q_total_lbl">Total price $</span>
+        <input id="q_total" type="number" min="0" step="0.01" style="width:110px;font-weight:700" placeholder="0.00" oninput="qLiveTotal()">
         <button class="accent" id="q_btn" onclick="qBuildQuote()">Build quote</button>
         <span style="font-size:12.5px;color:var(--muted)" id="q_markup_lbl">markup</span>
-        <input id="q_markup" type="number" min="0" step="1" style="width:62px" title="0 = no extra charge" oninput="qSetMarkup(this.value)"><span style="color:var(--muted)">%</span>
+        <input id="q_markup" type="number" min="0" step="1" style="width:62px" title="0 = no extra charge" oninput="qLiveTotal()"><span style="color:var(--muted)">%</span>
         <span id="q_note" class="muted2" style="font-size:11.5px"></span>
       </div>
       <div id="quoteResult" style="margin-top:14px"></div>
@@ -1063,6 +1065,7 @@ const QSTR={
   ar:{title:"تقدير السعر السريع", intro:"ابحث عن المنتج في أمازون، أدخل السعر يدويًا، وأضف صورة المنتج (الصق صورة، ارفعها، أو اجلبها من الرابط).",
       add:"＋ إضافة منتج", build:"تجهيز عرض السعر", link:"رابط أمازون (اختياري)", qty:"الكمية", price:"السعر $", name:"اسم المنتج",
       total:"الإجمالي للعميل", subtotal:"المجموع", markup:"هامش",
+      totalPrice:"السعر الإجمالي (شامل الشحن) $", emptyTotal:"أدخل السعر الإجمالي.",
       paste:"💡 🧾 = صورة الفاتورة من أمازون (الصق Ctrl/Cmd+V أو ارفع) — تظهر كبيرة للعميل.  🖼 = صورة المنتج (ارفع أو ↓ من الرابط) — تظهر صغيرة.",
       proofBox:"صورة الفاتورة من أمازون (الصق أو ارفع)", imgBox:"صورة المنتج (ارفع أو ↓ من الرابط)",
       editPrice:"✏️ تعديل الأسعار على صورة الفاتورة (إضافة الهامش)",
@@ -1072,6 +1075,7 @@ const QSTR={
   en:{title:"Quick price quote", intro:"Search the product on Amazon, type the price manually, and add the product image (paste, upload, or fetch from the link).",
       add:"＋ add item", build:"Build quote", link:"Amazon link (optional)", qty:"Qty", price:"Price $", name:"Product name",
       total:"Customer total", subtotal:"Subtotal", markup:"markup",
+      totalPrice:"Total price (incl. shipping) $", emptyTotal:"Enter the total price.",
       paste:"💡 🧾 = Amazon checkout screenshot (paste Ctrl/Cmd+V or upload) — shown LARGE to the customer.  🖼 = product photo (upload or ↓ from link) — shown small.",
       proofBox:"Amazon checkout screenshot (paste or upload)", imgBox:"Product photo (upload or ↓ from link)",
       editPrice:"✏️ Edit prices on the checkout image (add markup)",
@@ -1086,14 +1090,16 @@ function renderQuoteChrome(){
   const rtl=QLANG==="ar"; $("quoteView").dir=rtl?"rtl":"ltr";
   $("q_h").textContent="💰 "+qt("title"); $("q_intro").textContent=qt("intro");
   $("q_add").textContent=qt("add"); $("q_btn").textContent=qt("build"); $("q_note").textContent="";
-  $("q_markup_lbl").textContent=qt("markup");
+  $("q_markup_lbl").textContent=qt("markup"); $("q_total_lbl").textContent=qt("totalPrice");
   $("qlang_ar").classList.toggle("on",QLANG==="ar"); $("qlang_en").classList.toggle("on",QLANG==="en");
   renderQuoteRows();
 }
+function qLiveTotal(){ qSetMarkup($("q_markup").value); if(QLAST) qBuildQuote(); }   // live re-quote on total/markup change
 async function loadQuote(){
   try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){ QSETTINGS={}; }
   QMARKUP=(QSETTINGS&&typeof QSETTINGS.markup_pct==="number")?QSETTINGS.markup_pct:0.10;
   $("q_markup").value=Math.round(QMARKUP*1000)/10;     // default from Settings, editable per quote
+  $("q_total").value=""; QLAST=null;
   if(!QROWS.length) QROWS=[qBlank()];
   renderQuoteChrome(); $("quoteResult").innerHTML="";
 }
@@ -1107,7 +1113,6 @@ function renderQuoteRows(){
     <input value="${poEsc(r.title)}" placeholder="${qt('name')}" style="flex:2;min-width:130px" oninput="QROWS[${i}].title=this.value" onfocus="ACTIVE_QROW=${i}">
     <input value="${poEsc(r.link)}" placeholder="${qt('link')}" style="flex:1;min-width:90px" oninput="QROWS[${i}].link=this.value;qRowLinkBtn(${i})" onfocus="ACTIVE_QROW=${i}">
     <input type="number" min="1" value="${r.qty||1}" title="${qt('qty')}" style="width:52px" oninput="QROWS[${i}].qty=this.value" onfocus="ACTIVE_QROW=${i}">
-    <input type="number" min="0" step="0.01" value="${r.price}" placeholder="${qt('price')}" style="width:82px" oninput="QROWS[${i}].price=this.value" onfocus="ACTIVE_QROW=${i}">
     <button class="iconbtn" id="qfi${i}" title="${qt('fetchImg')}" onclick="qFetchImg(${i})" ${((r.link||'').trim())?'':'style="visibility:hidden"'}>↓🖼</button>
     <button class="iconbtn" onclick="qRemoveRow(${i})" ${QROWS.length<2?'style="visibility:hidden"':''}>✕</button></div>`).join("")
     + `<div class="qhint">${qt('paste')}</div>`;
@@ -1257,14 +1262,13 @@ function piUse(crop){
   el.addEventListener("touchstart",down,{passive:false}); el.addEventListener("touchmove",move,{passive:false}); el.addEventListener("touchend",up);
 })();
 function qBuildQuote(){
-  const rows=QROWS.filter(r=>parseFloat(r.price)>0);
-  if(!rows.length){ toast(qt("empty")); return; }
+  const subtotal=+(parseFloat($("q_total").value)||0).toFixed(2);   // ONE total for the whole order (incl. shipping)
+  if(subtotal<=0){ toast(qt("emptyTotal")); return; }
   qSetMarkup($("q_markup").value);                   // honor the per-quote markup field (0 = no charge)
   const markup=QMARKUP;
-  const items=rows.map(r=>{ const qty=parseInt(r.qty)||1, price=parseFloat(r.price)||0;
-    return {title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null, proof:r.proof||null,
-            qty, item_usd:price, line:+(price*qty).toFixed(2)}; });
-  const subtotal=+items.reduce((s,it)=>s+it.line,0).toFixed(2);
+  const items=QROWS.filter(r=>(r.title||"").trim()||(r.link||"").trim()||r.image||r.proof)
+    .map(r=>({title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null, proof:r.proof||null,
+              qty:parseInt(r.qty)||1}));
   const total=+(subtotal*(1+markup)).toFixed(2);
   renderQuoteResult({items, subtotal, markup, total_usd:total});
 }
@@ -1273,15 +1277,14 @@ function renderQuoteResult(d){
   const cust=!!(QSETTINGS&&QSETTINGS.customer_mode);
   const cards=d.items.map(it=>{
     const img=it.image?`<img src="${poEsc(it.image)}">`:'<div class="noimg"></div>';
-    const qline=it.qty>1?`<div class="muted2" style="font-size:11.5px;margin-top:3px">${money(it.item_usd)} × ${it.qty}</div>`:"";
+    const qline=it.qty>1?`<div class="muted2" style="font-size:11.5px;margin-top:3px">× ${it.qty}</div>`:"";
     const proof=it.proof?`<img class="qproof" src="${poEsc(it.proof)}" alt="">`:"";
     return `<div class="qcard">${img}
-      <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.link||'—')}</div>${qline}</div>
-      <div class="qsub">${money(it.line)}</div></div>${proof}`;
+      <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.link||'—')}</div>${qline}</div></div>${proof}`;
   }).join("");
   const wa=qWhatsappLink(d);
   const info=JSON.stringify({total:d.total_usd||0,links:d.items.map(i=>i.link).filter(Boolean),
-    products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,item_usd:i.item_usd,qty:i.qty,link:i.link}))}).replace(/'/g,"&#39;");
+    products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,qty:i.qty,link:i.link}))}).replace(/'/g,"&#39;");
   const breakdown=(!cust&&d.markup>0)?`<div class="muted2" style="font-size:11.5px;margin-top:7px">${qt("subtotal")} ${money(d.subtotal)} · ${qt("markup")} ${Math.round(d.markup*1000)/10}%</div>`:"";
   $("quoteResult").innerHTML=`<div class="qcards">${cards}</div>
     <div class="qtotal"><span>${qt("total")}</span><b>${money(d.total_usd)}</b></div>${breakdown}
