@@ -499,7 +499,7 @@
       <h2 style="margin:0;font-size:17px;font-weight:800">💡 Need to order</h2>
       <span class="muted2" id="needSub" style="font-size:12px"></span>
       <span class="spacer"></span>
-      <button onclick="neAddAllToCart()" class="minibtn" title="أضف كل المنتجات إلى سلة أمازون · add every product to the Amazon cart in one click" style="background:#ff9900;border-color:#e88a00;color:#111;font-weight:700">🛒 Add all to Amazon cart</button>
+      <button onclick="neOpenAllProducts()" class="minibtn" title="افتح صفحة كل منتج على أمازون (تبويب لكل منتج) لإضافته للسلة يدويًا · open every product page on Amazon to add to the cart manually" style="background:#ff9900;border-color:#e88a00;color:#111;font-weight:700">🔗 Open all products</button>
       <button onclick="loadNeedOrder()" class="minibtn">↻ Refresh</button>
     </div>
     <div class="panel"><div id="needList"></div></div>
@@ -1136,12 +1136,17 @@ async function loadNeedOrder(){
   $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`;
   if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
   $("needList").innerHTML=d.orders.map(o=>{
-    const items=o.items.map((it,ix)=>`<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
+    const items=o.items.map((it,ix)=>{
+      const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
+      const url=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+      const name=poEsc(it.title||it.asin||'—');
+      return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
       ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
-      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||it.asin||'—')}</div>
+      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
         <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
-      ${(!it.image&&it.link)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(it.link)}',this)">📷</button>`:''}
-      ${it.link?`<a class="po-btn" href="${poEsc(it.link)}" target="_blank">open</a>`:''}</div>`).join("");
+      ${(!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
+      ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون لإضافته للسلة · open the Amazon product page to add to cart" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
+    }).join("");
     return `<div class="need-order">
       <div class="need-head">
         <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
@@ -1165,26 +1170,24 @@ async function loadNeedOrder(){
   }).join("");
 }
 function neToggleInfo(id){ const el=$("neinfo_"+id); if(el) el.style.display=el.style.display==="none"?"block":"none"; }
-// Build Amazon's multi-item "add to cart" URL from every product on the page and
-// open it — one click loads the whole demand queue into the cart. Same ASIN across
-// customers is merged (qty summed), matching how Amazon's cart behaves.
-function neAddAllToCart(){
-  const qty={}; let skipped=0, total=0;
+// Open every product's Amazon page (one tab each) so staff add each to the cart
+// manually in this browser. Amazon retired the one-click bulk "add to cart" URL,
+// so this is the reliable path. De-dupes identical links.
+function neOpenAllProducts(){
+  const urls=[]; const seen={};
   (NEED_ORDERS||[]).forEach(o=>(o.items||[]).forEach(it=>{
     const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
-    const q=Math.max(1,parseInt(it.qty,10)||1);
-    if(/^[A-Z0-9]{10}$/.test(a)){ qty[a]=(qty[a]||0)+q; total+=q; } else skipped++;
+    const u=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+    if(u && !seen[u]){ seen[u]=1; urls.push(u); }
   }));
-  const asins=Object.keys(qty);
-  if(!asins.length){ toast(QLANG==="ar"?"لا توجد منتجات لها ASIN لإضافتها للسلة":"No products with an ASIN to add"); return; }
-  if(!confirm((QLANG==="ar"
-      ? `سيتم فتح أمازون في هذا المتصفح وإضافة ${total} منتج (${asins.length} صنف) إلى السلة.\nتأكد أنك مسجّل الدخول بحساب أمازون الذي تريد الشراء منه في هذا المتصفح.`
-      : `This opens Amazon in THIS browser and adds ${total} item(s) (${asins.length} product line(s)) to the cart.\nMake sure you're signed into the Amazon account you want to buy from — in this browser.`)
-      +(skipped?(QLANG==="ar"?`\n${skipped} منتج بدون ASIN سيُتخطّى.`:`\n${skipped} item(s) have no ASIN and will be skipped.`):""))) return;
-  const params=asins.map((a,i)=>`ASIN.${i+1}=${encodeURIComponent(a)}&Quantity.${i+1}=${qty[a]}`).join("&");
-  window.open("https://www.amazon.com/gp/aws/cart/add.html?"+params,"_blank");
-  toast((QLANG==="ar"?`تم فتح السلة · ${total} منتج`:`Opened cart · ${total} item(s)`)
-        +(skipped?(QLANG==="ar"?` · تُخطّي ${skipped} بدون ASIN`:` · skipped ${skipped} w/o ASIN`):""));
+  if(!urls.length){ toast(QLANG==="ar"?"لا توجد روابط منتجات":"No product links to open"); return; }
+  if(!confirm(QLANG==="ar"
+      ? `سيتم فتح ${urls.length} صفحة منتج على أمازون (تبويب لكل منتج) لتضيف كلًا منها للسلة يدويًا.\nقد يطلب المتصفح السماح بالنوافذ المنبثقة — اسمح بها لهذا الموقع.`
+      : `This opens ${urls.length} Amazon product page(s) — one tab each — so you can add each to the cart.\nYour browser may ask to allow pop-ups; allow them for this site.`)) return;
+  let blocked=0;
+  urls.forEach(u=>{ const w=window.open(u,"_blank"); if(!w) blocked++; });
+  if(blocked) toast(QLANG==="ar"?`فُتح ${urls.length-blocked}/${urls.length} — اسمح بالنوافذ المنبثقة لفتح الباقي`:`Opened ${urls.length-blocked}/${urls.length} — allow pop-ups to open the rest`);
+  else toast(QLANG==="ar"?`فُتح ${urls.length} صفحة منتج`:`Opened ${urls.length} product page(s)`);
 }
 async function neDelete(orderId,name){
   if(!confirm(`حذف الطلب · Delete order ${orderId}${name?(' ('+name+')'):''}?\nيُنقل إلى سلة المهملات · It moves to Trash (restorable).`)) return;
