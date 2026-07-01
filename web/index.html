@@ -489,6 +489,7 @@
         <span id="q_note" class="muted2" style="font-size:11.5px"></span>
       </div>
       <div id="quoteResult" style="margin-top:14px"></div>
+      <div id="qIntakeLink" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -1226,6 +1227,7 @@ const QSTR={
       editPrice:"✏️ تعديل الأسعار على صورة الفاتورة (إضافة الهامش)",
       disclaimer:"السعر يُؤكَّد عند الطلب.", whatsapp:"📱 واتساب", createOrder:"➕ إنشاء طلب من هذا",
       intakeLink:"🔗 رابط تعبئة بيانات العميل", linkCopied:"تم نسخ الرابط ✓", linkOnly:"الرابط متاح على النسخة المنشورة فقط",
+      copy:"نسخ", intakeReady:"أرسل هذا الرابط للعميل ليكمل بياناته:", copyManual:"حدّد الرابط وانسخه يدويًا",
       empty:"أدخل سعرًا واحدًا على الأقل.", imgFetched:"تمت إضافة الصورة ✓", imgFail:"تعذّر جلب الصورة — الصقها أو ارفعها يدويًا", fetchImg:"جلب الصورة من الرابط"},
   en:{title:"Quick price quote", intro:"Search the product on Amazon, type the price manually, and add the product image (paste, upload, or fetch from the link).",
       add:"＋ add item", build:"Build quote", link:"Amazon link (optional)", qty:"Qty", price:"Price $", name:"Product name",
@@ -1236,6 +1238,7 @@ const QSTR={
       editPrice:"✏️ Edit prices on the checkout image (add markup)",
       disclaimer:"Final price confirmed at order time.", whatsapp:"📱 WhatsApp", createOrder:"➕ Create order from this",
       intakeLink:"🔗 Customer intake link", linkCopied:"Link copied ✓", linkOnly:"Available on the deployed (hosted) app only",
+      copy:"Copy", intakeReady:"Send this link to the customer to fill in their details:", copyManual:"Select the link and copy it",
       empty:"Enter at least one price.", imgFetched:"Image added ✓", imgFail:"Couldn’t fetch image — paste or upload it", fetchImg:"Get image from link"}
 };
 function qt(k){ return (QSTR[QLANG]||QSTR.en)[k]||k; }
@@ -1256,7 +1259,7 @@ async function loadQuote(){
   $("q_markup").value=Math.round(QMARKUP*1000)/10;     // default from Settings, editable per quote
   $("q_total").value=""; QLAST=null;
   if(!QROWS.length) QROWS=[qBlank()];
-  renderQuoteChrome(); $("quoteResult").innerHTML="";
+  renderQuoteChrome(); $("quoteResult").innerHTML=""; $("qIntakeLink").innerHTML="";
 }
 function renderQuoteRows(){
   $("quoteRows").innerHTML=QROWS.map((r,i)=>`<div class="qrow" onmousedown="ACTIVE_QROW=${i}">
@@ -1450,13 +1453,31 @@ function renderQuoteResult(d){
       <button class="po-btn" onclick='qSendIntake(this,${info})'>${qt("intakeLink")}</button></div>`;
 }
 async function qSendIntake(btn,info){
-  btn.disabled=true;
+  btn.disabled=true; const old=btn.textContent; btn.textContent="…";
   let r; try{ r=await post("/api/draft",{products:info.products,amount:info.total}); }catch(e){ r={}; }
-  btn.disabled=false;
+  btn.disabled=false; btn.textContent=old;
+  const box=$("qIntakeLink");
   if(r&&r.ok&&r.url){
-    try{ await navigator.clipboard.writeText(r.url); toast(qt("linkCopied")+"  "+r.url); }
-    catch(e){ prompt(qt("linkCopied"), r.url); }
-  } else { toast(qt("linkOnly")); }   // /api/draft is hosted-only
+    const wa=`https://wa.me/?text=${encodeURIComponent(r.url)}`;
+    box.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:11px;padding:11px 13px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:7px">${qt("intakeReady")}</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <input id="qIntakeUrl" readonly value="${poEsc(r.url)}" onclick="this.select()" style="flex:1;min-width:220px;font-size:12.5px">
+        <button class="po-btn accent" onclick="qCopyIntake(this)">📋 ${qt("copy")}</button>
+        <a class="po-btn" href="${poEsc(r.url)}" target="_blank" title="open">↗</a>
+        <a class="po-btn" href="${wa}" target="_blank" title="WhatsApp">📱</a>
+      </div></div>`;
+    try{ await navigator.clipboard.writeText(r.url); }catch(e){}   // best-effort auto-copy too
+  } else { box.innerHTML=`<div class="warnflag">${qt("linkOnly")}</div>`; }
+}
+function qCopyIntake(btn){
+  const inp=$("qIntakeUrl"); if(!inp) return;
+  inp.focus(); inp.select(); inp.setSelectionRange(0,99999);
+  let ok=false;
+  try{ ok=document.execCommand("copy"); }catch(e){}
+  if(navigator.clipboard){ navigator.clipboard.writeText(inp.value).catch(()=>{}); ok=true; }
+  toast(ok?qt("linkCopied"):qt("copyManual"));
+  const t=btn.textContent; btn.textContent="✓"; setTimeout(()=>btn.textContent=t,1400);
 }
 function qWhatsappLink(d){
   const num=((QSETTINGS&&QSETTINGS.business_whatsapp)||"").replace(/[^\d]/g,"");
