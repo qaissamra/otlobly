@@ -1132,7 +1132,7 @@ let NEED_ORDERS=[];
 async function loadNeedOrder(){
   const d=await (await fetch("/api/needorder")).json();
   NEED_ORDERS=d.orders||[];
-  $("needSub").textContent=`${d.count} order(s) · ${d.products} product(s) to place`;
+  $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`;
   if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
   $("needList").innerHTML=d.orders.map(o=>{
     const items=o.items.map((it,ix)=>`<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
@@ -1148,13 +1148,22 @@ async function loadNeedOrder(){
         <div style="text-align:right;display:flex;align-items:center;gap:8px">
           <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
             <div class="muted2" style="font-size:11px">${poEsc(o.order_id)}${o.est_delivery_customer?` · ETA ${poEsc(o.est_delivery_customer)}`:''}</div></div>
+          <button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>
           <button class="po-btn" title="تعديل الطلب · edit order" onclick="openOrderEdit('${poEsc(o.order_id)}')">✏️</button>
           <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>
         </div>
       </div>
+      <div id="neinfo_${poEsc(o.order_id)}" style="display:none;margin-top:8px;background:#fbfaf6;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.7">
+        <div><b>${poEsc(o.customer||'—')}</b></div>
+        <div class="mono">📱 ${poEsc((o.phones&&o.phones.length?o.phones.join('  ·  '):o.phone)||'—')}</div>
+        ${o.city?`<div>🏙 ${poEsc(o.city)}</div>`:''}
+        ${o.address?`<div>📍 ${poEsc(o.address)}</div>`:''}
+        ${o.notes?`<div class="muted2">📝 ${poEsc(o.notes)}</div>`:''}
+      </div>
       <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
   }).join("");
 }
+function neToggleInfo(id){ const el=$("neinfo_"+id); if(el) el.style.display=el.style.display==="none"?"block":"none"; }
 async function neDelete(orderId,name){
   if(!confirm(`حذف الطلب · Delete order ${orderId}${name?(' ('+name+')'):''}?\nيُنقل إلى سلة المهملات · It moves to Trash (restorable).`)) return;
   const r=await post("/api/orders/delete",{ids:[orderId]});

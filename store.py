@@ -108,9 +108,12 @@ def need_order(orders):
         if o.get("status") not in PREORDER_STATUSES:
             continue
         ph = primary_phone(o)
+        cust = o.get("customer", {}) or {}
         rows.append({
             "order_id": o["order_id"], "status": o["status"],
-            "customer": o["customer"]["name"], "phone": ph["e164"] if ph else None,
+            "customer": cust.get("name"), "phone": ph["e164"] if ph else None,
+            "phones": [p.get("e164") for p in (cust.get("phones") or []) if p.get("e164")],
+            "address": cust.get("address"), "city": cust.get("city"), "notes": cust.get("notes"),
             "amount_to_collect_usd": o.get("amount_to_collect_usd"),
             "est_delivery_customer": o.get("est_delivery_customer"),
             "created_at": o.get("created_at"),
@@ -122,7 +125,8 @@ def need_order(orders):
         })
     rows.sort(key=lambda r: r["created_at"] or "")
     return {"orders": rows, "count": len(rows),
-            "products": sum(len(r["items"]) for r in rows)}
+            "products": sum(len(r["items"]) for r in rows),
+            "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2)}
 
 
 def upsert(db, order):
