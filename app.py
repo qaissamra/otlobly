@@ -43,6 +43,7 @@ import db
 import estimate
 import settings as settings_mod
 import messages
+import meta_leads as meta_leads_mod
 import normalize
 import notify
 import pnl as pnl_mod
@@ -649,6 +650,60 @@ def api_order_item_image():
     items[idx]["image"] = img
     db.upsert_order(o)
     return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------- #
+# Meta leads — Messenger/IG DMs + lead-ad forms, tracked as leads
+# --------------------------------------------------------------------------- #
+@app.route("/api/meta/leads")
+@auth.require("view_meta_leads")
+def api_meta_leads():
+    d = meta_leads_mod.sync()
+    d["staff"] = [{"id": u["id"], "name": u.get("name") or u["username"]}
+                  for u in db.list_users() if u.get("active")]
+    return jsonify(d)
+
+
+@app.route("/api/meta/lead", methods=["POST"])
+@auth.require("view_meta_leads")
+def api_meta_lead():
+    b = request.get_json(force=True, silent=True) or {}
+    lead = db.get_lead(str(b.get("id") or ""))
+    if not lead:
+        return jsonify({"ok": False, "error": "lead not found"}), 404
+    changes = {}
+    if b.get("status") in ("new", "contacted", "converted", "lost"):
+        changes["status"] = b["status"]
+    if "assigned_to" in b:
+        changes["assigned_to"] = int(b["assigned_to"]) if str(b.get("assigned_to") or "").isdigit() else None
+    if "note" in b:
+        changes["note"] = (b.get("note") or "").strip()
+    db.update_lead(lead["lead_id"], changes)
+    activity.log("set", "lead", lead["lead_id"], lead.get("name") or "lead",
+                 detail=", ".join(f"{k}={v}" for k, v in changes.items()), user=_user())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/meta/lead/convert", methods=["POST"])
+@auth.require("view_meta_leads")
+def api_meta_lead_convert():
+    """Turn a lead into a REQUESTED order (prefilled with name + phone). The staff then adds
+    products via the To-order Edit. Marks the lead converted + links the order."""
+    b = request.get_json(force=True, silent=True) or {}
+    lead = db.get_lead(str(b.get("id") or ""))
+    if not lead:
+        return jsonify({"ok": False, "error": "lead not found"}), 404
+    if lead.get("order_id") and db.get_order(lead["order_id"]):
+        return jsonify({"ok": True, "order_id": lead["order_id"], "existing": True})
+    phones = normalize.collect_phones(lead.get("phone")) if lead.get("phone") else []
+    o = make_order(name=lead.get("name") or "Lead", phones=phones, address="", city="",
+                   items=[], status="REQUESTED",
+                   notes=f"Meta lead · {lead.get('source')}")
+    db.upsert_order(o, created_by=current_user.id)
+    db.update_lead(lead["lead_id"], {"status": "converted", "order_id": o["order_id"]})
+    activity.log("created", "order", o["order_id"], _olabel(o),
+                 detail=f"converted from Meta lead ({lead.get('source')})", user=_user())
+    return jsonify({"ok": True, "order_id": o["order_id"]})
 
 
 @app.route("/api/purchases")

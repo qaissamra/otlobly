@@ -66,8 +66,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   entity TEXT, entity_id TEXT, detail TEXT
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS meta_leads (
+  lead_id TEXT PRIMARY KEY,
+  source TEXT,                         -- messenger | instagram | leadform
+  name TEXT, phone TEXT, email TEXT,
+  form_id TEXT, form_name TEXT, ad_name TEXT,
+  last_message TEXT, last_activity TEXT, created_time TEXT, response_min REAL,
+  status TEXT NOT NULL DEFAULT 'new',  -- new | contacted | converted | lost
+  assigned_to INTEGER, note TEXT, order_id TEXT,
+  synced_at TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS ix_orders_customer ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS ix_leads_status ON meta_leads(status);
+CREATE INDEX IF NOT EXISTS ix_leads_created ON meta_leads(created_time);
 """
 
 
@@ -284,6 +296,87 @@ def audit(actor, action, entity, entity_id, detail=""):
           VALUES (?,?,?,?,?,?,?)""",
                   (now_iso(), (actor or {}).get("id"), (actor or {}).get("username"),
                    action, entity, str(entity_id), detail))
+
+
+# --------------------------------------------------------------------------- #
+# Meta leads (Messenger/IG DMs + lead-ad forms)
+# --------------------------------------------------------------------------- #
+def upsert_lead(lead):
+    """Insert or refresh a lead from a Meta sync. NEVER overwrites the human-set
+    status / assigned_to / note / order_id (those are the team's work)."""
+    with connect() as c:
+        c.execute("""
+          INSERT INTO meta_leads (lead_id, source, name, phone, email, form_id, form_name,
+            ad_name, last_message, last_activity, created_time, response_min, synced_at)
+          VALUES (:lead_id,:source,:name,:phone,:email,:form_id,:form_name,
+            :ad_name,:last_message,:last_activity,:created_time,:response_min,:synced_at)
+          ON CONFLICT(lead_id) DO UPDATE SET
+            source=excluded.source, name=excluded.name,
+            phone=COALESCE(excluded.phone, meta_leads.phone),
+            email=COALESCE(excluded.email, meta_leads.email),
+            form_name=excluded.form_name, ad_name=excluded.ad_name,
+            last_message=excluded.last_message, last_activity=excluded.last_activity,
+            response_min=COALESCE(excluded.response_min, meta_leads.response_min),
+            synced_at=excluded.synced_at
+        """, {**{k: lead.get(k) for k in ("lead_id", "source", "name", "phone", "email",
+                                          "form_id", "form_name", "ad_name", "last_message",
+                                          "last_activity", "created_time", "response_min")},
+              "synced_at": now_iso()})
+
+
+def list_leads(status=None, source=None):
+    q = ("SELECT l.*, u.name AS assignee_name FROM meta_leads l "
+         "LEFT JOIN users u ON u.id=l.assigned_to")
+    conds, args = [], []
+    if status:
+        conds.append("l.status=?"); args.append(status)
+    if source:
+        conds.append("l.source=?"); args.append(source)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY l.created_time DESC LIMIT 500"
+    with connect() as c:
+        return [dict(r) for r in c.execute(q, args)]
+
+
+def update_lead(lead_id, changes):
+    allowed = {"status", "assigned_to", "note", "order_id"}
+    fields = {k: v for k, v in (changes or {}).items() if k in allowed}
+    if not fields:
+        return None
+    sets = ", ".join(f"{k}=?" for k in fields)
+    with connect() as c:
+        c.execute(f"UPDATE meta_leads SET {sets} WHERE lead_id=?",
+                  (*fields.values(), lead_id))
+        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=?", (lead_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def get_lead(lead_id):
+    with connect() as c:
+        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=?", (lead_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def lead_stats():
+    with connect() as c:
+        rows = c.execute("SELECT status, COUNT(*) n FROM meta_leads GROUP BY status").fetchall()
+        by = {r["status"]: r["n"] for r in rows}
+        total = sum(by.values())
+        conv, lost = by.get("converted", 0), by.get("lost", 0)
+        avg = c.execute("SELECT AVG(response_min) a FROM meta_leads WHERE response_min IS NOT NULL").fetchone()["a"]
+        team = c.execute("""SELECT u.name nm,
+                              SUM(CASE WHEN l.status='converted' THEN 1 ELSE 0 END) conv,
+                              COUNT(*) tot
+                            FROM meta_leads l JOIN users u ON u.id=l.assigned_to
+                            GROUP BY l.assigned_to ORDER BY conv DESC""").fetchall()
+    return {
+        "total": total, "new": by.get("new", 0), "contacted": by.get("contacted", 0),
+        "converted": conv, "lost": lost,
+        "close_rate": round(conv / (conv + lost) * 100) if (conv + lost) else 0,
+        "avg_response_min": round(avg, 1) if avg is not None else None,
+        "by_assignee": [{"name": r["nm"], "converted": r["conv"], "total": r["tot"]} for r in team],
+    }
 
 
 if __name__ == "__main__":

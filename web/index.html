@@ -257,6 +257,7 @@
     <button class="accent" onclick="toggleForm()">+ Add order</button>
     <button onclick="toggleQuote()" id="quoteBtn" title="estimate a customer's price from Amazon links">💰 Quote</button>
     <button onclick="toggleNeedOrder()" id="needBtn" title="orders waiting to be placed on Amazon">💡 To order</button>
+    <button onclick="toggleMetaLeads()" id="metaLeadsBtn" style="display:none" title="Messenger + Instagram DMs and lead-form ads">📣 Leads</button>
     <button onclick="toggleCustomers()" id="custBtn">👤 Customers</button>
     <button onclick="togglePurchases()" id="poBtn">📦 Purchases</button>
     <button onclick="togglePnl()" id="pnlBtn">📊 P&amp;L</button>
@@ -573,6 +574,20 @@
     </div>
     <div class="panel"><div id="teamList"></div></div>
   </div>
+
+  <!-- Meta leads: Messenger + Instagram DMs + lead-ad forms -->
+  <div id="metaLeadsView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">📣 Meta Leads</h2>
+      <span style="color:var(--muted);font-size:12px">everyone who messages your page or fills a lead form</span>
+      <span class="spacer"></span>
+      <button onclick="loadMetaLeads(this)" id="mlSyncBtn" class="minibtn">↻ Sync from Meta</button>
+    </div>
+    <div id="mlKpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div id="mlTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div id="mlNote"></div>
+    <div class="panel"><div id="mlList"></div></div>
+  </div>
 </div>
 
 <div id="azModal" class="az-modal hidden" onclick="if(event.target===this)closeAz()">
@@ -672,7 +687,7 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
 
 let ME=null;
 // Roles that get a LIMITED console: only these nav buttons + views, landing on `home`.
-const RESTRICTED_NAV={ sales:{ nav:["quoteBtn","needBtn"], views:["quote","needorder"], home:"quote" } };
+const RESTRICTED_NAV={ sales:{ nav:["quoteBtn","needBtn","metaLeadsBtn"], views:["quote","needorder","metaleads"], home:"quote" } };
 let RESTRICTED=null;
 async function applyRole(){
   if(ME) return;
@@ -685,6 +700,7 @@ async function applyRole(){
   hide("exportBtn", p.includes("admin_actions"));
   hide("clickupBtn", p.includes("admin_actions"));
   hide("teamBtn", p.includes("manage_users"));
+  hide("metaLeadsBtn", p.includes("view_meta_leads"));
   RESTRICTED = RESTRICTED_NAV[ME.role] || null;
   if(RESTRICTED){                                  // limited console: keep only the allowed nav buttons
     const keep=new Set(RESTRICTED.nav);
@@ -900,7 +916,7 @@ let VIEW="orders";
 function setView(v){
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -915,6 +931,7 @@ function setView(v){
   $("settingsView").classList.toggle("hidden",v!=="settings");
   $("needorderView").classList.toggle("hidden",v!=="needorder");
   $("teamView").classList.toggle("hidden",v!=="team");
+  $("metaLeadsView").classList.toggle("hidden",v!=="metaleads");
   $("pickBtn").textContent=v==="picking"?"📋 Orders table":"🧾 Picking list";
   $("pnlBtn").textContent=v==="pnl"?"📋 Orders":"📊 P&L";
   $("custBtn").textContent=v==="customers"?"📋 Orders":"👤 Customers";
@@ -925,7 +942,8 @@ function setView(v){
   $("settingsBtn").textContent=v==="settings"?"📋 Orders":"⚙ Settings";
   $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
   $("teamBtn").textContent=v==="team"?"📋 Orders":"👥 Team";
-  if(RESTRICTED){ $("quoteBtn").textContent="💰 Quote"; $("needBtn").textContent="💡 To order"; }
+  $("metaLeadsBtn").textContent=v==="metaleads"?"📋 Orders":"📣 Leads";
+  if(RESTRICTED){ $("quoteBtn").textContent="💰 Quote"; $("needBtn").textContent="💡 To order"; $("metaLeadsBtn").textContent="📣 Leads"; }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
   if(v==="purchases"){ loadPurchases(); }
@@ -935,7 +953,59 @@ function setView(v){
   if(v==="settings"){ loadSettings(); }
   if(v==="needorder"){ loadNeedOrder(); }
   if(v==="team"){ loadTeam(); }
+  if(v==="metaleads"){ loadMetaLeads(); }
 }
+function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
+// ---- Meta Leads (Messenger/IG DMs + lead-ad forms) -------------------------- //
+let ML=null, ML_FILTER="all", ML_STAFF=[];
+const ML_STATUS={new:{ar:"جديد",en:"New"},contacted:{ar:"تم التواصل",en:"Contacted"},converted:{ar:"تحوّل لطلب",en:"Converted"},lost:{ar:"خسارة",en:"Lost"}};
+const ML_SRC={messenger:"💬 Messenger",instagram:"📷 Instagram",leadform:"📝 Lead form"};
+async function loadMetaLeads(btn){
+  if(btn){ btn.disabled=true; btn.textContent="…"; }
+  let d; try{ d=await (await fetch("/api/meta/leads")).json(); }catch(e){ d={error:"network",leads:[],stats:{}}; }
+  if(btn){ btn.disabled=false; btn.textContent="↻ Sync from Meta"; }
+  ML=d; ML_STAFF=d.staff||[]; renderMetaLeads();
+}
+function renderMetaLeads(){
+  if(!ML) return;
+  const s=ML.stats||{};
+  $("mlKpis").innerHTML=[["Total",s.total||0],["New",s.new||0],["Converted",s.converted||0],["Lost",s.lost||0],
+    ["Close rate",(s.close_rate||0)+"%"],["Avg response",s.avg_response_min!=null?(s.avg_response_min+"m"):"—"]]
+    .map(([k,v])=>`<div style="flex:1;min-width:110px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px"><div style="font-size:22px;font-weight:800">${v}</div><div style="color:var(--muted);font-size:12px">${k}</div></div>`).join("");
+  const counts={all:(ML.leads||[]).length};
+  (ML.leads||[]).forEach(l=>{counts[l.status]=(counts[l.status]||0)+1;counts[l.source]=(counts[l.source]||0)+1;});
+  const tabs=[["all","All"],["new","New"],["contacted","Contacted"],["converted","Converted"],["lost","Lost"],["messenger","💬"],["instagram","📷"],["leadform","📝"]];
+  $("mlTabs").innerHTML=tabs.map(([k,lab])=>`<span class="qchip ${ML_FILTER===k?'alert':''}" style="cursor:pointer" onclick="ML_FILTER='${k}';renderMetaLeads()">${lab} ${counts[k]?`<b>${counts[k]}</b>`:''}</span>`).join("");
+  $("mlNote").innerHTML=ML.error?`<div class="warnflag" style="margin-bottom:10px">${poEsc(ML.error)}</div>`:"";
+  const leads=(ML.leads||[]).filter(l=>ML_FILTER==="all"||l.status===ML_FILTER||l.source===ML_FILTER);
+  if(!leads.length){ $("mlList").innerHTML=`<div class="empty">No leads here yet — press "Sync from Meta".</div>`; return; }
+  const staffOpts=id=>`<option value="">— assign —</option>`+ML_STAFF.map(u=>`<option value="${u.id}" ${u.id==id?'selected':''}>${poEsc(u.name)}</option>`).join("");
+  $("mlList").innerHTML=leads.map(l=>{
+    const wa=l.phone?`<a class="po-btn accent" target="_blank" href="https://wa.me/${(l.phone||'').replace(/[^\d]/g,'')}?text=${encodeURIComponent('مرحباً '+(l.name||''))}">📱</a>`:'';
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px;background:var(--card)">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <div style="min-width:180px;flex:1">
+          <b>${poEsc(l.name||'—')}</b> <span class="muted2" style="font-size:11px">${ML_SRC[l.source]||l.source}</span>${l.phone?`<span class="muted2 mono" style="font-size:11px"> · ${poEsc(l.phone)}</span>`:''}
+          <div class="muted2" style="font-size:12px;margin-top:2px">${poEsc(l.last_message||l.form_name||'')}</div>
+          <div class="muted2" style="font-size:10.5px;margin-top:2px">${l.created_time?new Date(l.created_time).toLocaleString():''}${l.response_min!=null?` · ⏱ ${l.response_min}m`:''}${l.order_id?` · ➜ ${poEsc(l.order_id)}`:''}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select onchange="setLeadStatus('${poEsc(l.lead_id)}',this.value)" style="width:auto">${['new','contacted','converted','lost'].map(st=>`<option value="${st}" ${l.status===st?'selected':''}>${ML_STATUS[st][QLANG==='ar'?'ar':'en']}</option>`).join('')}</select>
+          <select onchange="assignLead('${poEsc(l.lead_id)}',this.value)" style="width:auto">${staffOpts(l.assigned_to)}</select>
+          ${wa}
+          ${l.status!=='converted'?`<button class="po-btn" onclick="convertLead('${poEsc(l.lead_id)}',this)">➕ order</button>`:''}
+        </div>
+      </div>
+      <input placeholder="ملاحظة · note" value="${poEsc(l.note||'')}" style="width:100%;margin-top:7px;font-size:12px" onchange="saveLeadNote('${poEsc(l.lead_id)}',this.value)">
+    </div>`;
+  }).join("");
+}
+async function setLeadStatus(id,status){ const r=await post("/api/meta/lead",{id,status}); if(r&&r.ok){ toast("✓"); loadMetaLeads(); } }
+async function assignLead(id,assigned_to){ const r=await post("/api/meta/lead",{id,assigned_to}); if(r&&r.ok) toast("Assigned"); }
+async function saveLeadNote(id,note){ const r=await post("/api/meta/lead",{id,note}); if(r&&r.ok) toast("Note saved"); }
+async function convertLead(id,btn){ if(!confirm("إنشاء طلب من هذا العميل؟ · Create an order from this lead?"))return; btn.disabled=true;
+  const r=await post("/api/meta/lead/convert",{id}); btn.disabled=false;
+  if(r&&r.ok){ toast("Order "+r.order_id+" created — add products in To order"); loadMetaLeads(); } else toast((r&&r.error)||"failed"); }
 function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
 const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
 async function patchUsers(body){ try{ return await (await fetch("/api/users",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json(); }catch(e){ return {error:"network"}; } }

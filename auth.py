@@ -22,10 +22,10 @@ login_manager.login_view = "login"
 ROLE_PERMS = {
     "admin": {"view_orders", "view_money", "view_cost", "view_pnl", "edit_order",
               "edit_fulfillment", "view_customers", "manage_customers",
-              "manage_users", "admin_actions"},
-    # Sales is a limited console — Quote + To-order only (see the UI nav lock in
-    # web/index.html). view_orders lets the two pages load; view_money shows prices.
-    "sales": {"view_orders", "view_money"},
+              "manage_users", "admin_actions", "view_meta_leads"},
+    # Sales is a limited console — Quote + To-order + Leads (see the UI nav lock in
+    # web/index.html). view_orders lets the pages load; view_money shows prices.
+    "sales": {"view_orders", "view_money", "view_meta_leads"},
     "fulfillment": {"view_orders", "edit_fulfillment", "view_customers"},
 }
 ROLES = list(ROLE_PERMS.keys())

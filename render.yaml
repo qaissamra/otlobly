@@ -40,6 +40,11 @@ services:
         sync: false
       - key: META_ACCESS_TOKEN
         sync: false
+      # ── Meta Leads page (Messenger/IG DMs + lead-ad forms) ──
+      - key: META_PAGE_ID          # the Facebook Page id (e.g. 868855596307697)
+        sync: false
+      - key: META_PAGE_TOKEN       # page token: pages_messaging + instagram_manage_messages + leads_retrieval
+        sync: false
       # ── Customer-login WhatsApp OTP (Phase 14). Leave OTLOBLY_OTP_DEV=1 until the ──
       # ── WhatsApp template + token are ready, then set the 3 WHATSAPP_* and remove it. ──
       - key: OTLOBLY_OTP_DEV       # 1 = show the login code on screen (no WhatsApp needed yet)
