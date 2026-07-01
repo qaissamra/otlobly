@@ -499,6 +499,7 @@
       <h2 style="margin:0;font-size:17px;font-weight:800">💡 Need to order</h2>
       <span class="muted2" id="needSub" style="font-size:12px"></span>
       <span class="spacer"></span>
+      <button onclick="neAddAllToCart()" class="minibtn" title="أضف كل المنتجات إلى سلة أمازون · add every product to the Amazon cart in one click" style="background:#ff9900;border-color:#e88a00;color:#111;font-weight:700">🛒 Add all to Amazon cart</button>
       <button onclick="loadNeedOrder()" class="minibtn">↻ Refresh</button>
     </div>
     <div class="panel"><div id="needList"></div></div>
@@ -1164,6 +1165,27 @@ async function loadNeedOrder(){
   }).join("");
 }
 function neToggleInfo(id){ const el=$("neinfo_"+id); if(el) el.style.display=el.style.display==="none"?"block":"none"; }
+// Build Amazon's multi-item "add to cart" URL from every product on the page and
+// open it — one click loads the whole demand queue into the cart. Same ASIN across
+// customers is merged (qty summed), matching how Amazon's cart behaves.
+function neAddAllToCart(){
+  const qty={}; let skipped=0, total=0;
+  (NEED_ORDERS||[]).forEach(o=>(o.items||[]).forEach(it=>{
+    const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
+    const q=Math.max(1,parseInt(it.qty,10)||1);
+    if(/^[A-Z0-9]{10}$/.test(a)){ qty[a]=(qty[a]||0)+q; total+=q; } else skipped++;
+  }));
+  const asins=Object.keys(qty);
+  if(!asins.length){ toast(QLANG==="ar"?"لا توجد منتجات لها ASIN لإضافتها للسلة":"No products with an ASIN to add"); return; }
+  if(!confirm((QLANG==="ar"
+      ? `سيتم فتح سلة أمازون وإضافة ${total} منتج (${asins.length} صنف).\nتأكد أنك مسجّل الدخول في حساب أمازون الصحيح (بروفايل Multilogin).`
+      : `This opens Amazon and adds ${total} item(s) (${asins.length} product line(s)) to the cart.\nMake sure you're signed into the RIGHT Amazon account (Multilogin profile).`)
+      +(skipped?(QLANG==="ar"?`\n${skipped} منتج بدون ASIN سيُتخطّى.`:`\n${skipped} item(s) have no ASIN and will be skipped.`):""))) return;
+  const params=asins.map((a,i)=>`ASIN.${i+1}=${encodeURIComponent(a)}&Quantity.${i+1}=${qty[a]}`).join("&");
+  window.open("https://www.amazon.com/gp/aws/cart/add.html?"+params,"_blank");
+  toast((QLANG==="ar"?`تم فتح السلة · ${total} منتج`:`Opened cart · ${total} item(s)`)
+        +(skipped?(QLANG==="ar"?` · تُخطّي ${skipped} بدون ASIN`:` · skipped ${skipped} w/o ASIN`):""));
+}
 async function neDelete(orderId,name){
   if(!confirm(`حذف الطلب · Delete order ${orderId}${name?(' ('+name+')'):''}?\nيُنقل إلى سلة المهملات · It moves to Trash (restorable).`)) return;
   const r=await post("/api/orders/delete",{ids:[orderId]});
