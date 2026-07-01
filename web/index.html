@@ -1178,8 +1178,8 @@ function neAddAllToCart(){
   const asins=Object.keys(qty);
   if(!asins.length){ toast(QLANG==="ar"?"لا توجد منتجات لها ASIN لإضافتها للسلة":"No products with an ASIN to add"); return; }
   if(!confirm((QLANG==="ar"
-      ? `سيتم فتح سلة أمازون وإضافة ${total} منتج (${asins.length} صنف).\nتأكد أنك مسجّل الدخول في حساب أمازون الصحيح (بروفايل Multilogin).`
-      : `This opens Amazon and adds ${total} item(s) (${asins.length} product line(s)) to the cart.\nMake sure you're signed into the RIGHT Amazon account (Multilogin profile).`)
+      ? `سيتم فتح أمازون في هذا المتصفح وإضافة ${total} منتج (${asins.length} صنف) إلى السلة.\nتأكد أنك مسجّل الدخول بحساب أمازون الذي تريد الشراء منه في هذا المتصفح.`
+      : `This opens Amazon in THIS browser and adds ${total} item(s) (${asins.length} product line(s)) to the cart.\nMake sure you're signed into the Amazon account you want to buy from — in this browser.`)
       +(skipped?(QLANG==="ar"?`\n${skipped} منتج بدون ASIN سيُتخطّى.`:`\n${skipped} item(s) have no ASIN and will be skipped.`):""))) return;
   const params=asins.map((a,i)=>`ASIN.${i+1}=${encodeURIComponent(a)}&Quantity.${i+1}=${qty[a]}`).join("&");
   window.open("https://www.amazon.com/gp/aws/cart/add.html?"+params,"_blank");
