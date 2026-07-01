@@ -1342,20 +1342,20 @@ def _shipments_for(pairs, names, oids):
                   "image": it.get("image") or None}
                  for it in pk_items
                  if (it.get("title") or it.get("asin") or it.get("image"))][:6]
+        ef, et = _delivery_window(pk.get("arrival"))   # show the ETA whenever an arrival date is set,
+        est = {"est_delivery": pk.get("arrival") or None, "est_from": ef, "est_to": et}  # even without a tracking #
         if not gwd:
             shipments.append({"tracking": otl, "items": items, "events": [],
-                              "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}})
+                              "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}, **est})
             continue
         tl = tls.get(gwd, {})
         if tl.get("ok"):
             ct = tracking.customer_timeline(tl["events"], smap, dlabel)
-            ef, et = _delivery_window(pk.get("arrival"))
             shipments.append({"tracking": otl, "items": items, "current": ct["current"],
-                              "events": ct["events"], "est_delivery": pk.get("arrival") or None,
-                              "est_from": ef, "est_to": et})
+                              "events": ct["events"], **est})
         else:
             shipments.append({"tracking": otl, "items": items, "events": [],
-                              "current": {"label": "قيد الشحن", "bucket": "transit"}})
+                              "current": {"label": "قيد الشحن", "bucket": "transit"}, **est})
     return shipments
 
 
