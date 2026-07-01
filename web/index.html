@@ -1441,18 +1441,21 @@ function renderQuoteResult(d){
       <div style="flex:1;min-width:0"><div class="qtitle">${poEsc(it.title||it.link||'—')}</div>${qline}</div></div>${proof}`;
   }).join("");
   const wa=qWhatsappLink(d);
-  const info=JSON.stringify({total:d.total_usd||0,links:d.items.map(i=>i.link).filter(Boolean),
-    products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,qty:i.qty,link:i.link}))}).replace(/'/g,"&#39;");
+  // keep the quote data in a variable (NOT embedded in the onclick — titles with " & – would break it)
+  QINFO={total:d.total_usd||0, links:d.items.map(i=>i.link).filter(Boolean),
+         products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,qty:i.qty,link:i.link}))};
   const breakdown=(!cust&&d.markup>0)?`<div class="muted2" style="font-size:11.5px;margin-top:7px">${qt("subtotal")} ${money(d.subtotal)} · ${qt("markup")} ${Math.round(d.markup*1000)/10}%</div>`:"";
   $("quoteResult").innerHTML=`<div class="qcards">${cards}</div>
     <div class="qtotal"><span>${qt("total")}</span><b>${money(d.total_usd)}</b></div>${breakdown}
     <div class="muted2" style="font-size:11.5px;margin-top:6px">${qt("disclaimer")}</div>
     <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
       ${wa?`<a class="po-btn accent" href="${wa}" target="_blank">${qt("whatsapp")}</a>`:""}
-      ${RESTRICTED?"":`<button class="po-btn" onclick='qCreateOrder(${info})'>${qt("createOrder")}</button>`}
-      <button class="po-btn" onclick='qSendIntake(this,${info})'>${qt("intakeLink")}</button></div>`;
+      ${RESTRICTED?"":`<button class="po-btn" onclick="qCreateOrder()">${qt("createOrder")}</button>`}
+      <button class="po-btn" onclick="qSendIntake(this)">${qt("intakeLink")}</button></div>`;
 }
-async function qSendIntake(btn,info){
+let QINFO=null;
+async function qSendIntake(btn){
+  const info=QINFO||{};
   btn.disabled=true; const old=btn.textContent; btn.textContent="…";
   let r; try{ r=await post("/api/draft",{products:info.products,amount:info.total}); }catch(e){ r={}; }
   btn.disabled=false; btn.textContent=old;
@@ -1489,7 +1492,8 @@ function qWhatsappLink(d){
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 }
 let PENDING_PRODUCTS=null;
-function qCreateOrder(info){
+function qCreateOrder(){
+  const info=QINFO||{};
   setView("orders"); $("formPanel").classList.remove("hidden");
   $("f_links").value=(info.links||[]).join("\n");
   $("f_amount").value=Number(info.total||0).toFixed(2);
