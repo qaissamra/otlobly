@@ -1345,8 +1345,10 @@ def _shipments_for(pairs, names, oids):
         ef, et = _delivery_window(pk.get("arrival"))   # show the ETA whenever an arrival date is set,
         est = {"est_delivery": pk.get("arrival") or None, "est_from": ef, "est_to": et}  # even without a tracking #
         if not gwd:
+            # an arrival date means it's been ordered/shipped → "on the way"; otherwise "preparing"
+            label = "في الطريق إلى بلدك" if pk.get("arrival") else "نقوم بتجهيز طلبك"
             shipments.append({"tracking": otl, "items": items, "events": [],
-                              "current": {"label": "نقوم بتجهيز طلبك", "bucket": "transit"}, **est})
+                              "current": {"label": label, "bucket": "transit"}, **est})
             continue
         tl = tls.get(gwd, {})
         if tl.get("ok"):
