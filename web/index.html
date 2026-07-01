@@ -1457,6 +1457,7 @@ async function qSendIntake(btn,info){
   let r; try{ r=await post("/api/draft",{products:info.products,amount:info.total}); }catch(e){ r={}; }
   btn.disabled=false; btn.textContent=old;
   const box=$("qIntakeLink");
+  if(!box){ if(r&&r.url){ prompt(qt("linkCopied"), r.url); } else { toast((r&&r.error)||qt("linkOnly")); } return; }
   if(r&&r.ok&&r.url){
     const wa=`https://wa.me/?text=${encodeURIComponent(r.url)}`;
     box.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:11px;padding:11px 13px">

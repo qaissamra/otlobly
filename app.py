@@ -173,6 +173,15 @@ def login():
     return render_template("login.html")
 
 
+@app.after_request
+def _revalidate_html(resp):
+    """HTML pages (the dashboard + inline JS, /track, /account, /order) must revalidate on
+    every load so a deploy shows up immediately — no more stale cached page after an update."""
+    if (resp.headers.get("Content-Type") or "").startswith("text/html"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+
+
 @app.route("/healthz")
 def healthz():
     """Always-200 health check for the host (independent of login/setup state) so
@@ -1198,6 +1207,25 @@ def api_draft():
         "products": b.get("products") or [],
         "amount": b.get("amount"),
         "created_at": db.now_iso(), "used": False,
+    })
+    return jsonify({"ok": True, "draft_id": did, "path": f"/order/{did}",
+                    "url": request.host_url.rstrip("/") + f"/order/{did}"})
+
+
+@app.route("/api/bridge/draft", methods=["POST"])
+def api_bridge_draft():
+    """Server-to-server: sara-tool (deployed) creates a pre-filled draft here.
+    Authed by X-Bridge-Token == SARA_BRIDGE_TOKEN (no staff session needed)."""
+    tok = os.environ.get("SARA_BRIDGE_TOKEN")
+    if not tok or request.headers.get("X-Bridge-Token") != tok:
+        abort(401)
+    b = request.get_json(force=True, silent=True) or {}
+    did = uuid.uuid4().hex[:10]
+    db.set_setting(f"draft:{did}", {
+        "products": b.get("products") or [],
+        "amount": b.get("amount"),
+        "created_at": db.now_iso(), "used": False,
+        "source": b.get("source") or "sara-tool",
     })
     return jsonify({"ok": True, "draft_id": did, "path": f"/order/{did}",
                     "url": request.host_url.rstrip("/") + f"/order/{did}"})
