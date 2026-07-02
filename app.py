@@ -760,10 +760,30 @@ def api_payments():
         c["count"] += 1
     for c in by_cust.values():
         c["deposited_usd"] = round(c["deposited_usd"], 2)
+    # everyone who could receive a deposit: CRM customers + anyone with an order
+    # (incl. the pending "To order" queue), so the picker searches the full list.
+    seen, people = set(), []
+    def _add(nm, ph):
+        nm = (nm or "").strip()
+        if not nm:
+            return
+        k = nm.lower() + "|" + (ph or "")
+        if k in seen:
+            return
+        seen.add(k)
+        people.append({"name": nm, "phone": ph or ""})
+    for c in db.list_customers():
+        _add(c.get("name"), c.get("whatsapp"))
+    for o in db.list_orders():
+        cu = o.get("customer", {}) or {}
+        phs = cu.get("phones") or []
+        _add(cu.get("name"), (phs[0].get("e164") if phs else ""))
+    people.sort(key=lambda x: x["name"].lower())
     return jsonify({
         "ok": True, "payments": rows, "rate": _ils_rate(),
         "totals": {"deposited_usd": round(net_total, 2), "count": len(rows)},
         "by_customer": sorted(by_cust.values(), key=lambda x: -x["deposited_usd"]),
+        "customers": people,
     })
 
 

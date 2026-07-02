@@ -606,7 +606,9 @@
       <h2 style="font-size:14px;margin:0 0 9px">➕ سجّل دفعة · Record a deposit</h2>
       <div class="form-grid">
         <div><label class="fld">Order # (اختياري · optional)</label><input id="dp_order" style="width:100%" placeholder="OTL-0021"></div>
-        <div><label class="fld">Customer</label><select id="dp_name" style="width:100%" onchange="dpPickCustomer()"><option value="">— اختر عميلاً · select customer —</option></select></div>
+        <div><label class="fld">Customer (اكتب للبحث · type to search)</label>
+          <input id="dp_name" list="dp_custlist" style="width:100%" placeholder="ابحث بالاسم · search name…" autocomplete="off" oninput="dpPickCustomer()">
+          <datalist id="dp_custlist"></datalist></div>
         <div><label class="fld">Phone (auto from customer)</label><input id="dp_phone" style="width:100%" placeholder="0599…"></div>
         <div><label class="fld">Amount</label>
           <div style="display:flex;gap:6px">
@@ -1021,30 +1023,26 @@ function setView(v){
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
 // ---- Deposits / payments ledger (عربون) ------------------------------------ //
-let DEP=null, DEP_RATE=3.7, DEP_CUST=[];
-async function dpLoadCustomers(){
-  try{ const c=await (await fetch("/api/customers")).json();
-    const seen={}, list=[];
-    (c.customers||[]).forEach(x=>{ const n=(x.name||"").trim(); if(!n||seen[n+"|"+(x.whatsapp||"")]) return;
-      seen[n+"|"+(x.whatsapp||"")]=1; list.push({name:n, phone:x.whatsapp||""}); });
-    list.sort((a,b)=>a.name.localeCompare(b.name)); DEP_CUST=list;
-  }catch(e){ DEP_CUST=[]; }
-  const sel=$("dp_name"); if(!sel) return; const cur=sel.value;
-  sel.innerHTML=`<option value="">— اختر عميلاً · select customer —</option>`
-    + DEP_CUST.map(c=>`<option value="${poEsc(c.name)}" data-phone="${poEsc(c.phone)}">${poEsc(c.name)}${c.phone?` · ${poEsc(c.phone)}`:''}</option>`).join("");
-  sel.value=cur;
+let DEP=null, DEP_RATE=3.7, DEP_CUSTMAP={};
+// Fill the searchable datalist from the merged people list (CRM + everyone with an
+// order, incl. the pending To-order queue). Keep a name→phone map for auto-fill.
+function dpFillCustomers(people){
+  DEP_CUSTMAP={};
+  const dl=$("dp_custlist");
+  if(dl) dl.innerHTML=(people||[]).map(c=>{
+    DEP_CUSTMAP[c.name.toLowerCase()]=c.phone||"";
+    return `<option value="${poEsc(c.name)}">${c.phone?poEsc(c.phone):''}</option>`;
+  }).join("");
 }
 function dpPickCustomer(){
-  const sel=$("dp_name"); if(!sel) return;
-  const opt=sel.options[sel.selectedIndex];
-  const ph=opt?opt.getAttribute("data-phone"):"";
-  if($("dp_phone")) $("dp_phone").value=ph||"";
+  const v=($("dp_name").value||"").trim().toLowerCase();
+  if(v in DEP_CUSTMAP && $("dp_phone")) $("dp_phone").value=DEP_CUSTMAP[v];
 }
 async function loadDeposits(){
   if($("dp_date") && !$("dp_date").value) $("dp_date").value=new Date().toISOString().slice(0,10);
-  dpLoadCustomers();
   let d; try{ d=await (await fetch("/api/payments")).json(); }catch(e){ d={ok:false,payments:[],by_customer:[],totals:{}}; }
   DEP=d; DEP_RATE=d.rate||3.7;
+  dpFillCustomers(d.customers||[]);
   if($("depRate")) $("depRate").textContent="rate: 1$ = "+DEP_RATE+" ₪";
   dpConv();
   const t=d.totals||{};
