@@ -26,6 +26,7 @@ def read(config=None):
     config = config or cfg.load()
     return {
         "markup_pct": cfg.get(config, "pricing.markup_pct", 0.10),
+        "ils_per_usd": cfg.get(config, "fx.ils_per_usd", 3.7),
         "destination": {
             "shipping_location": cfg.get(config, "estimate.destination.shipping_location", "Israel"),
             "delivery_zip": cfg.get(config, "estimate.destination.delivery_zip", ""),
@@ -51,6 +52,8 @@ def apply(body, config=None, persist=True):
     config = config or cfg.load()
     if "markup_pct" in body:
         cfg.set_path(config, "pricing.markup_pct", max(0.0, _f(body["markup_pct"], 0.10)))
+    if "ils_per_usd" in body:
+        cfg.set_path(config, "fx.ils_per_usd", max(0.01, _f(body["ils_per_usd"], 3.7)))
     dest = body.get("destination") or {}
     for k in ("shipping_location", "delivery_zip", "label"):
         if k in dest:

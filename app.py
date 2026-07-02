@@ -117,6 +117,8 @@ def redact_report(rep):
         return rep
     for r in rep["orders"]:
         r["amount_to_collect_usd"] = None
+        r["deposit_usd"] = None
+        r["remaining_usd"] = None
     rep["summary"]["money"] = {k: None for k in rep["summary"]["money"]}
     return rep
 
@@ -280,6 +282,7 @@ def api_add_order():
                                      address=b.get("address", "")))
     db.audit(auth.actor(), "create_order", "order", o["order_id"], "")
     activity.log("created", "order", o["order_id"], _olabel(o), detail="new order", user=_user())
+    _maybe_record_deposit(b, o)          # numeric deposit (₪) → ledger entry
     return jsonify({"ok": True, "order_id": o["order_id"]})
 
 
@@ -636,7 +639,148 @@ def api_order_edit():
     db.update_order(o["order_id"], changes, auth.actor())
     activity.log("set", "order", o["order_id"], _olabel(o), field="products",
                  detail="edited order", user=_user())
+    _maybe_record_deposit(b, o)          # optional quick deposit (₪) from the Edit modal
     return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------- #
+# Deposits / payments ledger (عربون) — enter in ₪, stored + reported in $.
+# --------------------------------------------------------------------------- #
+def _ils_rate():
+    try:
+        return float(cfg.get(cfg.load(), "fx.ils_per_usd", 3.7)) or 3.7
+    except Exception:
+        return 3.7
+
+
+def _to_usd(amount, currency):
+    """Convert an entered amount to (amount_usd, fx_rate). USD passes through."""
+    if (currency or "ILS").upper() == "USD":
+        return round(float(amount), 2), 1.0
+    rate = _ils_rate()
+    return round(float(amount) / rate, 2), rate
+
+
+def _recompute_order_deposit(order_code):
+    """Sync the order's cached deposit_usd to the net of its ledger rows."""
+    if not order_code:
+        return None
+    net = db.deposit_total_for_order(order_code)
+    o = db.get_order(order_code)
+    if o and round(o.get("deposit_usd") or 0, 2) != net:
+        db.update_order(order_code, {"deposit_usd": net})
+    return net
+
+
+def _record_payment(*, amount, currency, order_code=None, name="", phone_core=None,
+                    kind="deposit", paid_at=None, note=None):
+    """Shared by /api/payment and the order create/edit quick-deposit fields."""
+    amount_usd, rate = _to_usd(amount, currency)
+    kind = kind if kind in ("deposit", "refund", "collect") else "deposit"
+    pid = db.add_payment({
+        "paid_at": (paid_at or "").strip() or None, "order_code": order_code,
+        "customer_phone": phone_core, "customer_name": name, "kind": kind,
+        "currency": (currency or "ILS").upper(), "amount_entered": round(float(amount), 2),
+        "fx_rate": rate, "amount_usd": amount_usd, "note": (note or "").strip() or None,
+        "created_by": getattr(current_user, "id", None), "created_by_name": _user(),
+    })
+    net = _recompute_order_deposit(order_code)
+    label = order_code or (name or "customer")
+    activity.log("recorded", "payment", str(pid),
+                 f"{kind} ${amount_usd} · {label}", user=_user())
+    db.audit(auth.actor(), "record_payment", "payment", str(pid),
+             f"{kind} {amount} {(currency or 'ILS')} = ${amount_usd} on {label}")
+    return {"id": pid, "amount_usd": amount_usd, "fx_rate": rate, "order_deposit_usd": net}
+
+
+def _maybe_record_deposit(b, o):
+    """Quick-deposit from the Add-order form / Edit modal: b['deposit'] (₪) → ledger."""
+    try:
+        amt = float(b.get("deposit"))
+    except (TypeError, ValueError):
+        return
+    if amt <= 0:
+        return
+    cust = o.get("customer", {}) or {}
+    phs = cust.get("phones") or []
+    core = (normalize.phone_core(phs[0].get("e164") or phs[0].get("raw") or "")
+            if phs else None)
+    _record_payment(amount=amt, currency=b.get("deposit_currency") or "ILS",
+                    order_code=o["order_id"], name=cust.get("name") or "",
+                    phone_core=core, kind="deposit", note=b.get("deposit_note"))
+
+
+@app.route("/api/payment", methods=["POST"])
+@auth.require("edit_order")
+def api_payment():
+    b = request.get_json(force=True, silent=True) or {}
+    try:
+        amount = float(b.get("amount"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "amount required"}), 400
+    if amount <= 0:
+        return jsonify({"ok": False, "error": "amount must be greater than 0"}), 400
+    order_code = (b.get("order_id") or "").strip() or None
+    name = (b.get("name") or "").strip()
+    phone_core = None
+    if order_code:
+        o = db.get_order(order_code)
+        if not o:
+            return jsonify({"ok": False, "error": "order not found"}), 404
+        cust = o.get("customer", {}) or {}
+        name = name or cust.get("name") or ""
+        phs = cust.get("phones") or []
+        if phs:
+            phone_core = normalize.phone_core(phs[0].get("e164") or phs[0].get("raw") or "")
+    elif b.get("phone"):
+        phone_core = normalize.phone_core(b["phone"])
+    res = _record_payment(amount=amount, currency=b.get("currency"), order_code=order_code,
+                          name=name, phone_core=phone_core, kind=b.get("kind"),
+                          paid_at=b.get("paid_at"), note=b.get("note"))
+    return jsonify({"ok": True, **res})
+
+
+@app.route("/api/payments")
+@auth.require("view_money")
+def api_payments():
+    order_code = (request.args.get("order") or "").strip() or None
+    phone = (request.args.get("customer") or "").strip() or None
+    core = normalize.phone_core(phone) if phone else None
+    rows = db.list_payments(order_code=order_code, customer_phone=core)
+    by_cust, net_total = {}, 0.0
+    for r in rows:
+        amt = r["amount_usd"] or 0
+        signed = -amt if r["kind"] == "refund" else amt
+        net_total += signed
+        key = r.get("customer_phone") or (r.get("customer_name") or "—")
+        c = by_cust.setdefault(key, {"name": r.get("customer_name") or "—",
+                                     "phone": r.get("customer_phone"),
+                                     "deposited_usd": 0.0, "count": 0})
+        c["deposited_usd"] += signed
+        c["count"] += 1
+    for c in by_cust.values():
+        c["deposited_usd"] = round(c["deposited_usd"], 2)
+    return jsonify({
+        "ok": True, "payments": rows, "rate": _ils_rate(),
+        "totals": {"deposited_usd": round(net_total, 2), "count": len(rows)},
+        "by_customer": sorted(by_cust.values(), key=lambda x: -x["deposited_usd"]),
+    })
+
+
+@app.route("/api/payment/delete", methods=["POST"])
+@auth.require("edit_order")
+def api_payment_delete():
+    b = request.get_json(force=True, silent=True) or {}
+    p = db.get_payment(b.get("id"))
+    if not p:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    db.delete_payment(p["id"])
+    net = _recompute_order_deposit(p.get("order_code"))
+    activity.log("deleted", "payment", str(p["id"]),
+                 f"{p.get('kind')} ${p.get('amount_usd')} · {p.get('order_code') or p.get('customer_name') or ''}",
+                 detail="deleted payment", user=_user())
+    db.audit(auth.actor(), "delete_payment", "payment", str(p["id"]), "")
+    return jsonify({"ok": True, "order_deposit_usd": net})
 
 
 @app.route("/api/order/item_image", methods=["POST"])
@@ -1446,17 +1590,23 @@ def _match_customer(core):
 
 
 def _customer_orders(core):
-    """The customer's orders (newest first) with status + ETA + items. NO money fields."""
+    """The customer's own orders (newest first): status + ETA + items + THEIR money
+    (price / deposit / remaining). Only the logged-in customer's own figures."""
     out = []
     for o in db.list_orders():
         if not any(normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core
                    for ph in (o.get("customer", {}).get("phones") or [])):
             continue
+        amt = o.get("amount_to_collect_usd")
+        dep = round(o.get("deposit_usd") or 0, 2)
         out.append({
             "order_id": o.get("order_id"),
             "status": o.get("status"),
             "est_delivery": o.get("est_delivery_customer"),
             "created_at": o.get("created_at"),
+            "amount_usd": amt,
+            "deposit_usd": dep,
+            "remaining_usd": (round((amt or 0) - dep, 2) if amt is not None else None),
             "items": [{"title": (it.get("title") or it.get("asin") or "").strip(),
                        "image": it.get("image") or None, "qty": it.get("qty") or 1}
                       for it in (o.get("items") or [])
@@ -1545,8 +1695,14 @@ def api_customer_orders():
     pdb = purchases.load()
     pairs, names, oids = _phone_pairs(core, pdb)
     shipments = _shipments_for(pairs, names, oids)
+    orders = _customer_orders(core)
+    OPEN = {"REQUESTED", "QUOTED", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"}
+    deposited = round(sum(o["deposit_usd"] or 0 for o in orders), 2)
+    remaining = round(sum(o["remaining_usd"] or 0 for o in orders
+                          if o["status"] in OPEN and o["remaining_usd"] is not None), 2)
     return jsonify({"name": session.get("cust_name") or "",
-                    "orders": _customer_orders(core),
+                    "orders": orders, "totals": {"deposited_usd": deposited,
+                                                 "remaining_usd": remaining},
                     "shipments": shipments, "count": len(shipments)})
 
 

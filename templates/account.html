@@ -107,6 +107,7 @@
   <!-- STATE 3: dashboard -->
   <div id="s_dash" style="display:none">
     <div class="hello"><b id="t_hello"></b><button class="out" id="b_logout" onclick="logout()"></button></div>
+    <div id="balSum"></div>
     <h2 class="sec" id="t_deliveries"></h2>
     <div id="shipments"></div>
     <h2 class="sec" id="t_orders"></h2>
@@ -125,6 +126,7 @@ const T={
       verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", logout:"خروج",
       deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
       curr:"الحالة الحالية", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
+      deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
   en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
       phonehint:"We'll send a code to your number on WhatsApp.",
@@ -132,6 +134,7 @@ const T={
       verify:"Sign in", resend:"Change number", hello:"Hi", logout:"Log out",
       deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
       curr:"current status", track:"Tracking #", eta:"🚚 Expected arrival", prep:"We're preparing your order",
+      deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance",
       foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
 };
 const STAT={ // order status → {ar,en,color,bg}
@@ -146,6 +149,7 @@ const STAT={ // order status → {ar,en,color,bg}
   CANCELLED:{ar:"ملغى",en:"Cancelled",c:"#b42318",b:"#fee2e2"}
 };
 function t(k){return (T[LANG]||T.en)[k];}
+function money(n){return (n==null)?"—":("$"+Number(n).toFixed(2));}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(d){ if(!d)return""; const x=new Date(d); if(isNaN(x))return esc(d);
   return x.toLocaleDateString(LANG==="ar"?"ar":"en-GB",{day:"2-digit",month:"short",year:"numeric"}); }
@@ -196,9 +200,13 @@ function orderRow(o){
   const it=(o.items||[])[0]||{};
   const more=(o.items||[]).length>1?` +${o.items.length-1}`:"";
   const eta=o.est_delivery?` · ${t("eta").replace('🚚 ','')} ${fmt(o.est_delivery)}`:"";
+  const done=(o.status==="COLLECTED"||o.status==="CANCELLED");
+  const moneyLine=(o.deposit_usd>0)
+    ? `<div style="font-size:11px;font-weight:600;margin-top:2px"><span style="color:#15803d">${t("deposit")} ${money(o.deposit_usd)}</span>${(!done&&o.remaining_usd!=null)?` · <span style="color:#b42318">${t("remaining")} ${money(o.remaining_usd)}</span>`:""}</div>`
+    : "";
   return `<div class="ord">
     ${it.image?`<img class="thumb" src="${esc(it.image)}" alt="">`:'<div class="thumb"></div>'}
-    <div class="t" dir="auto">${esc(it.title||o.order_id)}${more}<div style="color:var(--muted);font-weight:500;font-size:11px">${esc(o.order_id)}${eta}</div></div>
+    <div class="t" dir="auto">${esc(it.title||o.order_id)}${more}<div style="color:var(--muted);font-weight:500;font-size:11px">${esc(o.order_id)}${eta}</div>${moneyLine}</div>
     <span class="pill" style="color:${st.c};background:${st.b}">${LANG==="ar"?st.ar:st.en}</span></div>`;
 }
 async function loadDashboard(){
@@ -206,6 +214,16 @@ async function loadDashboard(){
   if(!d){ backToPhone(); return; }
   paint(); show("s_dash");
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
+  const tot=d.totals||{};
+  $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0)
+    ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px">
+         <div style="flex:1;min-width:130px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:12px;padding:10px 13px">
+           <div style="font-size:20px;font-weight:800;color:#15803d">${money(tot.deposited_usd||0)}</div>
+           <div style="font-size:11.5px;color:#166534">${t("paidsum")}</div></div>
+         <div style="flex:1;min-width:130px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:10px 13px">
+           <div style="font-size:20px;font-weight:800;color:#b42318">${money(tot.remaining_usd||0)}</div>
+           <div style="font-size:11.5px;color:#991b1b">${t("remainsum")}</div></div>
+       </div>` : "";
   $("shipments").innerHTML=(d.shipments&&d.shipments.length)?d.shipments.map(shipCard).join(""):`<div class="empty">${t("noship")}</div>`;
   $("orders").innerHTML=(d.orders&&d.orders.length)?d.orders.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
 }

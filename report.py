@@ -40,7 +40,10 @@ def _row(o):
         "batch": o.get("batch"),
         "profile_box": o.get("profile_box"),
         "amount_to_collect_usd": o.get("amount_to_collect_usd"),
-        "deposit_usd": o.get("deposit_usd") or 0,
+        "deposit_usd": round(o.get("deposit_usd") or 0, 2),
+        "remaining_usd": (round((o.get("amount_to_collect_usd") or 0)
+                                - (o.get("deposit_usd") or 0), 2)
+                          if o.get("amount_to_collect_usd") is not None else None),
         "status": o["status"],
         "amazon_order_number": o.get("amazon_order_number"),
         "tracking_number": o.get("tracking_number"),
@@ -60,7 +63,7 @@ def build(db=None):
     by_status = defaultdict(int)
     by_batch = defaultdict(lambda: {"count": 0, "usd": 0.0})
     by_profile = defaultdict(lambda: {"count": 0, "usd": 0.0})
-    outstanding = collected = total_value = 0.0
+    outstanding = collected = total_value = open_deposits = 0.0
 
     for r in rows:
         amt = r["amount_to_collect_usd"] or 0
@@ -75,6 +78,7 @@ def build(db=None):
             total_value += amt
         if r["status"] in OPEN_STATUSES:
             outstanding += amt
+            open_deposits += r["deposit_usd"]
         if r["status"] == "COLLECTED":
             collected += amt
 
@@ -86,6 +90,7 @@ def build(db=None):
             "collected_usd": round(collected, 2),
             "total_value_usd": round(total_value, 2),
             "deposits_usd": round(sum(r["deposit_usd"] for r in rows), 2),
+            "net_outstanding_usd": round(outstanding - open_deposits, 2),
         },
         "by_batch": {k: {"count": v["count"], "usd": round(v["usd"], 2)}
                      for k, v in sorted(by_batch.items())},

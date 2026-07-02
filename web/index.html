@@ -260,6 +260,7 @@
     <button onclick="toggleMetaLeads()" id="metaLeadsBtn" style="display:none" title="Messenger + Instagram DMs and lead-form ads">📣 Leads</button>
     <button onclick="toggleCustomers()" id="custBtn">👤 Customers</button>
     <button onclick="togglePurchases()" id="poBtn">📦 Purchases</button>
+    <button onclick="toggleDeposits()" id="depositsBtn" title="deposits / عربون customers paid — with remaining balance">💵 Deposits</button>
     <button onclick="togglePnl()" id="pnlBtn">📊 P&amp;L</button>
     <button onclick="togglePicking()" id="pickBtn">🧾 Picking list</button>
     <button onclick="toggleActivity()" id="activityBtn" title="see who changed what, and when">🕑 Activity</button>
@@ -297,7 +298,7 @@
       <div><label class="fld">Final price to collect (USD)</label>
         <input id="f_amount" style="width:100%" placeholder="auto = checkout + markup">
         <div id="quoteBreak" style="font-size:11px;color:var(--good);margin-top:3px"></div></div>
-      <div><label class="fld">Deposit note (عربون)</label><input id="f_deposit" style="width:100%" placeholder="50 ILS"></div>
+      <div><label class="fld">Deposit paid ₪ (عربون)</label><input id="f_deposit" type="number" step="1" style="width:100%" placeholder="e.g. 50"><div style="font-size:10.5px;color:var(--muted);margin-top:2px">in shekels — converted to USD automatically</div></div>
       <div class="full" style="display:flex;gap:9px;justify-content:flex-end">
         <button onclick="toggleForm()">Cancel</button>
         <button class="accent" id="addBtn" onclick="addOrder(this)">Save order</button>
@@ -352,11 +353,11 @@
     <table id="tbl">
       <thead><tr>
         <th style="width:26px"><input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)" title="select all shown"></th>
-        <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th>
+        <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th><th>Deposit</th><th>Remaining</th>
         <th>Box</th><th>Batch</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
       </tr></thead>
       <tbody id="rows"></tbody>
-      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td colspan="5"></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td class="amt" id="footDep"></td><td class="amt" id="footRem"></td><td colspan="5"></td></tr></tfoot>
     </table>
   </div>
 
@@ -512,6 +513,7 @@
     <div class="panel" style="max-width:620px">
       <div class="form-grid">
         <div><label class="fld">Markup %</label><input id="s_markup" type="number" step="0.5" style="width:100%" placeholder="10"></div>
+        <div><label class="fld">ILS per USD (₪ → $ for deposits)</label><input id="s_ils" type="number" step="0.01" style="width:100%" placeholder="3.7"></div>
         <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
         <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
         <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
@@ -590,6 +592,48 @@
     <div id="mlNote"></div>
     <div class="panel"><div id="mlList"></div></div>
   </div>
+
+  <!-- Deposits / payments ledger (عربون) -->
+  <div id="depositsView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">💵 Deposits · العرابين</h2>
+      <span style="color:var(--muted);font-size:12px">what customers paid up front — with the remaining balance</span>
+      <span class="spacer"></span>
+      <span class="muted2" id="depRate" style="font-size:12px"></span>
+      <button onclick="loadDeposits()" class="minibtn">↻ Refresh</button>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h2 style="font-size:14px;margin:0 0 9px">➕ سجّل دفعة · Record a deposit</h2>
+      <div class="form-grid">
+        <div><label class="fld">Order # (اختياري · optional)</label><input id="dp_order" style="width:100%" placeholder="OTL-0021"></div>
+        <div><label class="fld">Customer name</label><input id="dp_name" style="width:100%"></div>
+        <div><label class="fld">Phone (if no order #)</label><input id="dp_phone" style="width:100%" placeholder="0599…"></div>
+        <div><label class="fld">Amount</label>
+          <div style="display:flex;gap:6px">
+            <select id="dp_cur" style="width:80px" onchange="dpConv()"><option value="ILS">₪ ILS</option><option value="USD">$ USD</option></select>
+            <input id="dp_amount" type="number" step="1" style="flex:1" placeholder="50" oninput="dpConv()">
+          </div>
+          <div id="dp_conv" style="font-size:11px;color:var(--good);margin-top:3px"></div></div>
+        <div><label class="fld">Date paid</label><input id="dp_date" type="date" style="width:100%"></div>
+        <div><label class="fld">Kind</label><select id="dp_kind" style="width:100%"><option value="deposit">عربون · Deposit</option><option value="collect">تحصيل · Collected</option><option value="refund">استرجاع · Refund</option></select></div>
+        <div class="full"><label class="fld">Note (optional)</label><input id="dp_note" style="width:100%"></div>
+        <div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="recordPayment(this)">💾 Record</button></div>
+      </div>
+    </div>
+    <div id="depKpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div class="panel" style="margin-bottom:12px"><h2 style="font-size:14px;margin:0 0 9px">👤 Balances by customer</h2><div id="depByCust"></div></div>
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <h2 style="font-size:14px;margin:0">🧾 Ledger</h2>
+        <span class="spacer"></span>
+        <input id="depFilter" placeholder="filter by customer / order…" oninput="renderDeposits()" style="width:220px;padding:4px 8px;font-size:12px">
+      </div>
+      <table id="depTbl">
+        <thead><tr><th>Date</th><th>Customer</th><th>Order</th><th>Entered</th><th>Rate</th><th>USD</th><th>Kind</th><th>Note</th><th>By</th><th></th></tr></thead>
+        <tbody id="depRows"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <div id="azModal" class="az-modal hidden" onclick="if(event.target===this)closeAz()">
@@ -641,6 +685,7 @@
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div style="flex:2;min-width:180px"><label class="fld">اسم العميل · Customer</label><input id="oe_name" style="width:100%"></div>
         <div style="flex:1;min-width:120px"><label class="fld">الإجمالي للعميل · Amount $</label><input id="oe_amount" type="number" step="0.01" style="width:100%"></div>
+        <div style="flex:1;min-width:120px"><label class="fld">عربون جديد ₪ · New deposit</label><input id="oe_deposit" type="number" step="1" style="width:100%" placeholder="اختياري"><div style="font-size:10px;color:var(--muted);margin-top:2px">₪ → يُضاف للسجل</div></div>
       </div>
       <label class="fld">المنتجات · Products</label>
       <div id="oeRows"></div>
@@ -697,12 +742,14 @@ async function applyRole(){
   try{ const r=await fetch("/api/me"); if(r.ok){const j=await r.json(); if(j&&j.perms) ME=j;} }catch(e){}
   if(ME.local) return;                    // local dashboard (8788): no logins, show everything
   const p=ME.perms;
+  CAN_EDIT = p.includes("edit_order");
   const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
   hide("pnlBtn", p.includes("view_pnl"));
   hide("exportBtn", p.includes("admin_actions"));
   hide("clickupBtn", p.includes("admin_actions"));
   hide("teamBtn", p.includes("manage_users"));
   hide("metaLeadsBtn", p.includes("view_meta_leads"));
+  hide("depositsBtn", p.includes("view_money"));
   RESTRICTED = RESTRICTED_NAV[ME.role] || null;
   if(RESTRICTED){                                  // limited console: keep only the allowed nav buttons
     const keep=new Set(RESTRICTED.nav);
@@ -814,19 +861,28 @@ function render(){
       ...o.items.map(i=>i.asin)].join(" ").toLowerCase();
     return hay.includes(term);
   });
-  let out=0;
+  let out=0, totDep=0, totRem=0;
   $("rows").innerHTML=rows.map(o=>{
-    if(["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"].includes(o.status))
-      out+=o.amount_to_collect_usd||0;
+    const open=["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"].includes(o.status);
+    if(open){ out+=o.amount_to_collect_usd||0; totDep+=o.deposit_usd||0;
+              totRem+=(o.remaining_usd!=null?o.remaining_usd:(o.amount_to_collect_usd||0)); }
     const amt=o.amount_to_collect_usd!=null
       ? `${money(o.amount_to_collect_usd)} <a title="re-quote from a new checkout total" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="quoteOrder('${o.order_id}')">✎</a>`
       : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
+    const depTxt=(o.deposit_usd!=null&&o.deposit_usd>0)?money(o.deposit_usd):'';
+    const depCell=CAN_EDIT
+      ? `${depTxt} <a title="سجّل عربون · record a deposit" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
+      : (depTxt||'—');
+    const remCell=(o.remaining_usd!=null)?money(o.remaining_usd)
+                 :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
     return `<tr class="row">
       <td><input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="toggleOrderSel('${o.order_id}',this.checked)"></td>
       <td class="mono">${o.order_id}</td>
       <td><b>${o.customer||"—"}</b><br><span class="mono" style="color:var(--muted)">${o.phone||""}</span></td>
       <td>${itemsCell(o)}</td>
       <td class="amt">${amt}</td>
+      <td class="amt" style="color:var(--good)">${depCell}</td>
+      <td class="amt"><b>${remCell}</b></td>
       <td><input value="${o.profile_box||''}" style="width:54px;padding:3px 6px;font-size:11.5px"
             onchange="setBox('${o.order_id}',this.value)"></td>
       <td>${o.batch||"—"}</td>
@@ -837,6 +893,8 @@ function render(){
       <td>${waMenu(o)}</td>
     </tr>`;}).join("");
   $("footAmt").textContent=money(out);
+  if($("footDep")) $("footDep").textContent=money(totDep);
+  if($("footRem")) $("footRem").textContent=money(totRem);
   VISIBLE_ORDER_IDS=rows.map(o=>o.order_id);
   updateBulkBar();
 }
@@ -901,7 +959,7 @@ async function addOrder(btn){
     name:$("f_name").value, city:($("f_city")?$("f_city").value:""),
     phone:$("f_phone").value, phone2:$("f_phone2").value,
     address:$("f_address").value, links:$("f_links").value,
-    deposit_note:$("f_deposit").value, amount:$("f_amount").value,
+    deposit:$("f_deposit").value, deposit_currency:"ILS", amount:$("f_amount").value,
     products:PENDING_PRODUCTS
   };
   const r=await post("/api/order",body); btn.disabled=false;
@@ -914,11 +972,11 @@ async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const 
 async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…");const r=await post("/api/sync_sheet",{});b.disabled=false;if(r.ok)toast(`Sheet synced · ${r.updated} updated · ${r.created} new`+(r.removed?` · ${r.removed} removed → Trash`:""));else toast("Sync failed: "+(r.error||""));load();}
 
 function toggleForm(){$("formPanel").classList.toggle("hidden");}
-let VIEW="orders";
+let VIEW="orders", CAN_EDIT=true;
 function setView(v){
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads"||v==="deposits");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -934,6 +992,7 @@ function setView(v){
   $("needorderView").classList.toggle("hidden",v!=="needorder");
   $("teamView").classList.toggle("hidden",v!=="team");
   $("metaLeadsView").classList.toggle("hidden",v!=="metaleads");
+  $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("pickBtn").textContent=v==="picking"?"📋 Orders table":"🧾 Picking list";
   $("pnlBtn").textContent=v==="pnl"?"📋 Orders":"📊 P&L";
   $("custBtn").textContent=v==="customers"?"📋 Orders":"👤 Customers";
@@ -945,6 +1004,7 @@ function setView(v){
   $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
   $("teamBtn").textContent=v==="team"?"📋 Orders":"👥 Team";
   $("metaLeadsBtn").textContent=v==="metaleads"?"📋 Orders":"📣 Leads";
+  $("depositsBtn").textContent=v==="deposits"?"📋 Orders":"💵 Deposits";
   if(RESTRICTED){ $("quoteBtn").textContent="💰 Quote"; $("needBtn").textContent="💡 To order"; $("metaLeadsBtn").textContent="📣 Leads"; }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
@@ -956,8 +1016,71 @@ function setView(v){
   if(v==="needorder"){ loadNeedOrder(); }
   if(v==="team"){ loadTeam(); }
   if(v==="metaleads"){ loadMetaLeads(); }
+  if(v==="deposits"){ loadDeposits(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
+function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
+// ---- Deposits / payments ledger (عربون) ------------------------------------ //
+let DEP=null, DEP_RATE=3.7;
+async function loadDeposits(){
+  if($("dp_date") && !$("dp_date").value) $("dp_date").value=new Date().toISOString().slice(0,10);
+  let d; try{ d=await (await fetch("/api/payments")).json(); }catch(e){ d={ok:false,payments:[],by_customer:[],totals:{}}; }
+  DEP=d; DEP_RATE=d.rate||3.7;
+  if($("depRate")) $("depRate").textContent="rate: 1$ = "+DEP_RATE+" ₪";
+  dpConv();
+  const t=d.totals||{};
+  $("depKpis").innerHTML=[["Total held",money(t.deposited_usd||0)],["Entries",(t.count||0)],
+    ["Customers",(d.by_customer||[]).length]]
+    .map(k=>`<div class="card" style="min-width:130px"><div class="n money">${k[1]}</div><div class="l">${k[0]}</div></div>`).join("");
+  $("depByCust").innerHTML=(d.by_customer||[]).length
+    ? `<table><thead><tr><th>Customer</th><th>Phone</th><th>Entries</th><th>Deposited (USD)</th></tr></thead><tbody>${
+       d.by_customer.map(c=>`<tr><td><b>${poEsc(c.name||'—')}</b></td><td class="mono">${poEsc(c.phone||'')}</td><td>${c.count}</td><td class="amt" style="color:var(--good)"><b>${money(c.deposited_usd||0)}</b></td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty">No deposits yet.</div>`;
+  renderDeposits();
+}
+function renderDeposits(){
+  if(!DEP) return;
+  const term=($("depFilter").value||"").trim().toLowerCase();
+  const rows=(DEP.payments||[]).filter(p=>!term||[p.customer_name,p.order_code,p.note].join(" ").toLowerCase().includes(term));
+  $("depRows").innerHTML=rows.length ? rows.map(p=>{
+    const cur=p.currency==="USD"?"$":"₪";
+    const kind=p.kind==='refund'?'↩️ refund':(p.kind==='collect'?'✅ collect':'عربون');
+    return `<tr>
+      <td class="mono">${poEsc(p.paid_at||'')}</td>
+      <td>${poEsc(p.customer_name||'—')}</td>
+      <td class="mono">${poEsc(p.order_code||'—')}</td>
+      <td>${cur}${p.amount_entered}</td>
+      <td class="muted2">${p.currency==="USD"?'—':p.fx_rate}</td>
+      <td class="amt" style="color:var(--good)"><b>${money(p.amount_usd||0)}</b></td>
+      <td>${kind}</td>
+      <td class="muted2">${poEsc(p.note||'')}</td>
+      <td class="muted2">${poEsc(p.created_by_name||'')}</td>
+      <td>${CAN_EDIT?`<button class="iconbtn" title="delete" onclick="delPayment(${p.id})">✕</button>`:''}</td>
+    </tr>`;}).join("") : `<tr><td colspan="10" class="empty">No entries.</td></tr>`;
+}
+function dpConv(){
+  if(!$("dp_conv")) return;
+  const cur=$("dp_cur").value, amt=parseFloat($("dp_amount").value)||0;
+  $("dp_conv").textContent=(cur==="ILS"&&amt>0)?`≈ ${money(amt/DEP_RATE)} USD`:"";
+}
+async function recordPayment(btn){
+  const body={ order_id:$("dp_order").value.trim(), name:$("dp_name").value.trim(),
+    phone:$("dp_phone").value.trim(), currency:$("dp_cur").value, amount:$("dp_amount").value,
+    paid_at:$("dp_date").value, kind:$("dp_kind").value, note:$("dp_note").value.trim() };
+  if(!(parseFloat(body.amount)>0)){ toast("أدخل مبلغًا · enter an amount"); return; }
+  btn.disabled=true;
+  let r; try{ r=await post("/api/payment",body); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(r&&r.ok){ toast(`تم · recorded ${money(r.amount_usd)} ✓`);
+    ["dp_order","dp_name","dp_phone","dp_amount","dp_note"].forEach(i=>{if($(i))$(i).value="";}); loadDeposits(); }
+  else toast("Failed: "+((r&&r.error)||""));
+}
+function depositForOrder(id){ setView("deposits"); setTimeout(()=>{ if($("dp_order")){ $("dp_order").value=id; $("dp_amount").focus(); } },60); }
+async function delPayment(id){
+  if(!confirm("حذف هذه الدفعة؟ · Delete this deposit entry?")) return;
+  let r; try{ r=await post("/api/payment/delete",{id}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast("تم الحذف · deleted"); loadDeposits(); } else toast("Failed");
+}
 // ---- Meta Leads (Messenger/IG DMs + lead-ad forms) -------------------------- //
 let ML=null, ML_FILTER="all", ML_STAFF=[];
 const ML_STATUS={new:{ar:"جديد",en:"New"},contacted:{ar:"تم التواصل",en:"Contacted"},converted:{ar:"تحوّل لطلب",en:"Converted"},lost:{ar:"خسارة",en:"Lost"}};
@@ -1218,6 +1341,7 @@ function openOrderEdit(orderId){
   OE={ order_id:orderId, items:(o.items||[]).map(it=>({title:it.title||"",link:it.link||"",qty:it.qty||1,image:it.image||null,asin:it.asin||""})) };
   if(!OE.items.length) OE.items=[oeBlank()];
   $("oe_name").value=o.customer||""; $("oe_amount").value=(o.amount_to_collect_usd!=null?o.amount_to_collect_usd:"");
+  if($("oe_deposit")) $("oe_deposit").value="";              // blank → only adds a ledger row if typed
   oeRender(); $("orderEditModal").classList.remove("hidden");
 }
 function oeRender(){
@@ -1241,6 +1365,7 @@ async function oeImg(i,btn){
 async function oeSave(btn){
   if(!OE) return; btn.disabled=true;
   const body={ order_id:OE.order_id, name:$("oe_name").value, amount:$("oe_amount").value,
+    deposit:$("oe_deposit").value, deposit_currency:"ILS",
     items:OE.items.map(it=>({title:(it.title||"").trim(),link:(it.link||"").trim(),qty:parseInt(it.qty)||1,image:it.image||null,asin:it.asin||""})) };
   let r; try{ r=await post("/api/order/edit",body); }catch(e){ r={}; }
   btn.disabled=false;
@@ -1539,6 +1664,7 @@ function qCreateOrder(){
 async function loadSettings(){
   const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
   const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
+  if($("s_ils")) $("s_ils").value=s.ils_per_usd||3.7;
   $("s_wa").value=s.business_whatsapp||""; $("s_dest").value=s.destination.shipping_location||"";
   $("s_destlabel").value=s.destination.label||"";
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
@@ -1560,7 +1686,8 @@ function lblCollect(){ return [...document.querySelectorAll('#lblRows tr')].map(
   bucket:tr.querySelector('.l-bucket').value, hidden:tr.querySelector('.l-hide').checked })).filter(r=>r.match); }
 async function saveSettings(b){
   b.disabled=true;
-  const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100, business_whatsapp:$("s_wa").value,
+  const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100,
+    ils_per_usd:parseFloat($("s_ils").value)||3.7, business_whatsapp:$("s_wa").value,
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},

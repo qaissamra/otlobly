@@ -76,10 +76,27 @@ CREATE TABLE IF NOT EXISTS meta_leads (
   assigned_to INTEGER, note TEXT, order_id TEXT,
   synced_at TEXT
 );
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT,                              -- when recorded (system)
+  paid_at TEXT,                         -- date the customer actually paid (editable)
+  order_code TEXT,                      -- OTL-#### (nullable = customer-level credit)
+  customer_phone TEXT,                  -- phone_core, for per-customer rollup
+  customer_name TEXT,
+  kind TEXT NOT NULL DEFAULT 'deposit', -- deposit | refund | collect
+  currency TEXT NOT NULL DEFAULT 'ILS', -- ILS | USD (what staff typed)
+  amount_entered REAL,                  -- e.g. 50 (₪)
+  fx_rate REAL,                         -- ils_per_usd frozen at record time
+  amount_usd REAL,                      -- computed USD (frozen)
+  note TEXT,
+  created_by INTEGER, created_by_name TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS ix_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS ix_leads_status ON meta_leads(status);
 CREATE INDEX IF NOT EXISTS ix_leads_created ON meta_leads(created_time);
+CREATE INDEX IF NOT EXISTS ix_pay_order ON payments(order_code);
+CREATE INDEX IF NOT EXISTS ix_pay_customer ON payments(customer_phone);
 """
 
 
@@ -379,13 +396,72 @@ def lead_stats():
     }
 
 
+# --------------------------------------------------------------------------- #
+# Payments / deposits ledger (عربون). amount_usd + fx_rate are FROZEN per row.
+# --------------------------------------------------------------------------- #
+def add_payment(p):
+    """Insert one ledger row (deposit/refund/collect). Returns its id."""
+    with connect() as c:
+        cur = c.execute("""INSERT INTO payments
+          (ts, paid_at, order_code, customer_phone, customer_name, kind, currency,
+           amount_entered, fx_rate, amount_usd, note, created_by, created_by_name)
+          VALUES (:ts,:paid_at,:order_code,:customer_phone,:customer_name,:kind,:currency,
+           :amount_entered,:fx_rate,:amount_usd,:note,:created_by,:created_by_name)""",
+          {"ts": now_iso(), "paid_at": p.get("paid_at") or now_iso()[:10],
+           "order_code": p.get("order_code"), "customer_phone": p.get("customer_phone"),
+           "customer_name": p.get("customer_name"), "kind": p.get("kind") or "deposit",
+           "currency": p.get("currency") or "ILS", "amount_entered": p.get("amount_entered"),
+           "fx_rate": p.get("fx_rate"), "amount_usd": p.get("amount_usd"),
+           "note": p.get("note"), "created_by": p.get("created_by"),
+           "created_by_name": p.get("created_by_name")})
+        return cur.lastrowid
+
+
+def list_payments(order_code=None, customer_phone=None):
+    q, args = "SELECT * FROM payments", []
+    conds = []
+    if order_code:
+        conds.append("order_code=?"); args.append(order_code)
+    if customer_phone:
+        conds.append("customer_phone=?"); args.append(customer_phone)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY paid_at DESC, id DESC LIMIT 1000"
+    with connect() as c:
+        return [dict(r) for r in c.execute(q, args)]
+
+
+def get_payment(pid):
+    with connect() as c:
+        r = c.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
+        return dict(r) if r else None
+
+
+def delete_payment(pid):
+    with connect() as c:
+        c.execute("DELETE FROM payments WHERE id=?", (pid,))
+
+
+def deposit_total_for_order(order_code):
+    """Net deposit held against one order = deposits + collects − refunds (USD)."""
+    with connect() as c:
+        rows = c.execute("SELECT kind, amount_usd FROM payments WHERE order_code=?",
+                         (order_code,)).fetchall()
+    net = 0.0
+    for r in rows:
+        amt = r["amount_usd"] or 0
+        net += -amt if r["kind"] == "refund" else amt
+    return round(net, 2)
+
+
 if __name__ == "__main__":
     if "--init" in sys.argv:
         init_db()
         print(f"Initialized {DB_FILE.name}")
     elif "--stats" in sys.argv:
         with connect() as c:
-            for t in ("users", "customers", "orders", "order_items", "audit_log"):
+            for t in ("users", "customers", "orders", "order_items", "audit_log",
+                      "meta_leads", "payments"):
                 n = c.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
                 print(f"  {t:12} {n}")
     else:
