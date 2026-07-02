@@ -442,6 +442,12 @@ def delete_payment(pid):
         c.execute("DELETE FROM payments WHERE id=?", (pid,))
 
 
+def set_payment_order(pid, order_code):
+    """Attach a customer-level deposit to an order after the fact (self-heal)."""
+    with connect() as c:
+        c.execute("UPDATE payments SET order_code=? WHERE id=?", (order_code, pid))
+
+
 def deposit_total_for_order(order_code):
     """Net deposit held against one order = deposits + collects − refunds (USD)."""
     with connect() as c:

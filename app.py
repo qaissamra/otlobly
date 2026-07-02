@@ -318,6 +318,7 @@ def api_pricing():
 @app.route("/api/needorder")
 @auth.require("view_orders")
 def api_needorder():
+    _link_unlinked_deposits()          # fold in any customer deposits missing an order #
     return jsonify(store.need_order(db.list_orders()))
 
 
@@ -672,6 +673,42 @@ def _recompute_order_deposit(order_code):
     return net
 
 
+def _order_for_phone(core, orders=None):
+    """The best order to attach a customer's deposit to, matched by phone: the
+    newest still-open (REQUESTED/QUOTED/PAID) order, else the newest of any."""
+    if not core:
+        return None
+    mine = []
+    for o in (orders if orders is not None else db.list_orders()):
+        if any(normalize.phone_core(p.get("e164") or p.get("raw") or "") == core
+               for p in (o.get("customer", {}).get("phones") or [])):
+            mine.append(o)
+    if not mine:
+        return None
+    pending = [o for o in mine if o.get("status") in ("REQUESTED", "QUOTED", "PAID")]
+    pool = pending or mine
+    pool.sort(key=lambda o: o.get("created_at") or "", reverse=True)
+    return pool[0]["order_id"]
+
+
+def _link_unlinked_deposits():
+    """Self-heal: deposits recorded for a customer (phone) but with no order # get
+    attached to that customer's order, so the To-order badge + remaining show up."""
+    stray = [p for p in db.list_payments()
+             if not p.get("order_code") and p.get("customer_phone")]
+    if not stray:
+        return
+    orders = db.list_orders()
+    touched = set()
+    for p in stray:
+        oc = _order_for_phone(p["customer_phone"], orders)
+        if oc:
+            db.set_payment_order(p["id"], oc)
+            touched.add(oc)
+    for oc in touched:
+        _recompute_order_deposit(oc)
+
+
 def _record_payment(*, amount, currency, order_code=None, name="", phone_core=None,
                     kind="deposit", paid_at=None, note=None):
     """Shared by /api/payment and the order create/edit quick-deposit fields."""
@@ -734,6 +771,13 @@ def api_payment():
             phone_core = normalize.phone_core(phs[0].get("e164") or phs[0].get("raw") or "")
     elif b.get("phone"):
         phone_core = normalize.phone_core(b["phone"])
+    # No order # given? attach to the customer's pending order (matched by phone),
+    # so the deposit shows on the To-order card and reduces the remaining.
+    if not order_code and phone_core:
+        order_code = _order_for_phone(phone_core)
+        if order_code and not name:
+            oo = db.get_order(order_code) or {}
+            name = (oo.get("customer", {}) or {}).get("name") or name
     res = _record_payment(amount=amount, currency=b.get("currency"), order_code=order_code,
                           name=name, phone_core=phone_core, kind=b.get("kind"),
                           paid_at=b.get("paid_at"), note=b.get("note"))
@@ -743,6 +787,7 @@ def api_payment():
 @app.route("/api/payments")
 @auth.require("view_money")
 def api_payments():
+    _link_unlinked_deposits()          # backfill order links for stray customer deposits
     order_code = (request.args.get("order") or "").strip() or None
     phone = (request.args.get("customer") or "").strip() or None
     core = normalize.phone_core(phone) if phone else None
