@@ -115,6 +115,7 @@ def need_order(orders):
             "phones": [p.get("e164") for p in (cust.get("phones") or []) if p.get("e164")],
             "address": cust.get("address"), "city": cust.get("city"), "notes": cust.get("notes"),
             "amount_to_collect_usd": o.get("amount_to_collect_usd"),
+            "deposit_usd": round(o.get("deposit_usd") or 0, 2),
             "est_delivery_customer": o.get("est_delivery_customer"),
             "created_at": o.get("created_at"),
             "items": [{"asin": it.get("asin"), "title": it.get("title"),
@@ -126,7 +127,8 @@ def need_order(orders):
     rows.sort(key=lambda r: r["created_at"] or "")
     return {"orders": rows, "count": len(rows),
             "products": sum(len(r["items"]) for r in rows),
-            "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2)}
+            "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2),
+            "deposits_usd": round(sum(r["deposit_usd"] or 0 for r in rows), 2)}
 
 
 def upsert(db, order):
