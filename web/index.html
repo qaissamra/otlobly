@@ -1312,6 +1312,7 @@ function neCardHtml(o,placed){
     ? `<button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>`
     : `<button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>
        <button class="po-btn" title="تعديل الطلب · edit order" onclick="openOrderEdit('${poEsc(o.order_id)}')">✏️</button>
+       <button class="po-btn" style="color:#15803d" title="تم طلبه من أمازون — انقله إلى ✅ تم الطلب · already ordered on Amazon — move it to Ordered" onclick="neMarkOrdered('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">✅</button>
        <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>`;
   const meta=[poEsc(o.order_id)];
   if(placed&&o.amazon_order_number) meta.push(`Amazon ${poEsc(o.amazon_order_number)}`);
@@ -1380,6 +1381,12 @@ function renderNeedOrder(){
     S.push(neSection('deleted','🗑 محذوف · Deleted',del.length,'',
       del.map(neDeletedCardHtml).join("")));
   $("needList").innerHTML=chips+S.join("");
+}
+async function neMarkOrdered(orderId,name){
+  if(!confirm(`تم طلب ${name||orderId} من أمازون؟ · Mark ${name?name+"'s ":""}order as ORDERED?\nينتقل إلى قسم ✅ تم الطلب · it moves to the Ordered section.`)) return;
+  let r; try{ r=await post("/api/status",{id:orderId,status:"ORDERED"}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast("✅ تم النقل إلى تم الطلب · moved to Ordered"); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
+  else toast("Failed to update status");
 }
 async function neRestore(tid){
   if(!confirm("استرجاع هذا الطلب؟ · Restore this order back to the queue?")) return;
@@ -1889,7 +1896,7 @@ async function loadPurchases(){
       const e=PO_CUSTORDERS[k]||(PO_CUSTORDERS[k]={ids:[],items:[]});
       e.ids.push(o.order_id);
       (o.items||[]).forEach(it=>e.items.push({title:it.title||"",asin:(it.asin||"").toUpperCase(),
-        link:it.link||"",image:it.image||null,qty:it.qty||1}));
+        link:it.link||"",image:it.image||null,qty:it.qty||1,order_id:o.order_id}));
       if(o.customer && !PO_CUSTNAMES.includes(o.customer)) PO_CUSTNAMES.push(o.customer);
     });
   }catch(e){ PO_CUSTORDERS={}; }
@@ -1946,9 +1953,11 @@ function poAutofillFromOrder(p,pi,ii,name){
   if((it.title||"").trim()||(it.asin||"").trim()||(it.clean_url||"").trim()) return;  // row already has data
   const [first,...rest]=e.items;
   Object.assign(it,{title:first.title,asin:first.asin,clean_url:first.link,
-                    image:first.image||it.image||null,qty:first.qty||1});
+                    image:first.image||it.image||null,qty:first.qty||1,
+                    customer_order_id:first.order_id||e.ids[0]||null});
   rest.forEach(x=>p.packages[pi].items.push({title:x.title,asin:x.asin,clean_url:x.link,
-    image:x.image||null,qty:x.qty||1,status:"ORDERED",customer_name:name,matched:true}));
+    image:x.image||null,qty:x.qty||1,status:"ORDERED",customer_name:name,matched:true,
+    customer_order_id:x.order_id||e.ids[0]||null}));
   renderPurchases();
   toast(`تم جلب ${e.items.length} منتج من ${e.ids.join(" · ")} · pulled ${e.items.length} product(s) from the To-order page`);
 }

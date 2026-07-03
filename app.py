@@ -1879,6 +1879,33 @@ try:
 except Exception as _e:                      # noqa: BLE001
     app.logger.warning("customer backfill skipped: %s", _e)
 
+# One-time: re-run PO→order matching so manually-assigned PO items (which used to
+# miss customer_order_id) flip their orders to ORDERED + inherit batch/box/ETA.
+def _reconcile_pos_to_orders():
+    import purchases
+    import cfg as _cfg
+    pdb = purchases.load()
+    orders = db.list_orders()
+    buf = _cfg.get(_cfg.load(), "pipeline.delivery_buffer_days", 8)
+    touched = False
+    for po in pdb.get("purchase_orders", []):
+        purchases.attach_matches(po, orders)
+        for oid, ch in purchases.apply_to_orders(po, orders, buf):
+            db.update_order(oid, ch)
+            activity.log("set", "order", oid, oid,
+                         detail=f"auto → {ch.get('status', 'updated')} from "
+                                f"{po.get('amazon_order_number') or po['po_id']} (reconcile)",
+                         user="system")
+            touched = True
+    if touched:
+        purchases.save(pdb)
+
+
+try:
+    _reconcile_pos_to_orders()
+except Exception as _e:                      # noqa: BLE001
+    app.logger.warning("PO reconcile skipped: %s", _e)
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 8789)), debug=False)
