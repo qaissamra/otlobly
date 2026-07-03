@@ -1293,7 +1293,7 @@ async function loadNeedOrder(){
     return `<div class="need-order">
       <div class="need-head">
         <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
-          <span class="pill">${o.status}</span>${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · this customer paid a deposit">✅ عربون</span>`:''}</div>
+          <span class="pill">${o.status}</span>${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · this customer paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID document on file">🪪 هوية</span>`:''}</div>
         <div style="text-align:right;display:flex;align-items:center;gap:8px">
           <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
             <div class="muted2" style="font-size:11px">${poEsc(o.order_id)}${o.est_delivery_customer?` · ETA ${poEsc(o.est_delivery_customer)}`:''}</div>
@@ -2119,7 +2119,7 @@ function editCustomer(id){
   fillPayments(); $("c_payment").value=c.payment_method||'Cash on delivery';
   $("custFormPanel").classList.remove("hidden");
 }
-let CUSTSUB="list", ID_MISS=false;
+let CUSTSUB="list", ID_MISS=false, ID_TO=false;
 function custSearchInput(){ CUSTSUB==="gallery"?renderIdGallery():renderCustomers(); }
 function setCustSub(s){ CUSTSUB=s;
   $("custGrid").style.display=(s==="list")?"grid":"none";   // inline display beats .hidden
@@ -2132,17 +2132,21 @@ function renderIdGallery(){
   const term=$("custSearch").value.trim().toLowerCase();
   const list=CUST.customers.filter(c=>!term||[c.name,c.whatsapp,c.city].join(" ").toLowerCase().includes(term));
   const have=CUST.customers.filter(c=>c.id_image).length, total=CUST.customers.length;
-  const show=ID_MISS?list.filter(c=>!c.id_image):list;
+  const toCount=CUST.customers.filter(c=>c.in_to_order).length;
+  let show=list;
+  if(ID_MISS) show=show.filter(c=>!c.id_image);
+  if(ID_TO)   show=show.filter(c=>c.in_to_order);
   const cards=show.map(c=>{
     const src=c.id_image?`/api/customer_image?file=${encodeURIComponent(c.id_image)}`:null;
     const top=src?`<img src="${src}" onclick="window.open('${src}','_blank')" title="open full size">`
       :`<div class="noid" onclick="custIdUpload('${c.customer_id}')" title="upload an ID for this customer">＋ Upload ID</div>`;
     return `<div class="id-card">${top}
-      <div class="nm" title="${poEsc(c.name)}">${poEsc(c.name)||'—'}</div>
+      <div class="nm" title="${poEsc(c.name)}">${poEsc(c.name)||'—'}${c.in_to_order?` <span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;white-space:nowrap" title="لديه طلب قيد التجهيز · has a To-order order">💡 للطلب</span>`:''}</div>
       <div class="ph">${poEsc(c.whatsapp)||''}</div></div>`;
   }).join("");
   $("custGallery").innerHTML=`<div class="idsum">🪪 <b>${have}</b> of <b>${total}</b> customers have an ID on file.
-      <a class="seeall" onclick="ID_MISS=!ID_MISS;renderIdGallery()">${ID_MISS?'Show all':`Show only missing (${total-have})`}</a></div>
+      <a class="seeall" onclick="ID_MISS=!ID_MISS;renderIdGallery()">${ID_MISS?'Show all':`Show only missing (${total-have})`}</a>
+      <a class="seeall" onclick="ID_TO=!ID_TO;renderIdGallery()">${ID_TO?'Show all':`Show only To-order (${toCount})`}</a></div>
     <div class="id-gallery">${cards||'<div class="empty">No matches.</div>'}</div>`;
 }
 function custIdUpload(id){ const inp=$("custIdInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;

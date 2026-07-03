@@ -112,6 +112,7 @@ def enrich(cust, orders_db):
     return {
         **cust,
         "order_count": len(orders),
+        "in_to_order": any(o["status"] in ("REQUESTED", "QUOTED", "PAID") for o in orders),
         "total_spent_usd": round(spent, 2),
         "collected_usd": round(collected, 2),
         "last_order_at": last,

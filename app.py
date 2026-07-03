@@ -108,6 +108,36 @@ def make_customer(**kw):
     return cust_mod.new_customer({"seq": int(code.split("-")[1]) - 1}, **kw)
 
 
+def _cust_from_order(o):
+    ph = store.primary_phone(o)
+    cu = o.get("customer") or {}
+    return make_customer(name=cu.get("name") or "",
+                         whatsapp=ph["e164"] if ph else "",
+                         address=cu.get("address", ""))
+
+
+def _ensure_customer(o, existing=None):
+    """Add an order's customer to the CRM if it's not already there — so it shows on
+    the Customers / ID page. NEVER overwrites an existing profile (that would wipe a
+    stored ID). Pass `existing` (a set of match_keys) when looping to avoid re-scanning."""
+    c = _cust_from_order(o)
+    if not c.get("match_key"):
+        return
+    if existing is None:
+        existing = {x.get("match_key") for x in db.list_customers()}
+    if c["match_key"] not in existing:
+        db.upsert_customer(c)
+        existing.add(c["match_key"])
+
+
+def _backfill_customers_from_orders():
+    """One-time: every order's customer becomes a CRM profile (intake/lead/bridge
+    paths didn't create one), so To-order customers appear on the ID page."""
+    existing = {x.get("match_key") for x in db.list_customers()}
+    for o in db.list_orders():
+        _ensure_customer(o, existing)
+
+
 def orders_db():
     return {"orders": db.list_orders()}
 
@@ -318,7 +348,15 @@ def api_pricing():
 @app.route("/api/needorder")
 @auth.require("view_orders")
 def api_needorder():
-    return jsonify(store.need_order(db.list_orders()))
+    data = store.need_order(db.list_orders())
+    # read-only: flag which orders' customers already have an ID document on file
+    idset = {normalize.phone_core(c.get("whatsapp") or "")
+             for c in db.list_customers() if c.get("id_image")}
+    idset.discard("")
+    for r in data["orders"]:
+        core = normalize.phone_core(r.get("phone") or "")
+        r["has_id"] = bool(core and core in idset)
+    return jsonify(data)
 
 
 @app.route("/api/estimate", methods=["POST"])
@@ -916,6 +954,7 @@ def api_meta_lead_convert():
                    items=[], status="REQUESTED",
                    notes=f"Meta lead · {lead.get('source')}")
     db.upsert_order(o, created_by=current_user.id)
+    _ensure_customer(o)                    # add the converted lead to the CRM / ID page
     db.update_lead(lead["lead_id"], {"status": "converted", "order_id": o["order_id"]})
     activity.log("created", "order", o["order_id"], _olabel(o),
                  detail=f"converted from Meta lead ({lead.get('source')})", user=_user())
@@ -1510,6 +1549,7 @@ def api_order_intake():
                    city=b.get("city", ""), items=items, status="REQUESTED",
                    amount_to_collect_usd=(float(d["amount"]) if d.get("amount") else None))
     db.upsert_order(o)
+    _ensure_customer(o)                    # add the self-intake customer to the CRM / ID page
     db.set_setting(f"draft:{b['draft_id']}", {**d, "used": True})
     db.audit({"username": "customer"}, "intake_order", "order", o["order_id"], "")
     activity.log("created", "order", o["order_id"], _olabel(o),
@@ -1794,6 +1834,13 @@ try:
     _link_unlinked_deposits()
 except Exception as _e:                      # noqa: BLE001
     app.logger.warning("deposit backfill skipped: %s", _e)
+
+# One-time: ensure every order's customer exists in the CRM (intake/lead orders
+# didn't create one) so To-order customers show on the ID/Customers page.
+try:
+    _backfill_customers_from_orders()
+except Exception as _e:                      # noqa: BLE001
+    app.logger.warning("customer backfill skipped: %s", _e)
 
 
 if __name__ == "__main__":
