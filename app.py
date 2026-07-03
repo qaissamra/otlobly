@@ -318,7 +318,6 @@ def api_pricing():
 @app.route("/api/needorder")
 @auth.require("view_orders")
 def api_needorder():
-    _link_unlinked_deposits()          # fold in any customer deposits missing an order #
     return jsonify(store.need_order(db.list_orders()))
 
 
@@ -787,7 +786,6 @@ def api_payment():
 @app.route("/api/payments")
 @auth.require("view_money")
 def api_payments():
-    _link_unlinked_deposits()          # backfill order links for stray customer deposits
     order_code = (request.args.get("order") or "").strip() or None
     phone = (request.args.get("customer") or "").strip() or None
     core = normalize.phone_core(phone) if phone else None
@@ -1786,6 +1784,16 @@ def api_gen_customer_tracking():
         pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
         purchases.save(pdb)
     return jsonify({"ok": True, "customer_tracking": pk["customer_tracking"]})
+
+
+# One-time backfill at startup: link any deposits recorded without an order # to
+# the customer's order (matched by phone) so the To-order badge shows for existing
+# entries. Runs once per process, NOT on every request (writing inside a GET caused
+# SQLite lock contention with multiple workers). Guarded so it can never block boot.
+try:
+    _link_unlinked_deposits()
+except Exception as _e:                      # noqa: BLE001
+    app.logger.warning("deposit backfill skipped: %s", _e)
 
 
 if __name__ == "__main__":

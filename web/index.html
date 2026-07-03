@@ -1271,7 +1271,9 @@ function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
 let NEED_ORDERS=[];
 async function loadNeedOrder(){
-  const d=await (await fetch("/api/needorder")).json();
+  let d;
+  try{ const r=await fetch("/api/needorder"); if(!r.ok) throw new Error("HTTP "+r.status); d=await r.json(); }
+  catch(e){ $("needSub").textContent=""; $("needList").innerHTML=`<div class="empty">تعذّر تحميل القائمة · couldn't load — <a style="cursor:pointer;color:var(--accent)" onclick="loadNeedOrder()">إعادة المحاولة · retry</a></div>`; return; }
   NEED_ORDERS=d.orders||[];
   $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`
     +((d.deposits_usd||0)>0?` · <b style="color:#15803d">✅ عرابين · deposits ${money(d.deposits_usd)}</b>`:'');
