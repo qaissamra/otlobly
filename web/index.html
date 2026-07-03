@@ -746,6 +746,7 @@ async function applyRole(){
   if(ME.local) return;                    // local dashboard (8788): no logins, show everything
   const p=ME.perms;
   CAN_EDIT = p.includes("edit_order");
+  CAN_ADMIN = p.includes("admin_actions");
   const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
   hide("pnlBtn", p.includes("view_pnl"));
   hide("exportBtn", p.includes("admin_actions"));
@@ -975,7 +976,7 @@ async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const 
 async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…");const r=await post("/api/sync_sheet",{});b.disabled=false;if(r.ok)toast(`Sheet synced · ${r.updated} updated · ${r.created} new`+(r.removed?` · ${r.removed} removed → Trash`:""));else toast("Sync failed: "+(r.error||""));load();}
 
 function toggleForm(){$("formPanel").classList.toggle("hidden");}
-let VIEW="orders", CAN_EDIT=true;
+let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true;
 function setView(v){
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
@@ -1336,8 +1337,11 @@ function neCardHtml(o,placed){
     <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
 }
 function neDeletedCardHtml(x){
-  const items=(x.items||[]).map(it=>poEsc(it.title||'—')+(it.qty>1?` ×${it.qty}`:'')).join(" · ");
-  return `<div class="need-order" style="background:#fafafa;opacity:.8">
+  const items=(x.items||[]).map(it=>`<div class="qcard" style="padding:6px 9px;opacity:.9">
+      ${it.image?`<img src="${poEsc(it.image)}" style="width:36px;height:36px">`:'<div class="noimg" style="width:36px;height:36px"></div>'}
+      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||'—')}</div>
+        ${it.qty>1?`<div class="muted2" style="font-size:11px">×${it.qty}</div>`:''}</div></div>`).join("");
+  return `<div class="need-order" style="background:#fafafa;opacity:.85">
     <div class="need-head">
       <div><b>${poEsc(x.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(x.phone||'')}</span>
         <span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span></div>
@@ -1345,9 +1349,16 @@ function neDeletedCardHtml(x){
         <div><b class="amt" style="color:var(--muted)">${x.amount_to_collect_usd!=null?money(x.amount_to_collect_usd):'—'}</b>
           <div class="muted2" style="font-size:11px">${poEsc(x.order_id||'')}${x.deleted_at?` · حُذف ${poEsc(x.deleted_at)}`:''}${x.deleted_by?` · ${poEsc(x.deleted_by)}`:''}</div></div>
         ${CAN_EDIT?`<button class="po-btn" title="استرجاع الطلب · restore this order" onclick="neRestore('${poEsc(x.trash_id)}')">♻️ استرجاع</button>`:''}
+        ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا من هذه القائمة · remove permanently from this list" onclick="nePurge('${poEsc(x.trash_id)}','${poEsc((x.customer||'').replace(/'/g,''))}')">✕ إزالة</button>`:''}
       </div>
     </div>
-    ${items?`<div class="muted2" style="margin-top:6px;font-size:12px">${items}</div>`:''}</div>`;
+    ${items?`<div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div>`:''}</div>`;
+}
+async function nePurge(tid,name){
+  if(!confirm(`إزالة نهائية · Remove ${name?name+"'s ":""}deleted order from this list FOREVER?\nلا يمكن التراجع — it cannot be restored afterwards.`)) return;
+  let r; try{ r=await post("/api/trash/purge",{id:tid}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast("أُزيل نهائيًا · removed permanently"); loadNeedOrder(); }
+  else toast("Remove failed"+((r&&r.error)?": "+r.error:""));
 }
 function renderNeedOrder(){
   const d=NE_DATA; if(!d) return;
