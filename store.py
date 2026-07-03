@@ -100,31 +100,40 @@ def new_order(db, *, name, phones, address, items, batch=None, deposit_usd=0.0,
 PREORDER_STATUSES = ("REQUESTED", "QUOTED", "PAID")
 
 
+PLACED_STATUSES = ("ORDERED", "SHIPPED", "ARRIVED", "DELIVERED", "COLLECTED")
+
+
+def _order_row(o):
+    ph = primary_phone(o)
+    cust = o.get("customer", {}) or {}
+    return {
+        "order_id": o["order_id"], "status": o["status"],
+        "customer": cust.get("name"), "phone": ph["e164"] if ph else None,
+        "phones": [p.get("e164") for p in (cust.get("phones") or []) if p.get("e164")],
+        "address": cust.get("address"), "city": cust.get("city"), "notes": cust.get("notes"),
+        "amount_to_collect_usd": o.get("amount_to_collect_usd"),
+        "deposit_usd": round(o.get("deposit_usd") or 0, 2),
+        "est_delivery_customer": o.get("est_delivery_customer"),
+        "batch": o.get("batch"), "amazon_order_number": o.get("amazon_order_number"),
+        "created_at": o.get("created_at"),
+        "items": [{"asin": it.get("asin"), "title": it.get("title"),
+                   "image": it.get("image"), "qty": it.get("qty") or 1,
+                   "item_usd": it.get("item_usd"),
+                   "link": it.get("clean_url") or it.get("raw_url")}
+                  for it in o.get("items", [])],
+    }
+
+
+def order_rows(orders, statuses):
+    rows = [_order_row(o) for o in orders if o.get("status") in statuses]
+    rows.sort(key=lambda r: r["created_at"] or "")
+    return rows
+
+
 def need_order(orders):
     """The demand queue: orders not yet placed on Amazon, as product cards — the
     bulk-buying work-list (box/batch absent; assigned when the PO is recorded)."""
-    rows = []
-    for o in orders:
-        if o.get("status") not in PREORDER_STATUSES:
-            continue
-        ph = primary_phone(o)
-        cust = o.get("customer", {}) or {}
-        rows.append({
-            "order_id": o["order_id"], "status": o["status"],
-            "customer": cust.get("name"), "phone": ph["e164"] if ph else None,
-            "phones": [p.get("e164") for p in (cust.get("phones") or []) if p.get("e164")],
-            "address": cust.get("address"), "city": cust.get("city"), "notes": cust.get("notes"),
-            "amount_to_collect_usd": o.get("amount_to_collect_usd"),
-            "deposit_usd": round(o.get("deposit_usd") or 0, 2),
-            "est_delivery_customer": o.get("est_delivery_customer"),
-            "created_at": o.get("created_at"),
-            "items": [{"asin": it.get("asin"), "title": it.get("title"),
-                       "image": it.get("image"), "qty": it.get("qty") or 1,
-                       "item_usd": it.get("item_usd"),
-                       "link": it.get("clean_url") or it.get("raw_url")}
-                      for it in o.get("items", [])],
-        })
-    rows.sort(key=lambda r: r["created_at"] or "")
+    rows = order_rows(orders, PREORDER_STATUSES)
     return {"orders": rows, "count": len(rows),
             "products": sum(len(r["items"]) for r in rows),
             "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2),

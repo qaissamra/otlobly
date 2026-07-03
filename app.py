@@ -142,6 +142,22 @@ def orders_db():
     return {"orders": db.list_orders()}
 
 
+# Hosted app: Trash restores must land in the SQLite DB (the JSON store the
+# default restorers write to is the retired local dashboard's).
+def _db_restore_order(data, origin):
+    db.upsert_order(data)
+    return {"ok": True, "where": "Orders"}
+
+
+def _db_restore_customer(data, origin):
+    db.upsert_customer(data)
+    return {"ok": True, "where": "Customers"}
+
+
+trash._RESTORERS["order"] = _db_restore_order
+trash._RESTORERS["customer"] = _db_restore_customer
+
+
 def redact_report(rep):
     if current_user.has("view_money"):
         return rep
@@ -348,12 +364,33 @@ def api_pricing():
 @app.route("/api/needorder")
 @auth.require("view_orders")
 def api_needorder():
-    data = store.need_order(db.list_orders())
+    orders = db.list_orders()
+    data = store.need_order(orders)
+    # the two extra groups so orders never just vanish from this page:
+    placed = store.order_rows(orders, store.PLACED_STATUSES)
+    placed.reverse()                                     # newest first
+    data["ordered"] = placed
+    deleted = []
+    for rec in reversed(trash.load().get("trash", [])):  # newest first
+        if rec.get("kind") != "order":
+            continue
+        o = rec.get("data") or {}
+        cust = o.get("customer", {}) or {}
+        phs = cust.get("phones") or []
+        deleted.append({
+            "trash_id": rec.get("trash_id"), "order_id": o.get("order_id"),
+            "customer": cust.get("name"), "phone": phs[0].get("e164") if phs else None,
+            "amount_to_collect_usd": o.get("amount_to_collect_usd"),
+            "deleted_at": (rec.get("deleted_at") or "")[:10], "deleted_by": rec.get("deleted_by"),
+            "items": [{"title": it.get("title") or it.get("asin"), "image": it.get("image"),
+                       "qty": it.get("qty") or 1} for it in (o.get("items") or [])][:6],
+        })
+    data["deleted"] = deleted
     # read-only: flag which orders' customers already have an ID document on file
     idset = {normalize.phone_core(c.get("whatsapp") or "")
              for c in db.list_customers() if c.get("id_image")}
     idset.discard("")
-    for r in data["orders"]:
+    for r in data["orders"] + placed:
         core = normalize.phone_core(r.get("phone") or "")
         r["has_id"] = bool(core and core in idset)
     return jsonify(data)

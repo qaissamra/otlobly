@@ -1270,49 +1270,111 @@ async function emptyTrash(btn){ if(!confirm("Empty the whole trash? Everything i
 function toggleQuote(){ setView(VIEW==="quote"?"orders":"quote"); }
 function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
-let NEED_ORDERS=[];
+let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="all";
+let NE_COLL=new Set(JSON.parse(localStorage.getItem("ne_coll")||'["ordered","deleted"]'));
 async function loadNeedOrder(){
   let d;
   try{ const r=await fetch("/api/needorder"); if(!r.ok) throw new Error("HTTP "+r.status); d=await r.json(); }
   catch(e){ $("needSub").textContent=""; $("needList").innerHTML=`<div class="empty">تعذّر تحميل القائمة · couldn't load — <a style="cursor:pointer;color:var(--accent)" onclick="loadNeedOrder()">إعادة المحاولة · retry</a></div>`; return; }
-  NEED_ORDERS=d.orders||[];
+  NE_DATA=d; NEED_ORDERS=d.orders||[];
+  renderNeedOrder();
+}
+function neSetFilter(f){ NE_FILTER=f; renderNeedOrder(); }
+function neSecToggle(k){ NE_COLL.has(k)?NE_COLL.delete(k):NE_COLL.add(k);
+  localStorage.setItem("ne_coll",JSON.stringify([...NE_COLL])); renderNeedOrder(); }
+function neChip(id,label,n){ const on=NE_FILTER===id;
+  return `<button class="po-btn" style="${on?'background:var(--ink);color:#fff;border-color:var(--ink)':''}" onclick="neSetFilter('${id}')">${label}${n!=null?` · ${n}`:''}</button>`; }
+function neSection(key,title,n,extra,body){
+  const closed=NE_COLL.has(key);
+  return `<div style="margin-bottom:6px">
+    <div onclick="neSecToggle('${key}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 4px;user-select:none">
+      <span class="caret">${closed?'▸':'▾'}</span><b style="font-size:14px">${title}</b>
+      <span class="pill">${n}</span>${extra||''}
+    </div>
+    ${closed?'':`<div>${body||'<div class="empty">لا يوجد · nothing here.</div>'}</div>`}
+  </div>`;
+}
+function neCardHtml(o,placed){
+  const items=(o.items||[]).map((it,ix)=>{
+    const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
+    const url=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+    const name=poEsc(it.title||it.asin||'—');
+    return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
+    ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
+    <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
+      <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
+    ${(!placed&&!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
+    ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون · open on Amazon" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
+  }).join("");
+  const statusPill=placed?`<span class="pill" style="background:#e0e7ff;color:#3730a3">${o.status}</span>`:`<span class="pill">${o.status}</span>`;
+  const buttons=placed
+    ? `<button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>`
+    : `<button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>
+       <button class="po-btn" title="تعديل الطلب · edit order" onclick="openOrderEdit('${poEsc(o.order_id)}')">✏️</button>
+       <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>`;
+  const meta=[poEsc(o.order_id)];
+  if(placed&&o.amazon_order_number) meta.push(`Amazon ${poEsc(o.amazon_order_number)}`);
+  if(o.est_delivery_customer) meta.push(`ETA ${poEsc(o.est_delivery_customer)}`);
+  return `<div class="need-order"${placed?' style="background:#fcfcfa"':''}>
+    <div class="need-head">
+      <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
+        ${statusPill}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · this customer paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID document on file">🪪 هوية</span>`:''}</div>
+      <div style="text-align:right;display:flex;align-items:center;gap:8px">
+        <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
+          <div class="muted2" style="font-size:11px">${meta.join(' · ')}</div>
+          ${o.deposit_usd>0?`<div style="font-size:11px;color:#15803d;font-weight:700">✅ عربون ${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}</div>`:''}</div>
+        ${buttons}
+      </div>
+    </div>
+    <div id="neinfo_${poEsc(o.order_id)}" style="display:none;margin-top:8px;background:#fbfaf6;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.7">
+      <div><b>${poEsc(o.customer||'—')}</b></div>
+      <div class="mono">📱 ${poEsc((o.phones&&o.phones.length?o.phones.join('  ·  '):o.phone)||'—')}</div>
+      ${o.city?`<div>🏙 ${poEsc(o.city)}</div>`:''}
+      ${o.address?`<div>📍 ${poEsc(o.address)}</div>`:''}
+      ${o.notes?`<div class="muted2">📝 ${poEsc(o.notes)}</div>`:''}
+    </div>
+    <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
+}
+function neDeletedCardHtml(x){
+  const items=(x.items||[]).map(it=>poEsc(it.title||'—')+(it.qty>1?` ×${it.qty}`:'')).join(" · ");
+  return `<div class="need-order" style="background:#fafafa;opacity:.8">
+    <div class="need-head">
+      <div><b>${poEsc(x.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(x.phone||'')}</span>
+        <span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span></div>
+      <div style="text-align:right;display:flex;align-items:center;gap:8px">
+        <div><b class="amt" style="color:var(--muted)">${x.amount_to_collect_usd!=null?money(x.amount_to_collect_usd):'—'}</b>
+          <div class="muted2" style="font-size:11px">${poEsc(x.order_id||'')}${x.deleted_at?` · حُذف ${poEsc(x.deleted_at)}`:''}${x.deleted_by?` · ${poEsc(x.deleted_by)}`:''}</div></div>
+        ${CAN_EDIT?`<button class="po-btn" title="استرجاع الطلب · restore this order" onclick="neRestore('${poEsc(x.trash_id)}')">♻️ استرجاع</button>`:''}
+      </div>
+    </div>
+    ${items?`<div class="muted2" style="margin-top:6px;font-size:12px">${items}</div>`:''}</div>`;
+}
+function renderNeedOrder(){
+  const d=NE_DATA; if(!d) return;
+  const pend=d.orders||[], placed=d.ordered||[], del=d.deleted||[];
   $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`
     +((d.deposits_usd||0)>0?` · <b style="color:#15803d">✅ عرابين · deposits ${money(d.deposits_usd)}</b>`:'');
-  if(!d.orders.length){ $("needList").innerHTML=`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`; return; }
-  $("needList").innerHTML=d.orders.map(o=>{
-    const items=o.items.map((it,ix)=>{
-      const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
-      const url=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
-      const name=poEsc(it.title||it.asin||'—');
-      return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
-      ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
-      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
-        <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
-      ${(!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
-      ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون لإضافته للسلة · open the Amazon product page to add to cart" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
-    }).join("");
-    return `<div class="need-order">
-      <div class="need-head">
-        <div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:11px">${poEsc(o.phone||'')}</span>
-          <span class="pill">${o.status}</span>${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · this customer paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID document on file">🪪 هوية</span>`:''}</div>
-        <div style="text-align:right;display:flex;align-items:center;gap:8px">
-          <div><b class="amt" style="color:var(--accent)">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b>
-            <div class="muted2" style="font-size:11px">${poEsc(o.order_id)}${o.est_delivery_customer?` · ETA ${poEsc(o.est_delivery_customer)}`:''}</div>
-            ${o.deposit_usd>0?`<div style="font-size:11px;color:#15803d;font-weight:700">✅ عربون ${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}</div>`:''}</div>
-          <button class="po-btn" title="بيانات العميل · customer info" onclick="neToggleInfo('${poEsc(o.order_id)}')">👁</button>
-          <button class="po-btn" title="تعديل الطلب · edit order" onclick="openOrderEdit('${poEsc(o.order_id)}')">✏️</button>
-          <button class="po-btn danger" title="حذف الطلب · delete order" onclick="neDelete('${poEsc(o.order_id)}','${poEsc((o.customer||'').replace(/'/g,''))}')">🗑</button>
-        </div>
-      </div>
-      <div id="neinfo_${poEsc(o.order_id)}" style="display:none;margin-top:8px;background:#fbfaf6;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.7">
-        <div><b>${poEsc(o.customer||'—')}</b></div>
-        <div class="mono">📱 ${poEsc((o.phones&&o.phones.length?o.phones.join('  ·  '):o.phone)||'—')}</div>
-        ${o.city?`<div>🏙 ${poEsc(o.city)}</div>`:''}
-        ${o.address?`<div>📍 ${poEsc(o.address)}</div>`:''}
-        ${o.notes?`<div class="muted2">📝 ${poEsc(o.notes)}</div>`:''}
-      </div>
-      <div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">${items}</div></div>`;
-  }).join("");
+  const chips=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    ${neChip('all','الكل · All')}${neChip('pending','💡 للطلب · To order',pend.length)}
+    ${neChip('ordered','✅ تم الطلب · Ordered',placed.length)}${neChip('deleted','🗑 محذوف · Deleted',del.length)}</div>`;
+  const S=[];
+  if(NE_FILTER==='all'||NE_FILTER==='pending')
+    S.push(neSection('pending','💡 للطلب · To order',pend.length,
+      `<span class="muted2" style="font-size:12px">${money(d.total_usd||0)}${(d.deposits_usd||0)>0?` · <b style="color:#15803d">عرابين ${money(d.deposits_usd)}</b>`:''}</span>`,
+      pend.length?pend.map(o=>neCardHtml(o,false)).join(""):`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`));
+  if(NE_FILTER==='all'||NE_FILTER==='ordered')
+    S.push(neSection('ordered','✅ تم الطلب · Ordered',placed.length,'',
+      placed.map(o=>neCardHtml(o,true)).join("")));
+  if(NE_FILTER==='all'||NE_FILTER==='deleted')
+    S.push(neSection('deleted','🗑 محذوف · Deleted',del.length,'',
+      del.map(neDeletedCardHtml).join("")));
+  $("needList").innerHTML=chips+S.join("");
+}
+async function neRestore(tid){
+  if(!confirm("استرجاع هذا الطلب؟ · Restore this order back to the queue?")) return;
+  let r; try{ r=await post("/api/trash/restore",{id:tid}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast("تم الاسترجاع ✓ · restored"); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
+  else toast("Restore failed: "+((r&&r.error)||""));
 }
 function neToggleInfo(id){ const el=$("neinfo_"+id); if(el) el.style.display=el.style.display==="none"?"block":"none"; }
 // Open every product's Amazon page (one tab each) so staff add each to the cart
