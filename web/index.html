@@ -1721,7 +1721,7 @@ async function saveSettings(b){
 
 let POS=null, PO_STATUSES=["ORDERED","SHIPPED","ARRIVED","DELIVERED","RETURNED","CANCELLED"];
 let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
-let PO_CUSTNAMES=[]; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
+let PO_CUSTNAMES=[], PO_CUSTORDERS={}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function importClickup(btn){
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Importing…';
@@ -1808,6 +1808,18 @@ async function loadPurchases(){
   const d=await (await fetch("/api/purchases")).json();
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
+  // The demand queue: customer → their pending (To-order) products, so picking a
+  // customer on a purchase row can auto-fill the product image/link/ASIN/qty.
+  try{ const n=await (await fetch("/api/needorder")).json();
+    PO_CUSTORDERS={};
+    (n.orders||[]).forEach(o=>{ const k=(o.customer||"").trim().toLowerCase(); if(!k) return;
+      const e=PO_CUSTORDERS[k]||(PO_CUSTORDERS[k]={ids:[],items:[]});
+      e.ids.push(o.order_id);
+      (o.items||[]).forEach(it=>e.items.push({title:it.title||"",asin:(it.asin||"").toUpperCase(),
+        link:it.link||"",image:it.image||null,qty:it.qty||1}));
+      if(o.customer && !PO_CUSTNAMES.includes(o.customer)) PO_CUSTNAMES.push(o.customer);
+    });
+  }catch(e){ PO_CUSTORDERS={}; }
   renderPurchases();
 }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
@@ -1850,7 +1862,23 @@ function poMergeDupTracking(p,changedIdx){
   toast(`Merged ${idxs.length} packages → Package ${target.package_no} (${target.items.length} products)`);
   return true;
 }
-function poItemSet(id,pi,ii,f,v){ const p=poFind(id); if(!p)return; const it=p.packages[pi].items[ii]; it[f]=v; if(f==='customer_name'){it.matched=!!v;} poSave(p); }
+function poItemSet(id,pi,ii,f,v){ const p=poFind(id); if(!p)return; const it=p.packages[pi].items[ii]; it[f]=v;
+  if(f==='customer_name'){ it.matched=!!v; poAutofillFromOrder(p,pi,ii,v); } poSave(p); }
+// Picking a customer on a BLANK row pulls their pending To-order products in —
+// image, link, ASIN, qty — one row per product (never overwrites typed data).
+function poAutofillFromOrder(p,pi,ii,name){
+  const e=PO_CUSTORDERS[(name||"").trim().toLowerCase()];
+  if(!e||!e.items.length) return;
+  const it=p.packages[pi].items[ii];
+  if((it.title||"").trim()||(it.asin||"").trim()||(it.clean_url||"").trim()) return;  // row already has data
+  const [first,...rest]=e.items;
+  Object.assign(it,{title:first.title,asin:first.asin,clean_url:first.link,
+                    image:first.image||it.image||null,qty:first.qty||1});
+  rest.forEach(x=>p.packages[pi].items.push({title:x.title,asin:x.asin,clean_url:x.link,
+    image:x.image||null,qty:x.qty||1,status:"ORDERED",customer_name:name,matched:true}));
+  renderPurchases();
+  toast(`تم جلب ${e.items.length} منتج من ${e.ids.join(" · ")} · pulled ${e.items.length} product(s) from the To-order page`);
+}
 function extractAsinClient(url){   // /dp/, /gp/product/, /product/ … → 10-char ASIN (no network)
   const m=/\/(?:dp|gp\/product|gp\/aw\/d|gp\/offer-listing|product)\/([A-Z0-9]{10})/i.exec(url||'');
   return m?m[1].toUpperCase():(/^[A-Z0-9]{10}$/i.test((url||'').trim())?url.trim().toUpperCase():null);
