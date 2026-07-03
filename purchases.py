@@ -314,6 +314,9 @@ def save_full(db, po_dict, orders):
         "packages": _norm_packages(po_dict.get("packages")),
         "clickup_task_id": (existing or {}).get("clickup_task_id"),
         "screenshot": (existing or {}).get("screenshot"),
+        "attachments": ((existing or {}).get("attachments")
+                        or ([existing["screenshot"]]      # legacy: seed from the single screenshot
+                            if (existing or {}).get("screenshot") else [])),
         "created_at": (existing or {}).get("created_at") or now_iso(),
         "updated_at": now_iso(),
     }
@@ -335,9 +338,24 @@ def delete(db, po_id):
 
 
 def set_screenshot(db, po_id, filename):
+    """Attach an image: keeps the legacy single `screenshot` pointer AND appends
+    to the `attachments` gallery (the order-detail modal shows all of them)."""
     po = find(db, po_id)
     if po:
         po["screenshot"] = filename
+        atts = po.setdefault("attachments", [])
+        if filename and filename not in atts:
+            atts.append(filename)
+        po["updated_at"] = now_iso()
+    return po
+
+
+def remove_attachment(db, po_id, filename):
+    po = find(db, po_id)
+    if po:
+        po["attachments"] = [f for f in (po.get("attachments") or []) if f != filename]
+        if po.get("screenshot") == filename:
+            po["screenshot"] = po["attachments"][-1] if po["attachments"] else None
         po["updated_at"] = now_iso()
     return po
 

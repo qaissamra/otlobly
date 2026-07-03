@@ -435,6 +435,7 @@
       <button onclick="poCollapseAll(false)" class="minibtn">⊞ Expand all</button>
       <button onclick="addPO()" class="accent">+ New order</button>
       <input type="file" id="poImgInput" accept="image/*" style="display:none">
+      <input type="file" id="podImgInput" accept="image/*" multiple style="display:none">
     </div>
     <div class="po-help" id="poHelp">
       <b>How this works:</b> each box below is one Amazon order. Inside it are <b>packages</b>
@@ -636,6 +637,14 @@
         <tbody id="depRows"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<!-- ClickUp-style order detail: attachments gallery (paste Cmd+V) + products + fields -->
+<div id="poDetailModal" class="az-modal hidden" onclick="if(event.target===this)closePoDetail()">
+  <div class="az-box" style="width:980px;max-width:97vw;max-height:92vh;overflow:auto">
+    <div class="az-head"><b id="podTitle">📦 Order</b><span class="az-x" onclick="closePoDetail()">✕</span></div>
+    <div id="podBody" style="padding:14px 16px"></div>
   </div>
 </div>
 
@@ -2108,7 +2117,8 @@ function poCardHtml(p){
     ${trkPill}
     <span class="spacer"></span>
     <span class="po-actions">
-    ${p.screenshot?`<img class="thumb" src="/api/po_image?file=${p.screenshot}" style="width:26px;height:26px" title="attached screenshot">`:''}
+    ${p.screenshot?`<img class="thumb" src="/api/po_image?file=${p.screenshot}" style="width:26px;height:26px;cursor:pointer" title="فتح الطلب · open the order" onclick="poOpenDetail('${p.po_id}')">`:''}
+    <button class="po-btn" style="font-weight:700" title="افتح الطلب كاملًا — الصور والمنتجات وكل المعلومات (الصق الصور بـ Cmd+V) · open the full order — images, products, all info (paste images with Cmd+V)" onclick="poOpenDetail('${p.po_id}')">⤢ فتح · Open</button>
     <button class="po-btn" title="attach the Amazon order screenshot" onclick="poUpload(this,'${p.po_id}')">📷 Screenshot</button>
     <button class="po-btn" title="see what will be created in ClickUp" onclick="clickupPO(this,'${p.po_id}',true)">👁 Preview</button>
     <button class="po-btn accent" title="create this order in ClickUp" onclick="clickupPO(this,'${p.po_id}',false)">↗ Send to ClickUp</button>
@@ -2190,6 +2200,94 @@ function poUpload(btn,id){ const inp=$("poImgInput"); inp.value=""; inp.onchange
   const rd=new FileReader(); rd.onload=async()=>{ const r=await post("/api/po_image",{po_id:id,filename:f.name,data_base64:rd.result});
     if(r.ok){ const p=poFind(id); if(p)p.screenshot=r.file; renderPurchases(); toast("Screenshot attached ✓"); }
     else { toast("Upload failed"); btn.disabled=false; btn.innerHTML=old; } }; rd.readAsDataURL(f); }; inp.click(); }
+// ---- ClickUp-style order detail modal (attachments + products + fields) ---- //
+let PODETAIL=null;
+function poOpenDetail(id){ PODETAIL=id; podRender(); $("poDetailModal").classList.remove("hidden"); }
+function closePoDetail(){ PODETAIL=null; $("poDetailModal").classList.add("hidden"); }
+function podAtts(p){ return (p.attachments&&p.attachments.length)?p.attachments:(p.screenshot?[p.screenshot]:[]); }
+function podRender(){
+  const p=poFind(PODETAIL); if(!p){ closePoDetail(); return; }
+  $("podTitle").textContent=`📦 ${p.amazon_order_number||p.po_id}`;
+  const atts=podAtts(p);
+  const gallery=atts.map(fn=>`<div style="position:relative">
+      <img src="/api/po_image?file=${encodeURIComponent(fn)}" onclick="window.open('/api/po_image?file=${encodeURIComponent(fn)}','_blank')"
+           style="width:118px;height:118px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:zoom-in">
+      ${CAN_EDIT?`<span onclick="podDelImg('${poEsc(fn)}')" title="حذف الصورة · remove image" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--line);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer">✕</span>`:''}
+    </div>`).join("");
+  const items=(p.packages||[]).map((pk,pi)=>{
+    const rows=(pk.items||[]).map(it=>`<div class="qcard" style="padding:6px 9px">
+      ${it.image?`<img src="${poEsc(it.image)}" style="width:38px;height:38px">`:'<div class="noimg" style="width:38px;height:38px"></div>'}
+      <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||it.asin||'—')}</div>
+        <div class="muted2" style="font-size:11px">${poEsc(it.customer_name||'⚠ غير معيّن')}${it.qty>1?` · ×${it.qty}`:''}${it.tracking_number?` · <span class="mono">${poEsc(it.tracking_number)}</span>`:''}</div></div>
+      <span class="pill">${poEsc(it.status||'ORDERED')}</span></div>`).join("");
+    return `<div style="margin-bottom:10px">
+      <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦 Package ${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
+      <div style="display:flex;flex-direction:column;gap:5px">${rows||'<div class="muted2" style="font-size:12px">لا منتجات · no products</div>'}</div></div>`;
+  }).join("");
+  const nItems=(p.packages||[]).reduce((s,pk)=>s+(pk.items||[]).length,0);
+  const field=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span class="muted2">${l}</span><b dir="auto" style="text-align:left">${v||'—'}</b></div>`;
+  $("podBody").innerHTML=`<div style="display:flex;gap:18px;flex-wrap:wrap">
+    <div style="flex:2;min-width:380px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:7px">🖼 المرفقات · Attachments <span class="pill">${atts.length}</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${gallery}</div>
+      ${CAN_EDIT?`<div onclick="podUpload()" style="border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;cursor:pointer;color:var(--muted);font-size:12.5px;background:#fcfcfa" title="paste or upload">
+        📋 <b>Cmd/Ctrl + V</b> الصق لقطة الشاشة هنا مباشرة — أو انقر للرفع<br>paste a screenshot anywhere in this window, or click to upload</div>`:''}
+      <div style="font-weight:800;font-size:13px;margin:14px 0 7px">🛒 المنتجات · Products <span class="pill">${nItems}</span></div>
+      ${items||'<div class="muted2">لا طرود بعد · no packages yet</div>'}
+    </div>
+    <div style="flex:1;min-width:230px;background:#fbfaf6;border:1px solid var(--line);border-radius:12px;padding:6px 13px;align-self:flex-start">
+      ${field('Amazon #', p.amazon_order_number?`<span class="mono">${poEsc(p.amazon_order_number)}</span>`:'')}
+      ${field('Ship to', poEsc(p.ship_to||''))}
+      ${field('Profile / box', p.profile_box?`<span class="mono">${poEsc(p.profile_box)}</span>`:'')}
+      ${field('Total $', p.total_usd!=null&&p.total_usd!==''?money(p.total_usd):'')}
+      ${field('Total AED', p.total_aed||'')}
+      ${field('Placed', poEsc(p.order_placed||''))}
+      ${field('Packages', (p.packages||[]).length)}
+      ${field('Products', nItems)}
+      ${field('Matched', `${p.n_matched!=null?p.n_matched:'—'}/${nItems}`)}
+      <div style="padding:10px 0 6px;display:flex;flex-direction:column;gap:7px">
+        ${CAN_EDIT?`<button class="po-btn" style="width:100%" onclick="podUpload()">📷 رفع صور · upload images</button>`:''}
+        <button class="po-btn accent" style="width:100%" onclick="clickupPO(this,'${poEsc(p.po_id)}',false)">↗ Send to ClickUp</button>
+      </div>
+    </div></div>`;
+}
+function podUpload(){
+  const inp=$("podImgInput"); inp.value="";
+  inp.onchange=async()=>{
+    const files=[...inp.files]; if(!files.length) return;
+    toast(`⬆ رفع ${files.length} صورة… uploading…`);
+    for(const f of files){ await new Promise(res=>{ const rd=new FileReader();
+      rd.onload=async()=>{ const r=await post("/api/po_image",{po_id:PODETAIL,filename:f.name,data_base64:rd.result});
+        if(r&&r.ok){ const p=poFind(PODETAIL); if(p){ p.attachments=r.attachments; p.screenshot=r.file; } }
+        res(); }; rd.readAsDataURL(f); }); }
+    podRender(); renderPurchases(); toast("تم الإرفاق ✓ · attached");
+  };
+  inp.click();
+}
+async function podDelImg(fn){
+  if(!confirm("حذف هذه الصورة؟ · Remove this image?")) return;
+  let r; try{ r=await post("/api/po_image/delete",{po_id:PODETAIL,file:fn}); }catch(e){ r={}; }
+  if(r&&r.ok){ const p=poFind(PODETAIL); if(p){ p.attachments=r.attachments; if(!r.attachments.includes(p.screenshot)) p.screenshot=r.attachments[r.attachments.length-1]||null; }
+    podRender(); renderPurchases(); toast("حُذفت · removed"); }
+  else toast("Remove failed"+((r&&r.error)?": "+r.error:""));
+}
+document.addEventListener("paste",e=>{           // Cmd/Ctrl+V while the order detail is open
+  if(!PODETAIL||$("poDetailModal").classList.contains("hidden")) return;
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(const it of items){
+    if(it.type&&it.type.startsWith("image/")){
+      e.preventDefault();
+      const f=it.getAsFile(); const rd=new FileReader();
+      rd.onload=async()=>{ toast("⬆ رفع الصورة… uploading…");
+        let r; try{ r=await post("/api/po_image",{po_id:PODETAIL,filename:"pasted.png",data_base64:rd.result}); }catch(err){ r={}; }
+        if(r&&r.ok){ const p=poFind(PODETAIL); if(p){ p.attachments=r.attachments; p.screenshot=r.file; }
+          podRender(); renderPurchases(); toast("📋 تم لصق الصورة ✓ · image pasted"); }
+        else toast("Paste upload failed"); };
+      rd.readAsDataURL(f);
+      break;
+    }
+  }
+});
 async function clickupPO(btn,id,dry){ btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> '+(dry?'Preparing…':'Sending…');
   const r=await post("/api/purchase/clickup",{id,dry_run:dry}); const out=$("cu_"+id);
   if(r.plan){ if(out) out.textContent="Preview — this is what will be created in ClickUp:\n"+r.plan.join("\n"); btn.disabled=false; btn.innerHTML=old; }

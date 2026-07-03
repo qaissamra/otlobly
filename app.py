@@ -1206,7 +1206,30 @@ def api_po_image():
     activity.log("uploaded", "purchase", b.get("po_id", ""),
                  _polabel(po) if po else b.get("po_id", ""), detail="uploaded a file",
                  user=_user())
-    return jsonify({"ok": True, "file": fn})
+    return jsonify({"ok": True, "file": fn,
+                    "attachments": (po or {}).get("attachments") or []})
+
+
+@app.route("/api/po_image/delete", methods=["POST"])
+@auth.require("edit_order")
+def api_po_image_delete():
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    fn = (b.get("file") or "").strip()
+    if not fn or "/" in fn:
+        return jsonify({"ok": False, "error": "bad file"}), 400
+    pdb = purchases.load()
+    po = purchases.remove_attachment(pdb, b.get("po_id"), fn)
+    if not po:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    purchases.save(pdb)
+    try:
+        (purchases.IMAGE_DIR / fn).unlink(missing_ok=True)
+    except Exception:                          # noqa: BLE001 — DB already consistent
+        pass
+    activity.log("deleted", "purchase", po["po_id"], _polabel(po),
+                 detail="removed an attachment", user=_user())
+    return jsonify({"ok": True, "attachments": po.get("attachments") or []})
 
 
 @app.route("/api/customer_image", methods=["GET", "POST"])
