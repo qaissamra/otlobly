@@ -24,6 +24,14 @@ from paths import data_path
 DB_FILE = Path(os.environ.get("OTLOBLY_DB") or data_path("otlobly.db"))
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS businesses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,                  -- the broker's business name (shown in their UI/portal)
+  slug TEXT UNIQUE,                    -- url-safe handle
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT,
+  data_json TEXT NOT NULL DEFAULT '{}' -- per-business config: markup, ils_rate, whatsapp, logo…
+);
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
@@ -115,6 +123,88 @@ def connect():
 def init_db():
     with connect() as c:
         c.executescript(SCHEMA)
+    migrate()
+
+
+# --------------------------------------------------------------------------- #
+# Multi-tenant migration — every business-owned row carries a business_id.
+# --------------------------------------------------------------------------- #
+# Tables whose rows belong to exactly one business. settings is handled by
+# key-prefixing (b<id>:key), so it's not ALTER-ed here.
+TENANT_TABLES = ("users", "customers", "orders", "order_items",
+                 "audit_log", "meta_leads", "payments")
+
+
+def _columns(c, table):
+    return {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+
+
+def migrate():
+    """Idempotent schema upgrades that CREATE-IF-NOT-EXISTS can't express (adding
+    columns to existing tables). Runs on every boot, right after the base schema.
+
+    Adds business_id to every tenant table and backfills pre-tenancy rows to
+    business #1 (this deployment's own business). While a single business exists,
+    unscoped reads and business=1 reads return the same rows — so this is
+    non-breaking. The backfill only runs while sole-tenant; once a 2nd business is
+    added, every insert sets business_id explicitly and there are no NULLs left."""
+    with connect() as c:
+        for table in TENANT_TABLES:
+            if "business_id" not in _columns(c, table):
+                c.execute(f"ALTER TABLE {table} ADD COLUMN business_id INTEGER")
+            c.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_biz ON {table}(business_id)")
+        # Seed business #1 (owner of all pre-tenancy data) exactly once.
+        if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
+            c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "
+                      "VALUES (1, ?, ?, 1, ?)", ("Otlobly", "otlobly", now_iso()))
+        # Backfill untagged rows — ONLY while sole-tenant (guards against silently
+        # mis-assigning a stray row to business 1 after real tenants exist).
+        if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 1:
+            for table in TENANT_TABLES:
+                c.execute(f"UPDATE {table} SET business_id=1 WHERE business_id IS NULL")
+
+
+# --------------------------------------------------------------------------- #
+# Businesses (tenants)
+# --------------------------------------------------------------------------- #
+def list_businesses():
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, name, slug, active, created_at FROM businesses ORDER BY id")]
+
+
+def get_business(business_id):
+    with connect() as c:
+        r = c.execute("SELECT * FROM businesses WHERE id=?", (business_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def create_business(name, slug=None):
+    with connect() as c:
+        cur = c.execute("INSERT INTO businesses (name, slug, active, created_at, data_json) "
+                        "VALUES (?,?,1,?,'{}')", (name, slug, now_iso()))
+        return cur.lastrowid
+
+
+def get_business_config(business_id, key=None, default=None):
+    """Per-business config (markup, ils_rate, whatsapp, name, logo…) from data_json.
+    key=None returns the whole dict. Powers roadmap #2 (white-label)."""
+    b = get_business(business_id)
+    conf = {}
+    if b and b.get("data_json"):
+        try:
+            conf = json.loads(b["data_json"])
+        except (ValueError, TypeError):
+            conf = {}
+    return conf if key is None else conf.get(key, default)
+
+
+def set_business_config(business_id, key, value):
+    conf = get_business_config(business_id)
+    conf[key] = value
+    with connect() as c:
+        c.execute("UPDATE businesses SET data_json=? WHERE id=?",
+                  (json.dumps(conf, ensure_ascii=False), business_id))
 
 
 # --------------------------------------------------------------------------- #
@@ -466,8 +556,8 @@ if __name__ == "__main__":
         print(f"Initialized {DB_FILE.name}")
     elif "--stats" in sys.argv:
         with connect() as c:
-            for t in ("users", "customers", "orders", "order_items", "audit_log",
-                      "meta_leads", "payments"):
+            for t in ("businesses", "users", "customers", "orders", "order_items",
+                      "audit_log", "meta_leads", "payments"):
                 n = c.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
                 print(f"  {t:12} {n}")
     else:
