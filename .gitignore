@@ -21,6 +21,7 @@ drafts.json
 *.csv
 *.db-journal
 .DS_Store
+.claude/settings.local.json
 # committed seeds (force-keep, in case a broad rule above ever matches):
 !config.example.json
 !config.default.json
