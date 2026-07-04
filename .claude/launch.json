@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "otlobly-app",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders' && exec ./.venv/bin/python app.py"],
+      "port": 8789
+    }
+  ]
+}

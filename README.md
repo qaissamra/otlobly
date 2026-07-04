@@ -203,3 +203,11 @@ folder to use the real logo — the dashboard serves it automatically.
 - `orders.json`, `config.json`, `.env` are git-ignored (customer data + secrets).
 - No email, anywhere — customer contact is WhatsApp only.
 - Re-running `ingest.py` updates matching orders instead of duplicating them.
+
+
+## Virtual environment (recreate after the 2026-07 move to ~/projects)
+The old .venv was deleted when this project moved (venvs break on move). Recreate it:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
