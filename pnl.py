@@ -4,10 +4,10 @@ Profit / P&L — combine the three money flows into one USD picture:
 
     Revenue (from customers)  −  Amazon cost (COGS)  −  Meta ad spend  =  Net profit
 
-Free/local sources (orders.json revenue, manual Meta) are computed live every
-call. Sources that need network/credentials (ClickUp Amazon cost, live Sheet,
-Meta API) are read from their reports/*_cache.json, refreshed by running
-clickup_cost.py / revenue.py / meta.py (or the dashboard's Refresh button).
+Revenue and customer counts come straight from the app DB (db.py) every call.
+Sources that need network/credentials (ClickUp Amazon cost, Meta API) are read
+from their reports/*_cache.json, refreshed by running clickup_cost.py / meta.py
+(or the dashboard's Refresh button).
 
   python3 pnl.py            # print the P&L statement + by-month table
 """
@@ -17,6 +17,7 @@ from pathlib import Path
 
 import cfg
 import clickup_cost
+import db
 import meta
 import revenue
 import store
@@ -35,14 +36,8 @@ def _load_cache(name):
 
 
 def _source_revenue(config):
-    mode = cfg.get(config, "pnl.revenue.mode", "orders")
-    if mode == "orders":
-        return revenue.from_orders(), True            # local, always live
-    if mode == "gsheet":                              # public sheet, no token → live
-        res = revenue.from_gsheet(config)
-        return res, not res.get("error")
-    cached = _load_cache("revenue_cache.json")        # service-account 'sheet' mode
-    return (cached or {"total_usd": 0, "by_month": {}}), cached is not None
+    # Always the app's own orders (SQLite) — the Google-Sheet modes are retired.
+    return revenue.from_orders(), True
 
 
 def _source_meta(config):
@@ -58,10 +53,9 @@ def _source_cogs():
 
 
 def _customers():
-    """Distinct paying customers in the local store (for cost-per-customer)."""
-    db = store.load()
+    """Distinct paying customers in the app DB (for cost-per-customer)."""
     keys = {(store.primary_phone(o) or {}).get("e164") or o["customer"]["name"]
-            for o in db["orders"] if o["status"] != "CANCELLED"}
+            for o in db.list_orders() if o["status"] != "CANCELLED"}
     return len([k for k in keys if k])
 
 
@@ -102,7 +96,7 @@ def build(config=None):
             "cost_per_customer_usd": round(meta_usd / customers, 2) if customers else None,
         },
         "sources": {
-            "revenue": {"connected": rev_ok, "detail": rev.get("source", "orders.json")},
+            "revenue": {"connected": rev_ok, "detail": rev.get("source", "orders (app db)")},
             "cogs": {"connected": cogs_ok,
                      "detail": "ClickUp Otloble AMAZON" if cogs_ok else "not pulled yet"},
             "meta": {"connected": meta_ok, "detail": mta.get("source", "manual")},

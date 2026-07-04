@@ -29,12 +29,6 @@
       "CANCELLED": "PASTE_OPTION_ID"
     }
   },
-  "sheets": {
-    "mode": "csv",
-    "_mode_note": "'csv' = write a clean orders_export.csv (zero-dependency). 'api' = write straight to a Google Sheet via a service account (needs GOOGLE_APPLICATION_CREDENTIALS + google-api-python-client).",
-    "spreadsheet_id": "",
-    "worksheet": "Orders"
-  },
   "profiles": {
     "_note": "Multilogin profile/box -> daily order-capacity cap (anti-detection). order_placer assigns the box with remaining capacity.",
     "B19": {
@@ -83,18 +77,7 @@
       "value_is_usd": true
     },
     "revenue": {
-      "_note": "Customer revenue. mode 'gsheet' reads a link-readable Google Sheet live (no credentials); 'sheet' uses a service account; 'orders' uses local orders.json.",
-      "mode": "gsheet",
-      "spreadsheet_id": "14Gtzm8KVfgbSosR3SmVKRsjPGbgZeexLkZE7i8Mm_Xs",
-      "worksheet": "Orders",
-      "amount_column": "amount to be collected IN $ USD",
-      "status_column": "Status",
-      "exclude_statuses": [
-        "Cancelled",
-        "still need to order"
-      ],
-      "batch_column": "Order N",
-      "currency_is_usd": true
+      "_note": "Customer revenue is always computed from the app's own orders (SQLite) — no external source to configure."
     },
     "meta": {
       "_note": "Meta ad spend. mode 'api' pulls via the Marketing API (META_* in .env). campaign_filter (substring of campaign name) counts ONLY that campaign — these customers came from one campaign.",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Local order store — orders.json is the source of truth the dashboard, ClickUp
-sync, Sheet mirror and order-placer all read/write. Plain JSON, stdlib only.
+Order shapes + queue logic. The hosted app persists orders through db.py
+(SQLite); orders.json remains only for the local ClickUp sync / order-placer.
 
 Money is in USD throughout. One order = one customer + 1..N Amazon items.
 """
@@ -18,22 +18,6 @@ STORE_FILE = data_path("orders.json")
 # Order lifecycle: request → quote → pay → order → ship → arrive → deliver.
 STATUSES = ["REQUESTED", "QUOTED", "PAID", "ORDERED", "SHIPPED",
             "ARRIVED", "DELIVERED", "COLLECTED", "CANCELLED"]
-
-# Free-text statuses from the legacy sheet -> our logical status.
-SHEET_STATUS_MAP = {
-    "ordered": "ORDERED",
-    "cancelled": "CANCELLED",
-    "canceled": "CANCELLED",
-    "still need to order": "REQUESTED",
-    "need to order": "REQUESTED",
-    "quoted": "QUOTED",
-    "paid": "PAID",
-    "shipped": "SHIPPED",
-    "arrived": "ARRIVED",
-    "delivered": "DELIVERED",
-    "collected": "COLLECTED",
-}
-
 
 def now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -54,10 +38,6 @@ def signature(customer_key, items):
     keys = sorted((it.get("asin") or it.get("clean_url") or it.get("raw_url"))
                   for it in items)
     return customer_key + "|" + "|".join(k for k in keys if k)
-
-
-def map_sheet_status(raw):
-    return SHEET_STATUS_MAP.get((raw or "").strip().lower(), "REQUESTED")
 
 
 def new_order(db, *, name, phones, address, items, batch=None, deposit_usd=0.0,
@@ -91,7 +71,6 @@ def new_order(db, *, name, phones, address, items, batch=None, deposit_usd=0.0,
         "paid_at": None,                            # when payment was confirmed
         "delivered_at": None,                       # realized-profit timestamp
         "clickup_task_id": None,
-        "sheet_row": None,
         "tracking_number": tracking_number,
         "signature": signature(normalize.customer_key(phones, name), items),
     }
@@ -150,7 +129,7 @@ def upsert(db, order):
             order["order_id"] = ex["order_id"]
             order["created_at"] = ex.get("created_at", order["created_at"])
             # Preserve fields set later in the pipeline.
-            for keep in ("clickup_task_id", "sheet_row", "checkout",
+            for keep in ("clickup_task_id", "checkout",
                          "placed_at", "tracking_number", "amazon_order_number",
                          "amazon_arrival", "est_delivery_customer"):
                 if ex.get(keep) and not order.get(keep):

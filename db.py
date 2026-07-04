@@ -194,8 +194,8 @@ def update_order(order_code, changes, actor=None):
 
 
 def delete_order(order_code):
-    """Hard-delete an order row (+ its item rows). Used after the sheet-sync prune
-    has already copied the order into Trash, so it stays recoverable there."""
+    """Hard-delete an order row (+ its item rows). Callers copy the order into
+    Trash first, so it stays recoverable there."""
     with connect() as c:
         c.execute("DELETE FROM order_items WHERE order_code=?", (order_code,))
         c.execute("DELETE FROM orders WHERE order_code=?", (order_code,))

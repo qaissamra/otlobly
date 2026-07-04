@@ -269,8 +269,6 @@
     <button onclick="togglePicking()" id="pickBtn">🧾 Picking list</button>
     <button onclick="toggleActivity()" id="activityBtn" title="see who changed what, and when">🕑 Activity</button>
     <button onclick="toggleTrash()" id="trashBtn" title="deleted items — restore anything here">🗑 Trash</button>
-    <button onclick="syncSheet(this)" id="sheetBtn">⤓ Sync Sheet</button>
-    <button onclick="exportCsv(this)" id="exportBtn">⬇ Export CSV</button>
     <button onclick="syncClickup(this)" id="clickupBtn">↗ Sync ClickUp</button>
     <button onclick="toggleSettings()" id="settingsBtn" title="markup, shipping/import rules, WhatsApp number">⚙ Settings</button>
     <button onclick="toggleTeam()" id="teamBtn" style="display:none" title="manage staff accounts &amp; roles">👥 Team</button>
@@ -764,7 +762,6 @@ async function applyRole(){
   CAN_ADMIN = p.includes("admin_actions");
   const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
   hide("pnlBtn", p.includes("view_pnl"));
-  hide("exportBtn", p.includes("admin_actions"));
   hide("clickupBtn", p.includes("admin_actions"));
   hide("teamBtn", p.includes("manage_users"));
   hide("metaLeadsBtn", p.includes("view_meta_leads"));
@@ -986,9 +983,7 @@ async function addOrder(btn){
   else toast("Could not save order");
 }
 
-async function exportCsv(b){b.disabled=true;const r=await post("/api/export",{});b.disabled=false;toast(r.output||"exported");}
 async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const r=await post("/api/clickup",{});b.disabled=false;toast(r.output||"done");load();}
-async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…");const r=await post("/api/sync_sheet",{});b.disabled=false;if(r.ok)toast(`Sheet synced · ${r.updated} updated · ${r.created} new`+(r.removed?` · ${r.removed} removed → Trash`:""));else toast("Sync failed: "+(r.error||""));load();}
 
 function toggleForm(){$("formPanel").classList.toggle("hidden");}
 let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true;

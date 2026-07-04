@@ -32,13 +32,6 @@
     }
   },
 
-  "sheets": {
-    "mode": "csv",
-    "_mode_note": "'csv' = write a clean orders_export.csv (zero-dependency). 'api' = write straight to a Google Sheet via a service account (needs GOOGLE_APPLICATION_CREDENTIALS + google-api-python-client).",
-    "spreadsheet_id": "",
-    "worksheet": "Orders"
-  },
-
   "profiles": {
     "_note": "Multilogin profile/box -> daily order-capacity cap (anti-detection). order_placer assigns the box with remaining capacity.",
     "B19": { "folder_id": "", "profile_id": "", "daily_cap": 3 },
@@ -70,13 +63,7 @@
       "value_is_usd": true
     },
     "revenue": {
-      "_note": "Master customer-orders Google Sheet. mode 'sheet' reads it live (needs GOOGLE_APPLICATION_CREDENTIALS); 'orders' uses the local orders.json instead.",
-      "mode": "orders",
-      "spreadsheet_id": "",
-      "worksheet": "Orders",
-      "amount_column": "amount to be collected IN $ USD",
-      "date_column": "",
-      "currency_is_usd": true
+      "_note": "Customer revenue is always computed from the app's own orders (SQLite) — no external source to configure."
     },
     "meta": {
       "_note": "Meta ad spend. mode 'api' pulls via the Marketing API (META_* in .env); 'manual' reads meta_spend.json { 'YYYY-MM': amount_usd }.",

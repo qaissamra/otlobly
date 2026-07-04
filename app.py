@@ -297,7 +297,7 @@ def api_pnl():
 @auth.require("admin_actions")
 def api_pnl_refresh():
     return jsonify({"ok": True, "ran": {n: run_script(n + ".py")
-                    for n in ("clickup_cost", "revenue", "meta")}})
+                    for n in ("clickup_cost", "meta")}})
 
 
 @app.route("/api/order", methods=["POST"])
@@ -648,29 +648,6 @@ def api_customers_sync():
             existing.add(c["match_key"])
             n += 1
     return jsonify({"ok": True, "created": n, "total": len(db.list_customers())})
-
-
-@app.route("/api/sync_sheet", methods=["POST"])
-@auth.require("edit_order")
-def api_sync_sheet():
-    import sheet_sync
-    orders = db.list_orders()
-    seq = max([int(o["order_id"].split("-")[1]) for o in orders] or [0])
-    sdb = {"orders": orders, "seq": seq}
-    try:
-        res = sheet_sync.sync(sdb, save=False)
-    except Exception as e:  # noqa
-        return jsonify({"ok": False, "error": str(e)})
-    for o in sdb["orders"]:
-        db.upsert_order(o)
-    # sheet_sync already copied pruned orders into Trash + dropped them from sdb;
-    # remove them from SQLite too so they don't linger in both places.
-    for oid, _name in res.get("removed", []):
-        db.delete_order(oid)
-    db.audit(auth.actor(), "sync_sheet", "orders", "*",
-             f"{res['updated']} updated / {res['created']} created / {len(res.get('removed', []))} removed")
-    return jsonify({"ok": True, "updated": res["updated"], "created": res["created"],
-                    "removed": len(res.get("removed", []))})
 
 
 @app.route("/api/orders/delete", methods=["POST"])
@@ -1355,12 +1332,6 @@ def api_purchase_clickup():
     if res.get("ok") and not res.get("dry_run"):
         purchases.save(pdb)
     return jsonify(res)
-
-
-@app.route("/api/export", methods=["POST"])
-@auth.require("admin_actions")
-def api_export():
-    return jsonify(run_script("sheets.py"))
 
 
 @app.route("/api/clickup", methods=["POST"])
