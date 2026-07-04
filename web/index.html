@@ -471,33 +471,35 @@
   </div>
 
   <!-- Quick Quote estimator (bilingual) -->
-  <div id="quoteView" class="hidden">
-    <div class="toolbar">
-      <h2 id="q_h" style="margin:0;font-size:17px;font-weight:800">💰 Quick quote</h2>
-      <span class="spacer"></span>
-      <span class="chips" style="margin:0">
-        <span class="chip" id="qlang_ar" onclick="setQLang('ar')">عربي</span>
-        <span class="chip" id="qlang_en" onclick="setQLang('en')">EN</span></span>
-    </div>
-    <div class="panel" id="quotePanel">
-      <div id="q_intro" class="muted2"></div>
-      <div id="quoteRows" style="margin-top:10px"></div>
-      <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
-      <div style="margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:12.5px;color:var(--muted)" id="q_total_lbl">Total price $</span>
-        <input id="q_total" type="number" min="0" step="0.01" style="width:110px;font-weight:700" placeholder="0.00" oninput="qLiveTotal()">
-        <button class="accent" id="q_btn" onclick="qBuildQuote()">Build quote</button>
-        <span style="font-size:12.5px;color:var(--muted)" id="q_markup_lbl">markup</span>
-        <input id="q_markup" type="number" min="0" step="1" style="width:62px" title="0 = no extra charge" oninput="qLiveTotal()"><span style="color:var(--muted)">%</span>
-        <span id="q_note" class="muted2" style="font-size:11.5px"></span>
-      </div>
-      <div id="quoteResult" style="margin-top:14px"></div>
-      <div id="qIntakeLink" style="margin-top:10px"></div>
-    </div>
-  </div>
-
-  <!-- Need to order (demand queue) -->
+  <!-- Need to order (demand queue) — the Quick Quote tool sits at the top -->
   <div id="needorderView" class="hidden">
+    <!-- ── Quick quote, embedded at the top of the To-order page (collapsible) ── -->
+    <div id="quoteView" style="margin-bottom:16px">
+      <div class="toolbar" style="cursor:pointer;user-select:none" onclick="neQuoteToggle(event)" title="عرض/إخفاء أداة عرض السعر · show/hide the quote tool">
+        <span class="caret" id="q_caret">▾</span>
+        <h2 id="q_h" style="margin:0;font-size:17px;font-weight:800">💰 Quick quote</h2>
+        <span class="spacer"></span>
+        <span class="chips" style="margin:0" onclick="event.stopPropagation()">
+          <span class="chip" id="qlang_ar" onclick="setQLang('ar')">عربي</span>
+          <span class="chip" id="qlang_en" onclick="setQLang('en')">EN</span></span>
+      </div>
+      <div class="panel" id="quotePanel">
+        <div id="q_intro" class="muted2"></div>
+        <div id="quoteRows" style="margin-top:10px"></div>
+        <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
+        <div style="margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12.5px;color:var(--muted)" id="q_total_lbl">Total price $</span>
+          <input id="q_total" type="number" min="0" step="0.01" style="width:110px;font-weight:700" placeholder="0.00" oninput="qLiveTotal()">
+          <button class="accent" id="q_btn" onclick="qBuildQuote()">Build quote</button>
+          <span style="font-size:12.5px;color:var(--muted)" id="q_markup_lbl">markup</span>
+          <input id="q_markup" type="number" min="0" step="1" style="width:62px" title="0 = no extra charge" oninput="qLiveTotal()"><span style="color:var(--muted)">%</span>
+          <span id="q_note" class="muted2" style="font-size:11.5px"></span>
+        </div>
+        <div id="quoteResult" style="margin-top:14px"></div>
+        <div id="qIntakeLink" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <div class="toolbar">
       <h2 style="margin:0;font-size:17px;font-weight:800">💡 Need to order</h2>
       <span class="muted2" id="needSub" style="font-size:12px"></span>
@@ -746,7 +748,7 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
 
 let ME=null;
 // Roles that get a LIMITED console: only these nav buttons + views, landing on `home`.
-const RESTRICTED_NAV={ sales:{ nav:["quoteBtn","needBtn","metaLeadsBtn"], views:["quote","needorder","metaleads"], home:"quote" } };
+const RESTRICTED_NAV={ sales:{ nav:["quoteBtn","needBtn","metaLeadsBtn"], views:["quote","needorder","metaleads"], home:"needorder" } };
 let RESTRICTED=null;
 async function applyRole(){
   if(ME) return;
@@ -987,6 +989,7 @@ async function syncSheet(b){b.disabled=true;toast("Syncing from Google Sheet…"
 function toggleForm(){$("formPanel").classList.toggle("hidden");}
 let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true;
 function setView(v){
+  if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
   const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads"||v==="deposits");
@@ -1000,7 +1003,6 @@ function setView(v){
   $("purchasesView").classList.toggle("hidden",v!=="purchases");
   $("activityView").classList.toggle("hidden",v!=="activity");
   $("trashView").classList.toggle("hidden",v!=="trash");
-  $("quoteView").classList.toggle("hidden",v!=="quote");
   $("settingsView").classList.toggle("hidden",v!=="settings");
   $("needorderView").classList.toggle("hidden",v!=="needorder");
   $("teamView").classList.toggle("hidden",v!=="team");
@@ -1012,7 +1014,6 @@ function setView(v){
   $("poBtn").textContent=v==="purchases"?"📋 Orders":"📦 Purchases";
   $("activityBtn").textContent=v==="activity"?"📋 Orders":"🕑 Activity";
   $("trashBtn").textContent=v==="trash"?"📋 Orders":"🗑 Trash";
-  $("quoteBtn").textContent=v==="quote"?"📋 Orders":"💰 Quote";
   $("settingsBtn").textContent=v==="settings"?"📋 Orders":"⚙ Settings";
   $("needBtn").textContent=v==="needorder"?"📋 Orders":"💡 To order";
   $("teamBtn").textContent=v==="team"?"📋 Orders":"👥 Team";
@@ -1024,9 +1025,8 @@ function setView(v){
   if(v==="purchases"){ loadPurchases(); }
   if(v==="activity"){ loadActivity(); }
   if(v==="trash"){ loadTrash(); }
-  if(v==="quote"){ loadQuote(); }
   if(v==="settings"){ loadSettings(); }
-  if(v==="needorder"){ loadNeedOrder(); }
+  if(v==="needorder"){ loadNeedOrder(); loadQuote(); if(QUOTE_JUMP) neQuoteExpand(); QUOTE_JUMP=false; }
   if(v==="team"){ loadTeam(); }
   if(v==="metaleads"){ loadMetaLeads(); }
   if(v==="deposits"){ loadDeposits(); }
@@ -1277,7 +1277,14 @@ async function emptyTrash(btn){ if(!confirm("Empty the whole trash? Everything i
   const r=await post("/api/trash/empty",{}); if(r.ok){ toast(`Emptied (${r.removed} removed)`); loadTrash(); } }
 
 // ---- Quick Quote estimator (bilingual) + Settings -------------------------- //
-function toggleQuote(){ setView(VIEW==="quote"?"orders":"quote"); }
+let QUOTE_JUMP=false, QUOTE_OPEN=(localStorage.getItem("q_open")!=="0");
+function toggleQuote(){ QUOTE_JUMP=true; setView("needorder"); }
+function neQuoteExpand(){ QUOTE_OPEN=true; localStorage.setItem("q_open","1"); neQuoteApply();
+  const el=$("quoteView"); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); }
+function neQuoteToggle(e){ if(e) e.stopPropagation(); QUOTE_OPEN=!QUOTE_OPEN;
+  localStorage.setItem("q_open",QUOTE_OPEN?"1":"0"); neQuoteApply(); }
+function neQuoteApply(){ const p=$("quotePanel"), c=$("q_caret");
+  if(p) p.style.display=QUOTE_OPEN?"":"none"; if(c) c.textContent=QUOTE_OPEN?"▾":"▸"; }
 function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
 let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="all";
@@ -1530,6 +1537,7 @@ async function loadQuote(){
   $("q_total").value=""; QLAST=null;
   if(!QROWS.length) QROWS=[qBlank()];
   renderQuoteChrome(); $("quoteResult").innerHTML=""; $("qIntakeLink").innerHTML="";
+  neQuoteApply();                                   // honour the saved collapse state
 }
 function renderQuoteRows(){
   $("quoteRows").innerHTML=QROWS.map((r,i)=>`<div class="qrow" onmousedown="ACTIVE_QROW=${i}">
@@ -1571,7 +1579,7 @@ async function qFetchImg(i){
 }
 function qPasteImage(e){
   const modalOpen = !$("priceImgModal").classList.contains("hidden");
-  if(VIEW!=="quote" && !modalOpen) return;
+  if(VIEW!=="needorder" && !modalOpen) return;
   const items=(e.clipboardData&&e.clipboardData.items)||[];
   for(const it of items){ if(it.type&&it.type.indexOf("image")===0){ const f=it.getAsFile();
     if(f){ e.preventDefault();
