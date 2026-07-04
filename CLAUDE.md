@@ -26,6 +26,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
 - meta_leads.py / notify.py — Meta DM+lead-form sync / WhatsApp OTP
 - web/index.html — the whole staff UI
 - com.otlobly.sync.plist — optional launchd sync job (paths point at ~/projects)
+- backup_pull.py / com.otlobly.backup.plist — nightly off-site backup: pulls the
+  live app's /api/backup zip (DB snapshot + JSON stores + ID/PO images) into
+  ~/OtloblyBackups (worker-token auth, 30-day retention, logs to backup.log)
 
 ## Deploy
 Render Blueprint (render.yaml): pushing to GitHub main auto-deploys

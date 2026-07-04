@@ -13,14 +13,18 @@ stdlib server.
 First run with no users redirects to /setup to create the first admin.
 """
 
+import hmac
 import json
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
+import zipfile
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -1431,6 +1435,84 @@ def worker_result():
     changes.setdefault("placed_at", db.now_iso())
     o = db.update_order(b.get("id"), changes, {"username": "worker"})
     return jsonify({"ok": bool(o)})
+
+
+# --------------------------------------------------------------------------- #
+# Backup — one zip of ALL live data, pulled nightly by backup_pull.py (Mac)
+# --------------------------------------------------------------------------- #
+# Every writable artifact on the data disk. New data_path() files/dirs added to
+# the app MUST be added here too, or they won't be in backups.
+BACKUP_FILES = ("customers.json", "purchases.json", "trash.json", "orders.json",
+                "activity.jsonl", "config.json")
+BACKUP_DIRS = ("customer_ids", "po_images")
+
+
+def _backup_ok():
+    """Admin session (Settings download button) OR the worker bearer token
+    (the nightly pull). Token compared constant-time."""
+    if current_user.is_authenticated and current_user.has("admin_actions"):
+        return True
+    tok = os.environ.get("OTLOBLY_WORKER_TOKEN")
+    auth_h = request.headers.get("Authorization", "")
+    return bool(tok) and hmac.compare_digest(auth_h, f"Bearer {tok}")
+
+
+@app.route("/api/backup")
+def api_backup():
+    """Stream a consistent snapshot of the ENTIRE business state as one zip:
+    the SQLite DB (via sqlite3's backup API — safe under WAL while the app is
+    live), the JSON stores, and the uploaded ID/PO images, plus a manifest with
+    row counts so the puller can sanity-check. Contains PII + password hashes —
+    admin/worker-token only. Restore = unzip into the data dir + restart."""
+    if not _backup_ok():
+        abort(401)
+    from paths import DATA_DIR
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    tmp = tempfile.NamedTemporaryFile(prefix="otlobly-backup-", suffix=".zip",
+                                      delete=False)
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+            # 1) DB snapshot — never zip the raw file while WAL is active.
+            dbtmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+            dbtmp.close()
+            try:
+                src, dst = db.connect(), sqlite3.connect(dbtmp.name)
+                with dst:
+                    src.backup(dst)
+                dst.close()
+                src.close()
+                z.write(dbtmp.name, "otlobly.db")
+            finally:
+                os.unlink(dbtmp.name)
+            # 2) JSON stores + uploaded images (whitelist — see BACKUP_* above).
+            for name in BACKUP_FILES:
+                p = DATA_DIR / name
+                if p.is_file():
+                    z.write(p, name)
+            for dname in BACKUP_DIRS:
+                d = DATA_DIR / dname
+                if d.is_dir():
+                    for p in sorted(d.rglob("*")):
+                        if p.is_file():
+                            z.write(p, str(p.relative_to(DATA_DIR)))
+            # 3) Manifest — lets backup_pull.py verify the zip holds real data.
+            with db.connect() as c:
+                counts = {t: c.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+                          for t in ("users", "customers", "orders", "payments",
+                                    "meta_leads")}
+            z.writestr("manifest.json", json.dumps(
+                {"created_at": db.now_iso(), "counts": counts}, indent=2))
+        tmp.close()
+        f = open(tmp.name, "rb")
+        os.unlink(tmp.name)          # POSIX: lives until the handle closes
+    except Exception:
+        tmp.close()
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+        raise
+    db.audit(auth.actor() or {"username": "worker"}, "backup", "db", stamp, "")
+    return send_file(f, mimetype="application/zip", as_attachment=True,
+                     download_name=f"otlobly-backup-{stamp}.zip")
 
 
 @app.route("/api/worker/seed", methods=["POST"])

@@ -20,6 +20,9 @@ customers.json
 drafts.json
 *.csv
 *.db-journal
+sync.log
+backup.log
+otlobly-backup-*.zip
 .DS_Store
 .claude/settings.local.json
 # committed seeds (force-keep, in case a broad rule above ever matches):

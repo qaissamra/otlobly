@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Nightly off-site backup of the LIVE app onto this Mac (backup_pull.py).
+     Install:  cp com.otlobly.backup.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.otlobly.backup.plist
+     Remove:   launchctl unload ~/Library/LaunchAgents/com.otlobly.backup.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.otlobly.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/leluxegroup2/projects/otlobly-orders/backup_pull.py</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/backup.log</string>
+</dict>
+</plist>
