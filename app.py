@@ -1950,6 +1950,31 @@ def api_customer_otp_verify():
     return jsonify({"ok": True, "name": session["cust_name"]})
 
 
+@app.route("/api/admin/whatsapp_test", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_admin_whatsapp_test():
+    """Admin diagnostic for the customer-login WhatsApp OTP. GET reports whether the
+    WHATSAPP_* env vars are set; POST sends a REAL test code to a phone and surfaces
+    Meta's exact error — so the setup can be validated before customers rely on it.
+    The test code is a delivery test only; it is NOT stored as a login OTP."""
+    if request.method == "GET":
+        return jsonify({"configured": notify.configured()})
+    b = request.get_json(force=True, silent=True) or {}
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164")
+    if not e164:
+        return jsonify({"ok": False, "error": "Enter a valid phone number (e.g. 970599…)."}), 400
+    if not notify.configured():
+        return jsonify({"ok": False, "configured": False,
+                        "error": "WhatsApp not configured yet — set WHATSAPP_TOKEN + "
+                                 "WHATSAPP_PHONE_NUMBER_ID in Render, then redeploy."})
+    code = f"{secrets.randbelow(1000000):06d}"
+    res = notify.send_whatsapp_otp(e164, code)
+    if res.get("ok"):
+        return jsonify({"ok": True, "sent_to": e164, "message_id": res.get("id")})
+    return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
+
+
 @app.route("/api/customer/logout", methods=["POST"])
 def api_customer_logout():
     session.pop("cust_phone", None)
