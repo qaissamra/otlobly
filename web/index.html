@@ -218,6 +218,9 @@
   .qthumb input{display:none}
   .qhint{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
   #quoteView[dir="rtl"] .qhint{text-align:right}
+  /* Internal-only SERP item-price chip — staff eyes only, never sent to the customer. */
+  .serp-cost{font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #fde68a;
+    border-radius:7px;padding:1px 6px;white-space:nowrap;flex:none}
   .qthumb.proof{border-color:var(--accent);background-color:#fff5f0}
   .qthumb.proof.has{background-color:#fff}
   .qproof{display:block;width:100%;max-height:300px;object-fit:contain;border:1px solid var(--line);
@@ -1319,7 +1322,9 @@ function neCardHtml(o,placed){
     return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(o.order_id)}_${ix}">
     ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
     <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
-      <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div></div>
+      <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div>
+      ${it.serp_price_usd!=null?`<div class="serp-cost" style="display:inline-block;margin-top:3px" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يظهر للعميل · internal only, never shown to the customer">🔒 SERP $${(+it.serp_price_usd).toFixed(2)}${it.serp_price_at?` · ${poEsc((it.serp_price_at||'').slice(0,10))}`:''}</div>`:''}</div>
+    ${(!placed&&it.serp_price_usd==null&&url)?`<button class="po-btn" title="جلب سعر أمازون للمنتج (داخلي فقط، لا يظهر للعميل) · get Amazon item price (internal only, never shown to the customer)" onclick="neGetPrice('${poEsc(o.order_id)}',${ix},'${poEsc(url)}',this)">💲</button>`:''}
     ${(!placed&&!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(o.order_id)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
     ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون · open on Amazon" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
   }).join("");
@@ -1436,6 +1441,15 @@ async function neDelete(orderId,name){
   if(r&&r.ok){ toast("تم النقل إلى سلة المهملات · moved to Trash"); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
   else toast("Delete failed: "+((r&&r.error)||""));
 }
+// Capture the internal Amazon (SERP) price onto a To-order item — the card's 💲 button.
+// Works for any product however the order was added; stored staff-only, never sent to the customer.
+async function neGetPrice(orderId,index,link,btn){
+  if(btn){ btn.disabled=true; btn.textContent="…"; }
+  toast(QLANG==="ar"?"جاري جلب السعر من أمازون…":"Fetching Amazon price…");
+  let r; try{ r=await post("/api/order/item_price",{order_id:orderId,index,url:link}); }catch(e){ r={}; }
+  if(r&&r.ok){ toast((QLANG==="ar"?"تم حفظ السعر ✓ ":"Price saved ✓ ")+money(r.price_usd)); loadNeedOrder(); }
+  else { if(btn){ btn.disabled=false; btn.textContent="💲"; } toast((r&&r.error)||(QLANG==="ar"?"تعذّر جلب السعر":"Couldn't fetch price")); }
+}
 async function neImg(orderId,index,link,btn){
   if(btn){ btn.disabled=true; btn.textContent="…"; }
   toast(QLANG==="ar"?"جاري جلب الصورة…":"Fetching image…");
@@ -1452,11 +1466,11 @@ async function neImg(orderId,index,link,btn){
 // ---- Edit order (products / amount / customer) on the To-order page ---------- //
 let OE=null;
 function closeOrderEdit(){ $("orderEditModal").classList.add("hidden"); OE=null; }
-const oeBlank=()=>({title:"",link:"",qty:1,image:null,asin:""});
+const oeBlank=()=>({title:"",link:"",qty:1,image:null,asin:"",serp_price_usd:null,serp_price_at:null});
 function openOrderEdit(orderId){
   const o=NEED_ORDERS.find(x=>x.order_id===orderId);
   if(!o){ toast("Order not found — refresh and try again"); return; }
-  OE={ order_id:orderId, items:(o.items||[]).map(it=>({title:it.title||"",link:it.link||"",qty:it.qty||1,image:it.image||null,asin:it.asin||""})) };
+  OE={ order_id:orderId, items:(o.items||[]).map(it=>({title:it.title||"",link:it.link||"",qty:it.qty||1,image:it.image||null,asin:it.asin||"",serp_price_usd:(it.serp_price_usd!=null?it.serp_price_usd:null),serp_price_at:it.serp_price_at||null})) };
   if(!OE.items.length) OE.items=[oeBlank()];
   $("oe_name").value=o.customer||""; $("oe_amount").value=(o.amount_to_collect_usd!=null?o.amount_to_collect_usd:"");
   if($("oe_deposit")) $("oe_deposit").value="";              // blank → only adds a ledger row if typed
@@ -1469,6 +1483,7 @@ function oeRender(){
     <input value="${poEsc(it.link)}" placeholder="رابط أمازون · Amazon link" style="flex:2;min-width:140px" oninput="OE.items[${i}].link=this.value">
     <input type="number" min="1" value="${it.qty||1}" title="qty" style="width:54px" oninput="OE.items[${i}].qty=this.value">
     <button class="iconbtn" title="جلب الصورة · get photo" onclick="oeImg(${i},this)">📷</button>
+    ${it.serp_price_usd!=null?`<span class="serp-cost" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يُرسل للعميل · SerpAPI item price — internal only, never sent to the customer">🔒 $${(+it.serp_price_usd).toFixed(2)}</span>`:''}
     <button class="iconbtn" onclick="oeRemoveRow(${i})">✕</button></div>`).join("");
 }
 function oeAddRow(){ OE.items.push(oeBlank()); oeRender(); }
@@ -1479,12 +1494,17 @@ async function oeImg(i,btn){
   let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(link))).json(); }catch(e){ d={}; }
   if(d&&d.image){ OE.items[i].image=d.image; if(d.title&&!(OE.items[i].title||"").trim())OE.items[i].title=d.title; oeRender(); }
   else { if(btn){ btn.disabled=false; btn.textContent="📷"; } toast(d&&d.error?d.error:(QLANG==="ar"?"تعذّر جلب الصورة":"Couldn't fetch image")); }
+  // Also pull the internal SERP item price (stored on the To-order side only, not in the quote).
+  fetchItemPrice(link).then(p=>{ if(p&&p.price_usd!=null){
+    OE.items[i].serp_price_usd=p.price_usd; OE.items[i].serp_price_at=new Date().toISOString();
+    if(p.asin&&!(OE.items[i].asin||"").trim())OE.items[i].asin=p.asin;
+    oeRender(); } });
 }
 async function oeSave(btn){
   if(!OE) return; btn.disabled=true;
   const body={ order_id:OE.order_id, name:$("oe_name").value, amount:$("oe_amount").value,
     deposit:$("oe_deposit").value, deposit_currency:"ILS",
-    items:OE.items.map(it=>({title:(it.title||"").trim(),link:(it.link||"").trim(),qty:parseInt(it.qty)||1,image:it.image||null,asin:it.asin||""})) };
+    items:OE.items.map(it=>({title:(it.title||"").trim(),link:(it.link||"").trim(),qty:parseInt(it.qty)||1,image:it.image||null,asin:it.asin||"",serp_price_usd:(it.serp_price_usd!=null?it.serp_price_usd:null),serp_price_at:it.serp_price_at||null})) };
   let r; try{ r=await post("/api/order/edit",body); }catch(e){ r={}; }
   btn.disabled=false;
   if(r&&r.ok){ toast(QLANG==="ar"?"تم الحفظ ✓":"Saved ✓"); closeOrderEdit(); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
@@ -1492,7 +1512,7 @@ async function oeSave(btn){
 }
 let QLANG="ar", QSETTINGS=null, ACTIVE_QROW=0, QMARKUP=0.10;
 function qSetMarkup(v){ QMARKUP=Math.max(0,(parseFloat(v)||0))/100; }
-const qBlank=()=>({title:"",link:"",qty:1,price:"",image:null,proof:null});
+const qBlank=()=>({title:"",link:"",qty:1,price:"",image:null,proof:null,serp_price:null,serp_price_at:null,asin:""});
 let QROWS=[qBlank()];
 const QSTR={
   ar:{title:"تقدير السعر السريع", intro:"ابحث عن المنتج في أمازون، أدخل السعر يدويًا، وأضف صورة المنتج (الصق صورة، ارفعها، أو اجلبها من الرابط).",
@@ -1550,6 +1570,7 @@ function renderQuoteRows(){
     <input value="${poEsc(r.link)}" placeholder="${qt('link')}" style="flex:1;min-width:90px" oninput="QROWS[${i}].link=this.value;qRowLinkBtn(${i})" onfocus="ACTIVE_QROW=${i}">
     <input type="number" min="1" value="${r.qty||1}" title="${qt('qty')}" style="width:52px" oninput="QROWS[${i}].qty=this.value" onfocus="ACTIVE_QROW=${i}">
     <button class="iconbtn" id="qfi${i}" title="${qt('fetchImg')}" onclick="qFetchImg(${i})" ${((r.link||'').trim())?'':'style="visibility:hidden"'}>↓🖼</button>
+    ${r.serp_price!=null?`<span class="serp-cost" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يُرسل للعميل · SerpAPI item price — internal only, never sent to the customer">🔒 $${(+r.serp_price).toFixed(2)}</span>`:''}
     <button class="iconbtn" onclick="qRemoveRow(${i})" ${QROWS.length<2?'style="visibility:hidden"':''}>✕</button></div>`).join("")
     + `<div class="qhint">${qt('paste')}</div>`;
 }
@@ -1568,6 +1589,11 @@ function qResizeImage(file,cb,max){
 }
 function qPickImage(i,inp){ const f=inp.files&&inp.files[0]; if(!f)return; qResizeImage(f,d=>{ if(d){QROWS[i].image=d; renderQuoteRows();} }); }
 function qPickProof(i,inp){ const f=inp.files&&inp.files[0]; if(!f)return; qResizeImage(f,d=>{ if(d){QROWS[i].proof=d; renderQuoteRows();} }, 1400); }
+// Internal-only current SERP item price for the To-order page (never shown to the customer).
+async function fetchItemPrice(link){
+  try{ return await (await fetch("/api/item_price?url="+encodeURIComponent(link))).json(); }
+  catch(e){ return null; }
+}
 async function qFetchImg(i){
   const link=(QROWS[i].link||"").trim(); if(!link)return;
   const b=$("qfi"+i); const old=b?b.textContent:""; if(b){ b.disabled=true; b.textContent="…"; }
@@ -1576,6 +1602,12 @@ async function qFetchImg(i){
   if(b){ b.disabled=false; b.textContent=old||"↓🖼"; }
   if(d&&d.image){ QROWS[i].image=d.image; if(d.title&&!(QROWS[i].title||"").trim())QROWS[i].title=d.title; renderQuoteRows(); toast(qt("imgFetched")); }
   else toast(d&&d.error?d.error:qt("imgFail"));
+  // Also pull the internal SERP item price (stored on the To-order side only, not in the quote).
+  fetchItemPrice(link).then(p=>{ if(p&&p.price_usd!=null){
+    QROWS[i].serp_price=p.price_usd; QROWS[i].serp_price_at=new Date().toISOString();
+    if(p.asin&&!(QROWS[i].asin||"").trim())QROWS[i].asin=p.asin;
+    if(p.title&&!(QROWS[i].title||"").trim())QROWS[i].title=p.title;
+    renderQuoteRows(); } });
 }
 function qPasteImage(e){
   const modalOpen = !$("priceImgModal").classList.contains("hidden");
@@ -1775,7 +1807,12 @@ function qCreateOrder(){
   setView("orders"); $("formPanel").classList.remove("hidden");
   $("f_links").value=(info.links||[]).join("\n");
   $("f_amount").value=Number(info.total||0).toFixed(2);
-  PENDING_PRODUCTS=info.products||null;          // carry image/title/price/qty into the order
+  // Build the order payload from QROWS so each product carries its ASIN (for the /api/add_order
+  // link→item merge) + the internal SERP price. The customer-facing QINFO.products stays price-free.
+  PENDING_PRODUCTS=QROWS.filter(r=>(r.title||"").trim()||(r.link||"").trim()||r.image||r.proof)
+    .map(r=>({asin:(r.asin||extractAsinClient(r.link)||"").toUpperCase(), link:(r.link||"").trim(),
+              image:r.image||null, proof:r.proof||null, title:(r.title||"").trim(), qty:parseInt(r.qty)||1,
+              serp_price_usd:(r.serp_price!=null?r.serp_price:null), serp_price_at:r.serp_price_at||null}));
   if($("f_checkout")) $("f_checkout").value="";
   if($("quoteBreak")) $("quoteBreak").textContent="";
   window.scrollTo(0,0); toast(QLANG==="ar"?"تم تعبئة نموذج الطلب — راجع واحفظ":"Order form filled — review & save");

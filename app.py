@@ -312,6 +312,8 @@ def api_add_order():
             it["image"] = p.get("image") or it.get("image")
             it["title"] = p.get("title") or it.get("title")
             it["item_usd"] = p.get("item_usd")
+            it["serp_price_usd"] = p.get("serp_price_usd")      # internal SERP estimate (staff-only)
+            it["serp_price_at"] = p.get("serp_price_at")
             it["qty"] = int(p.get("qty") or 1)
     notes = b.get("notes", "")
     if b.get("deposit_note"):
@@ -477,6 +479,23 @@ def api_amazon_number():
 def api_import():
     url = request.args.get("url", "")
     return jsonify(amazon_import.import_product(url) if url else {"error": "no url"})
+
+
+@app.route("/api/item_price")
+@auth.require("view_orders")
+def api_item_price():
+    """INTERNAL-only current SERP item price for a link/ASIN, for the To-order page's
+    private price tracking. Never shown to the customer. Returns {price_usd, asin, title}
+    or {error}. Uses a fresh SerpAPI pull (refresh=True) so 'latest' is genuinely current
+    rather than a stale cache hit — fetches are deliberate, staff-initiated clicks."""
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "no url"}), 400
+    d = amazon_import.import_product(url, refresh=True)
+    if d.get("error"):
+        return jsonify({"error": d["error"], "asin": d.get("asin")})
+    return jsonify({"price_usd": d.get("price_usd"), "asin": d.get("asin"),
+                    "title": d.get("title")})
 
 
 @app.route("/api/extract_asin")   # link -> ASIN, NO SerpApi credit (string parse + a.co expand)
@@ -698,6 +717,8 @@ def api_order_edit():
                 "qty": max(1, int(it.get("qty") or 1)),
                 "image": it.get("image") or None,
                 "item_usd": it.get("item_usd"),
+                "serp_price_usd": it.get("serp_price_usd"),     # internal SERP estimate (staff-only)
+                "serp_price_at": it.get("serp_price_at"),
             })
         changes["items"] = new_items
     if b.get("amount") not in (None, ""):
@@ -941,6 +962,38 @@ def api_order_item_image():
     items[idx]["image"] = img
     db.upsert_order(o)
     return jsonify({"ok": True})
+
+
+@app.route("/api/order/item_price", methods=["POST"])
+@auth.require("edit_order")
+def api_order_item_price():
+    """Capture the INTERNAL SERP item price onto one of an order's items — the To-order
+    card's '💲 get price' button. Fresh SerpAPI pull so it's the price right now; stored
+    staff-only (serp_price_usd/at) and never shown to the customer. This is the catch-all
+    so a product shows its Amazon price no matter how the order was added."""
+    b = request.get_json(force=True, silent=True) or {}
+    o = db.get_order(str(b.get("order_id") or ""))
+    if not o:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    items = o.get("items") or []
+    try:
+        idx = int(b.get("index"))
+    except (TypeError, ValueError):
+        idx = -1
+    if not (0 <= idx < len(items)):
+        return jsonify({"ok": False, "error": "bad item"}), 400
+    it = items[idx]
+    url = ((b.get("url") or "").strip() or it.get("clean_url") or it.get("raw_url")
+           or it.get("asin") or "")
+    if not url:
+        return jsonify({"ok": False, "error": "no link or ASIN for this item"}), 400
+    d = amazon_import.import_product(url, refresh=True)
+    if d.get("error") or d.get("price_usd") is None:
+        return jsonify({"ok": False, "error": d.get("error") or "Amazon returned no price for this item."})
+    it["serp_price_usd"] = d.get("price_usd")
+    it["serp_price_at"] = db.now_iso()
+    db.upsert_order(o)
+    return jsonify({"ok": True, "price_usd": d.get("price_usd")})
 
 
 # --------------------------------------------------------------------------- #

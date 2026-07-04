@@ -119,6 +119,8 @@ def _order_row(o):
         "items": [{"asin": it.get("asin"), "title": it.get("title"),
                    "image": it.get("image"), "qty": it.get("qty") or 1,
                    "item_usd": it.get("item_usd"),
+                   "serp_price_usd": it.get("serp_price_usd"),   # internal SERP estimate (staff To-order view only)
+                   "serp_price_at": it.get("serp_price_at"),
                    "link": it.get("clean_url") or it.get("raw_url")}
                   for it in o.get("items", [])],
     }
