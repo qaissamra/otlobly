@@ -40,6 +40,20 @@ def read(config=None):
                                        tracking.DEFAULT_STATUS_MAP),
         "tracking_default_label": cfg.get(config, "customer_tracking.default_label",
                                           tracking.DEFAULT_CUSTOMER_LABEL),
+        # White-label the order card per business. Internal/region-specific features
+        # default OFF so a fresh tenant gets a clean, generic card. (Roadmap #2.)
+        "card_flags": {
+            "multilogin": bool(cfg.get(config, "card.flags.multilogin", False)),
+            "clickup": bool(cfg.get(config, "card.flags.clickup", False)),
+            "screenshot": bool(cfg.get(config, "card.flags.screenshot", False)),
+            "second_currency": bool(cfg.get(config, "card.flags.second_currency", False)),
+        },
+        "card_labels": {
+            "courier": cfg.get(config, "card.labels.courier", "Tracking"),
+            "currency": cfg.get(config, "card.labels.currency", "USD"),
+            "currency2": cfg.get(config, "card.labels.currency2", "AED"),
+            "box_term": cfg.get(config, "card.labels.box_term", "Profile"),
+        },
     }
 
 
@@ -81,6 +95,16 @@ def apply(body, config=None, persist=True):
     if "tracking_default_label" in body:
         cfg.set_path(config, "customer_tracking.default_label",
                      str(body["tracking_default_label"]).strip() or "In transit")
+    flags = body.get("card_flags")
+    if isinstance(flags, dict):
+        for k in ("multilogin", "clickup", "screenshot", "second_currency"):
+            if k in flags:
+                cfg.set_path(config, f"card.flags.{k}", bool(flags[k]))
+    labels = body.get("card_labels")
+    if isinstance(labels, dict):
+        for k in ("courier", "currency", "currency2", "box_term"):
+            if k in labels:
+                cfg.set_path(config, f"card.labels.{k}", str(labels[k]).strip())
     if persist:
         cfg.save(config)
     return read(config)
