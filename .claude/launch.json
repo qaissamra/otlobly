@@ -6,6 +6,12 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders' && exec ./.venv/bin/python app.py"],
       "port": 8789
+    },
+    {
+      "name": "otlobly-static-ui",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders/web' && exec python3 -m http.server 8790"],
+      "port": 8790
     }
   ]
 }
