@@ -1688,10 +1688,11 @@ def _amz_title_from_html(html):
 @app.route("/api/product_image")
 @auth.require("view_orders")
 def api_product_image():
-    """FREE product-image grab for the Quick Quote tool (no SerpApi credits). Tries a direct
-    Amazon fetch first; if that's blocked (cloud/datacenter IPs like Render usually are), falls
-    back to a free reader proxy that fetches Amazon from its own IP. Staff can always paste/
-    upload instead."""
+    """Product-image grab for the Quick Quote tool. FREE paths first (direct Amazon fetch,
+    then a free reader proxy — both no SerpApi credits); if Amazon blocks those (cloud IPs
+    like Render usually are), falls back to SerpAPI via the import cache (a previously seen
+    ASIN costs nothing; a new one uses one credit AND archives its price — which becomes the
+    product's original 💲 price). Staff can always paste/upload instead."""
     from urllib import request as _u
     url = (request.args.get("url") or "").strip()
     if not url:
@@ -1725,6 +1726,11 @@ def api_product_image():
             title = _amz_title_from_html(html)
             break
     if not img:
+        # Last resort: SerpAPI (cache-first — a known ASIN is free; a fresh one spends a
+        # credit and archives image/title/price for the To-order 💲 button).
+        d = amazon_import.import_product(clean, refresh=False)
+        if d.get("image"):
+            return jsonify({"image": d["image"], "title": d.get("title"), "source": "serpapi"})
         return jsonify({"error": "Amazon blocked the image fetch — paste or upload the photo."})
     return jsonify({"image": img, "title": title})
 
