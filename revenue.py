@@ -20,13 +20,17 @@ from datetime import datetime, timezone
 import db
 
 
-def from_orders(orders=None):
-    """Revenue from the app DB (non-cancelled), by month of created_at."""
+def from_orders(orders=None, since=None):
+    """Revenue from the app DB (non-cancelled), by month of created_at + by batch.
+    since='YYYY-MM-DD' keeps only orders created on/after that date."""
     orders = db.list_orders() if orders is None else orders
     total, n = 0.0, 0
     by_month = defaultdict(float)
+    by_batch = defaultdict(float)
     for o in orders:
         if o["status"] == "CANCELLED":
+            continue
+        if since and (o.get("created_at") or "")[:10] < since:
             continue
         amt = o.get("amount_to_collect_usd")
         if amt is None:
@@ -34,14 +38,16 @@ def from_orders(orders=None):
         total += amt
         n += 1
         by_month[(o.get("created_at") or "")[:7] or "unknown"] += amt
-    return _pack(total, n, by_month, "orders (app db)")
+        by_batch[str(o.get("batch") or "—")] += amt
+    return _pack(total, n, by_month, "orders (app db)", by_batch)
 
 
-def _pack(total, n, by_month, source):
+def _pack(total, n, by_month, source, by_batch=None):
     return {
         "total_usd": round(total, 2),
         "orders_counted": n,
         "by_month": {k: round(v, 2) for k, v in sorted(by_month.items())},
+        "by_batch": {k: round(v, 2) for k, v in sorted((by_batch or {}).items())},
         "source": source,
         "pulled_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }

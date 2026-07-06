@@ -28,3 +28,4 @@ otlobly-backup-*.zip
 # committed seeds (force-keep, in case a broad rule above ever matches):
 !config.example.json
 !config.default.json
+meta_cache.json

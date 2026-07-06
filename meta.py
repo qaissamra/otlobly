@@ -26,8 +26,9 @@ from pathlib import Path
 from urllib import request, parse, error
 
 import cfg
+from paths import data_path
 
-CACHE = Path(__file__).with_name("reports") / "meta_cache.json"
+CACHE = Path(data_path("meta_cache.json"))   # persistent disk — survives redeploys
 MANUAL = Path(__file__).with_name("meta_spend.json")
 GRAPH = "https://graph.facebook.com/v21.0"
 
@@ -46,9 +47,11 @@ def _to_usd(amount, currency, config):
 
 def from_manual(config):
     data = json.loads(MANUAL.read_text()) if MANUAL.exists() else {}
+    # Monthly spend typed in Settings (config.pnl.meta.manual) wins over the legacy file.
+    data.update({str(k): v for k, v in (cfg.get(config, "pnl.meta.manual", {}) or {}).items()})
     cur = cfg.get(config, "pnl.meta.spend_currency", "USD")
     by_month = {m: round(_to_usd(float(v), cur, config), 2) for m, v in data.items()}
-    return _pack(sum(by_month.values()), by_month, "manual")
+    return _pack(sum(by_month.values()), by_month, "manual (Settings)")
 
 
 def from_api(config):

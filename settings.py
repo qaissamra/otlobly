@@ -54,6 +54,8 @@ def read(config=None):
             "currency2": cfg.get(config, "card.labels.currency2", "AED"),
             "box_term": cfg.get(config, "card.labels.box_term", "Profile"),
         },
+        # Monthly Meta ad spend typed by the admin (USD) — feeds the P&L meta line.
+        "meta_manual": cfg.get(config, "pnl.meta.manual", {}) or {},
     }
 
 
@@ -105,6 +107,13 @@ def apply(body, config=None, persist=True):
         for k in ("courier", "currency", "currency2", "box_term"):
             if k in labels:
                 cfg.set_path(config, f"card.labels.{k}", str(labels[k]).strip())
+    if isinstance(body.get("meta_manual"), dict):
+        clean = {}
+        for k, v in body["meta_manual"].items():
+            k = str(k).strip()
+            if re.match(r"^\d{4}-\d{2}$", k):
+                clean[k] = round(_f(v, 0), 2)
+        cfg.set_path(config, "pnl.meta.manual", clean)
     if persist:
         cfg.save(config)
     return read(config)

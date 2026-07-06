@@ -481,7 +481,12 @@
   <div id="pnlView" class="hidden">
     <div class="toolbar">
       <h2 style="margin:0;font-size:17px;font-weight:800">📊 Profit / P&amp;L
-        <span style="color:var(--muted);font-weight:500;font-size:12px">· all USD</span></h2>
+        <span id="pnlPeriodLbl" style="color:var(--muted);font-weight:500;font-size:12px">· all time · USD</span></h2>
+      <span id="pnlRange" style="display:inline-flex;gap:6px">
+        <button class="po-btn" id="pr_all" onclick="setPnlDays(null)">الكل · All time</button>
+        <button class="po-btn" id="pr_7" onclick="setPnlDays(7)">آخر ٧ أيام · 7 days</button>
+        <button class="po-btn" id="pr_30" onclick="setPnlDays(30)">30 days</button>
+      </span>
       <span class="spacer"></span>
       <span id="pnlSources" class="chips" style="margin:0"></span>
       <button onclick="refreshPnl(this)" id="pnlRefresh">↻ Refresh sources</button>
@@ -666,6 +671,13 @@
         <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_f_clickup"> <span><b>ClickUp export</b> — Preview + Send-to-ClickUp buttons</span></label>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:13px"><button class="accent" onclick="saveSettings(this)">Save white-label</button></div>
+    </div>
+    <div class="panel" style="max-width:620px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 Meta ad spend (P&amp;L)</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:10px">اكتب كم صرفت على إعلانات ميتا كل شهر · type what you spent on Meta ads each month (USD) — the P&amp;L subtracts it from profit. Using the Meta API instead? Set META_AD_ACCOUNT_ID + META_ACCESS_TOKEN on the server and press “Refresh sources” on the P&amp;L page.</div>
+      <div id="metaSpendRows"></div>
+      <button class="po-btn" onclick="msAddRow()">＋ Add month</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="accent" onclick="saveSettings(this)">Save ad spend</button></div>
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📦 Customer tracking labels</h3>
@@ -1336,33 +1348,59 @@ async function loadTeam(){
     <td style="padding:9px 6px">${ROLE_LABEL[u.role]||u.role}</td>
     <td style="padding:9px 6px">${u.active?'<span style="color:var(--good)">● active</span>':'<span style="color:var(--muted)">○ disabled</span>'}</td>
     <td style="padding:9px 6px;text-align:right;white-space:nowrap">
-      <button class="po-btn" onclick="resetPw(${u.id},'${poEsc(u.username)}')">🔑 reset password</button>
+      <button class="po-btn" onclick="resetPw(${u.id})">🔑 reset password</button>
       <button class="po-btn" onclick="toggleActive(${u.id},${u.active?0:1})">${u.active?'🚫 disable':'✓ enable'}</button>
-    </td></tr>`).join("");
+    </td></tr>
+    <tr id="pwrow_${u.id}" style="display:none;background:var(--bg2)"><td colspan="5" style="padding:9px 10px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">كلمة مرور جديدة لـ · new password for <b>${poEsc(u.username)}</b>:</span>
+        <input id="pwin_${u.id}" class="mono" style="width:150px;border:1px solid var(--line);border-radius:8px;padding:5px 8px" placeholder="6+ characters">
+        <button class="po-btn" onclick="$('pwin_${u.id}').value=pwGen()" title="توليد كلمة مرور · make a random password">🎲 Generate</button>
+        <button class="po-btn accent" onclick="pwSave(${u.id},'${poEsc(u.username)}')">✓ Set password</button>
+        <button class="po-btn" onclick="$('pwrow_${u.id}').style.display='none'">✕</button>
+        <span id="pwout_${u.id}" style="font-size:12.5px"></span>
+      </div></td></tr>`).join("");
   $("teamList").innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line)">
       <th style="padding:6px">Name</th><th style="padding:6px">Username</th><th style="padding:6px">Role</th><th style="padding:6px">Status</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No staff yet.</td></tr>'}</tbody></table>`;
+    <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No staff yet.</td></tr>'}</tbody></table>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">🔒 كلمات المرور مشفّرة ولا يمكن عرضها لاحقًا · passwords are stored encrypted and can never be viewed later — use <b>🔑 reset password</b> to set a new one and share it.</div>`;
 }
 async function addStaff(btn){
   const name=$("u_name").value.trim(), username=$("u_username").value.trim(),
-        password=$("u_password").value, role=$("u_role").value;
+        password=$("u_password").value.trim(), role=$("u_role").value;   // trim — stray spaces break login later
   if(!username||password.length<6){ $("u_out").innerHTML='<span style="color:var(--bad)">Username and a 6+ character password are required.</span>'; return; }
   btn.disabled=true;
   let r; try{ r=await post("/api/users",{name,username,password,role}); }catch(e){ r={error:"network"}; }
   btn.disabled=false;
   if(r.ok){ toast(`Created ${username} (${role})`);
-    $("u_out").innerHTML=`<span style="color:var(--good)">✓ ${poEsc(name||username)} can sign in at the same login page with username <b>${poEsc(username)}</b> and the password you set.</span>`;
+    $("u_out").innerHTML=`<span style="color:var(--good)">✓ ${poEsc(name||username)} signs in with username <b>${poEsc(username)}</b> and password <b class="mono">${poEsc(password)}</b> — share it now; it can't be shown later.</span>`;
     ["u_name","u_username","u_password"].forEach(i=>$(i).value=""); loadTeam(); }
   else { $("u_out").innerHTML=`<span style="color:var(--bad)">${poEsc(r.error||'Could not create')}</span>`; }
 }
 async function toggleActive(id,active){
   const r=await patchUsers({id,active}); if(r.ok){ toast(active?"Enabled":"Disabled"); loadTeam(); } else toast(r.error||"failed");
 }
-async function resetPw(id,username){
-  const p=prompt("New password for "+username+" (6+ characters):"); if(p===null) return;
-  if((p||"").length<6){ toast("Password must be 6+ characters"); return; }
-  const r=await patchUsers({id,password:p}); if(r.ok){ toast("Password reset — share it with them"); } else toast(r.error||"failed");
+// Inline reset (no browser prompt() — those get blocked silently in embedded views).
+// The field is visible text + a generator, so the admin SEES the password they set.
+function pwGen(){ const a='abcdefghjkmnpqrstuvwxyz23456789'; let s=''; for(let i=0;i<8;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+function resetPw(id){
+  const row=$('pwrow_'+id); if(!row) return;
+  const opening=row.style.display==='none';
+  row.style.display=opening?'':'none';
+  if(opening){ const i=$('pwin_'+id); if(i){ if(!i.value) i.value=pwGen(); i.focus(); i.select(); } }
+}
+async function pwSave(id,username){
+  const inp=$('pwin_'+id), p=(inp&&inp.value||'').trim();   // trim — pasted passwords often carry stray spaces
+  if(p.length<6){ toast('Password must be 6+ characters'); return; }
+  const r=await patchUsers({id,password:p});
+  if(r&&r.ok){
+    inp.value=p;   // keep the exact stored value visible for copying
+    $('pwout_'+id).innerHTML=`<span style="color:var(--good)">✓ <b class="mono">${poEsc(p)}</b>
+      <a style="cursor:pointer;color:var(--accent)" onclick="navigator.clipboard&&navigator.clipboard.writeText($('pwin_${id}').value);toast('copied ✓')">📋 copy</a>
+      — شاركها الآن · share it now (it can't be shown again later).</span>`;
+    toast('Password set ✓');
+  } else toast((r&&r.error)||'failed');
 }
 function togglePicking(){ setView(VIEW==="picking"?"orders":"picking"); }
 function togglePnl(){ setView(VIEW==="pnl"?"orders":"pnl"); }
@@ -2034,6 +2072,7 @@ async function loadSettings(){
   $("s_imptype").value=s.import_rule.type; $("s_impval").value=s.import_rule.value;
   $("s_custmode").value=s.customer_mode?"1":"";
   lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
+  msRender(s.meta_manual||{});                       // monthly Meta ad spend rows
   const cf=s.card_flags||{}, cl=s.card_labels||{};   // white-label / card features
   if($("s_courier")) $("s_courier").value=cl.courier||"";
   if($("s_cur")) $("s_cur").value=cl.currency||"";
@@ -2073,6 +2112,22 @@ function lblAddRow(){ $("lblRows").insertAdjacentHTML('beforeend', lblRowHtml({}
 function lblCollect(){ return [...document.querySelectorAll('#lblRows tr')].map(tr=>({
   match:tr.querySelector('.l-match').value.trim(), label:tr.querySelector('.l-label').value.trim(),
   bucket:tr.querySelector('.l-bucket').value, hidden:tr.querySelector('.l-hide').checked })).filter(r=>r.match); }
+// --- Meta ad spend rows (Settings → P&L) --- //
+function msRowHtml(m,v){ return `<div class="ms-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+  <input type="month" class="ms-m" value="${poEsc(m)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px">
+  <input type="number" step="0.01" min="0" class="ms-v" value="${v!==''&&v!=null?v:''}" placeholder="USD" style="width:110px;border:1px solid var(--line);border-radius:8px;padding:5px 8px">
+  <button class="iconbtn" title="remove this month" onclick="this.parentElement.remove()">✕</button></div>`; }
+function msRender(d){ const el=$("metaSpendRows"); if(!el) return;
+  const rows=Object.entries(d||{}).sort();
+  el.innerHTML=rows.length?rows.map(([m,v])=>msRowHtml(m,v)).join(""):msRowHtml('','');
+}
+function msAddRow(){ const el=$("metaSpendRows"); if(el) el.insertAdjacentHTML('beforeend', msRowHtml('','')); }
+function msCollect(){ const out={};
+  document.querySelectorAll('#metaSpendRows .ms-row').forEach(r=>{
+    const m=r.querySelector('.ms-m').value, v=parseFloat(r.querySelector('.ms-v').value);
+    if(m&&!isNaN(v)) out[m]=v; });
+  return out;
+}
 async function saveSettings(b){
   b.disabled=true;
   const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100,
@@ -2086,6 +2141,7 @@ async function saveSettings(b){
       screenshot:!!($("s_f_screenshot")||{}).checked, second_currency:!!($("s_f_second_currency")||{}).checked },
     card_labels:{ courier:($("s_courier")||{}).value||"", currency:($("s_cur")||{}).value||"",
       currency2:($("s_cur2")||{}).value||"", box_term:($("s_boxterm")||{}).value||"" } };
+  if($("metaSpendRows")) body.meta_manual=msCollect();   // only when the rows are rendered (never wipe blindly)
   const r=await post("/api/settings",body); b.disabled=false;
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; QSETTINGS=r.settings; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
 }
@@ -2715,7 +2771,16 @@ async function addCustomer(b){
 async function syncCustomers(b){ b.disabled=true; const r=await post("/api/customers/sync",{}); b.disabled=false; toast(`${r.created} new · ${r.total} total`); loadCustomers(); }
 async function setAmazon(id,n){ await post("/api/amazon_number",{id,amazon_order_number:n}); toast(`${id} Amazon # saved`); }
 let PNL=null;
-async function loadPnl(){ const r=await fetch("/api/pnl"); PNL=await r.json(); renderPnl(); }
+let PNL_DAYS=null;   // null = all time; 7 / 30 = last N days
+function setPnlDays(d){ PNL_DAYS=d; loadPnl(); }
+async function loadPnl(){
+  const r=await fetch("/api/pnl"+(PNL_DAYS?`?days=${PNL_DAYS}`:"")); PNL=await r.json();
+  // active range chip + period label
+  [["pr_all",null],["pr_7",7],["pr_30",30]].forEach(([id,d])=>{ const b=$(id); if(b)
+    b.style.cssText=(d===PNL_DAYS)?"background:var(--ink);color:#fff;border-color:var(--ink)":""; });
+  const lbl=$("pnlPeriodLbl"); if(lbl) lbl.textContent=PNL_DAYS?`· last ${PNL_DAYS} days (from ${PNL.since||''}) · USD`:"· all time · USD";
+  renderPnl();
+}
 function renderPnl(){
   if(!PNL) return;
   const t=PNL.totals, s=PNL.sources;

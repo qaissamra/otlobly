@@ -290,14 +290,19 @@ def api_report():
 @app.route("/api/pnl")
 @auth.require("view_pnl")
 def api_pnl():
-    return jsonify(pnl_mod.build())
+    # ?days=7 → only the last week; ?since=YYYY-MM-DD → explicit start. Default: all time.
+    since = (request.args.get("since") or "").strip() or None
+    days = request.args.get("days", type=int)
+    if days and not since:
+        since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    return jsonify(pnl_mod.build(since=since))
 
 
 @app.route("/api/pnl/refresh", methods=["POST"])
 @auth.require("admin_actions")
 def api_pnl_refresh():
-    return jsonify({"ok": True, "ran": {n: run_script(n + ".py")
-                    for n in ("clickup_cost", "meta")}})
+    # COGS now comes live from the Purchases page; only the Meta API pull needs a refresh.
+    return jsonify({"ok": True, "ran": {"meta": run_script("meta.py")}})
 
 
 @app.route("/api/order", methods=["POST"])
@@ -1348,11 +1353,11 @@ def api_clickup():
 def api_users():
     if request.method == "POST":
         b = request.get_json(force=True, silent=True) or {}
-        if (b.get("role") not in auth.ROLES or not b.get("username")
-                or len(b.get("password", "")) < 6):
+        pw = (b.get("password") or "").strip()   # stray spaces from copy-paste break login later
+        if b.get("role") not in auth.ROLES or not b.get("username") or len(pw) < 6:
             return jsonify({"ok": False, "error": "username, role, 6+ char password required"}), 400
         try:
-            db.create_user(b["username"].strip(), auth.hash_pw(b["password"]),
+            db.create_user(b["username"].strip(), auth.hash_pw(pw),
                            b["role"], b.get("name", ""))
         except Exception as e:  # noqa (unique violation)
             return jsonify({"ok": False, "error": f"{e}"}), 400
@@ -1369,9 +1374,10 @@ def api_users():
             db.set_user_active(u["id"], bool(b["active"]))
             db.audit(auth.actor(), "user_active", "user", u["username"], str(bool(b["active"])))
         if b.get("password"):
-            if len(b["password"]) < 6:
+            pw = str(b["password"]).strip()
+            if len(pw) < 6:
                 return jsonify({"ok": False, "error": "password must be 6+ chars"}), 400
-            db.set_user_password(u["id"], auth.hash_pw(b["password"]))
+            db.set_user_password(u["id"], auth.hash_pw(pw))
             db.audit(auth.actor(), "user_reset_pw", "user", u["username"], "")
         return jsonify({"ok": True})
     return jsonify({"users": db.list_users(), "roles": auth.ROLES})
