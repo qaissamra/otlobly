@@ -85,8 +85,14 @@
   <!-- STATE 1: enter phone -->
   <div id="s_phone" style="display:none">
     <p class="sub" id="t_introphone"></p>
+    <button id="b_wa" onclick="waLogin()"
+            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer">
+      🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
+    <div id="waStatus" style="margin-top:10px"></div>
+    <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 8px">
+      <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
     <label id="t_phonelbl"></label>
-    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" autofocus
+    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
            onkeydown="if(event.key==='Enter')sendCode()">
     <button id="b_send" onclick="sendCode()"></button>
     <div class="hint" id="t_phonehint"></div>
@@ -173,7 +179,28 @@ async function sendCode(){
   paint(); show("s_code"); $("code").focus();
   if(d.dev_code){ $("out2").innerHTML=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("code").value=d.dev_code; }
 }
-function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; $("phone").focus(); }
+let WA_POLL=null;
+async function waLogin(){
+  const b=$("b_wa"); b.disabled=true; b.style.opacity=".6";
+  let d; try{ d=await (await fetch("/api/customer/wa_login/start",{method:"POST"})).json(); }catch(e){ d={}; }
+  if(!d.ok){ b.disabled=false; b.style.opacity="1";
+    $("waStatus").innerHTML=`<div class="err">${esc(d.error)||'WhatsApp login unavailable'}</div>`; return; }
+  window.open(d.wa_url,"_blank");                      // opens WhatsApp with the code pre-filled
+  $("waStatus").innerHTML=`<div class="hint" style="line-height:1.7">📲 <b>أرسل الرسالة</b> التي فتحت في واتساب — سيتم تسجيل دخولك تلقائياً.<br>
+    Hit <b>send</b> in WhatsApp — you'll be logged in automatically.</div>
+    <div class="hint">⏳ بانتظار رسالتك · waiting for your message…</div>`;
+  clearInterval(WA_POLL); WA_POLL=setInterval(waPoll,3000); setTimeout(waPoll,1200);
+}
+async function waPoll(){
+  let d; try{ d=await (await fetch("/api/customer/wa_login/poll")).json(); }catch(e){ return; }
+  if(d.status==="ok"){ clearInterval(WA_POLL); loadDashboard(); }
+  else if(d.status==="unknown"){ clearInterval(WA_POLL); const b=$("b_wa"); b.disabled=false; b.style.opacity="1";
+    $("waStatus").innerHTML=`<div class="err">${esc(d.error)}</div>`; }
+  else if(d.status==="expired"||d.status==="none"){ clearInterval(WA_POLL); const b=$("b_wa"); b.disabled=false; b.style.opacity="1";
+    $("waStatus").innerHTML=`<div class="hint">انتهت المهلة — اضغط الزر لتجربة أخرى · timed out, tap again</div>`; }
+  // pending → keep polling
+}
+function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; clearInterval(WA_POLL); $("phone").focus(); }
 async function verifyCode(){
   const c=($("code").value||"").trim(); if(!c)return;
   const b=$("b_verify"); b.disabled=true; const o=b.textContent; b.textContent=t("verifying"); $("out2").innerHTML="";

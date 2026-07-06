@@ -2032,6 +2032,86 @@ def api_customer_me():
     return jsonify({"logged_in": False})
 
 
+# ---- Login WITHOUT a template: customer taps → sends US a WhatsApp message ------ #
+# Meta lets you act on a message the customer SENT you (24h service window) with NO
+# template and NO business verification. So the customer proves they own the phone
+# by sending a one-time code from their WhatsApp; our inbound webhook logs them in.
+# This is the verification-free path while business verification is pending.
+WA_LOGIN_TTL = 600
+WA_NONCE_RE = re.compile(r"OTL[0-9A-F]{8}")
+
+
+def _wa_business_number():
+    num = os.environ.get("WHATSAPP_BUSINESS_NUMBER") or cfg.get(cfg.load(), "business.whatsapp", "") or ""
+    return "".join(c for c in str(num) if c.isdigit())
+
+
+@app.route("/api/customer/wa_login/start", methods=["POST"])
+@limiter.limit("6 per 10 minutes")
+def api_wa_login_start():
+    num = _wa_business_number()
+    if not num:
+        return jsonify({"ok": False, "error": "WhatsApp login not configured."}), 503
+    nonce = "OTL" + secrets.token_hex(4).upper()          # e.g. OTL9F3A2B1C
+    db.set_setting(f"walogin:{nonce}", {"status": "pending", "expires": time.time() + WA_LOGIN_TTL})
+    session["walogin_nonce"] = nonce                       # only THIS browser can complete it
+    session.permanent = True
+    prefill = f"رمز دخولي إلى اطلبلي: {nonce}\n(أرسل هذه الرسالة كما هي · send this as-is)"
+    return jsonify({"ok": True, "wa_url": f"https://wa.me/{num}?text={_urlquote(prefill)}"})
+
+
+@app.route("/webhook/whatsapp", methods=["GET", "POST"])
+def wa_webhook():
+    # GET = Meta's subscription handshake; POST = inbound messages.
+    if request.method == "GET":
+        if (request.args.get("hub.mode") == "subscribe" and request.args.get("hub.verify_token")
+                == os.environ.get("WHATSAPP_VERIFY_TOKEN", "otlobly_verify")):
+            return request.args.get("hub.challenge", ""), 200
+        return "forbidden", 403
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        for entry in body.get("entry", []):
+            for ch in entry.get("changes", []):
+                for msg in (ch.get("value") or {}).get("messages", []):
+                    text = ((msg.get("text") or {}).get("body")) or ""
+                    m = WA_NONCE_RE.search(text.upper())
+                    if not m:
+                        continue
+                    rec = db.get_setting(f"walogin:{m.group(0)}")
+                    if not rec or rec.get("status") != "pending" or time.time() > (rec.get("expires") or 0):
+                        continue
+                    core = normalize.phone_core(msg.get("from") or "")
+                    matched, name = _match_customer(core)   # only known customers can log in
+                    db.set_setting(f"walogin:{m.group(0)}",
+                                   {"status": "verified" if matched else "unknown",
+                                    "phone": core, "name": name, "expires": time.time() + WA_LOGIN_TTL})
+    except Exception:  # noqa — never 500 a webhook (Meta retries aggressively)
+        app.logger.exception("wa webhook parse failed")
+    return jsonify({"ok": True})                            # always 200
+
+
+@app.route("/api/customer/wa_login/poll")
+def api_wa_login_poll():
+    nonce = session.get("walogin_nonce")
+    if not nonce:
+        return jsonify({"status": "none"})
+    rec = db.get_setting(f"walogin:{nonce}") or {}
+    st = rec.get("status")
+    if st == "verified":
+        session["cust_phone"] = rec.get("phone")
+        session["cust_name"] = rec.get("name") or ""
+        session.pop("walogin_nonce", None)
+        db.set_setting(f"walogin:{nonce}", {"status": "used", "expires": 0})   # one-time
+        return jsonify({"status": "ok", "name": session["cust_name"]})
+    if st == "unknown":
+        session.pop("walogin_nonce", None)
+        return jsonify({"status": "unknown",
+                        "error": "لا توجد طلبات لهذا الرقم · No orders found for this number."})
+    if not rec or time.time() > (rec.get("expires") or 0):
+        return jsonify({"status": "expired"})
+    return jsonify({"status": "pending"})
+
+
 @app.route("/api/customer/otp/request", methods=["POST"])
 @limiter.limit("5 per 10 minutes")
 def api_customer_otp_request():
