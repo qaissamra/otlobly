@@ -809,6 +809,14 @@
   </div>
 </div>
 
+<!-- P&L drill-down: the rows behind one card (click any P&L number) -->
+<div id="pnlDrillModal" class="az-modal hidden" onclick="if(event.target===this)closePnlDrill()">
+  <div class="az-box" style="width:760px;max-width:96vw;max-height:90vh;overflow:auto">
+    <div class="az-head"><b id="pdrTitle">📊 Detail</b><span class="az-x" onclick="closePnlDrill()">✕</span></div>
+    <div id="pdrBody" style="padding:14px 16px"></div>
+  </div>
+</div>
+
 <div id="azModal" class="az-modal hidden" onclick="if(event.target===this)closeAz()">
   <div class="az-box">
     <div class="az-head"><b id="azTitle">Profile</b><span class="az-x" onclick="closeAz()">✕</span></div>
@@ -2800,16 +2808,16 @@ async function loadPnl(){
 function renderPnl(){
   if(!PNL) return;
   const t=PNL.totals, s=PNL.sources;
-  const card=(l,v,cls="")=>`<div class="card"><div class="n ${cls}">${v}</div><div class="l">${l}</div></div>`;
+  const card=(l,v,cls="",metric="")=>`<div class="card"${metric?` style="cursor:pointer" title="اضغط للتفاصيل · click to see where this number comes from" onclick="openPnlDrill('${metric}')"`:''}><div class="n ${cls}">${v}</div><div class="l">${l}${metric?' <span style="color:var(--muted);font-weight:400">›</span>':''}</div></div>`;
   $("pnlCards").innerHTML=
-    card("Revenue (placed orders)", money(t.revenue_usd))+
-    card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0))+
-    card("Amazon cost", money(t.cogs_usd))+
-    card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg")+
-    card("Meta spend", money(t.meta_usd))+
-    card("Net profit", money(t.net_profit_usd), t.net_profit_usd>=0?"good":"neg")+
-    card("Net margin", t.net_margin_pct==null?"—":t.net_margin_pct+"%")+
-    card("Cost / customer", t.cost_per_customer_usd==null?"—":money(t.cost_per_customer_usd));
+    card("Revenue (placed orders)", money(t.revenue_usd), "", "revenue")+
+    card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0), "", "to_order")+
+    card("Amazon cost", money(t.cogs_usd), "", "cogs")+
+    card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg", "fx_gross")+
+    card("Meta spend", money(t.meta_usd), "", "meta")+
+    card("Net profit", money(t.net_profit_usd), t.net_profit_usd>=0?"good":"neg", "fx_net")+
+    card("Net margin", t.net_margin_pct==null?"—":t.net_margin_pct+"%", "", "fx_net_margin")+
+    card("Cost / customer", t.cost_per_customer_usd==null?"—":money(t.cost_per_customer_usd), "", "fx_cpc");
   const badge=k=>`<span class="qchip">${k}: <b style="color:${s[k].connected?'var(--good)':'var(--warn)'}">${s[k].connected?'connected':'connect'}</b></span>`;
   $("pnlSources").innerHTML=badge("revenue")+badge("cogs")+badge("meta");
   const batches=Object.entries(PNL.revenue_by_batch||{});
@@ -2838,6 +2846,130 @@ let pnlTimer=null;
 function startPnlAuto(){ stopPnlAuto(); refreshPnlSilent(); pnlTimer=setInterval(refreshPnlSilent,180000); }
 function stopPnlAuto(){ if(pnlTimer){clearInterval(pnlTimer);pnlTimer=null;} }
 async function refreshPnlSilent(){ try{await post("/api/pnl/refresh",{});}catch(e){} loadPnl(); }
+
+// ---------- P&L drill-down: click any card → the rows behind that number ----------
+let PDRILL=null, PDR_EXCL=new Set(), PDR_CAMPS=null;
+const PDR_INFO={
+  revenue:{title:"💵 Revenue — placed orders", hint:"كل طلب تم شراؤه فعلًا · every order actually placed (ORDERED → COLLECTED)"},
+  to_order:{title:"🛒 To order — priced, not yet placed", hint:"طلبات مسعّرة بانتظار الشراء · quotes waiting in the To-order queue"},
+  cogs:{title:"📦 Amazon cost — purchase orders", hint:"مجاميع أوامر الشراء من صفحة Purchases · the PO totals typed on the Purchases page"},
+  customers:{title:"👥 Customers — distinct buyers", hint:"عملاء مميّزون على الطلبات المشتراة · distinct customers on placed orders"}};
+function pnlDrillQuery(){
+  const custom=PNL_SINCE||PNL_UNTIL;
+  return custom ? `&${PNL_SINCE?`since=${PNL_SINCE}`:''}${(PNL_SINCE&&PNL_UNTIL)?'&':''}${PNL_UNTIL?`until=${PNL_UNTIL}`:''}`
+                : (PNL_DAYS?`&days=${PNL_DAYS}`:"");
+}
+function pnlRangeLbl(){ const l=$("pnlPeriodLbl"); return l?l.textContent.replace(/^·\s*/,''):"all time"; }
+function closePnlDrill(){ $("pnlDrillModal").classList.add("hidden"); }
+async function openPnlDrill(metric){
+  PDRILL=metric;
+  $("pnlDrillModal").classList.remove("hidden");
+  if(metric.startsWith("fx_")){ drillRenderFormula(metric); return; }
+  $("pdrTitle").textContent="📊 Loading…"; $("pdrBody").innerHTML=`<div style="color:var(--muted)">Loading…</div>`;
+  let d; try{ d=await (await fetch(`/api/pnl/drill?metric=${metric}${pnlDrillQuery()}`)).json(); }catch(e){ d={error:String(e)}; }
+  if(d.error){ $("pdrTitle").textContent="⚠ Error"; $("pdrBody").innerHTML=`<div style="color:var(--bad)">${poEsc(d.error)}</div>`; return; }
+  if(metric==="meta") drillRenderMeta(d); else drillRender(d);
+}
+function pdrEmpty(n){ return `<tr><td colspan="${n}" style="color:var(--muted)">Nothing in this period.</td></tr>`; }
+function pdrFoot(span,label,amount){ return `</tbody><tfoot><tr><td colspan="${span}" style="border-top:2px solid var(--line)"><b>${label}</b></td><td class="amt" style="border-top:2px solid var(--line)"><b>${amount}</b></td></tr></tfoot>`; }
+function pdrMonthTable(pairs,total){
+  return `<table><thead><tr><th>Month</th><th class="amt">USD</th></tr></thead><tbody>`+
+    (pairs.map(([m,v])=>`<tr><td class="mono">${poEsc(m)}</td><td class="amt">${money(v)}</td></tr>`).join("")||pdrEmpty(2))+
+    pdrFoot(1,"= card total",money(total||0))+`</table>`;
+}
+function pdrRangeLine(extra){ return `<div style="color:var(--muted);font-size:12px;margin-bottom:10px">📅 ${poEsc(pnlRangeLbl())}${extra?` · ${extra}`:''}</div>`; }
+function drillRender(d){
+  const info=PDR_INFO[d.metric]||{title:d.metric};
+  $("pdrTitle").textContent=info.title;
+  let html=pdrRangeLine(info.hint);
+  if(d.metric==="customers"){
+    html+=`<table><thead><tr><th>Customer</th><th>Phone</th><th style="text-align:right">Orders</th><th class="amt">Total USD</th></tr></thead><tbody>`+
+      ((d.rows||[]).map(r=>`<tr><td><b>${poEsc(r.name||'—')}</b></td><td class="mono">${poEsc(r.phone||'')}</td><td style="text-align:right">${r.orders}</td><td class="amt">${money(r.total_usd)}</td></tr>`).join("")||pdrEmpty(4))+
+      pdrFoot(3,`= ${d.count} customer(s) — the card number`,"")+`</table>`;
+  }else if(d.metric==="cogs"&&d.fallback){
+    html+=`<div style="color:var(--warn);font-size:12px;margin-bottom:8px">No purchase orders yet — showing the legacy monthly cost cache.</div>`
+      +pdrMonthTable((d.rows||[]).map(r=>[r.month,r.amount_usd]), d.total_usd);
+  }else if(d.metric==="cogs"){
+    html+=`<table><thead><tr><th>PO</th><th>Amazon order #</th><th>Date</th><th class="amt">USD</th></tr></thead><tbody>`+
+      ((d.rows||[]).map(r=>`<tr><td><b>${poEsc(r.po_id||'')}</b></td><td class="mono">${poEsc(r.amazon_order_number||'—')}</td><td>${r.date||''}</td><td class="amt">${money(r.amount_usd)}</td></tr>`).join("")||pdrEmpty(4))+
+      pdrFoot(3,`= card total · ${d.count} order(s)`,money(d.total_usd))+`</table>`;
+  }else{  // revenue / to_order — order rows
+    html+=`<table><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Batch</th><th>Date</th><th class="amt">USD</th></tr></thead><tbody>`+
+      ((d.rows||[]).map(r=>`<tr><td><b>${poEsc(r.order_id||'')}</b></td><td>${poEsc(r.customer||'')}</td><td>${statusPill(r.status)}</td><td>${poEsc(r.batch||'—')}</td><td>${r.date||''}</td><td class="amt">${money(r.amount_usd)}</td></tr>`).join("")||pdrEmpty(6))+
+      pdrFoot(5,`= card total · ${d.count} order(s)`,money(d.total_usd))+`</table>`;
+  }
+  $("pdrBody").innerHTML=html;
+}
+function drillRenderMeta(d){
+  $("pdrTitle").textContent="📣 Meta ad spend";
+  PDR_CAMPS=d.campaigns||null;
+  PDR_EXCL=new Set((d.campaigns||[]).filter(c=>c.excluded).map(c=>c.id));
+  let html=pdrRangeLine(d.synced_at?`synced ${String(d.synced_at).slice(0,16).replace('T',' ')}`:'');
+  if(d.note) html+=`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:12.5px;margin-bottom:10px">💡 ${poEsc(d.note)}</div>`;
+  if(d.mode==="manual"){
+    html+=pdrMonthTable(Object.entries(d.by_month||{}), d.total_usd)
+      +`<div style="margin-top:10px"><a style="cursor:pointer;color:var(--accent);font-weight:600" onclick="closePnlDrill();setView('settings')">✏️ Edit monthly spend in Settings</a></div>`;
+  }else if(!d.campaigns){
+    html+=pdrMonthTable(Object.entries(d.by_month||{}), d.total_usd);
+  }else{
+    html+=`<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">✓ = يُحسب في الأرباح · ticked campaigns count in the P&L. Untick old campaigns to exclude them, then Save.</div>`;
+    html+=`<table><thead><tr><th style="width:30px"></th><th>Campaign</th><th class="amt">Spend (USD)</th></tr></thead><tbody>`+
+      (d.campaigns.map(c=>`<tr id="pdrc_${poEsc(c.id)}" style="${c.excluded?'opacity:.5':''}">
+        <td><input type="checkbox" ${c.excluded?'':'checked'} ${CAN_ADMIN?'':'disabled'} onchange="metaExclToggle('${poEsc(c.id)}',this.checked)"></td>
+        <td>${poEsc(c.name||c.id)}${c.excluded?' <span style="color:var(--muted);font-size:11px">excluded</span>':''}</td>
+        <td class="amt">${money(c.total_usd)}</td></tr>`).join("")||pdrEmpty(3))+
+      pdrFoot(2,`= Meta spend on the card <span id="pdrPreview" style="color:var(--warn);font-weight:400"></span>`,`<span id="pdrMetaTotal">${money(d.total_usd)}</span>`)+`</table>`;
+    if(CAN_ADMIN) html+=`<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="po-btn accent" onclick="saveMetaExclusions(this)">💾 Save — update the P&L</button>
+      <span style="color:var(--muted);font-size:12px">saved for everyone · survives refresh &amp; re-sync</span></div>`;
+  }
+  $("pdrBody").innerHTML=html;
+}
+function metaExclToggle(id,included){
+  if(included) PDR_EXCL.delete(id); else PDR_EXCL.add(id);
+  const tr=$("pdrc_"+id); if(tr) tr.style.opacity=included?'':'0.5';
+  const t=(PDR_CAMPS||[]).reduce((s,c)=>s+(PDR_EXCL.has(c.id)?0:(c.total_usd||0)),0);
+  const el=$("pdrMetaTotal"); if(el) el.textContent=money(Math.round(t*100)/100);
+  const pv=$("pdrPreview"); if(pv) pv.textContent="(after Save)";
+}
+async function saveMetaExclusions(btn){
+  btn.disabled=true;
+  let r; try{ r=await post("/api/settings",{meta_excluded_campaign_ids:[...PDR_EXCL]}); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(!r.ok){ toast("Save failed"+(r.error?": "+r.error:"")); return; }
+  toast("Saved ✓ — P&L updated");
+  loadPnl();                 // cards pick up the new exclusions
+  openPnlDrill('meta');      // re-fetch the drill so its sum matches the card again
+}
+function drillRenderFormula(metric){
+  const t=(PNL&&PNL.totals)||{};
+  const F={
+    fx_gross:{title:"🧮 Gross profit — the formula", rows:[
+      ["Revenue (placed orders)", money(t.revenue_usd||0), "revenue"],
+      ["− Amazon cost", money(t.cogs_usd||0), "cogs"],
+      ["= Gross profit", money(t.gross_profit_usd||0), null]]},
+    fx_net:{title:"🧮 Net profit — the formula", rows:[
+      ["Gross profit", money(t.gross_profit_usd||0), "fx_gross"],
+      ["− Meta ad spend", money(t.meta_usd||0), "meta"],
+      ["= Net profit", money(t.net_profit_usd||0), null]]},
+    fx_net_margin:{title:"🧮 Net margin — the formula", rows:[
+      ["Net profit", money(t.net_profit_usd||0), "fx_net"],
+      ["÷ Revenue", money(t.revenue_usd||0), "revenue"],
+      ["= Net margin", t.net_margin_pct==null?"—":t.net_margin_pct+"%", null]]},
+    fx_cpc:{title:"🧮 Cost per customer — the formula", rows:[
+      ["Meta ad spend", money(t.meta_usd||0), "meta"],
+      ["÷ Customers", String(t.customers==null?"—":t.customers), "customers"],
+      ["= Cost / customer", t.cost_per_customer_usd==null?"—":money(t.cost_per_customer_usd), null]]}
+  }[metric];
+  if(!F) return;
+  $("pdrTitle").textContent=F.title;
+  $("pdrBody").innerHTML=pdrRangeLine("اضغط أي سطر لتفاصيله · click a line for its own breakdown")
+    +F.rows.map(([l,v,m],i)=>{
+      const last=i===F.rows.length-1;
+      return `<div ${m?`onclick="openPnlDrill('${m}')"`:''} style="display:flex;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;${m?'cursor:pointer;':''}${last?'background:var(--bg2);font-weight:700;':''}">
+        <span>${l}${m?' <span style="color:var(--accent)">›</span>':''}</span><b>${v}</b></div>`;}).join("");
+}
+
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json();}
 
 load();

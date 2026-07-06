@@ -56,6 +56,9 @@ def read(config=None):
         },
         # Monthly Meta ad spend typed by the admin (USD) — feeds the P&L meta line.
         "meta_manual": cfg.get(config, "pnl.meta.manual", {}) or {},
+        # Campaigns excluded from the P&L Meta total (drill-down checkboxes).
+        # None = never saved → the P&L seeds defaults from the legacy campaign_filter.
+        "meta_excluded_campaign_ids": cfg.get(config, "pnl.meta.excluded_campaign_ids", None),
     }
 
 
@@ -114,6 +117,10 @@ def apply(body, config=None, persist=True):
             if re.match(r"^\d{4}-\d{2}$", k):
                 clean[k] = round(_f(v, 0), 2)
         cfg.set_path(config, "pnl.meta.manual", clean)
+    if isinstance(body.get("meta_excluded_campaign_ids"), list):
+        clean = sorted({str(x).strip() for x in body["meta_excluded_campaign_ids"]
+                        if str(x).strip()})
+        cfg.set_path(config, "pnl.meta.excluded_campaign_ids", clean)
     if persist:
         cfg.save(config)
     return read(config)

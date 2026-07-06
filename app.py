@@ -88,6 +88,9 @@ def load_env():
 load_env()
 db.init_db()
 
+import meta_sync
+meta_sync.start()          # background 24/7 Meta ad-spend pull (no-op without API creds)
+
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("OTLOBLY_SECRET", "dev-secret-change-me")
 app.config.update(
@@ -287,23 +290,43 @@ def api_report():
     return jsonify(redact_report(report_mod.build(orders_db())))
 
 
-@app.route("/api/pnl")
-@auth.require("view_pnl")
-def api_pnl():
+def _pnl_range():
     # ?days=7 → last week; ?since=&?until=YYYY-MM-DD → explicit range. Default: all time.
     since = (request.args.get("since") or "").strip() or None
     until = (request.args.get("until") or "").strip() or None
     days = request.args.get("days", type=int)
     if days and not since:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    return since, until
+
+
+@app.route("/api/pnl")
+@auth.require("view_pnl")
+def api_pnl():
+    since, until = _pnl_range()
     return jsonify(pnl_mod.build(since=since, until=until))
+
+
+@app.route("/api/pnl/drill")
+@auth.require("view_pnl")
+def api_pnl_drill():
+    # The rows behind one P&L card (metric=revenue|to_order|cogs|customers|meta),
+    # same window params as /api/pnl so the drill always matches the cards.
+    since, until = _pnl_range()
+    try:
+        return jsonify(pnl_mod.drill(request.args.get("metric", ""), since=since, until=until))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/pnl/refresh", methods=["POST"])
 @auth.require("admin_actions")
 def api_pnl_refresh():
-    # COGS now comes live from the Purchases page; only the Meta API pull needs a refresh.
-    return jsonify({"ok": True, "ran": {"meta": run_script("meta.py")}})
+    # COGS is live from the Purchases page; force an immediate Meta pull (in-process).
+    import meta
+    out = meta.sync_once()
+    return jsonify({"ok": True, "meta": {"total_usd": out.get("total_usd"),
+                                         "error": out.get("last_error")}})
 
 
 @app.route("/api/order", methods=["POST"])

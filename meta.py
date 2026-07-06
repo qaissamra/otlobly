@@ -61,50 +61,136 @@ def from_api(config):
         return {"error": "api mode needs META_AD_ACCOUNT_ID and META_ACCESS_TOKEN in .env."}
     if not acct.startswith("act_"):
         acct = "act_" + acct
-    # Optional: count only ONE campaign (these customers came from a single campaign).
-    camp_filter = cfg.get(config, "pnl.meta.campaign_filter")
-    level = "campaign" if camp_filter else "account"
-    fields = "spend,account_currency" + (",campaign_name" if camp_filter else "")
+    # Always campaign-level so the P&L drill-down can show every campaign and the
+    # owner can exclude old ones — the filter is applied at READ time
+    # (apply_exclusions), so toggling never needs a re-pull.
     q = parse.urlencode({
-        "fields": fields,
+        "fields": "campaign_id,campaign_name,spend,account_currency",
         "time_increment": "monthly",
         "date_preset": "maximum",
-        "level": level,
+        "level": "campaign",
+        "limit": 500,
         "access_token": token,
     })
+    url, rows = f"{GRAPH}/{acct}/insights?{q}", []
     try:
-        with request.urlopen(f"{GRAPH}/{acct}/insights?{q}", timeout=40) as r:
-            data = json.loads(r.read().decode())
+        while url:   # level=campaign paginates — follow paging.next to the end
+            with request.urlopen(url, timeout=40) as r:
+                data = json.loads(r.read().decode())
+            rows += data.get("data", [])
+            url = (data.get("paging") or {}).get("next")
     except error.HTTPError as e:
         return {"error": f"Meta API error {e.code}: {e.read().decode()[:200]}"}
     except (error.URLError, ValueError) as e:
         return {"error": f"Meta API call failed: {e}"}
 
-    by_month = defaultdict(float)
-    for row in data.get("data", []):
-        if camp_filter and camp_filter not in (row.get("campaign_name") or ""):
-            continue
+    by_month, camps = defaultdict(float), {}
+    for row in rows:
         month = (row.get("date_start") or "")[:7] or "unknown"
-        spend = float(row.get("spend") or 0)
-        by_month[month] += _to_usd(spend, row.get("account_currency"), config)
-    src = f"api:{acct}" + (f" · campaign~“{camp_filter}”" if camp_filter else "")
+        usd = _to_usd(float(row.get("spend") or 0), row.get("account_currency"), config)
+        cid = str(row.get("campaign_id") or "")
+        c = camps.setdefault(cid, {"id": cid, "name": row.get("campaign_name") or cid,
+                                   "by_month": defaultdict(float)})
+        c["by_month"][month] += usd
+        by_month[month] += usd   # RAW all-campaign totals; exclusions happen at read time
+    campaigns = []
+    for c in camps.values():
+        bm = {k: round(v, 2) for k, v in sorted(c["by_month"].items())}
+        campaigns.append({"id": c["id"], "name": c["name"], "by_month": bm,
+                          "total_usd": round(sum(bm.values()), 2)})
+    campaigns.sort(key=lambda c: -c["total_usd"])
     return _pack(sum(by_month.values()),
-                 {k: round(v, 2) for k, v in sorted(by_month.items())}, src)
+                 {k: round(v, 2) for k, v in sorted(by_month.items())},
+                 f"api:{acct} · {len(campaigns)} campaign(s)", campaigns=campaigns)
 
 
-def _pack(total, by_month, source):
-    return {
+def _pack(total, by_month, source, campaigns=None):
+    out = {
         "total_usd": round(total, 2),
         "by_month": dict(sorted(by_month.items())),
         "source": source,
         "pulled_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
+    if campaigns is not None:
+        out["campaigns"] = campaigns
+    return out
+
+
+def apply_exclusions(cached, config=None):
+    """Read-time campaign filter over the cached API spend. Returns
+    (by_month_included, campaigns_annotated) where each campaign gains
+    'excluded': bool. Defaults, in priority order:
+      1. config pnl.meta.excluded_campaign_ids saved (even []) → authoritative;
+      2. legacy pnl.meta.campaign_filter substring → only matching names count
+         (identical numbers to the old pull-time filter — seeds the first UI open);
+      3. neither → every campaign counts.
+    A cache that predates per-campaign data → (its raw by_month, None)."""
+    config = cfg.load() if config is None else config
+    campaigns = (cached or {}).get("campaigns")
+    if not campaigns:
+        return dict((cached or {}).get("by_month") or {}), None
+    excl = cfg.get(config, "pnl.meta.excluded_campaign_ids", None)
+    excl_set = {str(x) for x in excl} if isinstance(excl, list) else None
+    legacy = cfg.get(config, "pnl.meta.campaign_filter")
+    annotated, by_month = [], defaultdict(float)
+    for c in campaigns:
+        if excl_set is not None:
+            out = str(c.get("id")) in excl_set
+        elif legacy:
+            out = legacy not in (c.get("name") or "")
+        else:
+            out = False
+        annotated.append({**c, "excluded": out})
+        if not out:
+            for m, v in (c.get("by_month") or {}).items():
+                by_month[m] += v
+    return {k: round(v, 2) for k, v in sorted(by_month.items())}, annotated
+
+
+def has_api_creds():
+    return bool(os.environ.get("META_AD_ACCOUNT_ID") and os.environ.get("META_ACCESS_TOKEN"))
+
+
+def effective_mode(config=None):
+    """API as soon as the two env creds exist (no hidden config flip needed).
+    Without creds the API is impossible, so fall back to manual entry."""
+    return "api" if has_api_creds() else "manual"
 
 
 def pull(config=None):
     config = config or cfg.load()
-    mode = cfg.get(config, "pnl.meta.mode", "manual")
-    return from_api(config) if mode == "api" else from_manual(config)
+    return from_api(config) if effective_mode(config) == "api" else from_manual(config)
+
+
+def read_cache():
+    try:
+        return json.loads(CACHE.read_text()) if CACHE.exists() else None
+    except (ValueError, OSError):
+        return None
+
+
+def _now():
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def sync_once(config=None):
+    """Pull once and write the cache ATOMICALLY (temp + os.replace, safe across the
+    two gunicorn workers). On error keep the last-good totals but record last_error."""
+    config = config or cfg.load()
+    agg = pull(config)
+    prev = read_cache() or {}
+    if agg.get("error"):
+        out = {**prev, "last_error": agg["error"], "last_sync_at": _now()}
+    else:
+        out = {**agg, "last_error": None, "last_sync_at": _now()}
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CACHE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(out, ensure_ascii=False, indent=2))
+        os.replace(tmp, CACHE)          # atomic
+    except OSError as e:
+        return {**out, "write_error": str(e)}
+    return out
 
 
 def main():
@@ -114,18 +200,15 @@ def main():
     args = ap.parse_args()
     if args.selftest:
         return sys.exit(_selftest())
-    agg = pull()
-    if agg.get("error"):
-        print(agg["error"])
+    if args.dry_run:
+        agg = pull()
+        print(agg.get("error") or f"Meta spend: ${agg['total_usd']:.2f}  [{agg['source']}] (DRY RUN)")
         return
-    print(f"Meta spend: ${agg['total_usd']:.2f}  [source: {agg['source']}]")
-    print("By month:", json.dumps(agg["by_month"]))
-    if not args.dry_run:
-        CACHE.parent.mkdir(exist_ok=True)
-        CACHE.write_text(json.dumps(agg, ensure_ascii=False, indent=2))
-        print(f"Wrote {CACHE.name}.")
+    out = sync_once()
+    if out.get("last_error"):
+        print(f"⚠ sync error: {out['last_error']} (kept last-good cache)")
     else:
-        print("(DRY RUN — cache not written)")
+        print(f"Meta spend: ${out.get('total_usd',0):.2f}  [{out.get('source')}] · wrote {CACHE.name}")
 
 
 def _selftest():
@@ -145,7 +228,25 @@ def _selftest():
         tf.unlink(missing_ok=True)
     ok = agg["total_usd"] == 300.0 and agg["by_month"]["2026-06"] == 200.0
     print("manual+fx:", "OK" if ok else f"XX {agg}")
-    return 0 if ok else 1
+
+    cached = {"by_month": {"2026-05": 999.0},   # raw — ignored when campaigns exist
+              "campaigns": [
+                  {"id": "1", "name": "اطلبلي — June", "by_month": {"2026-05": 100.0}, "total_usd": 100.0},
+                  {"id": "2", "name": "Old promo", "by_month": {"2026-05": 50.0}, "total_usd": 50.0}]}
+    # legacy filter seeds the defaults: only the matching campaign counts
+    bm1, an1 = apply_exclusions(cached, {"pnl": {"meta": {"campaign_filter": "اطلبلي"}}})
+    ok1 = bm1 == {"2026-05": 100.0} and [a["excluded"] for a in an1] == [False, True]
+    # a saved exclusion list is authoritative (legacy filter ignored)
+    bm2, an2 = apply_exclusions(cached, {"pnl": {"meta": {"excluded_campaign_ids": ["1"],
+                                                          "campaign_filter": "اطلبلي"}}})
+    ok2 = bm2 == {"2026-05": 50.0} and [a["excluded"] for a in an2] == [True, False]
+    # no config at all → everything counts; stale cache → raw by_month passthrough
+    bm3, _ = apply_exclusions(cached, {})
+    bm4, an4 = apply_exclusions({"by_month": {"2026-05": 77.0}}, {})
+    ok3 = bm3 == {"2026-05": 150.0} and bm4 == {"2026-05": 77.0} and an4 is None
+    ok_x = ok1 and ok2 and ok3
+    print("exclusions:", "OK" if ok_x else f"XX {bm1}/{bm2}/{bm3}/{bm4}")
+    return 0 if (ok and ok_x) else 1
 
 
 if __name__ == "__main__":

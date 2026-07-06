@@ -5,7 +5,8 @@
       "name": "otlobly-app",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders' && exec ./.venv/bin/python app.py"],
-      "port": 8789
+      "port": 8789,
+      "autoPort": true
     },
     {
       "name": "otlobly-static-ui",

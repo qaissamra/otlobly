@@ -21,23 +21,31 @@ import db
 import store
 
 
-def from_orders(orders=None, since=None, until=None):
-    """Revenue = only orders that were actually PLACED (ORDERED..COLLECTED) — a
-    To-order quote (REQUESTED/QUOTED/PAID) is not revenue until it's ordered.
-    By month of created_at + by batch. since/until = 'YYYY-MM-DD' inclusive bounds."""
+def placed_rows(orders=None, since=None, until=None):
+    """Yield the PLACED (ORDERED..COLLECTED), priced orders inside the window —
+    the exact revenue selection. Shared by the total and the P&L drill-down so
+    the breakdown always sums to the headline number."""
     orders = db.list_orders() if orders is None else orders
-    total, n = 0.0, 0
-    by_month = defaultdict(float)
-    by_batch = defaultdict(float)
     for o in orders:
         if o["status"] not in store.PLACED_STATUSES:
             continue
         d = (o.get("created_at") or "")[:10]
         if (since and d < since) or (until and d > until):
             continue
-        amt = o.get("amount_to_collect_usd")
-        if amt is None:
+        if o.get("amount_to_collect_usd") is None:
             continue
+        yield o
+
+
+def from_orders(orders=None, since=None, until=None):
+    """Revenue = only orders that were actually PLACED (ORDERED..COLLECTED) — a
+    To-order quote (REQUESTED/QUOTED/PAID) is not revenue until it's ordered.
+    By month of created_at + by batch. since/until = 'YYYY-MM-DD' inclusive bounds."""
+    total, n = 0.0, 0
+    by_month = defaultdict(float)
+    by_batch = defaultdict(float)
+    for o in placed_rows(orders, since, until):
+        amt = o["amount_to_collect_usd"]
         total += amt
         n += 1
         by_month[(o.get("created_at") or "")[:7] or "unknown"] += amt

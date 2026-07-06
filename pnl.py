@@ -55,12 +55,23 @@ def _month_filter(agg, since, until=None):
 
 
 def _source_meta(config, since=None, until=None):
-    # Manual mode (the default) is always "connected" — it's a valid $0 until the
-    # owner types spend in Settings. API mode is connected only once the cache pulls.
-    if cfg.get(config, "pnl.meta.mode", "manual") == "manual":
-        return _month_filter(meta.from_manual(config), since, until), True
-    cached = _load_cache("meta_cache.json")
-    return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since, until), cached is not None
+    # Manual mode (no API creds) is always "connected" — a valid $0 until the owner
+    # types spend in Settings. API mode reads the cache the background sync keeps fresh;
+    # connected = we have a cache with no last_error (a bad token surfaces as an error).
+    if meta.effective_mode(config) == "manual":
+        m = meta.from_manual(config)
+        return _month_filter({**m, "source": "manual (Settings)"}, since, until), True
+    cached = meta.read_cache() or {}
+    err = cached.get("last_error")
+    synced = cached.get("pulled_at") or cached.get("last_sync_at")
+    detail = f"api error: {err}" if err else (f"api · synced {synced[:16].replace('T', ' ')}" if synced else "api · not pulled yet")
+    # Campaign exclusions (P&L drill-down) are applied at read time, so a
+    # checkbox toggle changes the totals instantly without a re-pull.
+    by_month, _ = meta.apply_exclusions(cached, config)
+    out = _month_filter({**cached, "by_month": by_month,
+                         "total_usd": round(sum(by_month.values()), 2),
+                         "source": detail}, since, until)
+    return out, bool(cached) and not err
 
 
 def _po_date(po):
@@ -71,23 +82,28 @@ def _po_date(po):
     return d
 
 
+def _cogs_po_rows(config, since=None, until=None):
+    """Yield (po, usd) for every PO inside the window — the exact Amazon-cost
+    selection (incl. the AED→USD conversion). Shared by the total and the drill."""
+    aed = float(cfg.get(config, "fx.aed_per_usd", 3.6725))
+    for po in purchases.load().get("purchase_orders", []):
+        d = _po_date(po)[:10]
+        if (since and d < since) or (until and d > until):
+            continue
+        usd = po.get("total_usd")
+        if usd in (None, "", 0) and po.get("total_aed"):
+            usd = float(po["total_aed"]) / aed
+        yield po, float(usd or 0)
+
+
 def _source_cogs(config, since=None, until=None):
     """Amazon cost = the PO totals staff type on the Purchases page — the in-app
     source of truth. (The old ClickUp cache is only a fallback when no POs exist.)"""
-    pos = purchases.load().get("purchase_orders", [])
-    if pos:
-        aed = float(cfg.get(config, "fx.aed_per_usd", 3.6725))
+    if purchases.load().get("purchase_orders"):
         total, by_month = 0.0, defaultdict(float)
-        for po in pos:
-            d = _po_date(po)[:10]
-            if (since and d < since) or (until and d > until):
-                continue
-            usd = po.get("total_usd")
-            if usd in (None, "", 0) and po.get("total_aed"):
-                usd = float(po["total_aed"]) / aed
-            usd = float(usd or 0)
+        for po, usd in _cogs_po_rows(config, since, until):
             total += usd
-            by_month[d[:7] or "unknown"] += usd
+            by_month[_po_date(po)[:7] or "unknown"] += usd
         return {"total_usd": round(total, 2),
                 "by_month": {k: round(v, 2) for k, v in sorted(by_month.items())},
                 "source": "Purchases page (PO totals)"}, True
@@ -95,33 +111,44 @@ def _source_cogs(config, since=None, until=None):
     return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since, until), cached is not None
 
 
-def _customers(since=None, until=None):
-    """Distinct customers on PLACED orders in the window (for cost-per-customer)."""
-    keys = set()
+def _customer_rows(since=None, until=None):
+    """Yield (key, order) for PLACED orders in the window — key is the customer's
+    E.164 phone (or name). The exact cost-per-customer selection (note: unlike
+    revenue it does NOT require a price). Shared by the count and the drill."""
     for o in db.list_orders():
         if o["status"] not in store.PLACED_STATUSES:
             continue
         d = (o.get("created_at") or "")[:10]
         if (since and d < since) or (until and d > until):
             continue
-        keys.add((store.primary_phone(o) or {}).get("e164") or o["customer"]["name"])
-    return len([k for k in keys if k])
+        yield (store.primary_phone(o) or {}).get("e164") or o["customer"]["name"], o
 
 
-def _to_order(since=None, until=None):
-    """Pending pipeline — priced orders still in the To-order queue (not yet placed),
-    so the amount excluded from revenue stays visible. Returns (usd, count)."""
-    total, n = 0.0, 0
+def _customers(since=None, until=None):
+    """Distinct customers on PLACED orders in the window (for cost-per-customer)."""
+    return len({k for k, _ in _customer_rows(since, until) if k})
+
+
+def _preorder_rows(since=None, until=None):
+    """Yield the priced To-order-queue orders inside the window — the exact
+    pipeline selection. Shared by the total and the drill."""
     for o in db.list_orders():
         if o["status"] not in store.PREORDER_STATUSES:
             continue
         d = (o.get("created_at") or "")[:10]
         if (since and d < since) or (until and d > until):
             continue
-        amt = o.get("amount_to_collect_usd")
-        if amt is None:
+        if o.get("amount_to_collect_usd") is None:
             continue
-        total += amt
+        yield o
+
+
+def _to_order(since=None, until=None):
+    """Pending pipeline — priced orders still in the To-order queue (not yet placed),
+    so the amount excluded from revenue stays visible. Returns (usd, count)."""
+    total, n = 0.0, 0
+    for o in _preorder_rows(since, until):
+        total += o["amount_to_collect_usd"]
         n += 1
     return round(total, 2), n
 
@@ -176,6 +203,103 @@ def build(config=None, since=None, until=None):
         "revenue_by_batch": rev.get("by_batch", {}),
         "by_month": by_month,
     }
+
+
+def _order_row(o):
+    ph = store.primary_phone(o) or {}
+    return {"order_id": o.get("order_id"),
+            "customer": (o.get("customer") or {}).get("name") or "",
+            "phone": ph.get("display") or ph.get("e164") or "",
+            "status": o.get("status"),
+            "batch": str(o.get("batch") or ""),
+            "date": (o.get("created_at") or "")[:10],
+            "amount_usd": o.get("amount_to_collect_usd")}
+
+
+def drill(metric, config=None, since=None, until=None):
+    """The rows behind one P&L card — computed with the SAME selection code as
+    build(), so the breakdown always sums to the headline number.
+    Raises ValueError on an unknown metric (route answers 400)."""
+    config = config or cfg.load()
+    base = {"metric": metric, "since": since, "until": until}
+
+    if metric in ("revenue", "to_order"):
+        src = (revenue.placed_rows(None, since, until) if metric == "revenue"
+               else _preorder_rows(since, until))
+        rows, total = [], 0.0
+        for o in src:
+            rows.append(_order_row(o))
+            total += o["amount_to_collect_usd"]
+        rows.sort(key=lambda r: r["date"], reverse=True)
+        return {**base, "total_usd": round(total, 2), "count": len(rows), "rows": rows}
+
+    if metric == "cogs":
+        if purchases.load().get("purchase_orders"):
+            rows, total = [], 0.0
+            for po, usd in _cogs_po_rows(config, since, until):
+                total += usd
+                rows.append({"po_id": po.get("po_id"),
+                             "amazon_order_number": po.get("amazon_order_number") or "",
+                             "date": _po_date(po)[:10],
+                             "amount_usd": round(usd, 2)})
+            rows.sort(key=lambda r: r["date"], reverse=True)
+            return {**base, "total_usd": round(total, 2), "count": len(rows),
+                    "fallback": False, "rows": rows}
+        cached = _month_filter(_load_cache("cost_cache.json") or {"total_usd": 0, "by_month": {}},
+                               since, until)
+        rows = [{"month": m, "amount_usd": v} for m, v in sorted((cached.get("by_month") or {}).items())]
+        return {**base, "total_usd": cached.get("total_usd", 0) or 0, "count": len(rows),
+                "fallback": True, "rows": rows}
+
+    if metric == "customers":
+        groups = {}
+        for key, o in _customer_rows(since, until):
+            if not key:
+                continue
+            ph = store.primary_phone(o) or {}
+            g = groups.setdefault(key, {"name": (o.get("customer") or {}).get("name") or "",
+                                        "phone": ph.get("display") or ph.get("e164") or "",
+                                        "orders": 0, "total_usd": 0.0})
+            g["orders"] += 1
+            g["total_usd"] += o.get("amount_to_collect_usd") or 0
+        rows = sorted(({**g, "total_usd": round(g["total_usd"], 2)} for g in groups.values()),
+                      key=lambda r: -r["total_usd"])
+        return {**base, "count": len(rows), "rows": rows}
+
+    if metric == "meta":
+        if meta.effective_mode(config) == "manual":
+            m = _month_filter(meta.from_manual(config), since, until)
+            return {**base, "mode": "manual", "total_usd": m.get("total_usd", 0),
+                    "by_month": m.get("by_month", {}), "campaigns": None,
+                    "excluded_campaign_ids": None, "legacy_filter": None,
+                    "synced_at": None, "stale": False,
+                    "note": "manual — type monthly spend in Settings"}
+        cached = meta.read_cache() or {}
+        by_month, campaigns = meta.apply_exclusions(cached, config)
+        by_month = _month_filter({"by_month": by_month}, since, until).get("by_month", {})
+        camps_out = None
+        if campaigns is not None:
+            camps_out = []
+            for c in campaigns:
+                bm = _month_filter({"by_month": c.get("by_month") or {}},
+                                   since, until).get("by_month", {})
+                camps_out.append({"id": c["id"], "name": c["name"], "excluded": c["excluded"],
+                                  "by_month": bm, "total_usd": round(sum(bm.values()), 2)})
+        excl = cfg.get(config, "pnl.meta.excluded_campaign_ids", None)
+        legacy = cfg.get(config, "pnl.meta.campaign_filter")
+        note = None
+        if campaigns is None:
+            note = "campaign breakdown appears after the next sync (a few minutes)"
+        elif excl is None and legacy:
+            note = f"seeded from the old “{legacy}” filter — Save to make your own selection permanent"
+        return {**base, "mode": "api",
+                "total_usd": round(sum(by_month.values()), 2), "by_month": by_month,
+                "campaigns": camps_out, "excluded_campaign_ids": excl,
+                "legacy_filter": legacy,
+                "synced_at": cached.get("pulled_at") or cached.get("last_sync_at"),
+                "stale": campaigns is None, "note": note}
+
+    raise ValueError(f"unknown metric: {metric!r}")
 
 
 if __name__ == "__main__":
