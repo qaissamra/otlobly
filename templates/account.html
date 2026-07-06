@@ -37,7 +37,7 @@
     margin-top:10px;text-align:center;color:#8a6d00}
   .hello{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
   .hello b{font-size:18px}
-  .hello .out{cursor:pointer;color:var(--muted);font-size:12px;border:1px solid var(--line);
+  .out{cursor:pointer;color:var(--muted);font-size:12px;border:1px solid var(--line);
     border-radius:20px;padding:4px 11px;background:none;width:auto;margin:0;font-weight:600}
   h2.sec{font-size:14px;font-weight:800;margin:20px 0 10px;text-align:start}
   .ship{border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:12px;background:#fbfaf6}
@@ -117,12 +117,14 @@
 
   <!-- STATE 3: dashboard -->
   <div id="s_dash" style="display:none">
-    <div class="hello"><b id="t_hello"></b><button class="out" id="b_logout" onclick="logout()"></button></div>
+    <div class="hello"><b id="t_hello"></b></div>
     <div id="balSum"></div>
     <h2 class="sec" id="t_deliveries"></h2>
     <div id="shipments"></div>
     <h2 class="sec" id="t_orders"></h2>
     <div id="orders"></div>
+    <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+      <button class="out" id="b_logout" onclick="logout()" style="padding:8px 26px;font-size:13px"></button></div>
   </div>
 
   <div class="foot" id="t_foot"></div>
@@ -148,10 +150,11 @@ const T={
       deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance", asof:"🕓 last updated",
       foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
 };
-const STAT={ // order status → {ar,en,color,bg}
+const STAT={ // order status → {ar,en,color,bg} — customer-friendly labels ONLY
   REQUESTED:{ar:"قيد المراجعة",en:"Reviewing",c:"#92400e",b:"#fef3c7"},
   QUOTED:{ar:"بانتظار التأكيد",en:"Awaiting confirm",c:"#92400e",b:"#fef3c7"},
   PAID:{ar:"مدفوع",en:"Paid",c:"#3730a3",b:"#e0e7ff"},
+  IN_CART:{ar:"قيد التجهيز",en:"Being prepared",c:"#92400e",b:"#fef3c7"},   // internal cart staging — customers just see "preparing"
   ORDERED:{ar:"تم الطلب",en:"Ordered",c:"#3730a3",b:"#e0e7ff"},
   SHIPPED:{ar:"تم الشحن",en:"Shipped",c:"#1d4ed8",b:"#dbeafe"},
   ARRIVED:{ar:"وصلت بلدك",en:"Arrived",c:"#6d28d9",b:"#ede9fe"},
@@ -229,7 +232,8 @@ function shipCard(s){
     ${asof}${items?`<div class="items">${items}</div>`:""}${tnum}${eta}${tl}</div>`;
 }
 function orderRow(o){
-  const st=STAT[o.status]||{ar:o.status,en:o.status,c:"#555",b:"#eee"};
+  // Unknown/internal statuses must NEVER leak raw to the customer — generic "preparing".
+  const st=STAT[o.status]||{ar:"قيد التجهيز",en:"In progress",c:"#92400e",b:"#fef3c7"};
   const it=(o.items||[])[0]||{};
   const more=(o.items||[]).length>1?` +${o.items.length-1}`:"";
   const eta=o.est_delivery?` · ${t("eta").replace('🚚 ','')} ${fmt(o.est_delivery)}`:"";

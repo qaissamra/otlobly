@@ -2205,7 +2205,9 @@ def api_customer_orders():
     pairs, names, oids = _phone_pairs(core, pdb)
     shipments = _shipments_for(pairs, names, oids)
     orders = _customer_orders(core)
-    OPEN = {"REQUESTED", "QUOTED", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"}
+    # IN_CART included: a staged order still owes its balance — without it the
+    # customer's "remaining" total would dip while the order sits in the cart.
+    OPEN = {"REQUESTED", "QUOTED", "IN_CART", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"}
     deposited = round(sum(o["deposit_usd"] or 0 for o in orders), 2)
     remaining = round(sum(o["remaining_usd"] or 0 for o in orders
                           if o["status"] in OPEN and o["remaining_usd"] is not None), 2)
