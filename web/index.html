@@ -2641,7 +2641,7 @@ function poPkgHtml(p,pk,pi){
       ${pk.customer_tracking
         ? `<span class="ctk" title="customer tracking number — give this to the customer; it maps to the courier # privately"><b class="mono">🎟 ${poEsc(pk.customer_tracking)}</b><a href="#" onclick="copyCtk('${poEsc(pk.customer_tracking)}');return false" title="copy">📋</a><a href="/track?t=${poEsc(pk.customer_tracking)}" target="_blank" rel="noopener" title="open the customer tracking page">↗</a></span>`
         : `<button class="po-btn" title="create a customer tracking number now (otherwise one is made automatically when you add the ${poEsc(courier)} #)" onclick="genCtk('${p.po_id}',${pk.package_no})">🎟 Customer #</button>`}
-      ${pk.tracking_status&&!pk.tracking_status.error?`<span class="trk-badge trk-${pk.tracking_status.bucket||'transit'}" title="${poEsc(pk.tracking_status.time||'')}">🚚 ${poEsc(pk.tracking_status.text||pk.tracking_status.label||pk.tracking_status.code||'')}</span>`:''}
+      ${pk.tracking_status&&!pk.tracking_status.error?`<span class="trk-badge trk-${pk.tracking_status.bucket||'transit'}" title="${poEsc(pk.tracking_status.time||'')}">🚚 ${poEsc(pk.tracking_status.text||pk.tracking_status.label||pk.tracking_status.code||'')}${pk.tracking_status.source==='parcelsapp'?' · via parcelsapp':''}${pk.tracking_status.source==='cache'?` · 🕓 last known ${poEsc((pk.tracking_status.fetched_at||'').slice(0,10))}`:''}</span>`:''}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
   const rows=pk.items.map((it,ii)=>`<tr>
@@ -2691,7 +2691,9 @@ async function trackPkg(btn,id,pi){ const p=poFind(id); const pk=p.packages[pi];
   btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…';
   let s; try{ s=await (await fetch("/api/track_gwd?tracking="+encodeURIComponent(pk.tracking_number))).json(); }catch(e){ s={error:"network error"}; }
   if(s.error){ toast("Shipping: "+s.error); btn.disabled=false; btn.textContent="🔎 Check shipping"; return; }
-  pk.tracking_status=s; poSave(p); renderPurchases(); toast("Shipping: "+(s.text||s.label||s.code||"updated")); }
+  pk.tracking_status=s; poSave(p); renderPurchases();
+  const via=s.source==='cache'?` (last known ${(s.fetched_at||'').slice(0,10)})`:(s.source==='parcelsapp'?' (via parcelsapp)':'');
+  toast("Shipping: "+(s.text||s.label||s.code||"updated")+via); }
 function poUpload(btn,id){ const inp=$("poImgInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Uploading…';
   const rd=new FileReader(); rd.onload=async()=>{ const r=await post("/api/po_image",{po_id:id,filename:f.name,data_base64:rd.result});
@@ -2917,6 +2919,7 @@ function renderPnl(){
     card("Revenue (placed orders)", money(t.revenue_usd), "", "revenue")+
     card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0), "", "to_order")+
     card(`In cart · ${t.in_cart_count||0} · live`, money(t.in_cart_usd||0), "", "in_cart")+
+    card("In cart profit · potential", money(t.in_cart_profit_usd||0), (t.in_cart_profit_usd||0)>=0?"good":"neg", "in_cart")+
     card("Amazon cost", money(t.cogs_usd), "", "cogs")+
     card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg", "fx_gross")+
     card("Meta spend", money(t.meta_usd), "", "meta")+
