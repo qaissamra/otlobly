@@ -75,6 +75,22 @@
   .delta.flat{color:var(--muted);background:var(--bg2)}
   #pnlChart{display:flex;align-items:flex-end;gap:7px;height:96px;padding:6px 0;margin-bottom:6px}
   #pnlSources .qchip b{font-weight:750}
+  /* P&L redesign: NET-PROFIT hero + profit equation + pipeline tint + activity chart */
+  .pnl-hero{display:grid;grid-template-columns:minmax(230px,1fr) 2.2fr;gap:12px;margin-bottom:4px}
+  .pnl-hero .card.hero .n{font-size:34px}
+  .pnl-eq{display:flex;align-items:stretch;flex-wrap:wrap;gap:0}
+  .pnl-eq .card{flex:1;min-width:118px}
+  .pnl-eq .op{display:flex;align-items:center;padding:0 8px;color:var(--muted);font-weight:800;font-size:19px}
+  .pnl-sec{color:var(--muted);font-size:11.5px;font-weight:800;margin:14px 0 8px;text-transform:uppercase;letter-spacing:.05em}
+  .card.pipe{background:#fffbeb;border-color:#fde68a}
+  .pnl-stats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 14px}
+  .pnl-stats .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:8px 13px;font-size:11.5px;color:var(--muted);box-shadow:var(--shadow)}
+  .pnl-stats .stat b{display:block;font-size:16px;letter-spacing:-.3px;color:var(--ink)}
+  .pnl-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  #actChart{display:flex;align-items:flex-end;gap:2px;height:110px;padding:6px 0;margin-bottom:4px}
+  @media (max-width:900px){ .pnl-hero{grid-template-columns:1fr} .pnl-2col{grid-template-columns:1fr}
+    .pnl-eq .op{display:none} .pnl-eq{gap:10px} }
   /* Purchases tree-table */
   .po-card{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden}
   /* two-tier header: white title bar (order # + actions) over a tinted meta strip (ship/profile/totals) */
@@ -497,16 +513,31 @@
       <span id="pnlSources" class="chips" style="margin:0"></span>
       <button onclick="refreshPnl(this)" id="pnlRefresh">↻ Refresh sources</button>
     </div>
-    <div class="cards" id="pnlCards"
-         style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
-    <div class="panel">
-      <h2>Revenue by bulk order (batch)</h2>
-      <div id="pnlChart"></div>
-      <table style="margin-top:6px"><thead><tr>
-        <th>Batch</th><th style="text-align:right">Revenue</th>
-        <th style="text-align:right">% of revenue</th></tr></thead>
-        <tbody id="pnlRows"></tbody></table>
-      <div id="pnlNote" style="color:var(--muted);font-size:12px;margin-top:10px"></div>
+    <!-- hero: NET PROFIT = Revenue − Amazon cost − Meta ads (each tile drills down) -->
+    <div id="pnlHero" class="pnl-hero"></div>
+    <!-- pipeline (pre-purchase, tinted so projected money never reads as real) -->
+    <div id="pnlPipe"></div>
+    <!-- small efficiency stats -->
+    <div id="pnlStats" class="pnl-stats"></div>
+    <div class="pnl-2col">
+      <div class="panel">
+        <h2 style="display:flex;align-items:center;gap:8px">📈 النشاط · Activity
+          <span class="spacer"></span>
+          <button class="po-btn" id="act_day" onclick="setActView('day')">باليوم · Day</button>
+          <button class="po-btn" id="act_month" onclick="setActView('month')">بالشهر · Month</button></h2>
+        <div id="actSummary" style="color:var(--muted);font-size:12px;margin:4px 0 8px"></div>
+        <div id="actChart"></div>
+        <div id="actTable"></div>
+      </div>
+      <div class="panel">
+        <h2>Revenue by bulk order (batch)</h2>
+        <div id="pnlChart"></div>
+        <table style="margin-top:6px"><thead><tr>
+          <th>Batch</th><th style="text-align:right">Revenue</th>
+          <th style="text-align:right">% of revenue</th></tr></thead>
+          <tbody id="pnlRows"></tbody></table>
+        <div id="pnlNote" style="color:var(--muted);font-size:12px;margin-top:10px"></div>
+      </div>
     </div>
   </div>
 
@@ -2914,18 +2945,39 @@ async function loadPnl(){
 function renderPnl(){
   if(!PNL) return;
   const t=PNL.totals, s=PNL.sources;
-  const card=(l,v,cls="",metric="")=>`<div class="card"${metric?` style="cursor:pointer" title="اضغط للتفاصيل · click to see where this number comes from" onclick="openPnlDrill('${metric}')"`:''}><div class="n ${cls}">${v}</div><div class="l">${l}${metric?' <span style="color:var(--muted);font-weight:400">›</span>':''}</div></div>`;
-  $("pnlCards").innerHTML=
-    card("Revenue (placed orders)", money(t.revenue_usd), "", "revenue")+
-    card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0), "", "to_order")+
-    card(`In cart · ${t.in_cart_count||0} · live`, money(t.in_cart_usd||0), "", "in_cart")+
-    card("In cart profit · potential", money(t.in_cart_profit_usd||0), (t.in_cart_profit_usd||0)>=0?"good":"neg", "in_cart")+
-    card("Amazon cost", money(t.cogs_usd), "", "cogs")+
-    card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg", "fx_gross")+
-    card("Meta spend", money(t.meta_usd), "", "meta")+
-    card("Net profit", money(t.net_profit_usd), t.net_profit_usd>=0?"good":"neg", "fx_net")+
-    card("Net margin", t.net_margin_pct==null?"—":t.net_margin_pct+"%", "", "fx_net_margin")+
-    card("Cost / customer", t.cost_per_customer_usd==null?"—":money(t.cost_per_customer_usd), "", "fx_cpc");
+  const card=(l,v,cls="",metric="",extra="")=>`<div class="card${extra?' '+extra:''}"${metric?` style="cursor:pointer" title="اضغط للتفاصيل · click to see where this number comes from" onclick="openPnlDrill('${metric}')"`:''}><div class="n ${cls}">${v}</div><div class="l">${l}${metric?' <span style="color:var(--muted);font-weight:400">›</span>':''}</div></div>`;
+  // hero: NET PROFIT = Revenue − Amazon cost − Meta ads
+  const pos=t.net_profit_usd>=0;
+  const marginChip=t.net_margin_pct==null?'':` <span class="pill" style="background:${pos?'#ecfdf5':'#fef2f2'};color:${pos?'#16a34a':'#dc2626'}">${t.net_margin_pct}% margin</span>`;
+  $("pnlHero").innerHTML=
+    `<div class="card hero" style="cursor:pointer" title="كيف يُحسب · how it's computed" onclick="openPnlDrill('fx_net')">
+       <div class="n ${pos?'good':'neg'}">${money(t.net_profit_usd)}</div>
+       <div class="l">صافي الربح · NET PROFIT${marginChip} <span style="color:var(--muted);font-weight:400">›</span></div></div>
+     <div class="pnl-eq">
+       <span class="op">=</span>
+       ${card("Revenue (placed orders)", money(t.revenue_usd), "", "revenue")}
+       <span class="op">−</span>
+       ${card("Amazon cost", money(t.cogs_usd), "", "cogs")}
+       <span class="op">−</span>
+       ${card("Meta ads", money(t.meta_usd), "", "meta")}
+     </div>`;
+  // pipeline — pre-purchase money, tinted amber like the IN_CART pill
+  $("pnlPipe").innerHTML=`<div class="pnl-sec">🛒 قيد التنفيذ · Pipeline — not bought yet</div>
+    <div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:0">
+      ${card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0), "", "to_order","pipe")}
+      ${card(`In cart · ${t.in_cart_count||0} · live`, money(t.in_cart_usd||0), "", "in_cart","pipe")}
+      ${card("In cart profit · potential", money(t.in_cart_profit_usd||0), (t.in_cart_profit_usd||0)>=0?"good":"neg", "in_cart","pipe")}
+    </div>`;
+  // efficiency stats
+  const stat=(l,v,metric,color)=>`<div class="stat"${metric?` style="cursor:pointer" onclick="openPnlDrill('${metric}')" title="اضغط للتفاصيل · click for detail"`:''}><b${color?` style="color:${color}"`:''}>${v}</b>${l}${metric?' ›':''}</div>`;
+  $("pnlStats").innerHTML=
+    stat('هامش الربح · Net margin', t.net_margin_pct==null?'—':t.net_margin_pct+'%', 'fx_net_margin')+
+    stat('تكلفة/عميل · Cost / customer', t.cost_per_customer_usd==null?'—':money(t.cost_per_customer_usd), 'fx_cpc')+
+    stat('أيام نشطة · Days with sales', t.days_active||0, '')+
+    stat('متوسط الإيراد/يوم · Avg revenue / day', t.avg_revenue_day_usd==null?'—':money(t.avg_revenue_day_usd), '')+
+    stat('متوسط الربح/يوم · Avg profit / day', t.avg_net_day_usd==null?'—':money(t.avg_net_day_usd), '', (t.avg_net_day_usd||0)>=0?'var(--good)':'var(--bad)')+
+    stat('🎯 أيام إعلانات · Ad days', t.ad_days||0, '');
+  renderActivity();
   const badge=k=>`<span class="qchip">${k}: <b style="color:${s[k].connected?'var(--good)':'var(--warn)'}">${s[k].connected?'connected':'connect'}</b></span>`;
   $("pnlSources").innerHTML=badge("revenue")+badge("cogs")+badge("meta");
   const batches=Object.entries(PNL.revenue_by_batch||{});
@@ -2948,6 +3000,50 @@ function renderPnl(){
     : `Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · meta ${s.meta.detail}. `)
     + (metaEmpty ? `<a style="cursor:pointer;color:var(--accent);font-weight:600" onclick="setView('settings')">➕ أضف مصروف إعلانات ميتا · add your Meta ad spend in Settings</a> · ` : '')
     + `COGS &amp; Meta are account totals (not split per batch).`;
+}
+// ---------- P&L Activity chart: revenue per day (🎯 = ad ran) or per month ----------
+let ACT_VIEW='day';
+function setActView(v){ ACT_VIEW=v; renderActivity(); }
+function renderActivity(){
+  if(!PNL) return;
+  const t=PNL.totals;
+  [['act_day','day'],['act_month','month']].forEach(([id,k])=>{ const b=$(id); if(b)
+    b.style.cssText=(k===ACT_VIEW)?'background:var(--ink);color:#fff;border-color:var(--ink)':''; });
+  $("actSummary").innerHTML=`<b>${t.days_active||0}</b> يوم بمبيعات · day(s) with sales`
+    +` · متوسط الإيراد · avg revenue <b>${t.avg_revenue_day_usd==null?'—':money(t.avg_revenue_day_usd)}</b>/day`
+    +` · متوسط الربح · avg profit <b style="color:${(t.avg_net_day_usd||0)>=0?'var(--good)':'var(--bad)'}">${t.avg_net_day_usd==null?'—':money(t.avg_net_day_usd)}</b>/day`
+    +` · 🎯 <b>${t.ad_days||0}</b> أيام إعلانات · ad day(s)`;
+  if(ACT_VIEW==='month'){
+    const rows=PNL.by_month||[];
+    const maxV=Math.max(1,...rows.map(r=>r.revenue||0));
+    $("actChart").innerHTML=rows.length?rows.map(r=>{
+      const h=Math.round(74*(r.revenue||0)/maxV)+4;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end"
+        title="${r.month} · revenue ${money(r.revenue)} · cost ${money(r.cogs)} · ads ${money(r.meta)} · net ${money(r.net)}">
+        <div style="width:60%;max-width:56px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
+        <div style="font-size:10px;color:var(--muted)">${r.month.slice(2)}</div></div>`;}).join("")
+      :`<div class="empty" style="width:100%">لا بيانات · no data yet.</div>`;
+    $("actTable").innerHTML=rows.length?`<table style="margin-top:4px"><thead><tr>
+        <th>Month</th><th class="amt">Revenue</th><th class="amt">Cost</th><th class="amt">Ads</th><th class="amt">Net</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td class="mono">${r.month}</td><td class="amt">${money(r.revenue)}</td>
+        <td class="amt">${money(r.cogs)}</td><td class="amt">${money(r.meta)}</td>
+        <td class="amt" style="color:${(r.net||0)>=0?'var(--good)':'var(--bad)'}"><b>${money(r.net)}</b></td></tr>`).join("")+`</tbody></table>`:'';
+    return;
+  }
+  // day view — the selected window; all-time shows the most recent 30 days with data
+  let rows=PNL.by_day||[];
+  const windowed=PNL.since||PNL.until;
+  if(!windowed && rows.length>30) rows=rows.slice(-30);
+  const maxV=Math.max(1,...rows.map(r=>r.revenue||0));
+  $("actChart").innerHTML=rows.length?rows.map(r=>{
+    const h=Math.round(70*(r.revenue||0)/maxV)+4;
+    return `<div style="flex:1;min-width:9px;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"
+      title="${r.date} · revenue ${money(r.revenue)} · cost ${money(r.cogs)} · ads ${money(r.meta)} · net ${money(r.net)}${r.meta>0?' · 🎯 حملة فعّالة':''}">
+      <div style="width:70%;max-width:26px;height:${h}px;background:${(r.revenue||0)>0?'var(--accent)':'var(--line)'};border-radius:3px 3px 0 0"></div>
+      <div style="width:5px;height:5px;border-radius:50%;background:${r.meta>0?'#f59e0b':'transparent'}" title="${r.meta>0?`🎯 ads ${money(r.meta)}`:''}"></div>
+      <div style="font-size:8.5px;color:var(--muted)">${r.date.slice(8)}</div></div>`;}).join("")
+    :`<div class="empty" style="width:100%">لا نشاط في هذه الفترة · no activity in this period.</div>`;
+  $("actTable").innerHTML=rows.length?`<div style="color:var(--muted);font-size:11px;margin-top:2px">🟠 نقطة برتقالية = يوم فيه إعلانات · orange dot = the ad campaign ran that day${!windowed&&(PNL.by_day||[]).length>30?` · showing the last 30 days with data`:''}</div>`:'';
 }
 async function refreshPnl(b){b.disabled=true;toast("Refreshing P&L sources…");await post("/api/pnl/refresh",{});b.disabled=false;loadPnl();toast("P&L refreshed");}
 let pnlTimer=null;

@@ -199,6 +199,26 @@ def _in_cart(config):
     return round(total, 2), n, cost, round(total - cost, 2)
 
 
+def _by_day(config, since=None, until=None):
+    """Per-day activity for the P&L chart: revenue (order created_at), Amazon cost
+    (PO date) and Meta ad spend (daily cache — empty in manual mode / legacy cache)
+    merged into sorted rows. Same generators as the totals, so the days always sum
+    back to the cards."""
+    rev, cogs, ads = defaultdict(float), defaultdict(float), {}
+    for o in revenue.placed_rows(None, since, until):
+        rev[(o.get("created_at") or "")[:10]] += o["amount_to_collect_usd"]
+    for po, usd in _cogs_po_rows(config, since, until):
+        cogs[_po_date(po)[:10]] += usd
+    if meta.effective_mode(config) == "api":
+        _, ads_by_day, _ = meta.apply_exclusions(meta.read_cache() or {}, config)
+        ads = _day_window(ads_by_day or {}, since, until)
+    days = sorted(set(rev) | set(cogs) | set(ads))
+    return [{"date": d, "revenue": round(rev.get(d, 0), 2), "cogs": round(cogs.get(d, 0), 2),
+             "meta": round(ads.get(d, 0), 2),
+             "net": round(rev.get(d, 0) - cogs.get(d, 0) - ads.get(d, 0), 2)}
+            for d in days if d]
+
+
 def build(config=None, since=None, until=None):
     config = config or cfg.load()
     rev, rev_ok = _source_revenue(config, since, until)
@@ -213,6 +233,8 @@ def build(config=None, since=None, until=None):
     customers = _customers(since, until)
     to_order_usd, to_order_count = _to_order(since, until)
     in_cart_usd, in_cart_count, in_cart_cost_usd, in_cart_profit_usd = _in_cart(config)
+    by_day = _by_day(config, since, until)
+    days_active = sum(1 for r in by_day if r["revenue"] > 0)
 
     months = sorted(set(rev.get("by_month", {})) | set(cogs.get("by_month", {}))
                     | set(mta.get("by_month", {})))
@@ -244,6 +266,11 @@ def build(config=None, since=None, until=None):
             "in_cart_count": in_cart_count,
             "in_cart_cost_usd": in_cart_cost_usd,  # one lump cart cost typed by the owner
             "in_cart_profit_usd": in_cart_profit_usd,
+            # daily-activity stats (Activity chart): active = days with revenue
+            "days_active": days_active,
+            "avg_revenue_day_usd": round(revenue_usd / days_active, 2) if days_active else None,
+            "avg_net_day_usd": round(net / days_active, 2) if days_active else None,
+            "ad_days": sum(1 for r in by_day if r["meta"] > 0),
         },
         "sources": {
             "revenue": {"connected": rev_ok, "detail": rev.get("source", "orders (app db)")},
@@ -253,6 +280,7 @@ def build(config=None, since=None, until=None):
         },
         "revenue_by_batch": rev.get("by_batch", {}),
         "by_month": by_month,
+        "by_day": by_day,
     }
 
 
