@@ -18,19 +18,22 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import db
+import store
 
 
-def from_orders(orders=None, since=None):
-    """Revenue from the app DB (non-cancelled), by month of created_at + by batch.
-    since='YYYY-MM-DD' keeps only orders created on/after that date."""
+def from_orders(orders=None, since=None, until=None):
+    """Revenue = only orders that were actually PLACED (ORDERED..COLLECTED) — a
+    To-order quote (REQUESTED/QUOTED/PAID) is not revenue until it's ordered.
+    By month of created_at + by batch. since/until = 'YYYY-MM-DD' inclusive bounds."""
     orders = db.list_orders() if orders is None else orders
     total, n = 0.0, 0
     by_month = defaultdict(float)
     by_batch = defaultdict(float)
     for o in orders:
-        if o["status"] == "CANCELLED":
+        if o["status"] not in store.PLACED_STATUSES:
             continue
-        if since and (o.get("created_at") or "")[:10] < since:
+        d = (o.get("created_at") or "")[:10]
+        if (since and d < since) or (until and d > until):
             continue
         amt = o.get("amount_to_collect_usd")
         if amt is None:
@@ -56,14 +59,17 @@ def _pack(total, n, by_month, source, by_batch=None):
 def _selftest():
     sample = [
         {"status": "DELIVERED", "amount_to_collect_usd": 100.0, "created_at": "2026-01-05T10:00:00"},
-        {"status": "REQUESTED", "amount_to_collect_usd": 50.5, "created_at": "2026-02-01T10:00:00"},
+        {"status": "ORDERED", "amount_to_collect_usd": 50.5, "created_at": "2026-02-01T10:00:00"},
+        {"status": "REQUESTED", "amount_to_collect_usd": 999.0, "created_at": "2026-02-02T10:00:00"},  # To-order: NOT revenue
         {"status": "CANCELLED", "amount_to_collect_usd": 999.0, "created_at": "2026-02-02T10:00:00"},
-        {"status": "ORDERED", "amount_to_collect_usd": None, "created_at": "2026-02-03T10:00:00"},
+        {"status": "SHIPPED", "amount_to_collect_usd": None, "created_at": "2026-02-03T10:00:00"},      # no price: skipped
     ]
     agg = from_orders(sample)
+    win = from_orders(sample, since="2026-02-01", until="2026-02-28")
     ok = (agg["total_usd"] == 150.5 and agg["orders_counted"] == 2
-          and agg["by_month"] == {"2026-01": 100.0, "2026-02": 50.5})
-    print("from_orders:", "OK" if ok else f"XX {agg}")
+          and agg["by_month"] == {"2026-01": 100.0, "2026-02": 50.5}
+          and win["total_usd"] == 50.5)   # since/until window drops the January placed order
+    print("from_orders:", "OK" if ok else f"XX {agg} / {win}")
     return 0 if ok else 1
 
 

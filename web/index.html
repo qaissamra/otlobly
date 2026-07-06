@@ -482,10 +482,15 @@
     <div class="toolbar">
       <h2 style="margin:0;font-size:17px;font-weight:800">📊 Profit / P&amp;L
         <span id="pnlPeriodLbl" style="color:var(--muted);font-weight:500;font-size:12px">· all time · USD</span></h2>
-      <span id="pnlRange" style="display:inline-flex;gap:6px">
+      <span id="pnlRange" style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center">
         <button class="po-btn" id="pr_all" onclick="setPnlDays(null)">الكل · All time</button>
         <button class="po-btn" id="pr_7" onclick="setPnlDays(7)">آخر ٧ أيام · 7 days</button>
         <button class="po-btn" id="pr_30" onclick="setPnlDays(30)">30 days</button>
+        <span style="color:var(--line)">|</span>
+        <input type="date" id="pr_from" style="border:1px solid var(--line);border-radius:8px;padding:4px 7px;font-size:12px" title="من · from">
+        <span style="color:var(--muted);font-size:12px">→</span>
+        <input type="date" id="pr_to" style="border:1px solid var(--line);border-radius:8px;padding:4px 7px;font-size:12px" title="إلى · to">
+        <button class="po-btn accent" onclick="applyPnlRange()">تطبيق · Apply</button>
       </span>
       <span class="spacer"></span>
       <span id="pnlSources" class="chips" style="margin:0"></span>
@@ -2771,14 +2776,25 @@ async function addCustomer(b){
 async function syncCustomers(b){ b.disabled=true; const r=await post("/api/customers/sync",{}); b.disabled=false; toast(`${r.created} new · ${r.total} total`); loadCustomers(); }
 async function setAmazon(id,n){ await post("/api/amazon_number",{id,amazon_order_number:n}); toast(`${id} Amazon # saved`); }
 let PNL=null;
-let PNL_DAYS=null;   // null = all time; 7 / 30 = last N days
-function setPnlDays(d){ PNL_DAYS=d; loadPnl(); }
+let PNL_DAYS=null, PNL_SINCE=null, PNL_UNTIL=null;   // quick chip OR explicit from/to
+function setPnlDays(d){ PNL_DAYS=d; PNL_SINCE=null; PNL_UNTIL=null; if($("pr_from"))$("pr_from").value=""; if($("pr_to"))$("pr_to").value=""; loadPnl(); }
+function applyPnlRange(){
+  const f=($("pr_from")||{}).value||"", t=($("pr_to")||{}).value||"";
+  if(!f && !t){ toast("Pick a From and/or To date"); return; }
+  if(f && t && f>t){ toast("From date is after To date"); return; }
+  PNL_SINCE=f||null; PNL_UNTIL=t||null; PNL_DAYS=null; loadPnl();
+}
 async function loadPnl(){
-  const r=await fetch("/api/pnl"+(PNL_DAYS?`?days=${PNL_DAYS}`:"")); PNL=await r.json();
-  // active range chip + period label
+  const custom=PNL_SINCE||PNL_UNTIL;
+  const q=custom ? `?${PNL_SINCE?`since=${PNL_SINCE}`:''}${(PNL_SINCE&&PNL_UNTIL)?'&':''}${PNL_UNTIL?`until=${PNL_UNTIL}`:''}`
+                 : (PNL_DAYS?`?days=${PNL_DAYS}`:"");
+  const r=await fetch("/api/pnl"+q); PNL=await r.json();
+  // active quick-chip highlight (off when a custom range is used)
   [["pr_all",null],["pr_7",7],["pr_30",30]].forEach(([id,d])=>{ const b=$(id); if(b)
-    b.style.cssText=(d===PNL_DAYS)?"background:var(--ink);color:#fff;border-color:var(--ink)":""; });
-  const lbl=$("pnlPeriodLbl"); if(lbl) lbl.textContent=PNL_DAYS?`· last ${PNL_DAYS} days (from ${PNL.since||''}) · USD`:"· all time · USD";
+    b.style.cssText=(!custom && d===PNL_DAYS)?"background:var(--ink);color:#fff;border-color:var(--ink)":""; });
+  const lbl=$("pnlPeriodLbl");
+  if(lbl){ lbl.textContent = custom ? `· ${PNL.since||'start'} → ${PNL.until||'today'} · USD`
+    : (PNL_DAYS?`· last ${PNL_DAYS} days (from ${PNL.since||''}) · USD`:"· all time · USD"); }
   renderPnl();
 }
 function renderPnl(){
@@ -2786,7 +2802,8 @@ function renderPnl(){
   const t=PNL.totals, s=PNL.sources;
   const card=(l,v,cls="")=>`<div class="card"><div class="n ${cls}">${v}</div><div class="l">${l}</div></div>`;
   $("pnlCards").innerHTML=
-    card("Revenue", money(t.revenue_usd))+
+    card("Revenue (placed orders)", money(t.revenue_usd))+
+    card(`To order · ${t.to_order_count||0} pending`, money(t.to_order_usd||0))+
     card("Amazon cost", money(t.cogs_usd))+
     card("Gross profit", money(t.gross_profit_usd), t.gross_profit_usd>=0?"":"neg")+
     card("Meta spend", money(t.meta_usd))+
@@ -2809,9 +2826,11 @@ function renderPnl(){
       <div style="width:58%;max-width:60px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
       <div style="font-size:10px;color:var(--muted)">${b==='—'?'—':'#'+b}</div></div>`;}).join("");
   const miss=["revenue","cogs","meta"].filter(k=>!s[k].connected);
+  const metaEmpty = s.meta.connected && !(t.meta_usd>0);   // connected but no spend typed yet
   $("pnlNote").innerHTML=(miss.length
     ? `⚠ Not connected: ${miss.join(", ")}. `
-    : `Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · ${s.meta.detail}. `)
+    : `Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · meta ${s.meta.detail}. `)
+    + (metaEmpty ? `<a style="cursor:pointer;color:var(--accent);font-weight:600" onclick="setView('settings')">➕ أضف مصروف إعلانات ميتا · add your Meta ad spend in Settings</a> · ` : '')
     + `COGS &amp; Meta are account totals (not split per batch).`;
 }
 async function refreshPnl(b){b.disabled=true;toast("Refreshing P&L sources…");await post("/api/pnl/refresh",{});b.disabled=false;loadPnl();toast("P&L refreshed");}

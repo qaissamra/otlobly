@@ -40,27 +40,27 @@ def _load_cache(name):
     return None
 
 
-def _source_revenue(config, since=None):
+def _source_revenue(config, since=None, until=None):
     # Always the app's own orders (SQLite) — the Google-Sheet modes are retired.
-    return revenue.from_orders(since=since), True
+    return revenue.from_orders(since=since, until=until), True
 
 
-def _month_filter(agg, since):
-    """Monthly-granular sources (meta, legacy cogs cache): keep months >= since's month."""
-    if not since or not agg:
+def _month_filter(agg, since, until=None):
+    """Monthly-granular sources (meta, legacy cogs cache): keep months within [since, until]."""
+    if (not since and not until) or not agg:
         return agg
-    keep = {m: v for m, v in (agg.get("by_month") or {}).items() if m >= since[:7]}
+    keep = {m: v for m, v in (agg.get("by_month") or {}).items()
+            if (not since or m >= since[:7]) and (not until or m <= until[:7])}
     return {**agg, "by_month": keep, "total_usd": round(sum(keep.values()), 2)}
 
 
-def _source_meta(config, since=None):
-    # Typed monthly spend (Settings → Meta ad spend) always wins — it's live app
-    # data. Otherwise api mode reads the cache written by meta.py (Refresh sources).
-    manual = meta.from_manual(config)
-    if manual.get("total_usd") or cfg.get(config, "pnl.meta.mode", "manual") == "manual":
-        return _month_filter(manual, since), True
+def _source_meta(config, since=None, until=None):
+    # Manual mode (the default) is always "connected" — it's a valid $0 until the
+    # owner types spend in Settings. API mode is connected only once the cache pulls.
+    if cfg.get(config, "pnl.meta.mode", "manual") == "manual":
+        return _month_filter(meta.from_manual(config), since, until), True
     cached = _load_cache("meta_cache.json")
-    return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since), cached is not None
+    return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since, until), cached is not None
 
 
 def _po_date(po):
@@ -71,7 +71,7 @@ def _po_date(po):
     return d
 
 
-def _source_cogs(config, since=None):
+def _source_cogs(config, since=None, until=None):
     """Amazon cost = the PO totals staff type on the Purchases page — the in-app
     source of truth. (The old ClickUp cache is only a fallback when no POs exist.)"""
     pos = purchases.load().get("purchase_orders", [])
@@ -79,8 +79,8 @@ def _source_cogs(config, since=None):
         aed = float(cfg.get(config, "fx.aed_per_usd", 3.6725))
         total, by_month = 0.0, defaultdict(float)
         for po in pos:
-            d = _po_date(po)
-            if since and d[:10] < since:
+            d = _po_date(po)[:10]
+            if (since and d < since) or (until and d > until):
                 continue
             usd = po.get("total_usd")
             if usd in (None, "", 0) and po.get("total_aed"):
@@ -92,29 +92,53 @@ def _source_cogs(config, since=None):
                 "by_month": {k: round(v, 2) for k, v in sorted(by_month.items())},
                 "source": "Purchases page (PO totals)"}, True
     cached = _load_cache("cost_cache.json")
-    return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since), cached is not None
+    return _month_filter(cached or {"total_usd": 0, "by_month": {}}, since, until), cached is not None
 
 
-def _customers(since=None):
-    """Distinct paying customers in the app DB (for cost-per-customer)."""
-    keys = {(store.primary_phone(o) or {}).get("e164") or o["customer"]["name"]
-            for o in db.list_orders() if o["status"] != "CANCELLED"
-            and not (since and (o.get("created_at") or "")[:10] < since)}
+def _customers(since=None, until=None):
+    """Distinct customers on PLACED orders in the window (for cost-per-customer)."""
+    keys = set()
+    for o in db.list_orders():
+        if o["status"] not in store.PLACED_STATUSES:
+            continue
+        d = (o.get("created_at") or "")[:10]
+        if (since and d < since) or (until and d > until):
+            continue
+        keys.add((store.primary_phone(o) or {}).get("e164") or o["customer"]["name"])
     return len([k for k in keys if k])
 
 
-def build(config=None, since=None):
+def _to_order(since=None, until=None):
+    """Pending pipeline — priced orders still in the To-order queue (not yet placed),
+    so the amount excluded from revenue stays visible. Returns (usd, count)."""
+    total, n = 0.0, 0
+    for o in db.list_orders():
+        if o["status"] not in store.PREORDER_STATUSES:
+            continue
+        d = (o.get("created_at") or "")[:10]
+        if (since and d < since) or (until and d > until):
+            continue
+        amt = o.get("amount_to_collect_usd")
+        if amt is None:
+            continue
+        total += amt
+        n += 1
+    return round(total, 2), n
+
+
+def build(config=None, since=None, until=None):
     config = config or cfg.load()
-    rev, rev_ok = _source_revenue(config, since)
-    cogs, cogs_ok = _source_cogs(config, since)
-    mta, meta_ok = _source_meta(config, since)
+    rev, rev_ok = _source_revenue(config, since, until)
+    cogs, cogs_ok = _source_cogs(config, since, until)
+    mta, meta_ok = _source_meta(config, since, until)
 
     revenue_usd = rev.get("total_usd", 0) or 0
     cogs_usd = cogs.get("total_usd", 0) or 0
     meta_usd = mta.get("total_usd", 0) or 0
     gross = round(revenue_usd - cogs_usd, 2)
     net = round(gross - meta_usd, 2)
-    customers = _customers(since)
+    customers = _customers(since, until)
+    to_order_usd, to_order_count = _to_order(since, until)
 
     months = sorted(set(rev.get("by_month", {})) | set(cogs.get("by_month", {}))
                     | set(mta.get("by_month", {})))
@@ -129,6 +153,7 @@ def build(config=None, since=None):
     return {
         "currency": "USD",
         "since": since,
+        "until": until,
         "totals": {
             "revenue_usd": round(revenue_usd, 2),
             "cogs_usd": round(cogs_usd, 2),
@@ -139,6 +164,8 @@ def build(config=None, since=None):
             "net_margin_pct": round(100 * net / revenue_usd, 1) if revenue_usd else None,
             "customers": customers,
             "cost_per_customer_usd": round(meta_usd / customers, 2) if customers else None,
+            "to_order_usd": to_order_usd,          # pipeline: priced, not yet placed
+            "to_order_count": to_order_count,
         },
         "sources": {
             "revenue": {"connected": rev_ok, "detail": rev.get("source", "orders (app db)")},

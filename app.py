@@ -290,12 +290,13 @@ def api_report():
 @app.route("/api/pnl")
 @auth.require("view_pnl")
 def api_pnl():
-    # ?days=7 → only the last week; ?since=YYYY-MM-DD → explicit start. Default: all time.
+    # ?days=7 → last week; ?since=&?until=YYYY-MM-DD → explicit range. Default: all time.
     since = (request.args.get("since") or "").strip() or None
+    until = (request.args.get("until") or "").strip() or None
     days = request.args.get("days", type=int)
     if days and not since:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    return jsonify(pnl_mod.build(since=since))
+    return jsonify(pnl_mod.build(since=since, until=until))
 
 
 @app.route("/api/pnl/refresh", methods=["POST"])
