@@ -84,11 +84,12 @@ function shipmentCard(s){
     :(s.est_delivery?`<div class="eta">🚚 الوصول المتوقّع · Expected arrival: <b>${fmt(s.est_delivery).split(' · ')[0]}</b></div>`:'');
   const now=`<div class="now b-${cur.bucket||'transit'}"><span class="dot"></span>
       <div><div class="big" dir="auto">${esc(cur.label)||'قيد الشحن'}</div><small>الحالة الحالية · current status</small></div></div>`;
+  const asof=(s.stale&&s.as_of)?`<div class="hint">🕓 آخر تحديث · last updated ${fmt(s.as_of)}</div>`:'';
   const evs=(s.events||[]).slice().reverse();
   const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'} ${i===0?'cur':''}">
       <span class="dot"></span><div class="body"><div class="lab" dir="auto">${esc(e.label)}</div>
       <div class="when">${fmt(e.date)}</div></div></li>`).join("")}</ul>`:'';
-  return `<div class="ship">${now}${items}${tnum}${eta}${tl}</div>`;
+  return `<div class="ship">${now}${asof}${items}${tnum}${eta}${tl}</div>`;
 }
 async function track(){
   const q=$("t").value.trim(); if(!q) return;

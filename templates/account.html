@@ -126,7 +126,7 @@ const T={
       verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", logout:"خروج",
       deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
       curr:"الحالة الحالية", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
-      deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك",
+      deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك", asof:"🕓 آخر تحديث",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
   en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
       phonehint:"We'll send a code to your number on WhatsApp.",
@@ -134,7 +134,7 @@ const T={
       verify:"Sign in", resend:"Change number", hello:"Hi", logout:"Log out",
       deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
       curr:"current status", track:"Tracking #", eta:"🚚 Expected arrival", prep:"We're preparing your order",
-      deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance",
+      deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance", asof:"🕓 last updated",
       foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
 };
 const STAT={ // order status → {ar,en,color,bg}
@@ -191,9 +191,10 @@ function shipCard(s){
     :(s.est_delivery?`<div class="eta">${t("eta")}: <b>${fmt(s.est_delivery)}</b></div>`:"");
   const evs=(s.events||[]).slice().reverse();
   const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'}"><span class="dot dotc b-${e.bucket||'transit'}"></span><div class="lab" dir="auto">${esc(e.label)}</div><div class="when">${fmt(e.date)}</div></li>`).join("")}</ul>`:"";
+  const asof=(s.stale&&s.as_of)?`<div class="hint">${t("asof")} ${fmt(s.as_of)}</div>`:"";
   return `<div class="ship">
     <div class="now b-${bucket}"><span class="dot"></span><div><div class="big" dir="auto">${esc(cur.label)||t("prep")}</div><small>${t("curr")}</small></div></div>
-    ${items?`<div class="items">${items}</div>`:""}${tnum}${eta}${tl}</div>`;
+    ${asof}${items?`<div class="items">${items}</div>`:""}${tnum}${eta}${tl}</div>`;
 }
 function orderRow(o){
   const st=STAT[o.status]||{ar:o.status,en:o.status,c:"#555",b:"#eee"};

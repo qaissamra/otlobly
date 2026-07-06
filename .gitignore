@@ -29,3 +29,4 @@ otlobly-backup-*.zip
 !config.example.json
 !config.default.json
 meta_cache.json
+tracking_cache.json

@@ -42,6 +42,8 @@ services:
         sync: false
       - key: META_ACCESS_TOKEN
         sync: false
+      - key: PARCELSAPP_API_KEY    # optional: tier-2 tracking fallback when GAASH is down
+        sync: false
       # ── Meta Leads page (Messenger/IG DMs + lead-ad forms) ──
       - key: META_PAGE_ID          # the Facebook Page id (e.g. 868855596307697)
         sync: false

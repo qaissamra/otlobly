@@ -1436,7 +1436,7 @@ def api_automatch():
 def api_track_gwd():
     import tracking
     tn = request.args.get("tracking", "")
-    return jsonify(tracking.track(tn) if tn else {"error": "no tracking number"})
+    return jsonify(tracking.track_with_fallback(tn) if tn else {"error": "no tracking number"})
 
 
 @app.route("/api/purchase/clickup", methods=["POST"])
@@ -1535,7 +1535,7 @@ def worker_result():
 # Every writable artifact on the data disk. New data_path() files/dirs added to
 # the app MUST be added here too, or they won't be in backups.
 BACKUP_FILES = ("customers.json", "purchases.json", "trash.json", "orders.json",
-                "activity.jsonl", "config.json")
+                "activity.jsonl", "config.json", "tracking_cache.json")
 BACKUP_DIRS = ("customer_ids", "po_images")
 
 
@@ -1898,7 +1898,7 @@ def _shipments_for(pairs, names, oids):
     smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
     gwds = [pk.get("tracking_number") for _, pk in uniq if (pk.get("tracking_number") or "").strip()]
-    tls = tracking.timelines(gwds) if gwds else {}
+    tls = tracking.timelines_with_fallback(gwds) if gwds else {}
     shipments = []
     for po, pk in uniq:
         otl = pk.get("customer_tracking")
@@ -1925,9 +1925,13 @@ def _shipments_for(pairs, names, oids):
         tl = tls.get(gwd, {})
         if tl.get("ok"):
             ct = tracking.customer_timeline(tl["events"], smap, dlabel)
-            shipments.append({"tracking": otl, "items": items, "current": ct["current"],
-                              "events": ct["events"], **est})
+            ship = {"tracking": otl, "items": items, "current": ct["current"],
+                    "events": ct["events"], **est}
+            if tl.get("stale"):                   # served from the last-known cache
+                ship.update(stale=True, as_of=tl.get("fetched_at"))
+            shipments.append(ship)
         else:
+            # every tier failed AND nothing cached → honest generic state
             shipments.append({"tracking": otl, "items": items, "events": [],
                               "current": {"label": "قيد الشحن", "bucket": "transit"}, **est})
     return shipments

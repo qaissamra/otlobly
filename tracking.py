@@ -4,20 +4,38 @@ GAASH Worldwide (GWD) tracking — same method as gaash-clickup-sync/gaash.py:
 a free, no-browser call to GAASH's public WordPress REST endpoint. Scrapes a
 fresh public nonce once, then queries each parcel.
 
+Tiered fallback (timelines_with_fallback / track_with_fallback):
+  1. GAASH direct (above)
+  2. parcelsapp.com — dormant until PARCELSAPP_API_KEY is set in env
+  3. last-known cached result, flagged stale:True + fetched_at ("as of" date)
+
   python3 tracking.py GWD004697561
+  python3 tracking.py --fallback GWD004697561
 """
 
 import json
+import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 from urllib import request, error
 from urllib.parse import quote
+
+import parcelsapp  # tier-2 fallback tracker (copy of gaash-clickup-sync's client)
+from paths import data_path
 
 TRACK_PAGE = "https://gaashwd.com/track-parcel/"
 DEFAULT_API = "https://gaashwd.com/wp-json/gaash-parcel-status-tracker/v1"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 REQUEST_GAP = 0.7
+
+# Fallback plumbing: last-good results cached on the data disk; the per-GWD
+# cooldown keeps customer refreshes during a GAASH outage from hammering
+# parcelsapp quota (cache is served in between attempts).
+CACHE_FILE = str(data_path("tracking_cache.json"))
+PARCELSAPP_COOLDOWN_SEC = 1800
+PARCELSAPP_COUNTRY = "Israel"
 
 # GAASH MappedStatusCode → (human label, colour bucket) for the INTERNAL staff UI.
 CODE_LABEL = {
@@ -47,14 +65,53 @@ DEFAULT_STATUS_MAP = [
     {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "arrived"},
     {"match": "K2", "label": "تم التخليص الجمركي", "bucket": "cleared"},
     {"match": "D1", "label": "تم التسليم", "bucket": "delivered"},
+    # parcelsapp machine statuses (tier-2 source; stamped as the last event's code)
+    {"match": "DELIVERED", "label": "تم التسليم", "bucket": "delivered"},
+    {"match": "ARRIVED", "label": "وصلت إلى بلدك", "bucket": "arrived"},
+    {"match": "TRANSIT", "label": "قيد الشحن", "bucket": "transit"},
+    {"match": "PICKUP", "label": "قيد الشحن", "bucket": "transit"},
 ]
 DEFAULT_CUSTOMER_LABEL = "قيد الشحن"
 
+# parcelsapp machine statuses → staff label + colour bucket (the CODE stamped on
+# a tier-2 timeline's final event; full words can't collide with GAASH's
+# 2-letter codes). Vocabulary is unverified until a PARCELSAPP_API_KEY exists —
+# unknown values safely fall back to the event text / generic label.
+PARCELSAPP_CODE_LABEL = {
+    "DELIVERED": ("Delivered", "delivered"),
+    "ARRIVED": ("Arrived in the country", "arrived"),
+    "TRANSIT": ("In transit", "transit"),
+    "PICKUP": ("In transit", "transit"),
+}
 
-def get_session():
-    req = request.Request(TRACK_PAGE, headers={"User-Agent": UA})
-    with request.urlopen(req, timeout=30) as r:
-        html = r.read().decode("utf-8", "replace")
+# Customer-facing built-in for the same codes: consulted by _match_row AFTER the
+# admin status_map, because live deployments have an admin-SAVED map (predating
+# the fallback) that would otherwise hide e.g. DELIVERED behind the generic label.
+PARCELSAPP_CODE_FALLBACK = {
+    "DELIVERED": {"label": "تم التسليم", "bucket": "delivered"},
+    "ARRIVED": {"label": "وصلت إلى بلدك", "bucket": "arrived"},
+    "TRANSIT": {"label": "قيد الشحن", "bucket": "transit"},
+    "PICKUP": {"label": "قيد الشحن", "bucket": "transit"},
+}
+
+
+def get_session(retries=4, timeout=12):
+    """Scrape a fresh apiUrl + nonce from the live tracking page, with the same
+    retry/backoff as gaash-clickup-sync/gaash.py. timeout=12 (not 30) on purpose:
+    worst case ~55s keeps a customer request inside gunicorn's 120s window."""
+    html, last = None, None
+    for attempt in range(retries):
+        try:
+            req = request.Request(TRACK_PAGE, headers={"User-Agent": UA})
+            with request.urlopen(req, timeout=timeout) as r:
+                html = r.read().decode("utf-8", "replace")
+            break
+        except Exception as e:  # noqa
+            last = e
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+    if html is None:
+        raise RuntimeError(f"Could not reach GAASH page after {retries} tries: {last}")
     non = re.search(r'"nonce":"([a-f0-9]+)"', html)
     if not non:
         raise RuntimeError("Could not find GAASH nonce (site layout may have changed).")
@@ -169,7 +226,9 @@ def _match_row(ev, status_map):
             m = (row.get("match") or "").strip()
             if m and m.upper() == code:
                 return row
-    return None
+    # Built-in last resort for parcelsapp machine codes (admin-saved maps predate
+    # the fallback tier and would otherwise mask e.g. a real DELIVERED).
+    return PARCELSAPP_CODE_FALLBACK.get(code) if code else None
 
 
 def customer_timeline(events, status_map=None, default_label=None):
@@ -202,7 +261,138 @@ def track_many(tns, lang="en"):
     return out
 
 
+# --------------------------------------------------------------------------- #
+# Tiered fallback: GAASH → parcelsapp → last-known cache.
+# Cache shape per cleaned GWD: {events(raw, pre-remap so later admin status_map
+# edits still apply), source, fetched_at(iso), pa_attempt_at(epoch, cooldown)}.
+# --------------------------------------------------------------------------- #
+def _now_iso():
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _load_cache():
+    try:
+        with open(CACHE_FILE) as f:
+            return json.load(f)
+    except Exception:  # noqa - missing/corrupt cache is never fatal
+        return {}
+
+
+def _save_cache(cache):
+    # tmp + os.replace = atomic (meta.py pattern). A lost race between the two
+    # gunicorn workers only costs one redundant refetch later.
+    tmp = CACHE_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cache, f, ensure_ascii=False)
+    os.replace(tmp, CACHE_FILE)
+
+
+def _parcelsapp_events(shipment):
+    """One parcelsapp result → GAASH-shaped events [{code,text,time}] or None.
+    The machine status is stamped as the LAST event's code only."""
+    if not shipment or "_error" in shipment:
+        return None
+    events = [{"code": "", "text": (t.get("text") or "").strip(), "time": t.get("time")}
+              for t in (shipment.get("timeline") or [])]
+    if not events and (shipment.get("text") or shipment.get("status")):
+        events = [{"code": "", "time": shipment.get("time"),
+                   "text": (shipment.get("text") or shipment.get("status") or "").strip()}]
+    if not events:
+        return None
+    code = (shipment.get("status") or "").strip().upper()
+    if code:
+        events[-1]["code"] = code
+    return events
+
+
+def timelines_with_fallback(gwds, lang="en"):
+    """Tiered timelines(): same contract plus source/fetched_at on every ok
+    entry, and stale:True when the answer is the last-known cache."""
+    res = timelines(gwds, lang)
+    cache = _load_cache()
+    now = time.time()
+    dirty = False
+
+    failed = []
+    for g in gwds:
+        r = res.get(g) or {}
+        if r.get("ok"):
+            r["source"], r["fetched_at"] = "gaash", _now_iso()
+            prev = cache.get(clean_tracking(g)) or {}
+            cache[clean_tracking(g)] = {"events": r["events"], "source": "gaash",
+                                        "fetched_at": r["fetched_at"],
+                                        "pa_attempt_at": prev.get("pa_attempt_at")}
+            dirty = True
+        else:
+            failed.append(g)
+
+    key = os.environ.get("PARCELSAPP_API_KEY")
+    if failed and key:
+        eligible = []
+        for g in failed:
+            at = (cache.get(clean_tracking(g)) or {}).get("pa_attempt_at")
+            if not at or now - at >= PARCELSAPP_COOLDOWN_SEC:
+                eligible.append(clean_tracking(g))
+        if eligible:
+            pa = parcelsapp.fetch_statuses(eligible, key, country=PARCELSAPP_COUNTRY,
+                                           poll_timeout=30, retries=2, timeout=20)
+            fetched = _now_iso()
+            for g in failed:
+                cg = clean_tracking(g)
+                if cg not in eligible:
+                    continue
+                entry = cache.get(cg) or {}
+                entry["pa_attempt_at"] = now       # attempts count even on failure
+                events = _parcelsapp_events(pa.get(cg))
+                if events:
+                    entry.update(events=events, source="parcelsapp", fetched_at=fetched)
+                    res[g] = {"ok": True, "events": events,
+                              "source": "parcelsapp", "fetched_at": fetched}
+                cache[cg] = entry
+                dirty = True
+    elif failed and not key:
+        print(f"tracking: GAASH failed for {len(failed)} parcel(s); "
+              "PARCELSAPP_API_KEY not set -- serving last-known cache")
+
+    for g in gwds:
+        r = res.get(g) or {}
+        if not r.get("ok"):
+            cached = cache.get(clean_tracking(g)) or {}
+            if cached.get("events"):
+                res[g] = {"ok": True, "events": cached["events"], "stale": True,
+                          "source": "cache", "fetched_at": cached.get("fetched_at")}
+
+    if dirty:
+        _save_cache(cache)
+    return res
+
+
+def track_with_fallback(tn, lang="en"):
+    """Staff wrapper: latest status via the tiered chain. Same shape as track()
+    plus source/fetched_at (+ stale:True when served from cache)."""
+    if not clean_tracking(tn):
+        return {"error": "no tracking number"}
+    r = timelines_with_fallback([tn], lang).get(tn) or {}
+    if not r.get("ok"):
+        return {"error": r.get("error") or "lookup failed"}
+    events = r.get("events") or []
+    if not events:
+        return {"error": "no status yet for this parcel"}
+    last = events[-1]
+    code = (last.get("code") or "").strip()
+    label, bucket = CODE_LABEL.get(
+        code, PARCELSAPP_CODE_LABEL.get(code, ((last.get("text") or "").strip(), "transit")))
+    out = {"code": code or None, "text": (last.get("text") or label or "").strip(),
+           "label": label, "bucket": bucket, "time": last.get("time"),
+           "source": r.get("source"), "fetched_at": r.get("fetched_at")}
+    if r.get("stale"):
+        out["stale"] = True
+    return out
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.exit("usage: python3 tracking.py <GWD-number>")
-    print(json.dumps(track(sys.argv[1]), indent=2, ensure_ascii=False))
+    argv = [a for a in sys.argv[1:] if a != "--fallback"]
+    if not argv:
+        sys.exit("usage: python3 tracking.py [--fallback] <GWD-number>")
+    fn = track_with_fallback if "--fallback" in sys.argv else track
+    print(json.dumps(fn(argv[0]), indent=2, ensure_ascii=False))
