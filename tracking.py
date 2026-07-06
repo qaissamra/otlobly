@@ -22,8 +22,9 @@ from datetime import datetime, timezone
 from urllib import request, error
 from urllib.parse import quote
 
-import gaash_browser  # tier-1.5: same GAASH data via headless Chrome (Mac only)
-import parcelsapp     # tier-2 fallback tracker (copy of gaash-clickup-sync's client)
+import gaash_browser      # tier-1.5: same GAASH data via headless Chrome (Mac only)
+import parcelsapp         # tier-2 fallback tracker (copy of gaash-clickup-sync's client)
+import parcelsapp_browser  # tier-2 keyless variant: the public site via Chrome
 from paths import data_path
 
 TRACK_PAGE = "https://gaashwd.com/track-parcel/"
@@ -37,6 +38,7 @@ REQUEST_GAP = 0.7
 CACHE_FILE = str(data_path("tracking_cache.json"))
 PARCELSAPP_COOLDOWN_SEC = 1800
 PARCELSAPP_COUNTRY = "Israel"
+PARCELSAPP_BROWSER_MAX = 4   # keyless browser lookups per request (~5-15s each)
 
 # GAASH MappedStatusCode → (human label, colour bucket) for the INTERNAL staff UI.
 CODE_LABEL = {
@@ -360,15 +362,28 @@ def timelines_with_fallback(gwds, lang="en"):
         failed = still
 
     key = os.environ.get("PARCELSAPP_API_KEY")
-    if failed and key:
+    use_browser = (not key) and parcelsapp_browser.available()
+    if failed and (key or use_browser):
         eligible = []
         for g in failed:
             at = (cache.get(clean_tracking(g)) or {}).get("pa_attempt_at")
             if not at or now - at >= PARCELSAPP_COOLDOWN_SEC:
                 eligible.append(clean_tracking(g))
+        if use_browser and len(eligible) > PARCELSAPP_BROWSER_MAX:
+            # over-cap GWDs get no attempt stamp → naturally retried next request
+            eligible = eligible[:PARCELSAPP_BROWSER_MAX]
         if eligible:
-            pa = parcelsapp.fetch_statuses(eligible, key, country=PARCELSAPP_COUNTRY,
-                                           poll_timeout=30, retries=2, timeout=20)
+            if key:
+                pa = parcelsapp.fetch_statuses(eligible, key, country=PARCELSAPP_COUNTRY,
+                                               poll_timeout=30, retries=2, timeout=20)
+            else:
+                print(f"tracking: parcelsapp (browser, keyless) for {len(eligible)} parcel(s)")
+                try:
+                    pa = parcelsapp_browser.fetch_statuses_browser(
+                        eligible, page_timeout=15, render_timeout=10, gap=1.5)
+                except Exception as e:  # noqa - Chrome died: stamp attempts, keep cooldown
+                    print(f"tracking: parcelsapp browser tier failed ({e})")
+                    pa = {}
             fetched = _now_iso()
             for g in failed:
                 cg = clean_tracking(g)
@@ -383,9 +398,9 @@ def timelines_with_fallback(gwds, lang="en"):
                               "source": "parcelsapp", "fetched_at": fetched}
                 cache[cg] = entry
                 dirty = True
-    elif failed and not key:
-        print(f"tracking: GAASH failed for {len(failed)} parcel(s); "
-              "PARCELSAPP_API_KEY not set -- serving last-known cache")
+    elif failed:
+        print(f"tracking: GAASH failed for {len(failed)} parcel(s); no PARCELSAPP_API_KEY "
+              "and no local Chrome -- serving last-known cache")
 
     for g in gwds:
         r = res.get(g) or {}
