@@ -89,14 +89,19 @@
             style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer">
       🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
     <div id="waStatus" style="margin-top:10px"></div>
-    <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 8px">
-      <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
-    <label id="t_phonelbl"></label>
-    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
-           onkeydown="if(event.key==='Enter')sendCode()">
-    <button id="b_send" onclick="sendCode()"></button>
-    <div class="hint" id="t_phonehint"></div>
-    <div id="out1"></div>
+    <!-- Phone+code fallback hidden: push-OTP needs a verified Meta business; WhatsApp-tap
+         above is the live login. Kept in the DOM (paint() references these ids) so it can
+         return the day business verification lands and template OTP works again. -->
+    <div style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 8px">
+        <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
+      <label id="t_phonelbl"></label>
+      <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
+             onkeydown="if(event.key==='Enter')sendCode()">
+      <button id="b_send" onclick="sendCode()"></button>
+      <div class="hint" id="t_phonehint"></div>
+      <div id="out1"></div>
+    </div>
   </div>
 
   <!-- STATE 2: enter code -->
