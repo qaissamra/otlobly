@@ -176,6 +176,29 @@ def _to_order(since=None, until=None):
     return round(total, 2), n
 
 
+def _in_cart_rows():
+    """Yield the priced orders staged in the Amazon cart (status IN_CART). A LIVE
+    snapshot — not date-windowed — since 'the cart' is a now-state, so its P&L card
+    and drill always match regardless of the P&L date filter."""
+    for o in db.list_orders():
+        if o["status"] not in store.CART_STATUSES:
+            continue
+        if o.get("amount_to_collect_usd") is None:
+            continue
+        yield o
+
+
+def _in_cart(config):
+    """In-cart preview: (revenue, count, cost, profit). Revenue = Σ amount_to_collect;
+    cost = the one lump cart total typed on the In-cart page; profit = revenue − cost."""
+    total, n = 0.0, 0
+    for o in _in_cart_rows():
+        total += o["amount_to_collect_usd"]
+        n += 1
+    cost = round(float(cfg.get(config, "pnl.in_cart.cost_usd", 0) or 0), 2)
+    return round(total, 2), n, cost, round(total - cost, 2)
+
+
 def build(config=None, since=None, until=None):
     config = config or cfg.load()
     rev, rev_ok = _source_revenue(config, since, until)
@@ -189,6 +212,7 @@ def build(config=None, since=None, until=None):
     net = round(gross - meta_usd, 2)
     customers = _customers(since, until)
     to_order_usd, to_order_count = _to_order(since, until)
+    in_cart_usd, in_cart_count, in_cart_cost_usd, in_cart_profit_usd = _in_cart(config)
 
     months = sorted(set(rev.get("by_month", {})) | set(cogs.get("by_month", {}))
                     | set(mta.get("by_month", {})))
@@ -216,6 +240,10 @@ def build(config=None, since=None, until=None):
             "cost_per_customer_usd": round(meta_usd / customers, 2) if customers else None,
             "to_order_usd": to_order_usd,          # pipeline: priced, not yet placed
             "to_order_count": to_order_count,
+            "in_cart_usd": in_cart_usd,            # staged in Amazon cart (live snapshot)
+            "in_cart_count": in_cart_count,
+            "in_cart_cost_usd": in_cart_cost_usd,  # one lump cart cost typed by the owner
+            "in_cart_profit_usd": in_cart_profit_usd,
         },
         "sources": {
             "revenue": {"connected": rev_ok, "detail": rev.get("source", "orders (app db)")},
@@ -255,6 +283,15 @@ def drill(metric, config=None, since=None, until=None):
             total += o["amount_to_collect_usd"]
         rows.sort(key=lambda r: r["date"], reverse=True)
         return {**base, "total_usd": round(total, 2), "count": len(rows), "rows": rows}
+
+    if metric == "in_cart":
+        # Live cart snapshot (ignores the date window) + the lump cost → profit preview.
+        rows = [_order_row(o) for o in _in_cart_rows()]
+        rows.sort(key=lambda r: r["date"], reverse=True)
+        revenue_usd = round(sum(r["amount_usd"] or 0 for r in rows), 2)
+        cost = round(float(cfg.get(config, "pnl.in_cart.cost_usd", 0) or 0), 2)
+        return {**base, "total_usd": revenue_usd, "count": len(rows), "rows": rows,
+                "cost_usd": cost, "profit_usd": round(revenue_usd - cost, 2)}
 
     if metric == "cogs":
         if purchases.load().get("purchase_orders"):

@@ -431,6 +431,84 @@ def api_needorder():
     return jsonify(data)
 
 
+def _incart_cost():
+    return round(float(cfg.get(cfg.load(), "pnl.in_cart.cost_usd", 0) or 0), 2)
+
+
+@app.route("/api/incart")
+@auth.require("view_orders")
+def api_incart():
+    # The Amazon-cart staging list + the lump cart cost → live profit preview.
+    data = store.in_cart(db.list_orders())
+    cost = _incart_cost()
+    data["cost_usd"] = cost
+    data["profit_usd"] = round((data.get("total_usd") or 0) - cost, 2)
+    return jsonify(data)
+
+
+def _incart_set(ids, to_status, prev_field=True):
+    """Move each order id to `to_status`. When entering the cart we stash the order's
+    previous status so 'back to queue' can restore it; when leaving we consume it."""
+    n = 0
+    for oid in ids:
+        o = db.get_order(oid)
+        if not o:
+            continue
+        old = o.get("status")
+        changes = {"status": to_status, **_stamp({**o, "status": to_status})}
+        if to_status == "IN_CART":
+            changes["cart_prev_status"] = old if old in store.STATUSES else "QUOTED"
+        o2 = db.update_order(oid, changes, auth.actor())
+        if o2:
+            n += 1
+            activity.log("set", "order", oid, _olabel(o2), field="status",
+                         old=old, new=to_status, user=_user())
+    return n
+
+
+@app.route("/api/incart/add", methods=["POST"])
+@auth.require("edit_order")
+def api_incart_add():
+    ids = (request.get_json(force=True, silent=True) or {}).get("ids") or []
+    return jsonify({"ok": True, "moved": _incart_set(ids, "IN_CART")})
+
+
+@app.route("/api/incart/remove", methods=["POST"])
+@auth.require("edit_order")
+def api_incart_remove():
+    # Back to the To-order queue at the status the order held before the cart.
+    ids = (request.get_json(force=True, silent=True) or {}).get("ids") or []
+    n = 0
+    for oid in ids:
+        o = db.get_order(oid)
+        if not o or o.get("status") != "IN_CART":
+            continue
+        old = o.get("status")
+        back = o.get("cart_prev_status") or "QUOTED"
+        if back not in store.PREORDER_STATUSES:
+            back = "QUOTED"
+        o2 = db.update_order(oid, {"status": back, "cart_prev_status": None}, auth.actor())
+        if o2:
+            n += 1
+            activity.log("set", "order", oid, _olabel(o2), field="status",
+                         old=old, new=back, user=_user())
+    return jsonify({"ok": True, "moved": n})
+
+
+@app.route("/api/incart/cost", methods=["POST"])
+@auth.require("edit_order")
+def api_incart_cost():
+    b = request.get_json(force=True, silent=True) or {}
+    try:
+        cost = round(max(0.0, float(b.get("cost_usd") or 0)), 2)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "bad number"}), 400
+    config = cfg.load()
+    cfg.set_path(config, "pnl.in_cart.cost_usd", cost)
+    cfg.save(config)
+    return jsonify({"ok": True, "cost_usd": cost})
+
+
 @app.route("/api/estimate", methods=["POST"])
 @auth.require("view_orders")
 def api_estimate():
@@ -790,7 +868,7 @@ def _order_for_phone(core, orders=None):
             mine.append(o)
     if not mine:
         return None
-    pending = [o for o in mine if o.get("status") in ("REQUESTED", "QUOTED", "PAID")]
+    pending = [o for o in mine if o.get("status") in ("REQUESTED", "QUOTED", "PAID", "IN_CART")]
     pool = pending or mine
     pool.sort(key=lambda o: o.get("created_at") or "", reverse=True)
     return pool[0]["order_id"]

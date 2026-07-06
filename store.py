@@ -15,8 +15,8 @@ from paths import data_path
 
 STORE_FILE = data_path("orders.json")
 
-# Order lifecycle: request → quote → pay → order → ship → arrive → deliver.
-STATUSES = ["REQUESTED", "QUOTED", "PAID", "ORDERED", "SHIPPED",
+# Order lifecycle: request → quote → pay → in-cart → order → ship → arrive → deliver.
+STATUSES = ["REQUESTED", "QUOTED", "PAID", "IN_CART", "ORDERED", "SHIPPED",
             "ARRIVED", "DELIVERED", "COLLECTED", "CANCELLED"]
 
 def now_iso():
@@ -79,6 +79,12 @@ def new_order(db, *, name, phones, address, items, batch=None, deposit_usd=0.0,
 PREORDER_STATUSES = ("REQUESTED", "QUOTED", "PAID")
 
 
+# Staged in the Amazon cart, priced but not yet bought — its OWN group (kept out of
+# PREORDER_STATUSES) so in-cart orders leave the To-order queue and get their own
+# page + a separate P&L figure, while staying out of revenue/COGS.
+CART_STATUSES = ("IN_CART",)
+
+
 PLACED_STATUSES = ("ORDERED", "SHIPPED", "ARRIVED", "DELIVERED", "COLLECTED")
 
 
@@ -115,6 +121,17 @@ def need_order(orders):
     """The demand queue: orders not yet placed on Amazon, as product cards — the
     bulk-buying work-list (box/batch absent; assigned when the PO is recorded)."""
     rows = order_rows(orders, PREORDER_STATUSES)
+    return {"orders": rows, "count": len(rows),
+            "products": sum(len(r["items"]) for r in rows),
+            "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2),
+            "deposits_usd": round(sum(r["deposit_usd"] or 0 for r in rows), 2)}
+
+
+def in_cart(orders):
+    """The Amazon-cart staging list: priced orders the owner has added to the cart
+    but not yet bought. Revenue (total_usd) = Σ amount_to_collect_usd — the cost is
+    entered on the In-cart page (one lump sum) for the profit preview."""
+    rows = order_rows(orders, CART_STATUSES)
     return {"orders": rows, "count": len(rows),
             "products": sum(len(r["items"]) for r in rows),
             "total_usd": round(sum(r["amount_to_collect_usd"] or 0 for r in rows), 2),
