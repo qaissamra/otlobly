@@ -61,12 +61,13 @@ def from_api(config):
         return {"error": "api mode needs META_AD_ACCOUNT_ID and META_ACCESS_TOKEN in .env."}
     if not acct.startswith("act_"):
         acct = "act_" + acct
-    # Always campaign-level so the P&L drill-down can show every campaign and the
-    # owner can exclude old ones — the filter is applied at READ time
+    # Campaign-level + DAILY (time_increment=1) so the P&L can filter Meta by the
+    # exact same day window as revenue/COGS (a "last 7 days" filter must move the
+    # Meta number too). Campaign exclusions are applied at READ time
     # (apply_exclusions), so toggling never needs a re-pull.
     q = parse.urlencode({
         "fields": "campaign_id,campaign_name,spend,account_currency",
-        "time_increment": "monthly",
+        "time_increment": 1,
         "date_preset": "maximum",
         "level": "campaign",
         "limit": 500,
@@ -74,7 +75,7 @@ def from_api(config):
     })
     url, rows = f"{GRAPH}/{acct}/insights?{q}", []
     try:
-        while url:   # level=campaign paginates — follow paging.next to the end
+        while url:   # daily campaign rows paginate — follow paging.next to the end
             with request.urlopen(url, timeout=40) as r:
                 data = json.loads(r.read().decode())
             rows += data.get("data", [])
@@ -84,33 +85,44 @@ def from_api(config):
     except (error.URLError, ValueError) as e:
         return {"error": f"Meta API call failed: {e}"}
 
-    by_month, camps = defaultdict(float), {}
+    by_day, camps = defaultdict(float), {}
     for row in rows:
-        month = (row.get("date_start") or "")[:7] or "unknown"
+        day = (row.get("date_start") or "")[:10] or "unknown"
         usd = _to_usd(float(row.get("spend") or 0), row.get("account_currency"), config)
         cid = str(row.get("campaign_id") or "")
         c = camps.setdefault(cid, {"id": cid, "name": row.get("campaign_name") or cid,
-                                   "by_month": defaultdict(float)})
-        c["by_month"][month] += usd
-        by_month[month] += usd   # RAW all-campaign totals; exclusions happen at read time
+                                   "by_day": defaultdict(float)})
+        c["by_day"][day] += usd
+        by_day[day] += usd   # RAW all-campaign totals; exclusions happen at read time
     campaigns = []
     for c in camps.values():
-        bm = {k: round(v, 2) for k, v in sorted(c["by_month"].items())}
-        campaigns.append({"id": c["id"], "name": c["name"], "by_month": bm,
-                          "total_usd": round(sum(bm.values()), 2)})
+        bd = {k: round(v, 2) for k, v in sorted(c["by_day"].items())}
+        campaigns.append({"id": c["id"], "name": c["name"], "by_day": bd,
+                          "by_month": _roll_months(bd), "total_usd": round(sum(bd.values()), 2)})
     campaigns.sort(key=lambda c: -c["total_usd"])
-    return _pack(sum(by_month.values()),
-                 {k: round(v, 2) for k, v in sorted(by_month.items())},
-                 f"api:{acct} · {len(campaigns)} campaign(s)", campaigns=campaigns)
+    by_day = {k: round(v, 2) for k, v in sorted(by_day.items())}
+    return _pack(sum(by_day.values()), _roll_months(by_day),
+                 f"api:{acct} · {len(campaigns)} campaign(s), daily",
+                 campaigns=campaigns, by_day=by_day)
 
 
-def _pack(total, by_month, source, campaigns=None):
+def _roll_months(by_day):
+    """Roll a {YYYY-MM-DD: usd} dict up to {YYYY-MM: usd} for the by-month table."""
+    out = defaultdict(float)
+    for d, v in (by_day or {}).items():
+        out[(d or "")[:7] or "unknown"] += v
+    return {k: round(v, 2) for k, v in sorted(out.items())}
+
+
+def _pack(total, by_month, source, campaigns=None, by_day=None):
     out = {
         "total_usd": round(total, 2),
         "by_month": dict(sorted(by_month.items())),
         "source": source,
         "pulled_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
+    if by_day is not None:
+        out["by_day"] = by_day
     if campaigns is not None:
         out["campaigns"] = campaigns
     return out
@@ -118,21 +130,23 @@ def _pack(total, by_month, source, campaigns=None):
 
 def apply_exclusions(cached, config=None):
     """Read-time campaign filter over the cached API spend. Returns
-    (by_month_included, campaigns_annotated) where each campaign gains
-    'excluded': bool. Defaults, in priority order:
+    (by_month_included, by_day_included, campaigns_annotated) where each campaign
+    gains 'excluded': bool. by_day_included is None for a legacy monthly-only cache
+    (the caller then filters by month). Defaults, in priority order:
       1. config pnl.meta.excluded_campaign_ids saved (even []) → authoritative;
       2. legacy pnl.meta.campaign_filter substring → only matching names count
          (identical numbers to the old pull-time filter — seeds the first UI open);
       3. neither → every campaign counts.
-    A cache that predates per-campaign data → (its raw by_month, None)."""
+    A cache that predates per-campaign data → (its raw by_month, its by_day|None, None)."""
     config = cfg.load() if config is None else config
     campaigns = (cached or {}).get("campaigns")
     if not campaigns:
-        return dict((cached or {}).get("by_month") or {}), None
+        c = cached or {}
+        return dict(c.get("by_month") or {}), (dict(c["by_day"]) if c.get("by_day") else None), None
     excl = cfg.get(config, "pnl.meta.excluded_campaign_ids", None)
     excl_set = {str(x) for x in excl} if isinstance(excl, list) else None
     legacy = cfg.get(config, "pnl.meta.campaign_filter")
-    annotated, by_month = [], defaultdict(float)
+    annotated, by_month, by_day, any_day = [], defaultdict(float), defaultdict(float), False
     for c in campaigns:
         if excl_set is not None:
             out = str(c.get("id")) in excl_set
@@ -144,7 +158,12 @@ def apply_exclusions(cached, config=None):
         if not out:
             for m, v in (c.get("by_month") or {}).items():
                 by_month[m] += v
-    return {k: round(v, 2) for k, v in sorted(by_month.items())}, annotated
+            if c.get("by_day"):
+                any_day = True
+                for d, v in c["by_day"].items():
+                    by_day[d] += v
+    bd = {k: round(v, 2) for k, v in sorted(by_day.items())} if any_day else None
+    return {k: round(v, 2) for k, v in sorted(by_month.items())}, bd, annotated
 
 
 def has_api_creds():
@@ -231,21 +250,27 @@ def _selftest():
 
     cached = {"by_month": {"2026-05": 999.0},   # raw — ignored when campaigns exist
               "campaigns": [
-                  {"id": "1", "name": "اطلبلي — June", "by_month": {"2026-05": 100.0}, "total_usd": 100.0},
-                  {"id": "2", "name": "Old promo", "by_month": {"2026-05": 50.0}, "total_usd": 50.0}]}
-    # legacy filter seeds the defaults: only the matching campaign counts
-    bm1, an1 = apply_exclusions(cached, {"pnl": {"meta": {"campaign_filter": "اطلبلي"}}})
-    ok1 = bm1 == {"2026-05": 100.0} and [a["excluded"] for a in an1] == [False, True]
+                  {"id": "1", "name": "اطلبلي — June", "by_month": {"2026-05": 100.0},
+                   "by_day": {"2026-05-10": 60.0, "2026-05-20": 40.0}, "total_usd": 100.0},
+                  {"id": "2", "name": "Old promo", "by_month": {"2026-05": 50.0},
+                   "by_day": {"2026-05-15": 50.0}, "total_usd": 50.0}]}
+    # legacy filter seeds the defaults: only the matching campaign counts (day + month)
+    bm1, bd1, an1 = apply_exclusions(cached, {"pnl": {"meta": {"campaign_filter": "اطلبلي"}}})
+    ok1 = (bm1 == {"2026-05": 100.0} and bd1 == {"2026-05-10": 60.0, "2026-05-20": 40.0}
+           and [a["excluded"] for a in an1] == [False, True])
     # a saved exclusion list is authoritative (legacy filter ignored)
-    bm2, an2 = apply_exclusions(cached, {"pnl": {"meta": {"excluded_campaign_ids": ["1"],
-                                                          "campaign_filter": "اطلبلي"}}})
-    ok2 = bm2 == {"2026-05": 50.0} and [a["excluded"] for a in an2] == [True, False]
-    # no config at all → everything counts; stale cache → raw by_month passthrough
-    bm3, _ = apply_exclusions(cached, {})
-    bm4, an4 = apply_exclusions({"by_month": {"2026-05": 77.0}}, {})
-    ok3 = bm3 == {"2026-05": 150.0} and bm4 == {"2026-05": 77.0} and an4 is None
-    ok_x = ok1 and ok2 and ok3
-    print("exclusions:", "OK" if ok_x else f"XX {bm1}/{bm2}/{bm3}/{bm4}")
+    bm2, bd2, an2 = apply_exclusions(cached, {"pnl": {"meta": {"excluded_campaign_ids": ["1"],
+                                                              "campaign_filter": "اطلبلي"}}})
+    ok2 = bm2 == {"2026-05": 50.0} and bd2 == {"2026-05-15": 50.0} and [a["excluded"] for a in an2] == [True, False]
+    # no config at all → everything counts; legacy monthly-only cache → by_day None
+    bm3, bd3, _ = apply_exclusions(cached, {})
+    bm4, bd4, an4 = apply_exclusions({"by_month": {"2026-05": 77.0}}, {})
+    ok3 = (bm3 == {"2026-05": 150.0} and round(sum(bd3.values()), 2) == 150.0
+           and bm4 == {"2026-05": 77.0} and bd4 is None and an4 is None)
+    # roll-up helper
+    ok4 = _roll_months({"2026-05-10": 60.0, "2026-05-20": 40.0, "2026-06-01": 10.0}) == {"2026-05": 100.0, "2026-06": 10.0}
+    ok_x = ok1 and ok2 and ok3 and ok4
+    print("exclusions:", "OK" if ok_x else f"XX {bm1}|{bd1}/{bm2}|{bd2}/{bm3}|{bd3}/{bm4}|{bd4}")
     return 0 if (ok and ok_x) else 1
 
 

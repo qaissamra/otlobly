@@ -46,12 +46,27 @@ def _source_revenue(config, since=None, until=None):
 
 
 def _month_filter(agg, since, until=None):
-    """Monthly-granular sources (meta, legacy cogs cache): keep months within [since, until]."""
+    """Monthly-granular sources (legacy cogs/meta cache): keep months within [since, until]."""
     if (not since and not until) or not agg:
         return agg
     keep = {m: v for m, v in (agg.get("by_month") or {}).items()
             if (not since or m >= since[:7]) and (not until or m <= until[:7])}
     return {**agg, "by_month": keep, "total_usd": round(sum(keep.values()), 2)}
+
+
+def _day_window(by_day, since=None, until=None):
+    """Keep {YYYY-MM-DD: usd} entries within [since, until] — day-accurate, like
+    revenue & COGS. This is what lets a "last 7 days" filter move the Meta number."""
+    return {d: v for d, v in (by_day or {}).items()
+            if (not since or d >= since) and (not until or d <= until)}
+
+
+def _roll_months(by_day):
+    """Roll a daily dict up to {YYYY-MM: usd} for the by-month table."""
+    out = defaultdict(float)
+    for d, v in (by_day or {}).items():
+        out[(d or "")[:7] or "unknown"] += v
+    return {k: round(v, 2) for k, v in sorted(out.items())}
 
 
 def _source_meta(config, since=None, until=None):
@@ -67,10 +82,18 @@ def _source_meta(config, since=None, until=None):
     detail = f"api error: {err}" if err else (f"api · synced {synced[:16].replace('T', ' ')}" if synced else "api · not pulled yet")
     # Campaign exclusions (P&L drill-down) are applied at read time, so a
     # checkbox toggle changes the totals instantly without a re-pull.
-    by_month, _ = meta.apply_exclusions(cached, config)
-    out = _month_filter({**cached, "by_month": by_month,
-                         "total_usd": round(sum(by_month.values()), 2),
-                         "source": detail}, since, until)
+    by_month, by_day, _ = meta.apply_exclusions(cached, config)
+    if by_day is not None:
+        # Daily cache → filter to the exact day window, like revenue & COGS.
+        kept = _day_window(by_day, since, until)
+        out = {**cached, "by_month": _roll_months(kept),
+               "total_usd": round(sum(kept.values()), 2), "source": detail}
+    else:
+        # Legacy monthly-only cache → month-granular filter (best available until
+        # the next daily sync overwrites the cache).
+        out = _month_filter({**cached, "by_month": by_month,
+                             "total_usd": round(sum(by_month.values()), 2),
+                             "source": detail}, since, until)
     return out, bool(cached) and not err
 
 
@@ -275,25 +298,36 @@ def drill(metric, config=None, since=None, until=None):
                     "synced_at": None, "stale": False,
                     "note": "manual — type monthly spend in Settings"}
         cached = meta.read_cache() or {}
-        by_month, campaigns = meta.apply_exclusions(cached, config)
-        by_month = _month_filter({"by_month": by_month}, since, until).get("by_month", {})
+        by_month_incl, by_day_incl, campaigns = meta.apply_exclusions(cached, config)
+
+        def _win(bd, bm):
+            """Window total + by-month, day-accurate when daily data exists."""
+            if bd is not None:
+                k = _day_window(bd, since, until)
+                return round(sum(k.values()), 2), _roll_months(k)
+            m = _month_filter({"by_month": bm or {}}, since, until).get("by_month", {})
+            return round(sum(m.values()), 2), m
+
+        total, by_month = _win(by_day_incl, by_month_incl)
         camps_out = None
         if campaigns is not None:
             camps_out = []
             for c in campaigns:
-                bm = _month_filter({"by_month": c.get("by_month") or {}},
-                                   since, until).get("by_month", {})
+                ct, cbm = _win(c.get("by_day"), c.get("by_month"))
                 camps_out.append({"id": c["id"], "name": c["name"], "excluded": c["excluded"],
-                                  "by_month": bm, "total_usd": round(sum(bm.values()), 2)})
+                                  "by_month": cbm, "total_usd": ct})
         excl = cfg.get(config, "pnl.meta.excluded_campaign_ids", None)
         legacy = cfg.get(config, "pnl.meta.campaign_filter")
+        monthly_only = campaigns is not None and by_day_incl is None
         note = None
         if campaigns is None:
             note = "campaign breakdown appears after the next sync (a few minutes)"
+        elif monthly_only and (since or until):
+            note = "Meta spend is monthly for now — day-level filtering starts after the next sync (press ↻ Refresh sources)"
         elif excl is None and legacy:
             note = f"seeded from the old “{legacy}” filter — Save to make your own selection permanent"
         return {**base, "mode": "api",
-                "total_usd": round(sum(by_month.values()), 2), "by_month": by_month,
+                "total_usd": total, "by_month": by_month,
                 "campaigns": camps_out, "excluded_campaign_ids": excl,
                 "legacy_filter": legacy,
                 "synced_at": cached.get("pulled_at") or cached.get("last_sync_at"),
