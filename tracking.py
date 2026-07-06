@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 from urllib import request, error
 from urllib.parse import quote
 
-import parcelsapp  # tier-2 fallback tracker (copy of gaash-clickup-sync's client)
+import gaash_browser  # tier-1.5: same GAASH data via headless Chrome (Mac only)
+import parcelsapp     # tier-2 fallback tracker (copy of gaash-clickup-sync's client)
 from paths import data_path
 
 TRACK_PAGE = "https://gaashwd.com/track-parcel/"
@@ -325,6 +326,38 @@ def timelines_with_fallback(gwds, lang="en"):
             dirty = True
         else:
             failed.append(g)
+
+    # Tier 1.5: retry through a REAL browser on this machine (headless Chrome
+    # executes the page and calls the API in-page — survives layout changes and
+    # bot walls). Render has no Chrome → available() is False → skipped there.
+    if failed and gaash_browser.available():
+        try:
+            braw = gaash_browser.fetch_raw([clean_tracking(g) for g in failed], lang=lang)
+        except Exception as e:  # noqa - browser couldn't start/load the page
+            braw = {}
+            print(f"tracking: browser fallback failed ({e})")
+        fetched = _now_iso()
+        still = []
+        for g in failed:
+            data = braw.get(clean_tracking(g))
+            if not data or "_error" in data:
+                still.append(g)
+                continue
+            events = sorted(
+                ({"code": (s.get("MappedStatusCode") or "").strip(),
+                  "text": (s.get("StatusDescription") or "").strip(),
+                  "time": s.get("StatusTime")} for s in (data.get("Statuses") or [])),
+                key=lambda e: e.get("time") or "")
+            # empty events = GAASH answered "no record yet" → success, like tier 1
+            res[g] = {"ok": True, "events": events,
+                      "source": "gaash_browser", "fetched_at": fetched}
+            if events:
+                prev = cache.get(clean_tracking(g)) or {}
+                cache[clean_tracking(g)] = {"events": events, "source": "gaash_browser",
+                                            "fetched_at": fetched,
+                                            "pa_attempt_at": prev.get("pa_attempt_at")}
+                dirty = True
+        failed = still
 
     key = os.environ.get("PARCELSAPP_API_KEY")
     if failed and key:
