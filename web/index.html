@@ -2494,9 +2494,9 @@ function poCardHtml(p){
     <div class="po-meta">
       <span class="field"><span class="lbl">Amazon order #</span><input class="mono" value="${poEsc(p.amazon_order_number)}" placeholder="—" style="width:170px" onchange="poSet('${p.po_id}','amazon_order_number',this.value)"></span>
       <span class="field"><span class="lbl">Ship to</span><input value="${poEsc(p.ship_to)}" placeholder="—" style="width:130px" onchange="poSet('${p.po_id}','ship_to',this.value)"></span>
-      ${F.multilogin?`<span class="field"><span class="lbl">${poEsc(boxTerm)}</span><input class="pobox mono" list="poBoxList" value="${poEsc(p.profile_box)}" placeholder="box…" title="type any Multilogin profile/box name — free text" onchange="poSetBox('${p.po_id}',this.value)">
-        ${p.profile_box?`<button class="iconbtn" title="check IP / open this Multilogin profile" onclick="openAzModal('${p.profile_box}')">🖥</button>`:''}
-        ${p.profile_box?`<button class="po-btn" title="auto-get every product's tracking # — opens the ${p.profile_box} profile and reads Amazon Your Orders" onclick="azTrackFetch(this,'${p.po_id}',null)">🤖 Get tracking</button>`:''}</span>`:''}
+      <span class="field"><span class="lbl">${poEsc(boxTerm)}</span><input class="pobox mono" list="poBoxList" value="${poEsc(p.profile_box)}" placeholder="box…" title="which profile / account you placed this order from — pick an existing one or type a new name" onchange="poSetBox('${p.po_id}',this.value)">
+        ${(F.multilogin&&p.profile_box)?`<button class="iconbtn" title="check IP / open this Multilogin profile" onclick="openAzModal('${p.profile_box}')">🖥</button>`:''}
+        ${(F.multilogin&&p.profile_box)?`<button class="po-btn" title="auto-get every product's tracking # — opens the ${p.profile_box} profile and reads Amazon Your Orders" onclick="azTrackFetch(this,'${p.po_id}',null)">🤖 Get tracking</button>`:''}</span>
       <span class="field"><span class="lbl">Total</span><input value="${p.total_usd!=null?p.total_usd:''}" style="width:66px" placeholder="0.00" onchange="poSet('${p.po_id}','total_usd',this.value)"><span class="unit">${poEsc(cur)}</span>
         ${F.second_currency?`<input value="${p.total_aed!=null?p.total_aed:''}" style="width:66px" placeholder="0.00" onchange="poSet('${p.po_id}','total_aed',this.value)"><span class="unit">${poEsc(cur2)}</span>`:''}</span>
     </div></div>`;
