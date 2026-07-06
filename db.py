@@ -345,9 +345,11 @@ def create_user(username, password_hash, role, name=""):
 
 
 def get_user(username):
+    # Login is case-insensitive on the username — people forget capitalisation
+    # (e.g. account created as "Sara" but they type "sara"). Only used by auth.verify().
     with connect() as c:
-        r = c.execute("SELECT * FROM users WHERE username=? AND active=1",
-                      (username,)).fetchone()
+        r = c.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",
+                      ((username or "").strip(),)).fetchone()
         return dict(r) if r else None
 
 

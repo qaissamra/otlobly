@@ -79,7 +79,7 @@
   .po-card{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden}
   /* two-tier header: white title bar (order # + actions) over a tinted meta strip (ship/profile/totals) */
   .po-head{display:flex;flex-direction:column}
-  .po-title{display:flex;align-items:center;gap:10px;padding:11px 14px 11px 8px}
+  .po-title{display:flex;align-items:center;gap:10px;padding:11px 14px 11px 8px;flex-wrap:wrap}
   .po-count{color:var(--muted);font-size:12px;white-space:nowrap}
   .po-count b{color:var(--ink);font-weight:700}
   .po-meta{display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;padding:9px 14px;background:var(--bg2);border-top:1px solid var(--line)}
@@ -119,6 +119,14 @@
     padding:5px 28px 5px 9px;min-width:128px;font-size:13px;cursor:pointer}
   .po-head .ordnum{font-weight:750;font-size:15px;letter-spacing:-.01em;width:210px;padding:4px 8px}
   .po-name{font-weight:750;font-size:15px;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;padding-left:2px}
+  /* expand state shares the To-order look: warm tint + round orange caret when open */
+  .po-title>.caret,.pkg-title-row>.caret{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
+    border-radius:9px;border:1px solid var(--line);background:var(--card);font-size:15px;line-height:1;flex:0 0 auto;
+    transition:background .12s,border-color .12s,color .12s}
+  .po-title:hover>.caret,.pkg-title-row:hover>.caret{border-color:#d0d5dd;background:var(--bg3)}
+  .po-card.open .po-title{background:#fff4ee}
+  .pkg.open .pkg-title-row{background:#fff4ee}
+  .po-card.open .po-title>.caret,.pkg.open .pkg-title-row>.caret{color:#fff;background:var(--accent);border-color:var(--accent)}
   .po-head .muted{color:var(--muted);font-size:12px}
   /* action group: stays right-aligned and wraps tidily as a unit instead of piling up */
   .po-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
@@ -310,12 +318,19 @@
   .ne-row:hover .cc .caret{background:var(--bg3);border-color:#d0d5dd}
   .ne-row.open .cc .caret{transform:rotate(90deg);color:#fff;background:var(--accent);border-color:var(--accent)}
   .ne-cust b{font-weight:700}
-  .ne-prod{display:flex;align-items:center;gap:9px;min-width:0}
-  .ne-prod img,.ne-prod .noimg{width:34px;height:34px;flex:0 0 auto;object-fit:contain;border-radius:8px;background:var(--bg3);border:1px solid var(--line)}
+  .ne-prod{display:flex;align-items:center;gap:10px;min-width:0}
+  .ne-prod img,.ne-prod .noimg{width:48px;height:48px;flex:0 0 auto;object-fit:contain;border-radius:9px;background:var(--bg3);border:1px solid var(--line)}
+  /* photo-less product → subtle "no photo yet" placeholder icon, not an empty box */
+  .ne-prod .noimg,.po-thumbs .noimg{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23b4bac4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='M21 15l-5-5L5 21'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:center}
+  /* inline product thumbnails on the Purchases card — same look as the To-order strip */
+  .po-thumbs{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .po-thumbs img,.po-thumbs .noimg{width:32px;height:32px;flex:0 0 auto;object-fit:contain;border-radius:7px;background:var(--bg3);border:1px solid var(--line)}
+  .po-thumbs .more{color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
   .ne-prod .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
   .ne-prod .more{color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
-  /* multi-product: a strip of thumbnails instead of one long title */
+  /* multi-product: a compact strip of thumbnails instead of one long title */
   .ne-prod-multi{gap:5px;flex-wrap:wrap}
+  .ne-prod-multi img,.ne-prod-multi .noimg{width:36px;height:36px}
   .ne-prod-multi .cnt{color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap;margin-left:2px}
   .ne-acts{display:flex;gap:5px;justify-content:flex-end;white-space:nowrap}
   .ne-detail>td{background:transparent;padding:0}
@@ -1535,8 +1550,8 @@ function neRowHtml(o,kind){
     prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
   }
   const badges=`${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
-  const statusPill = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
-    : (kind==="ordered"?`<span class="pill" style="background:#e0e7ff;color:#3730a3">${poEsc(o.status)}</span>`:`<span class="pill">${poEsc(o.status)}</span>`);
+  const statusCell = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
+    : statusPill(o.status);   // shared per-status colour (same map as the card)
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
   const rem=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd-(o.deposit_usd||0)):'—';
   const nm=poEsc((o.customer||'').replace(/'/g,''));
@@ -1565,7 +1580,7 @@ function neRowHtml(o,kind){
       <td>${prodCell}</td>
       <td class="amt hide-sm" style="color:var(--accent)">${amt}</td>
       <td class="amt hide-sm"><b>${rem}</b></td>
-      <td>${statusPill}</td>
+      <td>${statusCell}</td>
       <td><div class="ne-acts">${acts}</div></td>
     </tr>
     <tr class="ne-detail" id="nedet_${poEsc(oid)}" style="display:${isOpen?'':'none'}">
@@ -2368,6 +2383,23 @@ function poTrkCounts(p){   // products still missing a tracking # (item's own OR
     if(!((it.tracking_number||pk.tracking_number||'').trim())) need++; }));
   return {tot,need};
 }
+const PO_STAGE=["ORDERED","SHIPPED","ARRIVED","DELIVERED","COLLECTED"];
+function poRollupStatus(p){   // whole-order status = the least-advanced item (the bottleneck)
+  const items=(p.packages||[]).flatMap(pk=>pk.items||[]);
+  if(!items.length) return null;
+  let minIdx=99, other=null;
+  items.forEach(it=>{ const s=(it.status||'ORDERED').toUpperCase(); const i=PO_STAGE.indexOf(s);
+    if(i<0) other=s; else if(i<minIdx) minIdx=i; });
+  return minIdx<99?PO_STAGE[minIdx]:other;   // all items CANCELLED/RETURNED → show that
+}
+function statusSelCss(s){ const[c]=STATUS_COLOR[(s||'').toUpperCase()]||['#555']; return `color:${c};border-color:${c}66;font-weight:600`; }
+// Inline product-photo strip for the card / package headers (same look as the To-order row).
+function poThumbStrip(items,max=4){
+  items=(items||[]).filter(Boolean); if(!items.length) return '';
+  const t=it=>it.image?`<img src="${poEsc(it.image)}" title="${poEsc(it.title||it.asin||'')}">`:`<div class="noimg" title="${poEsc(it.title||it.asin||'')}"></div>`;
+  const extra=items.length>max?`<span class="more">+${items.length-max}</span>`:'';
+  return `<span class="po-thumbs">${items.slice(0,max).map(t).join('')}${extra}</span>`;
+}
 function poCardHtml(p){
   const collapsed=PO_COLLAPSED.has(poKey(p.po_id));
   const tc=poTrkCounts(p);
@@ -2380,12 +2412,15 @@ function poCardHtml(p){
   const custs=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[]).map(it=>(it.customer_name||'').trim())).filter(Boolean))];
   const dt=(p.created_at||'').slice(0,10);
   const title=`${poEsc(p.po_id)}${dt?` · ${dt}`:''}${custs.length===1?` · ${poEsc(custs[0])}`:''}`;
+  const rollup=poRollupStatus(p);
   const head=`<div class="po-head">
     <div class="po-title">
       <span class="caret" onclick="poToggle('${poKey(p.po_id)}')">${collapsed?'▸':'▾'}</span>
       <span class="po-name" title="رقم الطلب · order">${title}</span>
+      ${rollup?statusPill(rollup):''}
       <span class="po-count">${p.n_items} item${p.n_items===1?'':'s'} · <b style="color:${p.n_unmatched?'var(--warn)':'var(--good)'}">${p.n_matched}/${p.n_items}</b> matched</span>
       ${trkPill}
+      ${poThumbStrip((p.packages||[]).flatMap(pk=>pk.items||[]))}
       <span class="spacer"></span>
       <span class="po-actions">
         <button class="po-btn" title="افتح الطلب كاملًا · open the full order — images, products, all info" onclick="poOpenDetail('${p.po_id}')">⤢ Open</button>
@@ -2406,7 +2441,7 @@ function poCardHtml(p){
     </div></div>`;
   if(collapsed) return `<div class="po-card">${head}</div>`;
   const pkgs=(p.packages||[]).map((pk,pi)=>poPkgHtml(p,pk,pi)).join("");
-  return `<div class="po-card">${head}<div class="po-body">${pkgs}
+  return `<div class="po-card open">${head}<div class="po-body">${pkgs}
     <button class="po-btn" style="margin-top:8px" onclick="poAddPkg('${p.po_id}')">＋ Add package</button>
     <div id="cu_${p.po_id}" style="font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-line"></div></div></div>`;
 }
@@ -2419,6 +2454,7 @@ function poPkgHtml(p,pk,pi){
       <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
       <span class="pkg-title">📦 Package ${pk.package_no}</span>
       <span class="muted">${pk.items.length} product${pk.items.length===1?'':'s'}</span>
+      ${poThumbStrip(pk.items)}
       <span class="pkg-actions">
         ${(F.multilogin&&p.profile_box)?`<button class="po-btn" title="auto-get this package's tracking #s from Amazon (profile ${p.profile_box})" onclick="azTrackFetch(this,'${p.po_id}',${pi})">🤖 Get tracking</button>`:''}
         <button class="po-btn" title="check where this package is" onclick="trackPkg(this,'${p.po_id}',${pi})">🔎 Check shipping</button>
@@ -2443,10 +2479,10 @@ function poPkgHtml(p,pk,pi){
     <td><input class="custc${it.customer_name?'':' custc-empty'}" list="poCustList" value="${poEsc(it.customer_name||'')}" placeholder="⚠ ابحث عن عميل · search…" title="اكتب اسم العميل للبحث والاختيار · type to search the customer" onchange="poItemSet('${p.po_id}',${pi},${ii},'customer_name',this.value)"></td>
     <td class="qtyc"><input type="number" min="1" value="${it.qty||1}" onchange="poItemSet('${p.po_id}',${pi},${ii},'qty',this.value)"></td>
     <td class="trkc"><input class="mono trk-cell" value="${poEsc(it.tracking_number||pk.tracking_number||'')}" placeholder="${poEsc(courier)}…" title="enter this product's tracking # — it auto-moves to the matching package" onchange="poItemTracking('${p.po_id}',${pi},${ii},this.value)"></td>
-    <td><select onchange="poItemSet('${p.po_id}',${pi},${ii},'status',this.value)">${statusOptions(it.status)}</select></td>
+    <td><select style="${statusSelCss(it.status)}" onchange="poItemSet('${p.po_id}',${pi},${ii},'status',this.value)">${statusOptions(it.status)}</select></td>
     <td><input value="${poEsc(it.notes)}" placeholder="—" style="width:84px" onchange="poItemSet('${p.po_id}',${pi},${ii},'notes',this.value)"></td>
     <td><button class="iconbtn" title="remove this product" onclick="poDelItem('${p.po_id}',${pi},${ii})">✕</button></td></tr>`).join("");
-  return `<div class="pkg">${head}<div class="pkg-body"><table class="po-tbl">
+  return `<div class="pkg open">${head}<div class="pkg-body"><table class="po-tbl">
     <thead><tr><th>Photo</th><th>Product name</th><th>Link (auto-fills ASIN)</th><th>ASIN (Amazon code)</th><th>Customer (who ordered it)</th><th>Qty</th><th>Tracking #</th><th>Status</th><th>Notes</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div></div>`;
 }
