@@ -1581,7 +1581,7 @@ function neItemRow(oid,it,ix,interactive){
     <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
       <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div>
       ${it.serp_price_usd!=null?`<div class="serp-cost" style="display:inline-block;margin-top:3px" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يظهر للعميل · internal only, never shown to the customer">🔒 SERP $${(+it.serp_price_usd).toFixed(2)}${it.serp_price_at?` · ${poEsc((it.serp_price_at||'').slice(0,10))}`:''}</div>`:''}</div>
-    ${(interactive&&it.serp_price_usd==null&&url)?`<button class="po-btn" title="جلب سعر أمازون للمنتج (داخلي فقط، لا يظهر للعميل) · get Amazon item price (internal only, never shown to the customer)" onclick="neGetPrice('${poEsc(oid)}',${ix},'${poEsc(url)}',this)">💲</button>`:''}
+    ${(interactive&&it.serp_price_usd==null&&url)?`<button class="po-btn" title="سعر المنتج وقت الإدخال — من الأرشيف إن وُجد (داخلي فقط، لا يظهر للعميل) · the product's price from when it was first imported — stored/cached first (internal only)" onclick="neGetPrice('${poEsc(oid)}',${ix},'${poEsc(url)}',this)">💲</button>`:''}
     ${(interactive&&!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(oid)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
     ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون · open on Amazon" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
 }
@@ -2096,7 +2096,10 @@ function qBuildQuote(){
   const markup=QMARKUP;
   const items=QROWS.filter(r=>(r.title||"").trim()||(r.link||"").trim()||r.image||r.proof)
     .map(r=>({title:(r.title||"").trim(), link:(r.link||"").trim(), image:r.image||null, proof:r.proof||null,
-              qty:parseInt(r.qty)||1}));
+              qty:parseInt(r.qty)||1,
+              // carry the quote-time internals so the intake order keeps the ORIGINAL price
+              asin:(r.asin||extractAsinClient(r.link)||"").toUpperCase(),
+              serp_price_usd:(r.serp_price!=null?r.serp_price:null), serp_price_at:r.serp_price_at||null}));
   const total=+(subtotal*(1+markup)).toFixed(2);
   renderQuoteResult({items, subtotal, markup, total_usd:total});
 }
@@ -2113,7 +2116,9 @@ function renderQuoteResult(d){
   const wa=qWhatsappLink(d);
   // keep the quote data in a variable (NOT embedded in the onclick — titles with " & – would break it)
   QINFO={total:d.total_usd||0, links:d.items.map(i=>i.link).filter(Boolean),
-         products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,qty:i.qty,link:i.link}))};
+         products:d.items.map(i=>({image:i.image,proof:i.proof,title:i.title,qty:i.qty,link:i.link,
+           asin:i.asin||null,   // lets the intake route match draft products to parsed items
+           serp_price_usd:(i.serp_price_usd!=null?i.serp_price_usd:null), serp_price_at:i.serp_price_at||null}))};
   const breakdown=(!cust&&d.markup>0)?`<div class="muted2" style="font-size:11.5px;margin-top:7px">${qt("subtotal")} ${money(d.subtotal)} · ${qt("markup")} ${Math.round(d.markup*1000)/10}%</div>`:"";
   $("quoteResult").innerHTML=`<div class="qcards">${cards}</div>
     <div class="qtotal"><span>${qt("total")}</span><b>${money(d.total_usd)}</b></div>${breakdown}

@@ -1059,9 +1059,11 @@ def api_order_item_image():
 @auth.require("edit_order")
 def api_order_item_price():
     """Capture the INTERNAL SERP item price onto one of an order's items — the To-order
-    card's '💲 get price' button. Fresh SerpAPI pull so it's the price right now; stored
-    staff-only (serp_price_usd/at) and never shown to the customer. This is the catch-all
-    so a product shows its Amazon price no matter how the order was added."""
+    card's '💲' button. ORIGINAL-price-first: reuse the import cache (the price from when
+    the product was first imported — i.e. when the customer sent the link) and stamp
+    serp_price_at with that original fetched_at; only when the ASIN was never imported
+    does it fall through to a live SerpAPI pull (needs SERPAPI_KEY). Stored staff-only
+    (serp_price_usd/at), never shown to the customer."""
     b = request.get_json(force=True, silent=True) or {}
     o = db.get_order(str(b.get("order_id") or ""))
     if not o:
@@ -1078,13 +1080,21 @@ def api_order_item_price():
            or it.get("asin") or "")
     if not url:
         return jsonify({"ok": False, "error": "no link or ASIN for this item"}), 400
-    d = amazon_import.import_product(url, refresh=True)
+    # refresh=False → cached price (original import date) when available; live pull only
+    # on a cache miss (which needs SERPAPI_KEY in the env).
+    d = amazon_import.import_product(url, refresh=False)
     if d.get("error") or d.get("price_usd") is None:
-        return jsonify({"ok": False, "error": d.get("error") or "Amazon returned no price for this item."})
+        err = d.get("error") or "Amazon returned no price for this item."
+        if "SERPAPI_KEY" in err:
+            err = ("لا يوجد سعر محفوظ لهذا المنتج — أضف SERPAPI_KEY على السيرفر لجلبه · "
+                   "no stored price for this product; add SERPAPI_KEY on the server to fetch it live")
+        return jsonify({"ok": False, "error": err})
     it["serp_price_usd"] = d.get("price_usd")
-    it["serp_price_at"] = db.now_iso()
+    # honest date: a cached hit keeps the ORIGINAL import time, not "now"
+    it["serp_price_at"] = d.get("fetched_at") or db.now_iso()
     db.upsert_order(o)
-    return jsonify({"ok": True, "price_usd": d.get("price_usd")})
+    return jsonify({"ok": True, "price_usd": d.get("price_usd"),
+                    "as_of": it["serp_price_at"], "cached": bool(d.get("cached"))})
 
 
 # --------------------------------------------------------------------------- #
@@ -1822,6 +1832,10 @@ def api_order_intake():
         if p:
             it["image"], it["title"] = p.get("image"), p.get("title")
             it["item_usd"], it["qty"] = p.get("item_usd"), int(p.get("qty") or 1)
+            # keep the quote-time internal price — "the first price the customer got"
+            if p.get("serp_price_usd") is not None:
+                it["serp_price_usd"] = p["serp_price_usd"]
+                it["serp_price_at"] = p.get("serp_price_at") or db.now_iso()
     o = make_order(name=b.get("name", ""), phones=phones, address=b.get("address", ""),
                    city=b.get("city", ""), items=items, status="REQUESTED",
                    amount_to_collect_usd=(float(d["amount"]) if d.get("amount") else None))
