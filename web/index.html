@@ -1521,7 +1521,7 @@ function neQuoteApply(){ const p=$("quotePanel"), c=$("q_caret");
 function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
 let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="all";
-let NE_COLL=new Set(JSON.parse(localStorage.getItem("ne_coll")||'["ordered","deleted"]'));
+let NE_COLL=new Set(JSON.parse(localStorage.getItem("ne_coll")||'["incart","ordered","deleted"]'));
 let NE_OPEN=new Set();   // order_ids whose product sub-rows are expanded
 let NE_CART_SEL=new Set();   // To-order rows ticked to move into the cart
 function neCartToggle(id,on){ on?NE_CART_SEL.add(id):NE_CART_SEL.delete(id); neCartBar(); }
@@ -1537,6 +1537,10 @@ async function neMoveToCart(btn){
   if(!r||!r.ok){ toast("Move failed"+((r&&r.error)?": "+r.error:"")); return; }
   toast(`🛒 ${r.moved} moved to cart`);
   NE_CART_SEL.clear(); neCartBar(); loadNeedOrder();
+}
+async function neUncart(id){   // pull an order back out of the cart, from the To-order page
+  let r; try{ r=await post("/api/incart/remove",{ids:[id]}); }catch(e){ r={}; }
+  if(r&&r.ok) toast("↩ back to queue"); loadNeedOrder();
 }
 function neRowToggle(id){
   const det=$("nedet_"+id), row=$("nerow_"+id); if(!det||!row) return;
@@ -1640,6 +1644,7 @@ function neRowHtml(o,kind){
   let acts='';
   if(kind==="pending") acts=`<button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
     <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>`;
+  else if(kind==="incart") acts=`<button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="event.stopPropagation();neUncart('${poEsc(oid)}')">↩</button>`;
   else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
     ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا · remove permanently" onclick="event.stopPropagation();nePurge('${poEsc(o.trash_id)}','${nm}')">✕</button>`:''}`;
   // detail: customer info as a labelled meta strip (consistent with the order card), then the products
@@ -1682,19 +1687,25 @@ async function nePurge(tid,name){
 }
 function renderNeedOrder(){
   const d=NE_DATA; if(!d) return;
-  const pend=d.orders||[], placed=d.ordered||[], del=d.deleted||[];
+  const pend=d.orders||[], placed=d.ordered||[], del=d.deleted||[], cart=d.in_cart||[];
   const pendIds=new Set(pend.map(o=>o.order_id));   // drop ticks for orders no longer pending
   [...NE_CART_SEL].forEach(id=>{ if(!pendIds.has(id)) NE_CART_SEL.delete(id); }); neCartBar();
+  const cartTotal=cart.reduce((s,o)=>s+(o.amount_to_collect_usd||0),0);
   $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`
     +((d.deposits_usd||0)>0?` · <b style="color:#15803d">✅ عرابين · deposits ${money(d.deposits_usd)}</b>`:'');
   const chips=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
     ${neChip('all','الكل · All')}${neChip('pending','💡 للطلب · To order',pend.length)}
+    ${neChip('incart','🛒 في السلة · In cart',cart.length)}
     ${neChip('ordered','✅ تم الطلب · Ordered',placed.length)}${neChip('deleted','🗑 محذوف · Deleted',del.length)}</div>`;
   const S=[];
   if(NE_FILTER==='all'||NE_FILTER==='pending')
     S.push(neSection('pending','💡 للطلب · To order',pend.length,
       `<span class="muted2" style="font-size:12px">${money(d.total_usd||0)}${(d.deposits_usd||0)>0?` · <b style="color:#15803d">عرابين ${money(d.deposits_usd)}</b>`:''}</span>`,
       pend.length?neTable(pend.map(o=>neRowHtml(o,'pending')).join("")):`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`));
+  if(NE_FILTER==='all'||NE_FILTER==='incart')
+    S.push(neSection('incart','🛒 في السلة · In cart',cart.length,
+      cart.length?`<span class="muted2" style="font-size:12px">${money(cartTotal)}</span>`:'',
+      cart.length?neTable(cart.map(o=>neRowHtml(o,'incart')).join("")):`<div class="empty">لا شيء بالسلة · cart is empty.</div>`));
   if(NE_FILTER==='all'||NE_FILTER==='ordered')
     S.push(neSection('ordered','✅ تم الطلب · Ordered',placed.length,'',
       placed.length?neTable(placed.map(o=>neRowHtml(o,'ordered')).join("")):`<div class="empty">لا شيء · nothing here.</div>`));

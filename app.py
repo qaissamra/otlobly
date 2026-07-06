@@ -401,10 +401,13 @@ def api_pricing():
 def api_needorder():
     orders = db.list_orders()
     data = store.need_order(orders)
-    # the two extra groups so orders never just vanish from this page:
+    # the extra groups so orders never just vanish from this page:
     placed = store.order_rows(orders, store.PLACED_STATUSES)
     placed.reverse()                                     # newest first
     data["ordered"] = placed
+    cart = store.order_rows(orders, store.CART_STATUSES)
+    cart.reverse()                                       # newest first
+    data["in_cart"] = cart
     deleted = []
     for rec in reversed(trash.load().get("trash", [])):  # newest first
         if rec.get("kind") != "order":
@@ -425,7 +428,7 @@ def api_needorder():
     idset = {normalize.phone_core(c.get("whatsapp") or "")
              for c in db.list_customers() if c.get("id_image")}
     idset.discard("")
-    for r in data["orders"] + placed:
+    for r in data["orders"] + placed + cart:
         core = normalize.phone_core(r.get("phone") or "")
         r["has_id"] = bool(core and core in idset)
     return jsonify(data)
