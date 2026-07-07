@@ -1,0 +1,226 @@
+<!doctype html>
+<html dir="rtl" lang="ar">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — المتجر · Shop</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#111111">
+<style>
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--good:#16a34a}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    padding-bottom:86px}
+  .wrap{max-width:720px;margin:0 auto;padding:18px 16px 30px}
+  .top{display:flex;align-items:center;gap:10px;padding:4px 2px 14px}
+  .top h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .top .ly{color:var(--accent)}
+  .top a.back{margin-inline-start:2px;color:var(--muted);text-decoration:none;font-size:12px;font-weight:700}
+  .lang{margin-inline-start:auto;display:flex;gap:6px}
+  .lang span{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);
+    border-radius:20px;padding:3px 11px;background:var(--card)}
+  .lang span.on{background:#111;color:#fff;border-color:#111}
+  .sub{color:var(--muted);font-size:13px;margin:0 2px 14px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .chip{cursor:pointer;font-size:12.5px;font-weight:700;border:1px solid var(--line);border-radius:20px;
+    padding:6px 14px;background:var(--card);color:var(--muted)}
+  .chip.on{background:#111;color:#fff;border-color:#111}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+  .p{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;
+    flex-direction:column;gap:8px}
+  .p img,.p .ph{width:100%;aspect-ratio:1;object-fit:contain;background:#fbfaf6;border:1px solid var(--line);
+    border-radius:12px}
+  .p .t{font-size:12.5px;font-weight:600;line-height:1.35;min-height:2.7em;max-height:2.7em;overflow:hidden}
+  .p .pr{font-size:16px;font-weight:800}
+  .p .note{color:var(--muted);font-size:11px;margin-top:-4px}
+  .p button{border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;font-size:13px;
+    padding:10px;cursor:pointer}
+  .p .inq{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);
+    border-radius:10px;overflow:hidden}
+  .p .inq button{background:#fbfaf6;color:var(--ink);border-radius:0;padding:9px 13px;font-size:15px}
+  .p .inq b{font-size:14px}
+  .empty{color:var(--muted);text-align:center;padding:50px 0;grid-column:1/-1}
+  .bar{position:fixed;bottom:0;inset-inline:0;background:#111;color:#fff;padding:12px 16px;display:none;
+    box-shadow:0 -8px 30px rgba(0,0,0,.15)}
+  .bar .in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:12px}
+  .bar .n{font-weight:800;font-size:14px}
+  .bar small{color:#bbb;display:block;font-size:11px}
+  .bar button{margin-inline-start:auto;border:0;border-radius:10px;background:var(--accent);color:#fff;
+    font-weight:800;font-size:14px;padding:11px 22px;cursor:pointer}
+  /* cart / checkout sheet */
+  .sheet{position:fixed;inset:0;background:rgba(20,18,12,.45);display:none;z-index:9}
+  .sheet .box{position:absolute;bottom:0;inset-inline:0;max-height:88vh;overflow:auto;background:var(--card);
+    border-radius:20px 20px 0 0;padding:18px 16px 26px}
+  .sheet .box .in{max-width:560px;margin:0 auto}
+  .sheet h2{font-size:16px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .sheet h2 span{cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
+  .ci{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;
+    padding:8px 10px;margin-bottom:8px;background:#fff}
+  .ci img,.ci .ph{width:44px;height:44px;border-radius:8px;object-fit:contain;background:#fbfaf6;
+    border:1px solid var(--line);flex:none}
+  .ci .t{flex:1;min-width:0;font-size:12px;font-weight:600;line-height:1.3;max-height:2.6em;overflow:hidden}
+  .ci .pr{font-size:12.5px;font-weight:800;white-space:nowrap}
+  .ci .q{display:flex;align-items:center;gap:2px}
+  .ci .q button{border:1px solid var(--line);background:#fbfaf6;border-radius:8px;width:26px;height:26px;
+    cursor:pointer;font-size:14px;line-height:1}
+  .ci .q b{min-width:20px;text-align:center;font-size:13px}
+  .ci .rm{cursor:pointer;color:#b42318;font-size:16px;border:0;background:none;padding:2px}
+  .tot{display:flex;justify-content:space-between;font-weight:800;font-size:15px;margin:10px 2px 4px}
+  .disc{color:var(--muted);font-size:11.5px;margin:0 2px 12px}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 6px}
+  input,textarea{width:100%;font-size:15px;padding:12px 13px;border:1px solid var(--line);border-radius:12px;
+    background:#fbfaf6;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent);background:#fff}
+  .go{width:100%;margin-top:16px;font-size:15px;font-weight:800;color:#fff;background:var(--accent);
+    border:0;border-radius:12px;padding:14px;cursor:pointer}
+  .go:disabled{opacity:.6}
+  .err{background:#fef2f2;border:1px solid #f3c9c9;color:#b42318;border-radius:10px;padding:10px 12px;
+    font-size:13px;margin-top:12px;text-align:center}
+  .done{text-align:center;padding:30px 10px}
+  .done .big{font-size:44px}
+  .done h3{margin:10px 0 6px}
+  .done p{color:var(--muted);font-size:13.5px}
+  .done .oid{font-size:20px;font-weight:800;background:#f7f5ef;border:1px dashed var(--line);
+    border-radius:12px;padding:12px;margin:14px auto;max-width:280px}
+  .done a{color:var(--accent);font-weight:700}
+</style>
+<body>
+<div class="wrap">
+  <div class="top">
+    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
+      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+    <div><h1>Otlob<span class="ly">ly</span></h1><a class="back" href="/" id="backHome"></a></div>
+    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
+  </div>
+  <p class="sub" id="subT"></p>
+  <div class="chips" id="chips"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="bar" id="bar"><div class="in">
+  <div><div class="n" id="barN"></div><small id="barT"></small></div>
+  <button onclick="openCart()" id="barBtn"></button>
+</div></div>
+
+<div class="sheet" id="sheet" onclick="if(event.target===this)closeCart()">
+  <div class="box"><div class="in" id="sheetIn"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function money(n){return "$"+Number(n||0).toFixed(2);}
+let LANG="ar", ITEMS=[], CAT="*", CART=[], ME={}, STEP="cart"; // cart | done
+const CART_KEY="otl_cart_v1";
+const T={
+  ar:{sub:"منتجات مختارة نوفّرها لك من أمازون — أضِف للسلة واطلب، وندفع الباقي عند الاستلام بالدولار.",
+      all:"الكل", add:"أضِف للسلة 🛒", items:n=>`${n} ${n===1?"منتج":"منتجات"}`, cartBtn:"إتمام الطلب",
+      cartTitle:"🛒 سلتك", empty:"سلتك فارغة — تصفح المنتجات وأضِف ما يعجبك.", noitems:"لا توجد منتجات بعد — عد قريباً!",
+      total:"المجموع", disc:"السعر النهائي يُؤكد معك عند المراجعة، والدفع عند الاستلام بالدولار بعد عربون بسيط.",
+      name:"الاسم الكامل", phone:"رقم الجوال (واتساب)", city:"المدينة", addr:"العنوان بالتفصيل",
+      send:"إرسال الطلب", sending:"جارٍ الإرسال…", back:"→ الرئيسية",
+      doneT:"استلمنا طلبك!", doneP:"سنراجعه ونتواصل معك على واتساب لتأكيد السعر النهائي والعربون.",
+      keep:"احفظ رقم الطلب لمتابعته:", acc:"تابع طلبك من حسابك", more:"متابعة التسوق"},
+  en:{sub:"Hand-picked products we bring you from Amazon — add to cart, order, and pay on delivery in USD.",
+      all:"All", add:"Add to cart 🛒", items:n=>`${n} item${n===1?"":"s"}`, cartBtn:"Checkout",
+      cartTitle:"🛒 Your cart", empty:"Your cart is empty — browse and add what you like.", noitems:"No products yet — check back soon!",
+      total:"Total", disc:"The final price is confirmed with you on review; pay on delivery in USD after a small deposit.",
+      name:"Full name", phone:"Mobile (WhatsApp)", city:"City", addr:"Full address",
+      send:"Place order", sending:"Sending…", back:"→ Home",
+      doneT:"We got your order!", doneP:"We'll review it and confirm the final price and deposit on WhatsApp.",
+      keep:"Save your order number to track it:", acc:"Follow it in your account", more:"Keep shopping"}
+};
+function t(k){return T[LANG][k];}
+function setLang(l){ LANG=l; document.documentElement.lang=l; document.documentElement.dir=l==="ar"?"rtl":"ltr";
+  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en");
+  $("subT").textContent=t("sub"); $("backHome").textContent=t("back"); paintChips(); paintGrid(); paintBar();
+  if($("sheet").style.display==="block") paintSheet(); }
+function loadCart(){ try{ CART=JSON.parse(localStorage.getItem(CART_KEY))||[]; }catch(e){ CART=[]; } }
+function saveCart(){ localStorage.setItem(CART_KEY, JSON.stringify(CART)); }
+function qtyOf(id){ const r=CART.find(c=>c.id===id); return r?r.qty:0; }
+function setQty(id,q){ CART=CART.filter(c=>c.id!==id); if(q>0)CART.push({id,qty:Math.min(20,q)});
+  saveCart(); paintGrid(); paintBar(); if($("sheet").style.display==="block")paintSheet(); }
+function cartRows(){ return CART.map(c=>({...c,it:ITEMS.find(i=>i.id===c.id)})).filter(r=>r.it); }
+function cartTotal(){ return cartRows().reduce((s,r)=>s+(r.it.price_usd||0)*r.qty,0); }
+function cats(){ const s=[...new Set(ITEMS.map(i=>(i.category||"").trim()).filter(Boolean))]; return s; }
+function paintChips(){
+  const cs=cats();
+  $("chips").innerHTML = cs.length?[`<span class="chip ${CAT==="*"?"on":""}" onclick="CAT='*';paintChips();paintGrid()">${t("all")}</span>`,
+    ...cs.map(c=>`<span class="chip ${CAT===c?"on":""}" onclick="CAT='${esc(c).replace(/'/g,"\\'")}';paintChips();paintGrid()">${esc(c)}</span>`)].join(""):"";
+}
+function card(it){
+  const q=qtyOf(it.id);
+  const buy=q?`<div class="inq"><button onclick="setQty(${it.id},${q-1})">−</button><b>${q}</b><button onclick="setQty(${it.id},${q+1})">＋</button></div>`
+             :`<button onclick="setQty(${it.id},1)">${t("add")}</button>`;
+  return `<div class="p">
+    ${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}
+    <div class="t" dir="auto">${esc(it.title)}</div>
+    <div class="pr">${money(it.price_usd)}</div>
+    ${it.note?`<div class="note" dir="auto">${esc(it.note)}</div>`:""}
+    ${buy}</div>`;
+}
+function paintGrid(){
+  const list=ITEMS.filter(i=>CAT==="*"||(i.category||"").trim()===CAT);
+  $("grid").innerHTML=list.length?list.map(card).join(""):`<div class="empty">${t("noitems")}</div>`;
+}
+function paintBar(){
+  const n=CART.reduce((s,c)=>s+c.qty,0);
+  $("bar").style.display=n?"block":"none";
+  if(!n)return;
+  $("barN").textContent=t("items")(n); $("barT").textContent=t("total")+" "+money(cartTotal());
+  $("barBtn").textContent=t("cartBtn");
+}
+function openCart(){ STEP="cart"; $("sheet").style.display="block"; paintSheet(); }
+function closeCart(){ $("sheet").style.display="none"; }
+function paintSheet(){
+  if(STEP==="done") return;   // success view is painted by checkout()
+  const rows=cartRows();
+  const list=rows.length?rows.map(r=>`<div class="ci">
+      ${r.it.image?`<img src="${esc(r.it.image)}" alt="">`:'<div class="ph"></div>'}
+      <div class="t" dir="auto">${esc(r.it.title)}</div>
+      <div class="q"><button onclick="setQty(${r.id},${r.qty-1})">−</button><b>${r.qty}</b><button onclick="setQty(${r.id},${r.qty+1})">＋</button></div>
+      <div class="pr">${money((r.it.price_usd||0)*r.qty)}</div>
+      <button class="rm" onclick="setQty(${r.id},0)">✕</button>
+    </div>`).join(""):`<p style="color:var(--muted);text-align:center;padding:20px 0">${t("empty")}</p>`;
+  $("sheetIn").innerHTML=`<h2><span onclick="closeCart()">✕</span>${t("cartTitle")}</h2>${list}
+    ${rows.length?`
+    <div class="tot"><span>${t("total")}</span><span>${money(cartTotal())}</span></div>
+    <p class="disc">${t("disc")}</p>
+    <label>${t("name")}</label><input id="f_name" value="${esc(ME.name||"")}">
+    <label>${t("phone")}</label><input id="f_phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" value="${esc(ME.whatsapp||"")}">
+    <label>${t("city")}</label><input id="f_city">
+    <label>${t("addr")}</label><textarea id="f_addr" rows="2"></textarea>
+    <button class="go" id="f_go" onclick="checkout()">${t("send")}</button>
+    <div id="f_out"></div>`:""}`;
+}
+async function checkout(){
+  const name=$("f_name").value.trim(), phone=$("f_phone").value.trim(),
+        city=$("f_city").value.trim(), addr=$("f_addr").value.trim();
+  if(!name||!phone){ $("f_out").innerHTML=`<div class="err">${LANG==="ar"?"الاسم ورقم الجوال مطلوبان":"Name and phone are required"}</div>`; return; }
+  const b=$("f_go"); b.disabled=true; b.textContent=t("sending");
+  let d; try{ d=await (await fetch("/api/catalog/checkout",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({items:CART,name,phone,city,address:addr})})).json(); }catch(e){ d={error:"network"}; }
+  b.disabled=false; b.textContent=t("send");
+  if(!d.ok){ $("f_out").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
+  CART=[]; saveCart(); paintBar(); paintGrid(); STEP="done";
+  $("sheetIn").innerHTML=`<div class="done"><div class="big">🎉</div>
+    <h3>${t("doneT")}</h3><p>${t("doneP")}</p>
+    <p style="margin-top:16px;font-size:12.5px;color:var(--muted)">${t("keep")}</p>
+    <div class="oid">${esc(d.order_id)}</div>
+    <p><a href="/account">${t("acc")}</a></p>
+    <p><a href="#" onclick="STEP='cart';closeCart();return false">${t("more")}</a></p></div>`;
+}
+async function init(){
+  loadCart();
+  try{ ITEMS=(await (await fetch("/api/catalog/public")).json()).items||[]; }catch(e){ ITEMS=[]; }
+  CART=CART.filter(c=>ITEMS.some(i=>i.id===c.id));  // drop hidden/deleted
+  saveCart();
+  try{ ME=await (await fetch("/api/customer/me")).json(); }catch(e){ ME={}; }
+  if(!ME.logged_in) ME={};
+  setLang("ar");
+}
+init();
+</script>
+</body>
+</html>

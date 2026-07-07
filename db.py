@@ -99,12 +99,25 @@ CREATE TABLE IF NOT EXISTS payments (
   note TEXT,
   created_by INTEGER, created_by_name TEXT
 );
+CREATE TABLE IF NOT EXISTS catalog_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id INTEGER NOT NULL DEFAULT 1,
+  asin TEXT, amazon_url TEXT,               -- staff-internal, never sent to customers
+  title TEXT, image TEXT,
+  base_price_usd REAL,                      -- fetched Amazon price (internal)
+  price_usd REAL,                           -- display price customers see
+  category TEXT, note TEXT,
+  active INTEGER NOT NULL DEFAULT 1,        -- 0 = hidden from the public catalog
+  sort INTEGER DEFAULT 0,
+  created_at TEXT, updated_at TEXT, created_by INTEGER
+);
 CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS ix_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS ix_leads_status ON meta_leads(status);
 CREATE INDEX IF NOT EXISTS ix_leads_created ON meta_leads(created_time);
 CREATE INDEX IF NOT EXISTS ix_pay_order ON payments(order_code);
 CREATE INDEX IF NOT EXISTS ix_pay_customer ON payments(customer_phone);
+CREATE INDEX IF NOT EXISTS ix_catalog_biz ON catalog_items(business_id, active);
 """
 
 
@@ -373,6 +386,60 @@ def list_customer_login_rows(business_id=1):
         return [dict(r) for r in c.execute(
             "SELECT id, customer_code, name, whatsapp, email, email_verified_at "
             "FROM customers WHERE business_id=?", (business_id,))]
+
+
+# --------------------------------------------------------------------------- #
+# Catalog (staff-curated products the public /catalog page sells)
+# --------------------------------------------------------------------------- #
+def list_catalog(business_id=1, active_only=False):
+    q = "SELECT * FROM catalog_items WHERE business_id=?"
+    if active_only:
+        q += " AND active=1"
+    q += " ORDER BY sort, id DESC"
+    with connect() as c:
+        return [dict(r) for r in c.execute(q, (business_id,))]
+
+
+def get_catalog_item(item_id, business_id=1):
+    with connect() as c:
+        r = c.execute("SELECT * FROM catalog_items WHERE id=? AND business_id=?",
+                      (item_id, business_id)).fetchone()
+        return dict(r) if r else None
+
+
+def add_catalog_item(d, business_id=1):
+    with connect() as c:
+        cur = c.execute("""INSERT INTO catalog_items
+          (business_id, asin, amazon_url, title, image, base_price_usd, price_usd,
+           category, note, active, sort, created_at, updated_at, created_by)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+          (business_id, d.get("asin"), d.get("amazon_url"), d.get("title"),
+           d.get("image"), d.get("base_price_usd"), d.get("price_usd"),
+           d.get("category"), d.get("note"), 1 if d.get("active", True) else 0,
+           d.get("sort") or 0, now_iso(), now_iso(), d.get("created_by")))
+        return cur.lastrowid
+
+
+CATALOG_EDITABLE = {"title", "image", "price_usd", "base_price_usd",
+                    "category", "note", "active", "sort"}
+
+
+def update_catalog_item(item_id, changes, business_id=1):
+    sets = {k: v for k, v in (changes or {}).items() if k in CATALOG_EDITABLE}
+    if not sets:
+        return False
+    cols = ", ".join(f"{k}=?" for k in sets)
+    with connect() as c:
+        c.execute(f"UPDATE catalog_items SET {cols}, updated_at=? "
+                  "WHERE id=? AND business_id=?",
+                  (*sets.values(), now_iso(), item_id, business_id))
+    return True
+
+
+def delete_catalog_item(item_id, business_id=1):
+    with connect() as c:
+        c.execute("DELETE FROM catalog_items WHERE id=? AND business_id=?",
+                  (item_id, business_id))
 
 
 # --------------------------------------------------------------------------- #

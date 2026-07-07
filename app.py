@@ -628,6 +628,169 @@ def api_extract_asin():
     return jsonify({"asin": normalize.extract_asin(clean), "clean_url": clean})
 
 
+# --------------------------------------------------------------------------- #
+# Catalog: staff-curated products → the public /catalog page + cart checkout.
+# SerpAPI is only ever hit on staff clicks: add is cache-first (a known ASIN
+# costs nothing), refresh_price is an explicit one-credit pull. The public
+# endpoints serve stored rows and never fetch.
+# --------------------------------------------------------------------------- #
+@app.route("/api/catalog")
+@auth.require("view_orders")
+def api_catalog_list():
+    return jsonify({"items": db.list_catalog()})
+
+
+@app.route("/api/catalog", methods=["POST"])
+@auth.require("edit_order")
+def api_catalog_add():
+    """Paste an Amazon link → title/image/price auto-fetched → catalog row.
+    Display price defaults to the markup-applied quote; staff can override."""
+    b = request.get_json(force=True, silent=True) or {}
+    url = (b.get("url") or "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "no url"}), 400
+    d = amazon_import.import_product(url)              # cache-first — no refresh
+    if d.get("error"):
+        return jsonify({"ok": False, "error": d["error"]}), 400
+    try:
+        price = round(float(b.get("price_usd")), 2) if b.get("price_usd") not in (None, "") else None
+    except (TypeError, ValueError):
+        price = None
+    item_id = db.add_catalog_item({
+        "asin": d.get("asin"), "amazon_url": d.get("link") or url,
+        "title": (b.get("title") or d.get("title") or "").strip(),
+        "image": d.get("image"),
+        "base_price_usd": d.get("price_usd"),
+        "price_usd": price if price is not None else d.get("suggested_quote_usd"),
+        "category": (b.get("category") or "").strip() or None,
+        "note": (b.get("note") or "").strip() or None,
+        "created_by": getattr(current_user, "id", None),
+    })
+    it = db.get_catalog_item(item_id)
+    db.audit(auth.actor(), "catalog_add", "catalog", str(item_id), d.get("asin") or url)
+    activity.log("added", "catalog", str(item_id), (it.get("title") or url)[:80], user=_user())
+    return jsonify({"ok": True, "item": it})
+
+
+@app.route("/api/catalog/update", methods=["POST"])
+@auth.require("edit_order")
+def api_catalog_update():
+    b = request.get_json(force=True, silent=True) or {}
+    it = db.get_catalog_item(b.get("id"))
+    if not it:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    changes = {k: b[k] for k in ("title", "image", "price_usd", "category", "note",
+                                 "active", "sort") if k in b}
+    if "price_usd" in changes:
+        try:
+            changes["price_usd"] = round(float(changes["price_usd"]), 2)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "bad price"}), 400
+    if "active" in changes:
+        changes["active"] = 1 if changes["active"] else 0
+    db.update_catalog_item(it["id"], changes)
+    db.audit(auth.actor(), "catalog_update", "catalog", str(it["id"]),
+             ", ".join(changes.keys()))
+    return jsonify({"ok": True, "item": db.get_catalog_item(it["id"])})
+
+
+@app.route("/api/catalog/delete", methods=["POST"])
+@auth.require("edit_order")
+def api_catalog_delete():
+    b = request.get_json(force=True, silent=True) or {}
+    it = db.get_catalog_item(b.get("id"))
+    if not it:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    db.delete_catalog_item(it["id"])
+    db.audit(auth.actor(), "catalog_delete", "catalog", str(it["id"]),
+             (it.get("title") or "")[:80])
+    activity.log("removed", "catalog", str(it["id"]), (it.get("title") or "")[:80], user=_user())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/catalog/refresh_price", methods=["POST"])
+@auth.require("edit_order")
+def api_catalog_refresh_price():
+    """Deliberate one-credit SerpAPI pull (same philosophy as /api/item_price) —
+    updates the internal base price; staff decide whether to change the display price."""
+    b = request.get_json(force=True, silent=True) or {}
+    it = db.get_catalog_item(b.get("id"))
+    if not it:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    d = amazon_import.import_product(it.get("amazon_url") or it.get("asin") or "", refresh=True)
+    if d.get("error"):
+        return jsonify({"ok": False, "error": d["error"]}), 502
+    db.update_catalog_item(it["id"], {"base_price_usd": d.get("price_usd")})
+    return jsonify({"ok": True, "base_price_usd": d.get("price_usd"),
+                    "suggested_price_usd": d.get("suggested_quote_usd"),
+                    "item": db.get_catalog_item(it["id"])})
+
+
+@app.route("/catalog")
+def catalog_page():
+    return render_template("catalog.html")
+
+
+@app.route("/api/catalog/public")
+@limiter.limit("30 per minute")
+def api_catalog_public():
+    """Customer-safe fields ONLY — no amazon_url/asin (don't route buyers around
+    us) and no base_price_usd (the margin is nobody's business)."""
+    return jsonify({"items": [{"id": it["id"], "title": it["title"], "image": it["image"],
+                               "price_usd": it["price_usd"], "category": it["category"],
+                               "note": it["note"]}
+                              for it in db.list_catalog(active_only=True)]})
+
+
+@app.route("/api/catalog/checkout", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_catalog_checkout():
+    """Public: the website cart → a REQUESTED order tagged source='website', so
+    staff can always tell it apart from the manually-sent draft-link orders.
+    Prices and the total are taken from the DB — never from the client."""
+    b = request.get_json(force=True, silent=True) or {}
+    phones = normalize.collect_phones(b.get("phone"))
+    if not (b.get("name") or "").strip() or not phones:
+        return jsonify({"error": "الاسم ورقم جوال صالح مطلوبان · Name and a valid phone are required."}), 400
+    wanted = b.get("items") if isinstance(b.get("items"), list) else []
+    rows, amount = [], 0.0
+    for w in wanted[:30]:
+        it = db.get_catalog_item((w or {}).get("id"))
+        if not it or not it.get("active"):
+            continue                                    # hidden/deleted → drop
+        try:
+            qty = max(1, min(20, int((w or {}).get("qty") or 1)))
+        except (TypeError, ValueError):
+            qty = 1
+        rows.append((it, qty))
+        amount += (it.get("price_usd") or 0) * qty
+    if not rows:
+        return jsonify({"error": "السلة فارغة · Cart is empty."}), 400
+    items = []
+    for it, qty in rows:
+        src = it.get("amazon_url") or (f"https://www.amazon.com/dp/{it['asin']}" if it.get("asin") else "")
+        parsed = normalize.parse_items([src], expand=False) if src else []
+        item = parsed[0] if parsed else {"asin": it.get("asin"), "clean_url": src or None}
+        item.update({"title": it.get("title"), "image": it.get("image"), "qty": qty,
+                     "item_usd": it.get("price_usd")})
+        if it.get("base_price_usd") is not None:
+            # keep the staff To-order internal-price column meaningful
+            item["serp_price_usd"] = it["base_price_usd"]
+            item["serp_price_at"] = it.get("updated_at") or db.now_iso()
+        items.append(item)
+    o = make_order(name=b.get("name", ""), phones=phones, address=b.get("address", ""),
+                   city=b.get("city", ""), items=items, status="REQUESTED",
+                   amount_to_collect_usd=round(amount, 2) if amount else None,
+                   notes="🌐 طلب من متجر الموقع · website order")
+    o["source"] = "website"
+    db.upsert_order(o)
+    _ensure_customer(o)                    # website customers join the CRM / ID page too
+    db.audit({"username": "customer"}, "website_order", "order", o["order_id"], "")
+    activity.log("created", "order", o["order_id"], _olabel(o),
+                 detail="website catalog order", user="customer")
+    return jsonify({"ok": True, "order_id": o["order_id"]})
+
+
 # ── Multilogin "AZ tool" bridge (the 🖥 profile popup + 🤖 auto-get-tracking) ──
 # These reach the LOCAL AZ tool on 127.0.0.1:8765, so they only do real work when
 # this app runs on the Mac next to Multilogin. On the server they return a clean
@@ -1851,6 +2014,7 @@ def api_order_intake():
     o = make_order(name=b.get("name", ""), phones=phones, address=b.get("address", ""),
                    city=b.get("city", ""), items=items, status="REQUESTED",
                    amount_to_collect_usd=(float(d["amount"]) if d.get("amount") else None))
+    o["source"] = "intake"                 # staff-sent draft link (vs 'website' cart orders)
     db.upsert_order(o)
     _ensure_customer(o)                    # add the self-intake customer to the CRM / ID page
     db.set_setting(f"draft:{b['draft_id']}", {**d, "used": True})
@@ -2039,6 +2203,7 @@ def api_customer_me():
         email = (row.get("email") or "").strip()
         return jsonify({"logged_in": True, "name": session.get("cust_name") or "",
                         "phone": core,
+                        "whatsapp": row.get("whatsapp") or None,   # e164 for form prefill
                         "email_masked": _mask_email(email) if email else None,
                         "email_verified": bool(email and row.get("email_verified_at"))})
     return jsonify({"logged_in": False})

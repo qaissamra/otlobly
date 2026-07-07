@@ -92,7 +92,7 @@ def _order_row(o):
     ph = primary_phone(o)
     cust = o.get("customer", {}) or {}
     return {
-        "order_id": o["order_id"], "status": o["status"],
+        "order_id": o["order_id"], "status": o["status"], "source": o.get("source"),
         "customer": cust.get("name"), "phone": ph["e164"] if ph else None,
         "phones": [p.get("e164") for p in (cust.get("phones") or []) if p.get("e164")],
         "address": cust.get("address"), "city": cust.get("city"), "notes": cust.get("notes"),

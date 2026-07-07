@@ -397,6 +397,7 @@
     <button id="custBtn" onclick="setView('customers')"><span class="ic">👤</span>Customers</button>
     <button id="poBtn" onclick="setView('purchases')"><span class="ic">📦</span>Purchases</button>
     <button id="depositsBtn" onclick="setView('deposits')" title="deposits / عربون customers paid — with remaining balance"><span class="ic">💵</span>Deposits</button>
+    <button id="catalogBtn" onclick="setView('catalog')" title="products the public /catalog page sells — paste an Amazon link to add"><span class="ic">🏬</span>Catalog</button>
     <button id="pickBtn" onclick="setView('picking')"><span class="ic">🧾</span>Picking list</button>
     <div class="nav-sec">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span>P&amp;L</button>
@@ -844,6 +845,41 @@
       </table>
     </div>
   </div>
+
+  <!-- Catalog: what the public /catalog page sells (website orders arrive tagged 🌐) -->
+  <div id="catalogView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🏬 Catalog · المتجر</h2>
+      <span style="color:var(--muted);font-size:12px">what customers see on <a href="/catalog" target="_blank" rel="noopener">/catalog</a> — website orders arrive with a 🌐 badge</span>
+      <span class="spacer"></span>
+      <button onclick="loadCatalog()" class="minibtn">↻ Refresh</button>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h2 style="font-size:14px;margin:0 0 9px">➕ أضِف منتجاً · Add a product</h2>
+      <div class="form-grid">
+        <div class="full"><label class="fld">Amazon link (title/image/price auto-fetched — cached ASINs cost no SerpAPI credit)</label>
+          <input id="cat_url" style="width:100%" placeholder="https://www.amazon.com/dp/…"></div>
+        <div><label class="fld">Display price $ (blank = fetched price × markup)</label>
+          <input id="cat_price" type="number" step="0.01" style="width:100%" placeholder="auto"></div>
+        <div><label class="fld">Category (optional)</label><input id="cat_cat" style="width:100%" placeholder="إلكترونيات"></div>
+        <div class="full"><label class="fld">Note shown to the customer (optional)</label><input id="cat_note" style="width:100%"></div>
+        <div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="catAdd(this)">🔎 Fetch &amp; add</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <h2 style="font-size:14px;margin:0">🏷️ Products</h2>
+        <span class="muted2" id="catCount" style="font-size:12px"></span>
+        <span class="spacer"></span>
+      </div>
+      <table id="catTbl">
+        <thead><tr><th></th><th>Title</th><th>Base $</th><th>Display $</th><th>Category</th><th>Note</th><th>Live</th><th></th></tr></thead>
+        <tbody id="catRows"></tbody>
+      </table>
+      <div id="catEmpty" class="muted2" style="display:none;padding:14px;text-align:center;font-size:13px">
+        No products yet — paste an Amazon link above to add the first one.</div>
+    </div>
+  </div>
 </div>
 
 <!-- ClickUp-style order detail: attachments gallery (paste Cmd+V) + products + fields -->
@@ -953,7 +989,7 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
 
 let ME=null;
 // Roles that get a LIMITED console: only these nav buttons + views, landing on `home`.
-const RESTRICTED_NAV={ sales:{ nav:["needBtn","metaLeadsBtn"], views:["quote","needorder","metaleads"], home:"needorder" } };
+const RESTRICTED_NAV={ sales:{ nav:["needBtn","metaLeadsBtn","catalogBtn"], views:["quote","needorder","metaleads","catalog"], home:"needorder" } };
 let RESTRICTED=null;
 async function applyRole(){
   if(ME) return;
@@ -1123,7 +1159,7 @@ function render(){
                  :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
     return `<tr class="row">
       <td><input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="toggleOrderSel('${o.order_id}',this.checked)"></td>
-      <td class="mono">${o.order_id}</td>
+      <td class="mono">${o.order_id}${o.source==="website"?`<br><span class="pill" style="background:#e0f2fe;color:#0369a1;font-size:9.5px" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:""}</td>
       <td><b>${o.customer||"—"}</b><br><span class="mono" style="color:var(--muted)">${o.phone||""}</span></td>
       <td>${itemsCell(o)}</td>
       <td class="amt">${amt}</td>
@@ -1227,7 +1263,7 @@ function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads"||v==="deposits"||v==="incart");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -1246,13 +1282,14 @@ function setView(v){
   $("teamView").classList.toggle("hidden",v!=="team");
   $("metaLeadsView").classList.toggle("hidden",v!=="metaleads");
   $("depositsView").classList.toggle("hidden",v!=="deposits");
+  $("catalogView").classList.toggle("hidden",v!=="catalog");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
-    metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn"};
+    metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
   const VIEW_TITLES={orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
-    metaleads:"Leads",deposits:"Deposits",incart:"In cart"};
+    metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
   document.querySelectorAll("#sideNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -1268,9 +1305,66 @@ function setView(v){
   if(v==="team"){ loadTeam(); }
   if(v==="metaleads"){ loadMetaLeads(); }
   if(v==="deposits"){ loadDeposits(); }
+  if(v==="catalog"){ loadCatalog(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
+// ---- Catalog: products the public /catalog page sells ----------------------- //
+let CATALOG=[];
+async function loadCatalog(){
+  let d; try{ d=await (await fetch("/api/catalog")).json(); }catch(e){ d={items:[]}; }
+  CATALOG=d.items||[]; renderCatalog();
+}
+function renderCatalog(){
+  $("catCount").textContent=CATALOG.length?`${CATALOG.length} products · ${CATALOG.filter(i=>i.active).length} live`:"";
+  $("catEmpty").style.display=CATALOG.length?"none":"block";
+  $("catRows").innerHTML=CATALOG.map(it=>`<tr style="${it.active?"":"opacity:.45"}">
+    <td>${it.image?`<img src="${poEsc(it.image)}" style="width:38px;height:38px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff">`:""}</td>
+    <td style="max-width:300px"><input value="${poEsc(it.title||"")}" style="width:100%;font-size:12px" onchange="catUpd(${it.id},'title',this.value)">
+      <div class="muted2" style="font-size:10.5px">${it.asin?poEsc(it.asin)+" · ":""}<a href="${poEsc(it.amazon_url||"#")}" target="_blank" rel="noopener">amazon ↗</a></div></td>
+    <td class="muted2" style="white-space:nowrap" title="fetched Amazon price (internal)">${it.base_price_usd!=null?"$"+Number(it.base_price_usd).toFixed(2):"—"}</td>
+    <td><input type="number" step="0.01" value="${it.price_usd!=null?Number(it.price_usd).toFixed(2):""}" style="width:84px" title="what customers see" onchange="catUpd(${it.id},'price_usd',this.value)"></td>
+    <td><input value="${poEsc(it.category||"")}" style="width:110px;font-size:12px" onchange="catUpd(${it.id},'category',this.value)"></td>
+    <td><input value="${poEsc(it.note||"")}" style="width:140px;font-size:12px" title="shown on the product card" onchange="catUpd(${it.id},'note',this.value)"></td>
+    <td style="text-align:center"><input type="checkbox" ${it.active?"checked":""} title="show on /catalog" onchange="catUpd(${it.id},'active',this.checked)"></td>
+    <td style="white-space:nowrap">
+      <button class="minibtn" title="re-pull the Amazon price (1 SerpAPI credit)" onclick="catRefresh(${it.id},this)">💲↻</button>
+      <button class="minibtn" title="remove from catalog" onclick="catDel(${it.id})">🗑</button></td>
+  </tr>`).join("");
+}
+async function catAdd(btn){
+  const url=$("cat_url").value.trim(); if(!url){ toast("Paste an Amazon link first"); return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent="⏳ Fetching…";
+  const body={url};
+  if($("cat_price").value) body.price_usd=$("cat_price").value;
+  if($("cat_cat").value.trim()) body.category=$("cat_cat").value.trim();
+  if($("cat_note").value.trim()) body.note=$("cat_note").value.trim();
+  let r; try{ r=await post("/api/catalog",body); }catch(e){ r={}; }
+  btn.disabled=false; btn.textContent=o;
+  if(!r.ok){ toast(r.error||"Couldn't add the product"); return; }
+  ["cat_url","cat_price","cat_cat","cat_note"].forEach(id=>$(id).value="");
+  toast("Added to the catalog ✓"); loadCatalog();
+}
+async function catUpd(id,field,value){
+  const body={id}; body[field]=(field==="active")?(value?1:0):value;
+  let r; try{ r=await post("/api/catalog/update",body); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"Couldn't save"); return; }
+  const i=CATALOG.findIndex(x=>x.id===id); if(i>=0&&r.item){ CATALOG[i]=r.item; renderCatalog(); }
+}
+async function catRefresh(id,btn){
+  btn.disabled=true;
+  let r; try{ r=await post("/api/catalog/refresh_price",{id}); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"Couldn't refresh the price"); return; }
+  toast(`Amazon now $${Number(r.base_price_usd||0).toFixed(2)} · suggested $${Number(r.suggested_price_usd||0).toFixed(2)}`);
+  const i=CATALOG.findIndex(x=>x.id===id); if(i>=0&&r.item){ CATALOG[i]=r.item; renderCatalog(); }
+}
+async function catDel(id){
+  if(!confirm("Remove this product from the catalog?")) return;
+  let r; try{ r=await post("/api/catalog/delete",{id}); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"Couldn't delete"); return; }
+  loadCatalog();
+}
 // ---- Deposits / payments ledger (عربون) ------------------------------------ //
 let DEP=null, DEP_RATE=3.7, DEP_CUSTMAP={};
 // Fill the searchable datalist from the merged people list (CRM + everyone with an
@@ -1666,7 +1760,7 @@ function neRowHtml(o,kind){
     const extra=items.length>MAX?`<span class="more">+${items.length-MAX}</span>`:'';
     prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
   }
-  const badges=`${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
+  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
   const statusCell = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
     : statusPill(o.status);   // shared per-status colour (same map as the card)
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
@@ -2384,11 +2478,11 @@ async function loadPurchases(){
   const d=await (await fetch("/api/purchases")).json();
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
-  // The demand queue: customer → their pending (To-order) products, so picking a
-  // customer on a purchase row can auto-fill the product image/link/ASIN/qty.
+  // The demand queue: customer → their pending (To-order + In-cart) products, so
+  // picking a customer on a purchase row can auto-fill the product image/link/ASIN/qty.
   try{ const n=await (await fetch("/api/needorder")).json();
     PO_CUSTORDERS={};
-    (n.orders||[]).forEach(o=>{ const k=(o.customer||"").trim().toLowerCase(); if(!k) return;
+    (n.orders||[]).concat(n.in_cart||[]).forEach(o=>{ const k=(o.customer||"").trim().toLowerCase(); if(!k) return;
       const e=PO_CUSTORDERS[k]||(PO_CUSTORDERS[k]={ids:[],items:[]});
       e.ids.push(o.order_id);
       (o.items||[]).forEach(it=>e.items.push({title:it.title||"",asin:(it.asin||"").toUpperCase(),

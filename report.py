@@ -45,6 +45,7 @@ def _row(o):
                                 - (o.get("deposit_usd") or 0), 2)
                           if o.get("amount_to_collect_usd") is not None else None),
         "status": o["status"],
+        "source": o.get("source"),
         "created_at": o.get("created_at"),
         "amazon_order_number": o.get("amazon_order_number"),
         "tracking_number": o.get("tracking_number"),

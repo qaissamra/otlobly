@@ -82,6 +82,7 @@
     <h2 data-i18n-html="heroTitle"></h2>
     <p data-i18n="heroSub"></p>
     <div class="cta">
+      <a class="btn main" href="/catalog">🛍️ <span data-i18n="ctaShop"></span></a>
       {% if wa_number %}<a class="btn wa" id="waBtn" href="#" target="_blank" rel="noopener">🟢 <span data-i18n="ctaWa"></span></a>{% endif %}
       <a class="btn line" href="/track">📦 <span data-i18n="ctaTrack"></span></a>
     </div>
@@ -109,6 +110,7 @@
 
   <h3 class="sec" data-i18n="goTitle"></h3>
   <div class="tiles">
+    <a class="tile" href="/catalog"><span class="ic">🛍️</span><b data-i18n="tShop"></b><small data-i18n="tShopD"></small></a>
     <a class="tile" href="/track"><span class="ic">📦</span><b data-i18n="tTrack"></b><small data-i18n="tTrackD"></small></a>
     <a class="tile" href="/account"><span class="ic">👤</span><b data-i18n="tAcc"></b><small data-i18n="tAccD"></small></a>
     {% if wa_number %}<a class="tile" id="waTile" href="#" target="_blank" rel="noopener"><span class="ic">💬</span><b data-i18n="tWa"></b><small data-i18n="tWaD"></small></a>{% endif %}
@@ -125,7 +127,7 @@ const T = {
   ar: {
     heroTitle: 'اطلب من أمازون،<br>ونحن نوصلها إلى <em>فلسطين</em>',
     heroSub: 'اطلبلي تشتري لك أي منتج من أمازون وتشحنه حتى باب بيتك — بدون بطاقة ائتمان: عربون بسيط للتأكيد، وتدفع الباقي عند الاستلام بالدولار.',
-    ctaWa: 'اطلب الآن عبر واتساب', ctaTrack: 'تتبّع طلبك',
+    ctaShop: 'تصفح المنتجات', ctaWa: 'اطلب الآن عبر واتساب', ctaTrack: 'تتبّع طلبك',
     trustCod: 'الدفع عند الاستلام', trustDoor: 'حتى باب البيت', trustNoCard: 'بدون بطاقة ائتمان',
     howTitle: 'كيف تعمل الخدمة؟',
     s1t: 'اختر منتجك', s1d: 'أرسل لنا رابط المنتج من أمازون عبر واتساب.',
@@ -137,6 +139,7 @@ const T = {
     f2t: 'بدون بطاقة', f2d: 'عربون للتأكيد فقط، والباقي كاش عند الاستلام بالدولار.',
     f3t: 'حساب شخصي', f3d: 'كل طلباتك ودفعاتك وشحناتك في صفحة واحدة.',
     goTitle: 'وين بدك تروح؟',
+    tShop: 'المتجر', tShopD: 'منتجات مختارة جاهزة للطلب',
     tTrack: 'تتبّع شحنتك', tTrackD: 'برقم الجوال أو رقم OTL',
     tAcc: 'حسابي', tAccD: 'طلباتك ودفعاتك',
     tWa: 'تواصل معنا', tWaD: 'واتساب مباشر',
@@ -147,7 +150,7 @@ const T = {
   en: {
     heroTitle: 'Shop Amazon,<br>delivered to <em>Palestine</em>',
     heroSub: 'Otlobly buys any Amazon product for you and ships it to your door — no credit card needed: a small deposit confirms your order, and you pay the rest in USD cash on delivery.',
-    ctaWa: 'Order now on WhatsApp', ctaTrack: 'Track your order',
+    ctaShop: 'Browse products', ctaWa: 'Order now on WhatsApp', ctaTrack: 'Track your order',
     trustCod: 'Cash on delivery', trustDoor: 'To your door', trustNoCard: 'No credit card',
     howTitle: 'How it works',
     s1t: 'Pick your product', s1d: 'Send us the Amazon product link on WhatsApp.',
@@ -159,6 +162,7 @@ const T = {
     f2t: 'No card needed', f2d: 'Just a confirmation deposit; the rest is cash on delivery in USD.',
     f3t: 'Your account', f3d: 'All your orders, payments and shipments in one page.',
     goTitle: 'Where to?',
+    tShop: 'Shop', tShopD: 'Hand-picked, ready to order',
     tTrack: 'Track a shipment', tTrackD: 'By phone or OTL number',
     tAcc: 'My account', tAccD: 'Your orders & payments',
     tWa: 'Contact us', tWaD: 'Direct WhatsApp',
