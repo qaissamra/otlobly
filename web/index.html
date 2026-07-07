@@ -2473,21 +2473,50 @@ async function azRotate(btn){
     } else { $("azIpOut").innerHTML=`<span class="spin"></span> rotating… ${s.done||0}/${s.total||1}`; }
   }, 1500);
 }
+// Mirror normalize.person_key: strip bidi/zero-width marks (WhatsApp copy-paste
+// junk), NBSP→space, collapse whitespace, lowercase — so visually identical
+// customer names always land on the same key.
+function normName(s){ return String(s==null?"":s)
+  .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\u061C\uFEFF]/g,"")
+  .replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toLowerCase(); }
+// Mirror normalize.phone_core (rows carry server-built e164 → always ASCII digits).
+function phoneCoreJs(s){ let d=String(s==null?"":s).replace(/\D/g,"");
+  if(d.startsWith("00")) d=d.slice(2);
+  for(const cc of ["970","972"]) if(d.startsWith(cc)){ d=d.slice(cc.length); break; }
+  return d.replace(/^0+/,""); }
 async function loadPurchases(){
   if(!QSETTINGS){ try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){} }  // white-label flags/labels for the card
   const d=await (await fetch("/api/purchases")).json();
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
-  // The demand queue: customer → their pending (To-order + In-cart) products, so
-  // picking a customer on a purchase row can auto-fill the product image/link/ASIN/qty.
+  // The demand queue: customer → their pending (To-order + In-cart) products, plus
+  // ORDERED orders (rescue: flipped by hand, still attachable — never SHIPPED+),
+  // so picking a customer on a purchase row can auto-fill image/link/ASIN/qty.
+  // One person = one group: orders are merged by phone, then the group is
+  // registered under EVERY spelling of the name seen on their orders.
   try{ const n=await (await fetch("/api/needorder")).json();
     PO_CUSTORDERS={};
-    (n.orders||[]).concat(n.in_cart||[]).forEach(o=>{ const k=(o.customer||"").trim().toLowerCase(); if(!k) return;
-      const e=PO_CUSTORDERS[k]||(PO_CUSTORDERS[k]={ids:[],items:[]});
-      e.ids.push(o.order_id);
-      (o.items||[]).forEach(it=>e.items.push({title:it.title||"",asin:(it.asin||"").toUpperCase(),
+    const rows=(n.orders||[]).concat(n.in_cart||[],
+      (n.ordered||[]).filter(o=>o.status==="ORDERED"));   // pending first → fills first
+    const persons={};                                     // phone core (else name) → group
+    rows.forEach(o=>{
+      const nk=normName(o.customer);
+      const pc=phoneCoreJs((o.phones&&o.phones[0])||o.phone||"");
+      if(!pc&&!nk) return;
+      const gk=pc?("ph:"+pc):("nm:"+nk);
+      const g=persons[gk]||(persons[gk]={ids:[],items:[],names:new Set()});
+      g.ids.push(o.order_id); if(nk) g.names.add(nk);
+      (o.items||[]).forEach(it=>g.items.push({title:it.title||"",asin:(it.asin||"").toUpperCase(),
         link:it.link||"",image:it.image||null,qty:it.qty||1,order_id:o.order_id}));
       if(o.customer && !PO_CUSTNAMES.includes(o.customer)) PO_CUSTNAMES.push(o.customer);
+    });
+    Object.values(persons).forEach(g=>{
+      // union with any entries already claiming one of this group's name variants
+      // (two spellings of one person, or same-named people — merged like today)
+      const hits=[...new Set([...g.names].map(k=>PO_CUSTORDERS[k]).filter(x=>x&&x!==g))];
+      hits.forEach(h=>{ g.ids.push(...h.ids); g.items.push(...h.items);
+        h.names.forEach(v=>g.names.add(v)); });
+      g.names.forEach(k=>PO_CUSTORDERS[k]=g);             // re-point ALL variants at the union
     });
   }catch(e){ PO_CUSTORDERS={}; }
   renderPurchases();
@@ -2536,20 +2565,45 @@ function poItemSet(id,pi,ii,f,v){ const p=poFind(id); if(!p)return; const it=p.p
   if(f==='customer_name'){ it.matched=!!v; poAutofillFromOrder(p,pi,ii,v); } poSave(p); }
 // Picking a customer on a BLANK row pulls their pending To-order products in —
 // image, link, ASIN, qty — one row per product (never overwrites typed data).
+// Products already sitting on ANY package of ANY purchase are skipped, so
+// re-picking the same customer on a second package only adds what's left.
 function poAutofillFromOrder(p,pi,ii,name){
-  const e=PO_CUSTORDERS[(name||"").trim().toLowerCase()];
+  const e=PO_CUSTORDERS[normName(name)];
   if(!e||!e.items.length) return;
   const it=p.packages[pi].items[ii];
   if((it.title||"").trim()||(it.asin||"").trim()||(it.clean_url||"").trim()) return;  // row already has data
-  const [first,...rest]=e.items;
+  // already-placed index over in-memory POS (so unsaved rows count too):
+  // exact (order, product) pairs, plus (name, product) for rows the server
+  // couldn't resolve to an order id yet.
+  const prodKey=x=>((x.asin||"").trim().toUpperCase())||((x.clean_url||x.link||"").trim());
+  const byOid=new Set(), byName=new Set();
+  (POS||[]).forEach(po=>(po.packages||[]).forEach(pk=>(pk.items||[]).forEach(x=>{
+    if(x===it) return;                                        // the row being filled
+    if(x.status==="CANCELLED"||x.status==="RETURNED") return; // don't block re-ordering
+    const a=prodKey(x); if(!a) return;
+    if(x.customer_order_id) byOid.add(x.customer_order_id+"|"+a);
+    else if(x.customer_name) byName.add(normName(x.customer_name)+"|"+a);
+  })));
+  const names=e.names?[...e.names]:[normName(name)];
+  const fresh=e.items.filter(x=>{ const a=prodKey(x); if(!a) return true;
+    if(x.order_id && byOid.has(x.order_id+"|"+a)) return false;
+    return !names.some(v=>byName.has(v+"|"+a)); });
+  if(!fresh.length){
+    toast(`منتجات ${name} كلها مضافة مسبقًا في الطرود · all of ${name}'s products are already in packages`);
+    return;
+  }
+  const skipped=e.items.length-fresh.length;
+  const [first,...rest]=fresh;
   Object.assign(it,{title:first.title,asin:first.asin,clean_url:first.link,
                     image:first.image||it.image||null,qty:first.qty||1,
-                    customer_order_id:first.order_id||e.ids[0]||null});
+                    customer_order_id:first.order_id||null});
   rest.forEach(x=>p.packages[pi].items.push({title:x.title,asin:x.asin,clean_url:x.link,
     image:x.image||null,qty:x.qty||1,status:"ORDERED",customer_name:name,matched:true,
-    customer_order_id:x.order_id||e.ids[0]||null}));
+    customer_order_id:x.order_id||null}));
   renderPurchases();
-  toast(`تم جلب ${e.items.length} منتج من ${e.ids.join(" · ")} · pulled ${e.items.length} product(s) from the To-order page`);
+  const ids=[...new Set(fresh.map(x=>x.order_id).filter(Boolean))];
+  toast(`تم جلب ${fresh.length} منتج من ${ids.join(" · ")} · pulled ${fresh.length} product(s)`+
+        (skipped?` · تخطّينا ${skipped} مضاف مسبقًا · ${skipped} already in packages`:``));
 }
 function extractAsinClient(url){   // /dp/, /gp/product/, /product/ … → 10-char ASIN (no network)
   const m=/\/(?:dp|gp\/product|gp\/aw\/d|gp\/offer-listing|product)\/([A-Z0-9]{10})/i.exec(url||'');

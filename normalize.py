@@ -204,11 +204,25 @@ def parse_items(cells, expand=False):
 # --------------------------------------------------------------------------- #
 # Customer identity
 # --------------------------------------------------------------------------- #
+_NAME_MARKS = dict.fromkeys(
+    [0x200B, 0x200C, 0x200D, 0x200E, 0x200F,          # zero-widths + LRM/RLM
+     0x202A, 0x202B, 0x202C, 0x202D, 0x202E,          # bidi embeddings
+     0x2066, 0x2067, 0x2068, 0x2069, 0x061C, 0xFEFF], None)
+_NAME_MARKS[0x00A0] = " "                              # NBSP → real space (never delete)
+
+
+def person_key(name):
+    """Canonical key for a customer NAME: strip invisible bidi/zero-width marks
+    (WhatsApp copy-paste junk), NBSP→space, collapse whitespace, lowercase."""
+    s = (name or "").translate(_NAME_MARKS)
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
 def customer_key(phones, name):
     """Stable key to dedupe a customer across rows: first phone, else name."""
     if phones:
         return phones[0]["e164"]
-    return "name:" + re.sub(r"\s+", " ", (name or "").strip().lower())
+    return "name:" + person_key(name)
 
 
 # --------------------------------------------------------------------------- #
@@ -246,8 +260,22 @@ def _selftest():
         mark = "OK " if asin == want else "XX "
         lf += asin != want
         print(f"  {mark} {url[:54]:54} -> {asin}")
-    print(f"\n{'ALL PASS' if pf==0 and lf==0 else f'FAILURES: {pf} phone, {lf} link'}")
-    return pf + lf
+    names = [                                    # visually identical spellings must collapse
+        ("\u062e\u0627\u0644\u062f \u062c\u0645\u0627\u0644", "\u062e\u0627\u0644\u062f \u062c\u0645\u0627\u0644"),
+        ("\u062e\u0627\u0644\u062f\u200f \u062c\u0645\u0627\u0644", "\u062e\u0627\u0644\u062f \u062c\u0645\u0627\u0644"),  # RLM pasted from WhatsApp
+        ("\u062e\u0627\u0644\u062f\u00a0\u062c\u0645\u0627\u0644", "\u062e\u0627\u0644\u062f \u062c\u0645\u0627\u0644"),   # NBSP instead of space
+        (" \u062e\u0627\u0644\u062f  \u062c\u0645\u0627\u0644 ", "\u062e\u0627\u0644\u062f \u062c\u0645\u0627\u0644"),
+    ]
+    print("\nNAMES  raw -> person_key")
+    nf = 0
+    for raw, want in names:
+        got = person_key(raw)
+        mark = "OK " if got == want else "XX "
+        nf += got != want
+        print(f"  {mark} {raw!r:28} -> {got!r}")
+
+    print(f"\n{'ALL PASS' if pf==0 and lf==0 and nf==0 else f'FAILURES: {pf} phone, {lf} link, {nf} name'}")
+    return pf + lf + nf
 
 
 if __name__ == "__main__":

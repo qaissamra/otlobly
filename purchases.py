@@ -117,28 +117,34 @@ def apply_to_orders(po, orders, buffer_days=8):
 def attach_matches(po, orders):
     """Fill each item's customer_order_id / customer_name / matched by ASIN.
     Manual customer picks are kept — but they STILL get a customer_order_id
-    (name → their pending order), otherwise apply_to_orders can never flip a
-    manually-assigned item's order to ORDERED."""
+    (name → their pending order, else their newest unshipped ORDERED one),
+    otherwise apply_to_orders can never flip a manually-assigned item's order
+    to ORDERED / sync its batch, box and dates."""
     idx = asin_index(orders)
-    name_idx = {}                              # customer name → newest pending order
+    name_idx, ordered_idx = {}, {}             # person_key → newest pending / ORDERED order
     for o in orders:
-        if o.get("status") in ("REQUESTED", "QUOTED", "PAID", "IN_CART"):
-            nm = (o.get("customer", {}).get("name") or "").strip().lower()
-            if nm:
-                prev = name_idx.get(nm)
-                if not prev or (o.get("created_at") or "") > (prev.get("created_at") or ""):
-                    name_idx[nm] = o
+        st = o.get("status")
+        bucket = (name_idx if st in ("REQUESTED", "QUOTED", "PAID", "IN_CART")
+                  else ordered_idx if st == "ORDERED" else None)
+        if bucket is None:
+            continue
+        nm = normalize.person_key(o.get("customer", {}).get("name") or "")
+        if nm:
+            prev = bucket.get(nm)
+            if not prev or (o.get("created_at") or "") > (prev.get("created_at") or ""):
+                bucket[nm] = o
     for pkg in po.get("packages", []):
         for it in pkg.get("items", []):
             if it.get("customer_name") and it.get("matched"):
                 if not it.get("customer_order_id"):           # manual pick → resolve the id
-                    nm = (it.get("customer_name") or "").strip().lower()
-                    m = name_idx.get(nm)
+                    nm = normalize.person_key(it.get("customer_name") or "")
+                    # pending wins; an ORDERED order is only a fallback rescue
+                    m = name_idx.get(nm) or ordered_idx.get(nm)
                     if m:
                         it["customer_order_id"] = m["order_id"]
                     else:                                     # same product AND same name
                         cid, cname, _amb = match_item(it.get("asin"), idx)
-                        if cid and (cname or "").strip().lower() == nm:
+                        if cid and normalize.person_key(cname or "") == nm:
                             it["customer_order_id"] = cid
                 continue                       # keep the manual assignment itself
             cid, cname, amb = match_item(it.get("asin"), idx)
