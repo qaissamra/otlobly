@@ -93,8 +93,10 @@ def apply_to_orders(po, orders, buffer_days=8):
             if not o:
                 continue
             ch = {}
-            if o.get("status") in ("REQUESTED", "QUOTED", "PAID"):
+            if o.get("status") in ("REQUESTED", "QUOTED", "PAID", "IN_CART"):
                 ch["status"] = "ORDERED"
+                if o.get("cart_prev_status"):
+                    ch["cart_prev_status"] = None
             if ano and o.get("amazon_order_number") != ano:
                 ch["amazon_order_number"] = ano
             if ano and not (o.get("batch") or "").strip():
@@ -120,7 +122,7 @@ def attach_matches(po, orders):
     idx = asin_index(orders)
     name_idx = {}                              # customer name → newest pending order
     for o in orders:
-        if o.get("status") in ("REQUESTED", "QUOTED", "PAID"):
+        if o.get("status") in ("REQUESTED", "QUOTED", "PAID", "IN_CART"):
             nm = (o.get("customer", {}).get("name") or "").strip().lower()
             if nm:
                 prev = name_idx.get(nm)
