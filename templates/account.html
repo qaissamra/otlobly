@@ -123,6 +123,8 @@
     <div id="shipments"></div>
     <h2 class="sec" id="t_orders"></h2>
     <div id="orders"></div>
+    <h2 class="sec" id="t_payments" style="display:none"></h2>
+    <div id="payments"></div>
     <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
       <button class="out" id="b_logout" onclick="logout()" style="padding:8px 26px;font-size:13px"></button></div>
   </div>
@@ -140,6 +142,8 @@ const T={
       deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
       curr:"الحالة الحالية", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
       deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك", asof:"🕓 آخر تحديث",
+      creditsum:"رصيدك لدينا", payments:"💵 سجل دفعاتك", credittag:"رصيد لحسابك",
+      kdeposit:"عربون", kcollect:"دفعة", krefund:"استرجاع",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
   en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
       phonehint:"We'll send a code to your number on WhatsApp.",
@@ -148,6 +152,8 @@ const T={
       deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
       curr:"current status", track:"Tracking #", eta:"🚚 Expected arrival", prep:"We're preparing your order",
       deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance", asof:"🕓 last updated",
+      creditsum:"Your credit", payments:"💵 Your payments", credittag:"Account credit",
+      kdeposit:"Deposit", kcollect:"Payment", krefund:"Refund",
       foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
 };
 const STAT={ // order status → {ar,en,color,bg} — customer-friendly labels ONLY
@@ -173,7 +179,7 @@ function fmtRange(a,b){ const loc=LANG==="ar"?"ar":"en-GB";
 function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
   $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
 function paint(){
-  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
+  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
 }
@@ -246,13 +252,22 @@ function orderRow(o){
     <div class="t" dir="auto">${esc(it.title||o.order_id)}${more}<div style="color:var(--muted);font-weight:500;font-size:11px">${esc(o.order_id)}${eta}</div>${moneyLine}</div>
     <span class="pill" style="color:${st.c};background:${st.b}">${LANG==="ar"?st.ar:st.en}</span></div>`;
 }
+function payRow(p){
+  const refund=p.kind==="refund";
+  const kind=t(refund?"krefund":(p.kind==="collect"?"kcollect":"kdeposit"));
+  const ils=(p.currency==="ILS"&&p.amount_entered!=null)?` · ₪${Number(p.amount_entered).toFixed(0)}`:"";
+  const where=p.order_code?esc(p.order_code):t("credittag");
+  return `<div class="ord" style="background:#fbfaf6">
+    <div class="t" dir="auto"><b>${kind}</b><div style="color:var(--muted);font-weight:500;font-size:11px">${fmt(p.paid_at)} · ${where}</div></div>
+    <span style="font-size:14px;font-weight:800;white-space:nowrap;color:${refund?"#b42318":"#15803d"}">${refund?"−":""}${money(Math.abs(p.amount_usd||0))}<small style="color:var(--muted);font-weight:600">${ils}</small></span></div>`;
+}
 async function loadDashboard(){
   let d; try{ d=await (await fetch("/api/customer/orders")).json(); }catch(e){ d=null; }
   if(!d){ backToPhone(); return; }
   paint(); show("s_dash");
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
   const tot=d.totals||{};
-  $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0)
+  $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0||(tot.credit_usd||0)>0)
     ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px">
          <div style="flex:1;min-width:130px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:12px;padding:10px 13px">
            <div style="font-size:20px;font-weight:800;color:#15803d">${money(tot.deposited_usd||0)}</div>
@@ -260,9 +275,16 @@ async function loadDashboard(){
          <div style="flex:1;min-width:130px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:10px 13px">
            <div style="font-size:20px;font-weight:800;color:#b42318">${money(tot.remaining_usd||0)}</div>
            <div style="font-size:11.5px;color:#991b1b">${t("remainsum")}</div></div>
+         ${(tot.credit_usd||0)>0?`<div style="flex:1;min-width:130px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:10px 13px">
+           <div style="font-size:20px;font-weight:800;color:#1d4ed8">${money(tot.credit_usd)}</div>
+           <div style="font-size:11.5px;color:#1e40af">${t("creditsum")}</div></div>`:""}
        </div>` : "";
   $("shipments").innerHTML=(d.shipments&&d.shipments.length)?d.shipments.map(shipCard).join(""):`<div class="empty">${t("noship")}</div>`;
   $("orders").innerHTML=(d.orders&&d.orders.length)?d.orders.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
+  const pays=d.payments||[];
+  $("t_payments").style.display=pays.length?"block":"none";
+  $("t_payments").textContent=t("payments");
+  $("payments").innerHTML=pays.map(payRow).join("");
 }
 async function init(){
   setLang("ar");

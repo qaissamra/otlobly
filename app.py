@@ -2252,9 +2252,22 @@ def api_customer_orders():
     deposited = round(sum(o["deposit_usd"] or 0 for o in orders), 2)
     remaining = round(sum(o["remaining_usd"] or 0 for o in orders
                           if o["status"] in OPEN and o["remaining_usd"] is not None), 2)
+    # Their money trail: full ledger rows (customer-safe fields ONLY — notes and
+    # staff names stay internal) + standalone credit = net of payments not attached
+    # to any order (deposits/collects − refunds). Order-attached money already shows
+    # per order; credit>0 means "money on file with no open order to absorb it".
+    pay_rows = db.list_payments(customer_phone=core)
+    credit = round(sum((-(r["amount_usd"] or 0) if r["kind"] == "refund" else (r["amount_usd"] or 0))
+                       for r in pay_rows if not r.get("order_code")), 2)
+    payments = [{"paid_at": r.get("paid_at") or r.get("ts"), "kind": r.get("kind"),
+                 "currency": r.get("currency"), "amount_entered": r.get("amount_entered"),
+                 "amount_usd": r.get("amount_usd"), "order_code": r.get("order_code")}
+                for r in pay_rows[:50]]
     return jsonify({"name": session.get("cust_name") or "",
                     "orders": orders, "totals": {"deposited_usd": deposited,
-                                                 "remaining_usd": remaining},
+                                                 "remaining_usd": remaining,
+                                                 "credit_usd": credit},
+                    "payments": payments,
                     "shipments": shipments, "count": len(shipments)})
 
 
