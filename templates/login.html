@@ -21,6 +21,12 @@
   button:hover{background:#000}
   .err{background:#fef2f2;color:var(--bad);border:1px solid #f3c0c0;border-radius:9px;padding:8px 11px;font-size:12.5px;margin-bottom:6px}
   .sub{color:var(--muted);font-size:12.5px;margin:-6px 0 4px}
+  .pwd{position:relative}
+  .pwd input{padding-right:42px}
+  .pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:30px;height:30px;
+    margin:0;padding:0;border:none;border-radius:8px;background:transparent;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .pw-eye:hover{background:#f3f1ea;color:var(--ink)}
 </style>
 <form class="card" method="post" action="{{ url_for('setup') if setup else url_for('login') }}">
   <div class="brand">
@@ -33,6 +39,24 @@
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
   {% if setup %}<label>Your name</label><input name="name" autofocus>{% endif %}
   <label>Username</label><input name="username" {{ '' if setup else 'autofocus' }} required>
-  <label>Password</label><input name="password" type="password" required>
+  <label>Password</label>
+  <div class="pwd">
+    <input id="pw" name="password" type="password" required>
+    <button type="button" class="pw-eye" id="pwEye" aria-label="Show password" title="Show password"></button>
+  </div>
   <button type="submit">{{ 'Create admin' if setup else 'Sign in' }}</button>
 </form>
+<script>
+  var pw=document.getElementById('pw'), eye=document.getElementById('pwEye');
+  var EYE='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var EYE_OFF='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.5 10.5 0 0 1 12 19c-7 0-11-7-11-7a20.8 20.8 0 0 1 5.06-5.94"/><path d="M9.9 4.24A10.6 10.6 0 0 1 12 5c7 0 11 7 11 7a20.9 20.9 0 0 1-3.22 4.19"/><line x1="1" y1="1" x2="23" y2="23"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>';
+  eye.innerHTML=EYE;
+  eye.onclick=function(){
+    var show=pw.type==='password';
+    pw.type=show?'text':'password';
+    eye.innerHTML=show?EYE_OFF:EYE;
+    eye.title='' + (show?'Hide password':'Show password');
+    eye.setAttribute('aria-label',eye.title);
+    pw.focus();
+  };
+</script>
