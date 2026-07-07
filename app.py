@@ -13,6 +13,7 @@ stdlib server.
 First run with no users redirects to /setup to create the first admin.
 """
 
+import hashlib
 import hmac
 import json
 import os
@@ -2060,6 +2061,25 @@ def api_wa_login_start():
     return jsonify({"ok": True, "wa_url": f"https://wa.me/{num}?text={_urlquote(prefill)}"})
 
 
+def _wa_login_consume(phone_raw, text):
+    """Shared by both inbound webhooks: if `text` carries a pending login nonce,
+    mark it verified/unknown for the sender's phone. Returns the resulting status
+    ('verified' | 'unknown' | 'ignored') so callers can branch a reply on it."""
+    m = WA_NONCE_RE.search((text or "").upper())
+    if not m:
+        return "ignored"
+    rec = db.get_setting(f"walogin:{m.group(0)}")
+    if not rec or rec.get("status") != "pending" or time.time() > (rec.get("expires") or 0):
+        return "ignored"
+    core = normalize.phone_core(phone_raw or "")
+    matched, name = _match_customer(core)                   # only known customers can log in
+    status = "verified" if matched else "unknown"
+    db.set_setting(f"walogin:{m.group(0)}",
+                   {"status": status, "phone": core, "name": name,
+                    "expires": time.time() + WA_LOGIN_TTL})
+    return status
+
+
 @app.route("/webhook/whatsapp", methods=["GET", "POST"])
 def wa_webhook():
     # GET = Meta's subscription handshake; POST = inbound messages.
@@ -2068,26 +2088,43 @@ def wa_webhook():
                 == os.environ.get("WHATSAPP_VERIFY_TOKEN", "otlobly_verify")):
             return request.args.get("hub.challenge", ""), 200
         return "forbidden", 403
+    # A forged POST here would log an attacker in as any customer, so the payload
+    # must prove it came from Meta: X-Hub-Signature-256 = HMAC of the raw body
+    # with the Meta app secret. No WHATSAPP_APP_SECRET configured = trust nobody.
+    app_secret = os.environ.get("WHATSAPP_APP_SECRET", "")
+    sig_ok = False
+    if app_secret:
+        want = "sha256=" + hmac.new(app_secret.encode(), request.get_data(),
+                                    hashlib.sha256).hexdigest()
+        sig_ok = hmac.compare_digest(request.headers.get("X-Hub-Signature-256", ""), want)
+    if not sig_ok:
+        app.logger.warning("wa webhook POST rejected (bad or missing signature)")
+        return jsonify({"ok": True})                        # 200 so Meta doesn't hammer retries
     body = request.get_json(force=True, silent=True) or {}
     try:
         for entry in body.get("entry", []):
             for ch in entry.get("changes", []):
                 for msg in (ch.get("value") or {}).get("messages", []):
-                    text = ((msg.get("text") or {}).get("body")) or ""
-                    m = WA_NONCE_RE.search(text.upper())
-                    if not m:
-                        continue
-                    rec = db.get_setting(f"walogin:{m.group(0)}")
-                    if not rec or rec.get("status") != "pending" or time.time() > (rec.get("expires") or 0):
-                        continue
-                    core = normalize.phone_core(msg.get("from") or "")
-                    matched, name = _match_customer(core)   # only known customers can log in
-                    db.set_setting(f"walogin:{m.group(0)}",
-                                   {"status": "verified" if matched else "unknown",
-                                    "phone": core, "name": name, "expires": time.time() + WA_LOGIN_TTL})
+                    _wa_login_consume(msg.get("from"), (msg.get("text") or {}).get("body"))
     except Exception:  # noqa — never 500 a webhook (Meta retries aggressively)
         app.logger.exception("wa webhook parse failed")
     return jsonify({"ok": True})                            # always 200
+
+
+@app.route("/webhook/manychat", methods=["POST"])
+def manychat_webhook():
+    """Inbound-message relay for when the WhatsApp number lives on ManyChat (ManyChat
+    owns the Cloud API connection, so Meta's webhooks go to them, not us). A ManyChat
+    keyword automation ("message contains OTL") fires an External Request here with
+    the sender's phone + message text. Auth = shared secret header, set the same
+    value in Render env MANYCHAT_WEBHOOK_SECRET and in the ManyChat request headers."""
+    secret = os.environ.get("MANYCHAT_WEBHOOK_SECRET", "")
+    got = request.headers.get("X-Otlobly-Secret", "") or request.args.get("secret", "")
+    if not (secret and hmac.compare_digest(got, secret)):
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+    b = request.get_json(force=True, silent=True) or {}
+    status = _wa_login_consume(b.get("phone"), b.get("text"))
+    return jsonify({"ok": True, "status": status})
 
 
 @app.route("/api/customer/wa_login/poll")
