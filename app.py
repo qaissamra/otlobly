@@ -271,9 +271,13 @@ def logout():
 
 
 @app.route("/")
-@login_required
 def index():
-    return send_file(HERE / "web" / "index.html")
+    """Staff get the dashboard; everyone else gets the public landing page.
+    Customer-portal sessions (cust_phone) are NOT Flask-Login auth, so logged-in
+    customers still land on the marketing page — their door is /account."""
+    if current_user.is_authenticated:
+        return send_file(HERE / "web" / "index.html")
+    return render_template("landing.html", wa_number=_wa_business_number())
 
 
 @app.route("/api/me")

@@ -1,0 +1,189 @@
+<!doctype html>
+<html dir="rtl" lang="ar">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — اطلبلي · نشتري لك من أمازون ونوصلها إلى فلسطين</title>
+<meta name="description" content="اطلبلي تشتري لك من أمازون وتشحن حتى باب بيتك في فلسطين — بدون بطاقة ائتمان، عربون بسيط والدفع عند الاستلام بالدولار. Otlobly buys from Amazon for you and delivers to Palestine, cash on delivery in USD.">
+<meta property="og:title" content="Otlobly — اطلبلي">
+<meta property="og:description" content="نشتري لك من أمازون ونوصلها إلى فلسطين — الدفع عند الاستلام بالدولار.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#111111">
+<style>
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--wa:#25D366}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:18px 16px 40px}
+  /* header */
+  .top{display:flex;align-items:center;gap:10px;padding:4px 2px 18px}
+  .top h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .top .ly{color:var(--accent)}
+  .lang{margin-inline-start:auto;display:flex;gap:6px}
+  .lang span{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);
+    border-radius:20px;padding:3px 11px;background:var(--card)}
+  .lang span.on{background:#111;color:#fff;border-color:#111}
+  /* hero */
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:22px;
+    box-shadow:0 10px 40px rgba(20,18,12,.06);padding:34px 24px 28px;text-align:center}
+  .hero .mark{margin-bottom:14px}
+  .hero h2{font-size:clamp(24px,5.4vw,34px);line-height:1.25;font-weight:800;letter-spacing:-.6px;margin:0 0 10px}
+  .hero h2 em{color:var(--accent);font-style:normal}
+  .hero p{color:var(--muted);font-size:15.5px;max-width:520px;margin:0 auto 22px}
+  .cta{display:flex;flex-direction:column;gap:10px;max-width:360px;margin:0 auto}
+  .btn{display:block;text-decoration:none;text-align:center;font-size:15.5px;font-weight:800;
+    border-radius:12px;padding:14px 18px;cursor:pointer;border:1px solid transparent}
+  .btn.wa{background:var(--wa);color:#fff}
+  .btn.main{background:var(--accent);color:#fff}
+  .btn.line{background:var(--card);color:var(--ink);border-color:var(--line)}
+  .trust{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:20px;
+    color:var(--muted);font-size:12px;font-weight:600}
+  .trust span{display:flex;align-items:center;gap:5px}
+  /* sections */
+  h3.sec{font-size:16px;font-weight:800;margin:30px 4px 12px;text-align:start}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 14px}
+  .step .n{width:28px;height:28px;border-radius:50%;background:#111;color:#fff;font-weight:800;font-size:13px;
+    display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+  .step b{display:block;font-size:13.5px;margin-bottom:5px}
+  .step small{color:var(--muted);font-size:12px;line-height:1.5;display:block}
+  .feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:10px;align-items:flex-start}
+  .feat .ic{font-size:20px;line-height:1}
+  .feat b{display:block;font-size:13px;margin-bottom:3px}
+  .feat small{color:var(--muted);font-size:11.5px;line-height:1.45;display:block}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 14px;text-align:center;
+    text-decoration:none;color:var(--ink);transition:border-color .15s}
+  .tile:hover{border-color:var(--accent)}
+  .tile .ic{font-size:22px;display:block;margin-bottom:8px}
+  .tile b{font-size:13.5px;display:block}
+  .tile small{color:var(--muted);font-size:11.5px}
+  .foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);
+    font-size:11.5px;text-align:center}
+  .foot a{color:var(--muted)}
+</style>
+<body>
+<div class="wrap">
+  <div class="top">
+    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
+      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+    <h1>Otlob<span class="ly">ly</span></h1>
+    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
+  </div>
+
+  <div class="hero">
+    <div class="mark">
+      <svg width="58" height="58" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
+        <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
+        <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+    </div>
+    <h2 data-i18n-html="heroTitle"></h2>
+    <p data-i18n="heroSub"></p>
+    <div class="cta">
+      {% if wa_number %}<a class="btn wa" id="waBtn" href="#" target="_blank" rel="noopener">🟢 <span data-i18n="ctaWa"></span></a>{% endif %}
+      <a class="btn line" href="/track">📦 <span data-i18n="ctaTrack"></span></a>
+    </div>
+    <div class="trust">
+      <span>💵 <span data-i18n="trustCod"></span></span>
+      <span>🚚 <span data-i18n="trustDoor"></span></span>
+      <span>🔒 <span data-i18n="trustNoCard"></span></span>
+    </div>
+  </div>
+
+  <h3 class="sec" data-i18n="howTitle"></h3>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><b data-i18n="s1t"></b><small data-i18n="s1d"></small></div>
+    <div class="step"><div class="n">2</div><b data-i18n="s2t"></b><small data-i18n="s2d"></small></div>
+    <div class="step"><div class="n">3</div><b data-i18n="s3t"></b><small data-i18n="s3d"></small></div>
+    <div class="step"><div class="n">4</div><b data-i18n="s4t"></b><small data-i18n="s4d"></small></div>
+  </div>
+
+  <h3 class="sec" data-i18n="whyTitle"></h3>
+  <div class="feats">
+    <div class="feat"><span class="ic">🔎</span><div><b data-i18n="f1t"></b><small data-i18n="f1d"></small></div></div>
+    <div class="feat"><span class="ic">💵</span><div><b data-i18n="f2t"></b><small data-i18n="f2d"></small></div></div>
+    <div class="feat"><span class="ic">👤</span><div><b data-i18n="f3t"></b><small data-i18n="f3d"></small></div></div>
+  </div>
+
+  <h3 class="sec" data-i18n="goTitle"></h3>
+  <div class="tiles">
+    <a class="tile" href="/track"><span class="ic">📦</span><b data-i18n="tTrack"></b><small data-i18n="tTrackD"></small></a>
+    <a class="tile" href="/account"><span class="ic">👤</span><b data-i18n="tAcc"></b><small data-i18n="tAccD"></small></a>
+    {% if wa_number %}<a class="tile" id="waTile" href="#" target="_blank" rel="noopener"><span class="ic">💬</span><b data-i18n="tWa"></b><small data-i18n="tWaD"></small></a>{% endif %}
+  </div>
+
+  <div class="foot">
+    <span data-i18n="foot"></span> · <a href="/login" data-i18n="staff"></a>
+  </div>
+</div>
+<script>
+const WA_NUM = "{{ wa_number }}";
+let LANG = "ar";
+const T = {
+  ar: {
+    heroTitle: 'اطلب من أمازون،<br>ونحن نوصلها إلى <em>فلسطين</em>',
+    heroSub: 'اطلبلي تشتري لك أي منتج من أمازون وتشحنه حتى باب بيتك — بدون بطاقة ائتمان: عربون بسيط للتأكيد، وتدفع الباقي عند الاستلام بالدولار.',
+    ctaWa: 'اطلب الآن عبر واتساب', ctaTrack: 'تتبّع طلبك',
+    trustCod: 'الدفع عند الاستلام', trustDoor: 'حتى باب البيت', trustNoCard: 'بدون بطاقة ائتمان',
+    howTitle: 'كيف تعمل الخدمة؟',
+    s1t: 'اختر منتجك', s1d: 'أرسل لنا رابط المنتج من أمازون عبر واتساب.',
+    s2t: 'ادفع العربون', s2d: 'نرسل لك السعر النهائي شامل الشحن، وتؤكد طلبك بعربون بسيط.',
+    s3t: 'نطلب ونشحن', s3d: 'نشتري المنتج ونشحنه إلى فلسطين — وتتابع رحلته برقم تتبّع خاص.',
+    s4t: 'استلم وادفع الباقي', s4d: 'يصلك الطلب حتى باب البيت، وتدفع المتبقي عند الاستلام بالدولار.',
+    whyTitle: 'ليش اطلبلي؟',
+    f1t: 'تتبّع مباشر', f1d: 'رقم تتبّع OTL لكل شحنة — تعرف وين طلبك بأي لحظة.',
+    f2t: 'بدون بطاقة', f2d: 'عربون للتأكيد فقط، والباقي كاش عند الاستلام بالدولار.',
+    f3t: 'حساب شخصي', f3d: 'كل طلباتك ودفعاتك وشحناتك في صفحة واحدة.',
+    goTitle: 'وين بدك تروح؟',
+    tTrack: 'تتبّع شحنتك', tTrackD: 'برقم الجوال أو رقم OTL',
+    tAcc: 'حسابي', tAccD: 'طلباتك ودفعاتك',
+    tWa: 'تواصل معنا', tWaD: 'واتساب مباشر',
+    foot: 'Otlobly · اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين',
+    staff: 'دخول الموظفين',
+    waText: 'مرحباً اطلبلي 👋 بدي أطلب من أمازون'
+  },
+  en: {
+    heroTitle: 'Shop Amazon,<br>delivered to <em>Palestine</em>',
+    heroSub: 'Otlobly buys any Amazon product for you and ships it to your door — no credit card needed: a small deposit confirms your order, and you pay the rest in USD cash on delivery.',
+    ctaWa: 'Order now on WhatsApp', ctaTrack: 'Track your order',
+    trustCod: 'Cash on delivery', trustDoor: 'To your door', trustNoCard: 'No credit card',
+    howTitle: 'How it works',
+    s1t: 'Pick your product', s1d: 'Send us the Amazon product link on WhatsApp.',
+    s2t: 'Pay a deposit', s2d: 'We quote the final price incl. shipping — confirm with a small deposit.',
+    s3t: 'We order & ship', s3d: 'We buy it and ship to Palestine — follow it live with your OTL tracking number.',
+    s4t: 'Receive & pay the rest', s4d: 'Delivered to your door — pay the remainder in USD on delivery.',
+    whyTitle: 'Why Otlobly?',
+    f1t: 'Live tracking', f1d: 'An OTL tracking number for every shipment — know where your order is anytime.',
+    f2t: 'No card needed', f2d: 'Just a confirmation deposit; the rest is cash on delivery in USD.',
+    f3t: 'Your account', f3d: 'All your orders, payments and shipments in one page.',
+    goTitle: 'Where to?',
+    tTrack: 'Track a shipment', tTrackD: 'By phone or OTL number',
+    tAcc: 'My account', tAccD: 'Your orders & payments',
+    tWa: 'Contact us', tWaD: 'Direct WhatsApp',
+    foot: 'Otlobly — we buy from Amazon and deliver to Palestine',
+    staff: 'Staff login',
+    waText: 'Hi Otlobly 👋 I want to order from Amazon'
+  }
+};
+function setLang(l){
+  LANG = l;
+  document.documentElement.lang = l;
+  document.documentElement.dir = l === "ar" ? "rtl" : "ltr";
+  document.getElementById("l_ar").classList.toggle("on", l === "ar");
+  document.getElementById("l_en").classList.toggle("on", l === "en");
+  const d = T[l];
+  document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = d[e.dataset.i18n] || ""; });
+  document.querySelectorAll("[data-i18n-html]").forEach(e => { e.innerHTML = d[e.dataset.i18nHtml] || ""; });
+  if (WA_NUM) {
+    const url = "https://wa.me/" + WA_NUM + "?text=" + encodeURIComponent(d.waText);
+    const b = document.getElementById("waBtn"), t = document.getElementById("waTile");
+    if (b) b.href = url;
+    if (t) t.href = url;
+  }
+}
+setLang("ar");
+</script>
+</body>
+</html>
