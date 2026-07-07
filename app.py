@@ -47,6 +47,7 @@ import customers as cust_mod
 import db
 import estimate
 import settings as settings_mod
+import mailer
 import messages
 import meta_leads as meta_leads_mod
 import normalize
@@ -2033,7 +2034,13 @@ def account_page():
 @app.route("/api/customer/me")
 def api_customer_me():
     if session.get("cust_phone"):
-        return jsonify({"logged_in": True, "name": session.get("cust_name") or ""})
+        core = session["cust_phone"]
+        row = _customer_row_for_core(core) or {}
+        email = (row.get("email") or "").strip()
+        return jsonify({"logged_in": True, "name": session.get("cust_name") or "",
+                        "phone": core,
+                        "email_masked": _mask_email(email) if email else None,
+                        "email_verified": bool(email and row.get("email_verified_at"))})
     return jsonify({"logged_in": False})
 
 
@@ -2202,6 +2209,154 @@ def api_customer_otp_verify():
     db.set_setting(f"otp:{core}", {"used": True, "expires": 0})   # one-time
     session["cust_phone"] = core
     session["cust_name"] = rec.get("name") or _match_customer(core)[1]
+    session.permanent = True
+    return jsonify({"ok": True, "name": session["cust_name"]})
+
+
+# ---- Customer email login (second method — WhatsApp stays) ------------------- #
+# Bootstrap: no emails exist, so a customer first logs in via WhatsApp, then links
+# + verifies an email from the dashboard; after that email+code login works too.
+# Same settings-KV nonce discipline as walogin:/otp: — hashed codes, TTL, attempt
+# cap, single-use — plus a per-business unique email and anti-enumeration replies.
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+EMAIL_GENERIC_FAIL = "تعذّر استخدام هذا البريد · This email can't be used."
+
+
+def _customer_row_for_core(core):
+    """The CRM row whose WhatsApp matches this phone core (every portal customer
+    has one — _backfill_customers_from_orders runs at boot)."""
+    if not core:
+        return None
+    for r in db.list_customer_login_rows():
+        if normalize.phone_core(r.get("whatsapp") or "") == core:
+            return r
+    return None
+
+
+def _mask_email(e):
+    local, _, dom = (e or "").partition("@")
+    return (local[:1] + "***@" + dom) if dom else "***"
+
+
+def _email_kv_key(email):
+    # keyed by hash, not raw address — settings keys show up in admin tooling
+    return "emailotp:" + hashlib.sha256(email.encode()).hexdigest()[:16]
+
+
+def _send_or_dev(email, code):
+    """Send the code; in OTLOBLY_EMAIL_DEV echo it instead of failing when the
+    email API isn't configured (mirrors the OTP dev fallback)."""
+    res = mailer.send_login_code(email, code)
+    if res.get("ok"):
+        return {"ok": True}
+    app.logger.warning("email code for %s = %s (not sent: %s)", email, code, res.get("error"))
+    if os.environ.get("OTLOBLY_EMAIL_DEV"):
+        return {"ok": True, "dev_code": code}
+    return {"ok": False}
+
+
+@app.route("/api/customer/email/link/start", methods=["POST"])
+@limiter.limit("5 per 10 minutes")
+@customer_required
+def api_customer_email_link_start():
+    b = request.get_json(force=True, silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "أدخل بريداً صالحاً · Enter a valid email."}), 400
+    mine = _customer_row_for_core(session["cust_phone"])
+    if not mine:
+        return jsonify({"ok": False, "error": EMAIL_GENERIC_FAIL}), 400
+    owner = db.get_customer_by_email(email)
+    if owner and owner["id"] != mine["id"]:
+        # someone else's email — same wording as any other failure (no enumeration)
+        return jsonify({"ok": False, "error": EMAIL_GENERIC_FAIL}), 400
+    code = f"{secrets.randbelow(1000000):06d}"
+    db.set_setting(f"emaillink:{session['cust_phone']}",
+                   {"email": email, "hash": auth.hash_pw(code),
+                    "expires": time.time() + OTP_TTL, "attempts": 0})
+    sent = _send_or_dev(email, code)
+    if not sent.get("ok"):
+        return jsonify({"ok": False,
+                        "error": "تعذّر إرسال الرمز حالياً · Couldn't send the code right now."}), 502
+    out = {"ok": True}
+    if sent.get("dev_code"):
+        out["dev_code"] = sent["dev_code"]
+    return jsonify(out)
+
+
+@app.route("/api/customer/email/link/verify", methods=["POST"])
+@limiter.limit("10 per 10 minutes")
+@customer_required
+def api_customer_email_link_verify():
+    b = request.get_json(force=True, silent=True) or {}
+    code = re.sub(r"\D", "", b.get("code") or "")
+    key = f"emaillink:{session['cust_phone']}"
+    rec = db.get_setting(key)
+    if not rec or not code or rec.get("used"):
+        return jsonify({"ok": False, "error": "اطلب رمزاً جديداً · Request a new code."}), 400
+    if time.time() > (rec.get("expires") or 0):
+        return jsonify({"ok": False, "error": "انتهت صلاحية الرمز · Code expired."}), 400
+    if (rec.get("attempts") or 0) >= OTP_MAX_ATTEMPTS:
+        return jsonify({"ok": False,
+                        "error": "محاولات كثيرة · Too many attempts — request a new code."}), 429
+    if not check_password_hash(rec.get("hash") or "", code):
+        rec["attempts"] = (rec.get("attempts") or 0) + 1
+        db.set_setting(key, rec)
+        return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
+    mine = _customer_row_for_core(session["cust_phone"])
+    if not mine or not db.set_customer_email(mine["id"], rec["email"], db.now_iso()):
+        return jsonify({"ok": False, "error": EMAIL_GENERIC_FAIL}), 400
+    db.set_setting(key, {"used": True, "expires": 0})   # one-time
+    db.audit({"username": "customer"}, "link_email", "customer",
+             mine.get("customer_code") or str(mine["id"]), _mask_email(rec["email"]))
+    return jsonify({"ok": True, "email_masked": _mask_email(rec["email"])})
+
+
+@app.route("/api/customer/email/login/start", methods=["POST"])
+@limiter.limit("5 per 10 minutes")
+def api_customer_email_login_start():
+    """Anti-enumeration: ALWAYS {"ok":true} — a code is only actually created and
+    sent when the email belongs to a verified customer."""
+    b = request.get_json(force=True, silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "أدخل بريداً صالحاً · Enter a valid email."}), 400
+    row = db.get_customer_by_email(email)
+    out = {"ok": True}
+    if row and row.get("email_verified_at"):
+        core = normalize.phone_core(row.get("whatsapp") or "")
+        if core:
+            code = f"{secrets.randbelow(1000000):06d}"
+            db.set_setting(_email_kv_key(email),
+                           {"hash": auth.hash_pw(code), "expires": time.time() + OTP_TTL,
+                            "attempts": 0, "core": core, "name": row.get("name") or ""})
+            sent = _send_or_dev(email, code)
+            if sent.get("dev_code"):
+                out["dev_code"] = sent["dev_code"]
+    return jsonify(out)
+
+
+@app.route("/api/customer/email/login/verify", methods=["POST"])
+@limiter.limit("10 per 10 minutes")
+def api_customer_email_login_verify():
+    b = request.get_json(force=True, silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    code = re.sub(r"\D", "", b.get("code") or "")
+    rec = db.get_setting(_email_kv_key(email)) if EMAIL_RE.match(email) else None
+    if not rec or not code or rec.get("used"):
+        return jsonify({"ok": False, "error": "اطلب رمزاً جديداً · Request a new code."}), 400
+    if time.time() > (rec.get("expires") or 0):
+        return jsonify({"ok": False, "error": "انتهت صلاحية الرمز · Code expired."}), 400
+    if (rec.get("attempts") or 0) >= OTP_MAX_ATTEMPTS:
+        return jsonify({"ok": False,
+                        "error": "محاولات كثيرة · Too many attempts — request a new code."}), 429
+    if not check_password_hash(rec.get("hash") or "", code):
+        rec["attempts"] = (rec.get("attempts") or 0) + 1
+        db.set_setting(_email_kv_key(email), rec)
+        return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
+    db.set_setting(_email_kv_key(email), {"used": True, "expires": 0})   # one-time
+    session["cust_phone"] = rec["core"]
+    session["cust_name"] = rec.get("name") or _match_customer(rec["core"])[1]
     session.permanent = True
     return jsonify({"ok": True, "name": session["cust_name"]})
 

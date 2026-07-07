@@ -59,6 +59,14 @@ services:
         sync: false
       - key: WHATSAPP_OTP_TEMPLATE # approved authentication template name
         sync: false
+      # ── Customer email login (second method). Leave OTLOBLY_EMAIL_DEV=1 until the ──
+      # ── Resend key is in, then set RESEND_API_KEY + EMAIL_FROM and remove it.      ──
+      - key: OTLOBLY_EMAIL_DEV     # 1 = show the email code on screen (no email API needed yet)
+        value: "1"
+      - key: RESEND_API_KEY        # resend.com API key (HTTPS send — no SMTP on Render)
+        sync: false
+      - key: EMAIL_FROM            # e.g. 'Otlobly <login@otlobly.com>' once the domain is verified
+        sync: false
     disk:
       name: otlobly-data
       mountPath: /var/data

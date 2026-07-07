@@ -153,6 +153,16 @@ def migrate():
             if "business_id" not in _columns(c, table):
                 c.execute(f"ALTER TABLE {table} ADD COLUMN business_id INTEGER")
             c.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_biz ON {table}(business_id)")
+        # Customer email login (portal second method): the column is the single
+        # source of truth — NOT mirrored into data_json, which upsert_customer
+        # rewrites wholesale and would clobber. Unique per business (case-blind),
+        # partial so empty/NULL rows never collide.
+        if "email" not in _columns(c, "customers"):
+            c.execute("ALTER TABLE customers ADD COLUMN email TEXT")
+            c.execute("ALTER TABLE customers ADD COLUMN email_verified_at TEXT")
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_email "
+                  "ON customers(business_id, lower(email)) "
+                  "WHERE email IS NOT NULL AND email <> ''")
         # Seed business #1 (owner of all pre-tenancy data) exactly once.
         if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
             c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "
@@ -332,6 +342,37 @@ def upsert_customer(cust):
 def next_customer_code():
     with connect() as c:
         return _next_code(c, "customers", "customer_code", "CUS")
+
+
+# ---- customer email login (portal) ---------------------------------------- #
+def get_customer_by_email(email, business_id=1):
+    """The customer row owning this email (case-blind) — id/whatsapp/name/email
+    columns only, or None."""
+    with connect() as c:
+        r = c.execute("SELECT id, customer_code, name, whatsapp, email, email_verified_at "
+                      "FROM customers WHERE lower(email)=lower(?) AND business_id=?",
+                      ((email or "").strip(), business_id)).fetchone()
+        return dict(r) if r else None
+
+
+def set_customer_email(row_id, email, verified_at):
+    """Attach a verified email to a customer row. False when another customer
+    already owns it (unique-index race)."""
+    try:
+        with connect() as c:
+            c.execute("UPDATE customers SET email=?, email_verified_at=?, updated_at=? "
+                      "WHERE id=?", ((email or "").strip(), verified_at, now_iso(), row_id))
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def list_customer_login_rows(business_id=1):
+    """Slim rows for phone→customer matching in the portal (no data_json parse)."""
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, customer_code, name, whatsapp, email, email_verified_at "
+            "FROM customers WHERE business_id=?", (business_id,))]
 
 
 # --------------------------------------------------------------------------- #

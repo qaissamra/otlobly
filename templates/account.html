@@ -89,6 +89,10 @@
             style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer">
       🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
     <div id="waStatus" style="margin-top:10px"></div>
+    <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
+      <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
+    <button class="ghost" id="b_email" onclick="emailOpen()"
+            style="border:1px solid var(--line);border-radius:12px;width:100%;padding:12px;font-size:14px"></button>
     <!-- Phone+code fallback hidden: push-OTP needs a verified Meta business; WhatsApp-tap
          above is the live login. Kept in the DOM (paint() references these ids) so it can
          return the day business verification lands and template OTP works again. -->
@@ -115,9 +119,34 @@
     <div id="out2"></div>
   </div>
 
+  <!-- STATE 2b: email login (second method — WhatsApp above stays the main door) -->
+  <div id="s_email" style="display:none">
+    <p class="sub" id="t_introemail"></p>
+    <label id="t_emaillbl"></label>
+    <input id="lemail" type="email" inputmode="email" placeholder="name@example.com"
+           style="letter-spacing:0" onkeydown="if(event.key==='Enter')emailGo()">
+    <div id="ecodeBox" style="display:none">
+      <label id="t_ecodelbl"></label>
+      <input id="ecode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
+             onkeydown="if(event.key==='Enter')emailGo()">
+    </div>
+    <button id="b_esend" onclick="emailGo()"></button>
+    <button class="ghost" id="b_eback" onclick="emailBack()"></button>
+    <div id="out3"></div>
+  </div>
+
   <!-- STATE 3: dashboard -->
   <div id="s_dash" style="display:none">
     <div class="hello"><b id="t_hello"></b></div>
+    <div id="emailLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
+    <div id="emailMgr" style="display:none;border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 12px;background:#fbfaf6">
+      <input id="memail" type="email" inputmode="email" placeholder="name@example.com" style="letter-spacing:0">
+      <div id="mcodeBox" style="display:none">
+        <input id="mcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" style="margin-top:8px">
+      </div>
+      <button id="b_mgo" onclick="linkGo()" style="margin-top:10px;padding:11px"></button>
+      <div id="out4"></div>
+    </div>
     <div id="balSum"></div>
     <h2 class="sec" id="t_deliveries"></h2>
     <div id="shipments"></div>
@@ -133,7 +162,7 @@
 </div>
 <script>
 const $=id=>document.getElementById(id);
-let LANG="ar", PHONE="";
+let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false;
 const T={
   ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"إرسال رمز الدخول",
       phonehint:"سنرسل رمزاً إلى رقمك على واتساب.",
@@ -144,6 +173,10 @@ const T={
       deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك", asof:"🕓 آخر تحديث",
       creditsum:"رصيدك لدينا", payments:"💵 سجل دفعاتك", credittag:"رصيد لحسابك",
       kdeposit:"عربون", kcollect:"دفعة", krefund:"استرجاع",
+      emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
+      emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
+      eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
+      elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
   en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
       phonehint:"We'll send a code to your number on WhatsApp.",
@@ -154,6 +187,10 @@ const T={
       deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance", asof:"🕓 last updated",
       creditsum:"Your credit", payments:"💵 Your payments", credittag:"Account credit",
       kdeposit:"Deposit", kcollect:"Payment", krefund:"Refund",
+      emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
+      emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
+      eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
+      elink:"Link email", echange:"Change", elinked:"Email linked ✓",
       foot:"Otlobly · contact us anytime", sending:"…", verifying:"…"}
 };
 const STAT={ // order status → {ar,en,color,bg} — customer-friendly labels ONLY
@@ -179,11 +216,14 @@ function fmtRange(a,b){ const loc=LANG==="ar"?"ar":"en-GB";
 function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
   $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
 function paint(){
-  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
+  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments","introemail","emaillbl","ecodelbl"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
+  $("b_email").textContent=t("emailbtn"); $("b_eback").textContent=t("eback");
+  $("b_esend").textContent=ECODE?t("everify"):t("esend");
+  $("b_mgo").textContent=MCODE?t("everify"):t("esend");
 }
-function show(state){ ["s_phone","s_code","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none"); }
+function show(state){ ["s_phone","s_code","s_email","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none"); }
 async function sendCode(){
   const p=$("phone").value.trim(); if(!p)return; PHONE=p;
   const b=$("b_send"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("out1").innerHTML="";
@@ -224,6 +264,51 @@ async function verifyCode(){
   loadDashboard();
 }
 async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} backToPhone(); show("s_phone"); }
+/* ---- email login (second method) + link/change from the dashboard ---- */
+async function post(url,body){ try{ return await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json(); }catch(e){ return {error:"network"}; } }
+function emailOpen(){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); show("s_email"); $("lemail").focus(); }
+function emailBack(){ if(ECODE){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); $("lemail").focus(); } else { show("s_phone"); } }
+function emailGo(){ ECODE?emailVerify():emailStart(); }
+async function emailStart(){
+  const em=($("lemail").value||"").trim(); if(!em)return; LEMAIL=em;
+  const b=$("b_esend"); b.disabled=true; const d=await post("/api/customer/email/login/start",{email:em}); b.disabled=false;
+  if(!d.ok){ $("out3").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  ECODE=true; $("ecodeBox").style.display="block"; paint(); $("ecode").focus();
+  $("out3").innerHTML=`<div class="hint">${t("esent")}</div>`;
+  if(d.dev_code){ $("out3").innerHTML+=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("ecode").value=d.dev_code; }
+}
+async function emailVerify(){
+  const c=($("ecode").value||"").trim(); if(!c)return;
+  const b=$("b_esend"); b.disabled=true; const d=await post("/api/customer/email/login/verify",{email:LEMAIL,code:c}); b.disabled=false;
+  if(!d.ok){ $("out3").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  ECODE=false; loadDashboard();
+}
+async function refreshEmailLine(){
+  let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
+  const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
+  $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--accent);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
+}
+function toggleEmailMgr(){
+  const m=$("emailMgr"); const open=m.style.display!=="none";
+  m.style.display=open?"none":"block";
+  if(!open){ MCODE=false; $("mcodeBox").style.display="none"; $("out4").innerHTML=""; paint(); $("memail").focus(); }
+}
+function linkGo(){ MCODE?linkVerify():linkStart(); }
+async function linkStart(){
+  const em=($("memail").value||"").trim(); if(!em)return;
+  const b=$("b_mgo"); b.disabled=true; const d=await post("/api/customer/email/link/start",{email:em}); b.disabled=false;
+  if(!d.ok){ $("out4").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  MCODE=true; $("mcodeBox").style.display="block"; paint(); $("mcode").focus();
+  $("out4").innerHTML=`<div class="hint">${t("esent")}</div>`;
+  if(d.dev_code){ $("out4").innerHTML+=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("mcode").value=d.dev_code; }
+}
+async function linkVerify(){
+  const c=($("mcode").value||"").trim(); if(!c)return;
+  const b=$("b_mgo"); b.disabled=true; const d=await post("/api/customer/email/link/verify",{code:c}); b.disabled=false;
+  if(!d.ok){ $("out4").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  MCODE=false; $("emailMgr").style.display="none"; $("out4").innerHTML="";
+  refreshEmailLine();
+}
 function shipCard(s){
   const cur=s.current||{}; const bucket=cur.bucket||"transit";
   const items=(s.items||[]).map(it=>`<div class="prod">${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(it.title)}</span></div>`).join("");
@@ -266,6 +351,7 @@ async function loadDashboard(){
   if(!d){ backToPhone(); return; }
   paint(); show("s_dash");
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
+  refreshEmailLine();
   const tot=d.totals||{};
   $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0||(tot.credit_usd||0)>0)
     ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px">
