@@ -49,10 +49,12 @@ services:
         sync: false
       - key: META_PAGE_TOKEN       # page token: pages_messaging + instagram_manage_messages + leads_retrieval
         sync: false
-      # ── Customer-login WhatsApp OTP (Phase 14). Leave OTLOBLY_OTP_DEV=1 until the ──
-      # ── WhatsApp template + token are ready, then set the 3 WHATSAPP_* and remove it. ──
-      - key: OTLOBLY_OTP_DEV       # 1 = show the login code on screen (no WhatsApp needed yet)
-        value: "1"
+      # ── Customer-login WhatsApp OTP. NEVER set OTLOBLY_OTP_DEV=1 in production:  ──
+      # ── when a WhatsApp send fails it would show login codes/links ON SCREEN to  ──
+      # ── anyone typing a customer's phone. Login runs on the wa.me tap (ManyChat) ──
+      # ── + email; phone-code activates once the WHATSAPP_* template is approved.  ──
+      - key: OTLOBLY_OTP_DEV       # local testing only — leave "0" here
+        value: "0"
       - key: WHATSAPP_TOKEN        # permanent token for the WhatsApp Business number
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
