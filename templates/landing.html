@@ -26,10 +26,10 @@
       </a>
 
       <div class="sitenav-links">
-        <a href="/catalog" data-i18n="nav.shop">تسوّق</a>
-        <a href="#how" onclick="smoothTo('how',event)" data-i18n="nav.how">كيف تعمل</a>
+        <a href="/order" data-i18n="nav.order">اطلب الآن</a>
         <a href="/pricing" data-i18n="nav.plans">الباقات</a>
-        <a href="#track" onclick="smoothTo('track',event)" data-i18n="nav.track">تتبّع</a>
+        <a href="/track" data-i18n="nav.track">تتبّع</a>
+        <a href="#how" onclick="smoothTo('how',event)" data-i18n="nav.how">كيف تعمل</a>
       </div>
 
       <!-- WA pill: visible on desktop, hidden on mobile (hamburger covers it) -->
@@ -43,22 +43,38 @@
       </button>
     </div>
 
-    <!-- Dropdown (☰) — the language toggle lives here on every screen size -->
+    <!-- Dropdown (☰) — iconized links; the عربي/EN toggle lives at the BOTTOM -->
     <div class="sitenav-mobile" id="nav-mobile">
+      <a href="/order">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span data-i18n="nav.order">اطلب الآن</span>
+      </a>
+      <a href="/pricing">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        <span data-i18n="nav.plans">الباقات</span>
+      </a>
+      <a href="/track">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span data-i18n="nav.track">تتبّع</span>
+      </a>
+      <a href="/#how" onclick="toggleNav()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+        <span data-i18n="nav.how">كيف تعمل</span>
+      </a>
+      <a href="/account">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span data-i18n="nav.account">حسابي · تسجيل الدخول</span>
+      </a>
+      <a class="sitenav-wa-mob" id="wa-mob" href="#" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+        <span data-i18n="nav.wa.cta">واتساب</span>
+      </a>
       <div class="langrow">
         <div class="sitenav-lang langtog" role="group" aria-label="Language">
           <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
           <button id="lang-en" onclick="setLang('en')">EN</button>
         </div>
       </div>
-      <a href="/catalog" data-i18n="nav.shop">تسوّق</a>
-      <a href="#how" onclick="smoothTo('how',event);toggleNav()" data-i18n="nav.how">كيف تعمل</a>
-      <a href="/pricing" data-i18n="nav.plans">الباقات</a>
-      <a href="#track" onclick="smoothTo('track',event);toggleNav()" data-i18n="nav.track">تتبّع</a>
-      <a class="sitenav-wa-mob" id="wa-mob" href="#" target="_blank" rel="noopener">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
-        <span data-i18n="nav.wa.cta">واتساب</span>
-      </a>
     </div>
   </nav>
 

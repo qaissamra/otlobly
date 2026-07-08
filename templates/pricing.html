@@ -50,10 +50,16 @@ body{
   border-bottom:1px solid #ede9e4;box-shadow:0 14px 30px rgba(0,0,0,.08);
   flex-direction:column;padding:10px 18px 12px;z-index:99}
 .navmenu.open{display:flex}
-.navmenu .langrow{display:flex;justify-content:center;padding:2px 0 10px;border-bottom:1px solid #f4f1ec}
-.navmenu a{padding:11px 6px;border-bottom:1px solid #f4f1ec;color:#111;text-decoration:none;
-  font-weight:700;font-size:.95rem}
-.navmenu a:last-child{border-bottom:none}
+.navmenu a{display:flex;align-items:center;gap:9px;padding:11px 6px;border-bottom:1px solid #f4f1ec;
+  color:#111;text-decoration:none;font-weight:700;font-size:.95rem}
+.navmenu a svg{flex:none;opacity:.75}
+.navmenu a:last-of-type{border-bottom:none}
+.navmenu .wa-menu{background:#25D366;color:#fff;border-radius:999px;justify-content:center;
+  margin-top:8px;padding:12px 16px;border-bottom:none}
+.navmenu .wa-menu svg{opacity:1}
+/* the عربي/EN toggle sits at the BOTTOM of the dropdown */
+.navmenu .langrow{display:flex;justify-content:center;padding:12px 0 2px;
+  border-top:1px solid #f4f1ec;margin-top:8px}
 
 /* ─── Hero band ─── */
 .pricing-hero{
@@ -149,6 +155,8 @@ html[dir=ltr] .plan-badge{right:auto;left:50%;transform:translateX(-50%)}
 }
 .plan-rate sup{font-size:1.1rem;vertical-align:super;font-weight:700}
 .plan-rate-sub{font-size:.82rem;color:#888;margin-bottom:8px;line-height:1.4}
+.fee-orderval{font-size:.8rem;font-weight:700;color:#111;background:#f0ede8;border-radius:99px;
+  display:inline-block;padding:4px 14px;margin-bottom:10px}
 .plan-fee-live{
   background:#fff8f5;border-radius:12px;
   padding:10px 14px;margin-bottom:20px;
@@ -406,17 +414,36 @@ footer a:hover{color:#fff}
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="navmenu" id="navmenu">
+    <a href="/order">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span data-i18n="m.order">اطلب الآن</span>
+    </a>
+    <a href="/pricing">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+      <span data-i18n="m.plans">الباقات</span>
+    </a>
+    <a href="/track">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span data-i18n="m.track">تتبّع شحنتك</span>
+    </a>
+    <a href="/#how">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+      <span data-i18n="m.how">كيف تعمل</span>
+    </a>
+    <a href="/account">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span data-i18n="m.account">حسابي · تسجيل الدخول</span>
+    </a>
+    <a class="wa-menu" id="wa-menu" href="#" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+      <span data-i18n="m.wa">واتساب</span>
+    </a>
     <div class="langrow">
       <div class="langtog" role="group" aria-label="Language">
         <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
         <button id="lang-en" onclick="setLang('en')">EN</button>
       </div>
     </div>
-    <a href="/" data-i18n="m.home">الرئيسية</a>
-    <a href="/order" data-i18n="m.order">اطلب الآن</a>
-    <a href="/catalog" data-i18n="m.shop">تسوّق</a>
-    <a href="/track" data-i18n="m.track">تتبّع شحنتك</a>
-    <a href="/account" data-i18n="m.account">حسابي</a>
   </div>
 </div>
 
@@ -470,10 +497,11 @@ footer a:hover{color:#fff}
     <!-- Card 2: ZERO RISK (featured) -->
     <div class="plan-card featured" id="card-deposit">
       <div class="plan-badge" data-i18n="plan2.badge">الأكثر شيوعًا</div>
-      <div class="plan-name" data-i18n="plan2.name">ZERO RISK</div>
+      <div class="plan-name" data-i18n="plan2.name">الدفع عند الاستلام</div>
       <div class="plan-tagline" data-i18n="plan2.tagline">ادفع جزء الآن والباقي لما يوصل لبابك</div>
       <div class="plan-rate"><span id="relax-rate-live">20%</span></div>
       <div class="plan-rate-sub" id="relax-rate-sub">عمولتك الآن: 20%</div>
+      <div class="fee-orderval" id="deposit-orderval">لطلب بقيمة $150</div>
       <div class="plan-fee-live">
         <div class="fee-label" data-i18n="fee.label">رسومك لهذا الطلب</div>
         <div class="fee-val" id="fee-deposit">$12.00</div>
@@ -494,7 +522,7 @@ footer a:hover{color:#fff}
       <div class="plan-rate" data-i18n="plan3.rate">أسعار خاصة</div>
       <div class="plan-rate-sub" data-i18n="plan3.ratesub">للطلبات فوق $1000 أو الكميات الكبيرة</div>
       <ul class="plan-features">
-        <li class="feature-parent" data-i18n="plan3.f0">كل مزايا ZERO RISK مشمولة</li>
+        <li class="feature-parent" data-i18n="plan3.f0">كل مزايا الدفع عند الاستلام مشمولة</li>
         <li data-i18n="plan3.f1">مدير حساب خاص يتابع طلبك شخصياً</li>
         <li data-i18n="plan3.f2">أولوية بالشراء والشحن</li>
         <li data-i18n="plan3.f3">نشتري ونشحن على حسابنا</li>
@@ -725,8 +753,8 @@ function calcRelax(orderVal) {
 /* ─── i18n ─── */
 const I18N = {
   ar: {
-    "m.home":"الرئيسية", "m.order":"اطلب الآن", "m.shop":"تسوّق",
-    "m.track":"تتبّع شحنتك", "m.account":"حسابي",
+    "m.order":"اطلب الآن", "m.plans":"الباقات", "m.track":"تتبّع شحنتك",
+    "m.how":"كيف تعمل", "m.account":"حسابي · تسجيل الدخول", "m.wa":"واتساب",
     "hero.eyebrow":           "اطلبلي · التسعيرة",
     "hero.title.em":          "باقات اطلبلي",
     "hero.sub":               "كل ما تدفع أبكر — كل ما توفّر أكثر",
@@ -743,7 +771,7 @@ const I18N = {
     "plan1.note":             "الرسوم الجمركية (إن وجدت) على العميل",
     "plan1.cta":              "اطلب بالدفع المسبق",
     "plan2.badge":            "الأكثر شيوعًا",
-    "plan2.name":             "ZERO RISK",
+    "plan2.name":             "الدفع عند الاستلام",
     "plan2.tagline":          "ادفع جزء الآن والباقي لما يوصل لبابك",
     "plan2.ratesub.ar":       "عمولتك الآن: ",
     "plan2.f0":               "كل مزايا باقة FREE مشمولة",
@@ -755,7 +783,7 @@ const I18N = {
     "plan3.rate":             "أسعار خاصة",
     "plan3.tagline":          "أسعار مخصوصة للطلبات الكبيرة — نتفاهم عليها مع بعض",
     "plan3.ratesub":          "للطلبات فوق $1000 أو الكميات الكبيرة",
-    "plan3.f0":               "كل مزايا ZERO RISK مشمولة",
+    "plan3.f0":               "كل مزايا الدفع عند الاستلام مشمولة",
     "plan3.f1":               "مدير حساب خاص يتابع طلبك شخصياً",
     "plan3.f2":               "أولوية بالشراء والشحن",
     "plan3.f3":               "نشتري ونشحن على حسابنا",
@@ -840,8 +868,8 @@ const I18N = {
     "wa.nav":                 "مرحباً اطلبلي 👋"
   },
   en: {
-    "m.home":"Home", "m.order":"Order now", "m.shop":"Shop",
-    "m.track":"Track a shipment", "m.account":"My account",
+    "m.order":"Order now", "m.plans":"Pricing", "m.track":"Track a shipment",
+    "m.how":"How it works", "m.account":"My account · Sign in", "m.wa":"WhatsApp",
     "hero.eyebrow":           "Otlobly · Pricing",
     "hero.title.em":          "Otlobly Pricing",
     "hero.sub":               "The earlier you pay, the more you save.",
@@ -858,7 +886,7 @@ const I18N = {
     "plan1.note":             "Customs fees (if any) are the customer's responsibility",
     "plan1.cta":              "Order — Pay Upfront",
     "plan2.badge":            "Most Popular",
-    "plan2.name":             "ZERO RISK",
+    "plan2.name":             "Pay on Delivery",
     "plan2.tagline":          "Pay part now, the rest when it arrives at your door",
     "plan2.ratesub.en":       "Your rate now: ",
     "plan2.f0":               "All FREE plan benefits included",
@@ -870,7 +898,7 @@ const I18N = {
     "plan3.rate":             "Custom pricing",
     "plan3.tagline":          "Custom rates for large orders — we work it out together",
     "plan3.ratesub":          "For orders above $1000 or bulk quantities",
-    "plan3.f0":               "All ZERO RISK benefits included",
+    "plan3.f0":               "All Pay-on-Delivery benefits included",
     "plan3.f1":               "Dedicated account manager follows your order personally",
     "plan3.f2":               "Priority purchasing and shipping",
     "plan3.f3":               "We buy and ship at our expense",
@@ -1004,6 +1032,10 @@ function updateSlider() {
   document.getElementById("relax-rate-live").textContent = rStr;
   const prefix = currentLang === "ar" ? "عمولتك الآن: " : "Your rate now: ";
   document.getElementById("relax-rate-sub").textContent = prefix + rStr;
+  /* the slider is off-screen on mobile — repeat its order value inside the card
+     so the % always has visible context */
+  const ovPfx = currentLang === "ar" ? "لطلب بقيمة " : "for an order of ";
+  document.getElementById("deposit-orderval").textContent = ovPfx + "$" + v;
 }
 
 slider.addEventListener("input", updateSlider);
@@ -1021,6 +1053,12 @@ function buildWaLinks() {
   document.getElementById("cta-member").href    = wa(d["wa.member"]);
   document.getElementById("cta-biz").href       = wa(d["wa.biz"]);
   document.getElementById("wa-nav").href        = wa(d["wa.nav"]);
+  /* ☰ menu WhatsApp item — hidden when no number is configured */
+  const menuWa = document.getElementById("wa-menu");
+  if (menuWa) {
+    if (WA_NUMBER) { menuWa.href = wa(d["wa.nav"]); menuWa.style.display = ""; }
+    else menuWa.style.display = "none";
+  }
 }
 
 /* ─── Membership billing toggle ─── */

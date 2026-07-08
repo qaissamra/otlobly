@@ -141,7 +141,10 @@ img{max-width:100%;display:block}
   display:flex;align-items:center;gap:8px;
 }
 .sitenav-mobile a:last-child{border-bottom:none}
-.sitenav-mobile .langrow{display:flex;justify-content:center;padding:2px 0 12px;border-bottom:1px solid var(--line)}
+.sitenav-mobile a svg{flex:none;opacity:.75}
+/* the عربي/EN toggle sits at the BOTTOM of the dropdown */
+.sitenav-mobile .langrow{display:flex;justify-content:center;padding:12px 0 2px;
+  border-top:1px solid var(--line);margin-top:8px}
 .sitenav-wa-mob{
   background:var(--wa) !important;color:#fff !important;
   border-radius:999px;margin-top:8px;justify-content:center;
