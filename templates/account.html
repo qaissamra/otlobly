@@ -82,26 +82,30 @@
       <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
   </div>
 
-  <!-- STATE 1: enter phone. Primary = receive-a-code OTP (business is Meta-verified now);
-       WhatsApp-tap stays as the no-cost fallback, email third. -->
+  <!-- STATE 1: enter phone -->
   <div id="s_phone" style="display:none">
     <p class="sub" id="t_introphone"></p>
-    <label id="t_phonelbl"></label>
-    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
-           onkeydown="if(event.key==='Enter')sendCode()">
-    <button id="b_send" onclick="sendCode()"></button>
-    <div class="hint" id="t_phonehint"></div>
-    <div id="out1"></div>
-    <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
-      <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
     <button id="b_wa" onclick="waLogin()"
-            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;margin-top:12px">
+            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer">
       🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
     <div id="waStatus" style="margin-top:10px"></div>
     <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
       <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
             style="border:1px solid var(--line);border-radius:12px;width:100%;padding:12px;font-size:14px"></button>
+    <!-- Phone+code fallback hidden: push-OTP needs a verified Meta business; WhatsApp-tap
+         above is the live login. Kept in the DOM (paint() references these ids) so it can
+         return the day business verification lands and template OTP works again. -->
+    <div style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 8px">
+        <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
+      <label id="t_phonelbl"></label>
+      <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
+             onkeydown="if(event.key==='Enter')sendCode()">
+      <button id="b_send" onclick="sendCode()"></button>
+      <div class="hint" id="t_phonehint"></div>
+      <div id="out1"></div>
+    </div>
   </div>
 
   <!-- STATE 2: enter code -->
