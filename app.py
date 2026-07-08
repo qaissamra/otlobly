@@ -219,13 +219,15 @@ def setup():
 def login():
     if db.count_users() == 0:
         return redirect(url_for("setup"))
+    if request.method == "GET" and current_user.is_authenticated:
+        return redirect(url_for("staff_app"))   # already in → straight to the dashboard
     if request.method == "POST":
         user = auth.verify(request.form.get("username", "").strip(),
                            request.form.get("password", ""))
         if user:
             login_user(user)
             db.audit(auth.actor(), "login", "user", user.username, "")
-            return redirect(url_for("index"))
+            return redirect(url_for("staff_app"))
         return render_template("login.html", error="Wrong username or password.")
     return render_template("login.html")
 
@@ -273,12 +275,17 @@ def logout():
 
 @app.route("/")
 def index():
-    """Staff get the dashboard; everyone else gets the public landing page.
-    Customer-portal sessions (cust_phone) are NOT Flask-Login auth, so logged-in
-    customers still land on the marketing page — their door is /account."""
-    if current_user.is_authenticated:
-        return send_file(HERE / "web" / "index.html")
+    """The public landing page — for EVERYONE, staff sessions included, so the
+    owner can always see what customers see. The staff dashboard lives at /app."""
     return render_template("landing.html", wa_number=_wa_business_number())
+
+
+@app.route("/app")
+@login_required
+def staff_app():
+    """The staff dashboard (admin/sales/fulfillment). Logged-out visitors are
+    bounced to /login by login_manager.login_view."""
+    return send_file(HERE / "web" / "index.html")
 
 
 @app.route("/api/me")
