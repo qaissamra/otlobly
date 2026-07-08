@@ -122,7 +122,8 @@ img{max-width:100%;display:block}
 .sitenav-wa:hover{filter:brightness(1.06)}
 
 .sitenav-burger{
-  display:none;background:none;border:none;cursor:pointer;
+  /* always visible — the ☰ holds the language toggle now, desktop included */
+  display:flex;background:none;border:none;cursor:pointer;
   color:var(--ink);padding:6px;border-radius:8px;
   flex-shrink:0;
 }
@@ -140,6 +141,7 @@ img{max-width:100%;display:block}
   display:flex;align-items:center;gap:8px;
 }
 .sitenav-mobile a:last-child{border-bottom:none}
+.sitenav-mobile .langrow{display:flex;justify-content:center;padding:2px 0 12px;border-bottom:1px solid var(--line)}
 .sitenav-wa-mob{
   background:var(--wa) !important;color:#fff !important;
   border-radius:999px;margin-top:8px;justify-content:center;

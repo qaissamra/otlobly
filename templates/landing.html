@@ -32,12 +32,6 @@
         <a href="#track" onclick="smoothTo('track',event)" data-i18n="nav.track">تتبّع</a>
       </div>
 
-      <!-- lang toggle: always visible on all screen sizes -->
-      <div class="sitenav-lang langtog" role="group" aria-label="Language">
-        <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
-        <button id="lang-en" onclick="setLang('en')">EN</button>
-      </div>
-
       <!-- WA pill: visible on desktop, hidden on mobile (hamburger covers it) -->
       <a class="sitenav-wa" id="wa-sitenav" href="#" target="_blank" rel="noopener">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
@@ -49,8 +43,14 @@
       </button>
     </div>
 
-    <!-- Mobile dropdown -->
+    <!-- Dropdown (☰) — the language toggle lives here on every screen size -->
     <div class="sitenav-mobile" id="nav-mobile">
+      <div class="langrow">
+        <div class="sitenav-lang langtog" role="group" aria-label="Language">
+          <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+          <button id="lang-en" onclick="setLang('en')">EN</button>
+        </div>
+      </div>
       <a href="/catalog" data-i18n="nav.shop">تسوّق</a>
       <a href="#how" onclick="smoothTo('how',event);toggleNav()" data-i18n="nav.how">كيف تعمل</a>
       <a href="/pricing" data-i18n="nav.plans">الباقات</a>

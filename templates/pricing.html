@@ -43,6 +43,17 @@ body{
   padding:5px 14px;border-radius:99px;color:#555;transition:all .18s;
 }
 .langtog button.on{background:#fff;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+/* ☰ + dropdown (language toggle lives inside) */
+.burger{border:none;background:#f0ede8;border-radius:10px;width:38px;height:38px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;color:#111;flex:none}
+.navmenu{display:none;position:absolute;top:100%;inset-inline:0;background:#fff;
+  border-bottom:1px solid #ede9e4;box-shadow:0 14px 30px rgba(0,0,0,.08);
+  flex-direction:column;padding:10px 18px 12px;z-index:99}
+.navmenu.open{display:flex}
+.navmenu .langrow{display:flex;justify-content:center;padding:2px 0 10px;border-bottom:1px solid #f4f1ec}
+.navmenu a{padding:11px 6px;border-bottom:1px solid #f4f1ec;color:#111;text-decoration:none;
+  font-weight:700;font-size:.95rem}
+.navmenu a:last-child{border-bottom:none}
 
 /* ─── Hero band ─── */
 .pricing-hero{
@@ -391,9 +402,21 @@ footer a:hover{color:#fff}
     <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
     <span class="word">Otlob<em>ly</em></span>
   </a>
-  <div class="langtog" role="group" aria-label="Language">
-    <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
-    <button id="lang-en" onclick="setLang('en')">EN</button>
+  <button class="burger" id="burger" aria-label="القائمة · menu" onclick="toggleMenu(event)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="navmenu" id="navmenu">
+    <div class="langrow">
+      <div class="langtog" role="group" aria-label="Language">
+        <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+        <button id="lang-en" onclick="setLang('en')">EN</button>
+      </div>
+    </div>
+    <a href="/" data-i18n="m.home">الرئيسية</a>
+    <a href="/order" data-i18n="m.order">اطلب الآن</a>
+    <a href="/catalog" data-i18n="m.shop">تسوّق</a>
+    <a href="/track" data-i18n="m.track">تتبّع شحنتك</a>
+    <a href="/account" data-i18n="m.account">حسابي</a>
   </div>
 </div>
 
@@ -434,11 +457,11 @@ footer a:hover{color:#fff}
         <div class="fee-val" id="fee-prepaid">$5.00</div>
       </div>
       <ul class="plan-features">
+        <li class="feature-exclusive" data-i18n="plan1.f4">تعويض كامل إذا ضاع أو تضرر الطرد</li>
+        <li data-i18n="plan1.f5">استرداد فوري إذا المنتج غير متوفر</li>
         <li data-i18n="plan1.f1">أرخص طريقة تطلب فيها</li>
         <li data-i18n="plan1.f2">تسعيرة نهائية شاملة الشحن</li>
         <li data-i18n="plan1.f3">رقم تتبّع OTL خاص</li>
-        <li data-i18n="plan1.f4">تعويض كامل إذا ضاع أو تضرر الطرد</li>
-        <li data-i18n="plan1.f5">استرداد فوري إذا المنتج غير متوفر</li>
       </ul>
       <p class="plan-note-muted" data-i18n="plan1.note">الرسوم الجمركية (إن وجدت) على العميل</p>
       <a class="btn-plan" id="cta-prepaid" href="#" target="_blank" rel="noopener" data-i18n="plan1.cta">اطلب بالدفع المسبق</a>
@@ -672,6 +695,13 @@ const PRICES = {
 /* ─── Config ─── */
 const WA_NUMBER = "{{ wa_number }}";   /* injected by Flask — the real business number */
 
+/* ─── ☰ dropdown (language toggle lives inside) ─── */
+function toggleMenu(e){ if(e) e.stopPropagation(); document.getElementById("navmenu").classList.toggle("open"); }
+document.addEventListener("click", function(e){
+  const m=document.getElementById("navmenu");
+  if(m && m.classList.contains("open") && !m.contains(e.target)) m.classList.remove("open");
+});
+
 /* ─── Fee calculators ─── */
 function calcPrepaid() {
   return PRICES.prepaidFlat; /* always $5 — never changes */
@@ -695,6 +725,8 @@ function calcRelax(orderVal) {
 /* ─── i18n ─── */
 const I18N = {
   ar: {
+    "m.home":"الرئيسية", "m.order":"اطلب الآن", "m.shop":"تسوّق",
+    "m.track":"تتبّع شحنتك", "m.account":"حسابي",
     "hero.eyebrow":           "اطلبلي · التسعيرة",
     "hero.title.em":          "باقات اطلبلي",
     "hero.sub":               "كل ما تدفع أبكر — كل ما توفّر أكثر",
@@ -808,6 +840,8 @@ const I18N = {
     "wa.nav":                 "مرحباً اطلبلي 👋"
   },
   en: {
+    "m.home":"Home", "m.order":"Order now", "m.shop":"Shop",
+    "m.track":"Track a shipment", "m.account":"My account",
     "hero.eyebrow":           "Otlobly · Pricing",
     "hero.title.em":          "Otlobly Pricing",
     "hero.sub":               "The earlier you pay, the more you save.",
