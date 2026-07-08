@@ -751,7 +751,7 @@ def pricing_page():
 def order_request_page():
     """Public: the 'اطلب الآن' funnel — plan + Amazon links + WhatsApp number.
     (Coexists with /order/<draft_id>, the quotation-confirm page.)"""
-    return render_template("order_request.html")
+    return render_template("order_request.html", wa_number=_wa_business_number())
 
 
 @app.route("/api/quote/request", methods=["POST"])

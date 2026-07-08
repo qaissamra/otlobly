@@ -48,6 +48,24 @@
   .plan small{color:var(--muted);font-size:.8rem;line-height:1.5;display:block}
   .plan .tag{position:absolute;inset-inline-start:12px;top:-9px;background:var(--orange);color:#fff;font-size:.66rem;
     font-weight:800;padding:2px 10px;border-radius:99px}
+  .plan ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .plan ul li{font-size:.76rem;color:#444;display:flex;gap:6px;align-items:flex-start;line-height:1.45}
+  .plan ul li::before{content:"✓";color:var(--good);font-weight:800;flex:none}
+  .plan .fee{display:block;margin-top:9px;color:var(--muted);font-size:.74rem;line-height:1.5}
+  .plan .fee a{color:var(--orange);font-weight:700;text-decoration:none}
+  .plans-note{color:var(--muted);font-size:.78rem;text-align:center;margin:12px 2px 0}
+  /* burger + dropdown nav */
+  .burger{border:none;background:#f0ede8;border-radius:10px;width:38px;height:38px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+  .navmenu{display:none;position:absolute;top:100%;inset-inline:0;background:#fff;
+    border-bottom:1px solid var(--line);box-shadow:0 14px 30px rgba(0,0,0,.08);
+    flex-direction:column;padding:6px 18px 12px;z-index:49}
+  .navmenu.open{display:flex}
+  .navmenu a{padding:11px 6px;border-bottom:1px solid #f4f1ec;color:var(--ink);text-decoration:none;
+    font-weight:700;font-size:.95rem}
+  .navmenu a:last-child{border-bottom:none}
+  .btn-wa-done{display:block;background:#25D366;color:#fff;text-decoration:none;border-radius:14px;
+    font-weight:800;font-size:1rem;padding:14px 18px;margin:18px auto 6px;max-width:320px}
   /* link rows */
   .links{display:flex;flex-direction:column;gap:8px}
   .lrow{display:flex;gap:8px}
@@ -80,14 +98,26 @@
   .done a{color:var(--orange);font-weight:700}
 </style>
 <body>
-<div class="topbar">
+<div class="topbar" id="topbar">
   <a class="brand" href="/">
     <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
     <span class="word">Otlob<em>ly</em></span>
   </a>
-  <div class="langtog" role="group" aria-label="Language">
-    <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
-    <button id="lang-en" onclick="setLang('en')">EN</button>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="langtog" role="group" aria-label="Language">
+      <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+      <button id="lang-en" onclick="setLang('en')">EN</button>
+    </div>
+    <button class="burger" id="burger" aria-label="القائمة · menu" onclick="toggleMenu(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="navmenu" id="navmenu">
+    <a href="/" data-i18n="m.home">الرئيسية</a>
+    <a href="/catalog" data-i18n="m.shop">تسوّق</a>
+    <a href="/pricing" data-i18n="m.plans">الباقات</a>
+    <a href="/track" data-i18n="m.track">تتبّع شحنتك</a>
+    <a href="/account" data-i18n="m.account">حسابي</a>
   </div>
 </div>
 
@@ -103,17 +133,23 @@
     <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
       <span class="tick">✓</span>
       <span class="ic">💰</span>
-      <b data-i18n="p1t">ادفع الآن — 0% عمولة</b>
-      <small data-i18n="p1d">تدفع كامل المبلغ قبل ما نطلب — رسوم ثابتة $5 فقط مهما كانت قيمة الطلب.</small>
+      <b data-i18n="p1t">ادفع مقدماً — 0% عمولة</b>
+      <small data-i18n="p1d">للواثقين: كامل المبلغ الآن ورسوم ثابتة $5 فقط — أرخص طريقة تطلب فيها.</small>
     </div>
     <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
       <span class="tag" data-i18n="p2tag">الأكثر شيوعًا</span>
       <span class="tick">✓</span>
       <span class="ic">🛡️</span>
-      <b data-i18n="p2t">زيرو ريسك</b>
-      <small data-i18n="p2d">عربون بسيط الآن والباقي كاش عند الاستلام — عمولة حسب قيمة الطلب.</small>
+      <b data-i18n="p2t">استلم أولاً — وادفع الباقي على بابك</b>
+      <ul>
+        <li data-i18n="p2g1">لو ضاع أو تضرر الطرد — التعويض علينا</li>
+        <li data-i18n="p2g2">الجمارك الإضافية علينا</li>
+        <li data-i18n="p2g3">إلغاء مجاني قبل الشحن</li>
+      </ul>
+      <small class="fee"><span data-i18n="p2fee1">عربون بسيط للتأكيد · عمولة تبدأ من 8%</span> — <a href="/pricing" onclick="event.stopPropagation()" data-i18n="p2fee2">احسبها بدقة</a></small>
     </div>
   </div>
+  <p class="plans-note" data-i18n="plansnote">الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.</p>
 
   <h2 class="sec"><span class="stepnum">2</span><span data-i18n="s2">روابط منتجاتك من أمازون</span></h2>
   <div class="links" id="links"></div>
@@ -129,37 +165,57 @@
   <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
   <div id="out"></div>
 </div>
+<script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
 <script>
 const $=id=>document.getElementById(id);
+function toggleMenu(e){ if(e) e.stopPropagation(); $("navmenu").classList.toggle("open"); }
+document.addEventListener("click", function(e){
+  const m=$("navmenu");
+  if(m && m.classList.contains("open") && !m.contains(e.target)) m.classList.remove("open");
+});
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 let LANG="ar", PLAN="zero_risk";
 const T={
   ar:{eyebrow:"عرض سعر خلال ساعات", h1a:"اطلب ", h1b:"الآن",
       sub:"الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.",
-      s1:"اختر طريقة الدفع", p1t:"ادفع الآن — 0% عمولة",
-      p1d:"تدفع كامل المبلغ قبل ما نطلب — رسوم ثابتة $5 فقط مهما كانت قيمة الطلب.",
-      p2tag:"الأكثر شيوعًا", p2t:"زيرو ريسك",
-      p2d:"عربون بسيط الآن والباقي كاش عند الاستلام — عمولة حسب قيمة الطلب.",
+      s1:"اختر طريقة الدفع", p1t:"ادفع مقدماً — 0% عمولة",
+      p1d:"للواثقين: كامل المبلغ الآن ورسوم ثابتة $5 فقط — أرخص طريقة تطلب فيها.",
+      p2tag:"الأكثر شيوعًا", p2t:"استلم أولاً — وادفع الباقي على بابك",
+      p2g1:"لو ضاع أو تضرر الطرد — التعويض علينا",
+      p2g2:"الجمارك الإضافية علينا",
+      p2g3:"إلغاء مجاني قبل الشحن",
+      p2fee1:"عربون بسيط للتأكيد · عمولة تبدأ من 8%", p2fee2:"احسبها بدقة",
+      plansnote:"الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.",
+      "m.home":"الرئيسية", "m.shop":"تسوّق", "m.plans":"الباقات", "m.track":"تتبّع شحنتك", "m.account":"حسابي",
       s2:"روابط منتجاتك من أمازون", linkph:"https://www.amazon.com/…", addlink:"＋ أضف رابطاً آخر",
       s3:"بياناتك", name:"الاسم الكامل", phone:"رقم الواتساب (نرسل عليه عرض السعر)",
       send:"أرسل لي عرض السعر", sending:"جارٍ الإرسال…",
       hint:"مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.",
       needlink:"أضف رابط منتج واحداً على الأقل من أمازون.", needinfo:"الاسم ورقم الواتساب مطلوبان.",
       doneT:"وصلنا طلبك! 🎉", doneP:"سنراجع الروابط ونرسل لك عرض السعر النهائي على واتساب خلال ساعات العمل.",
-      keep:"رقم طلبك — احتفظ به للمتابعة:", more:"→ العودة للرئيسية"},
+      keep:"رقم طلبك — احتفظ به للمتابعة:", more:"→ العودة للرئيسية",
+      wabtn:"راسلنا الآن على واتساب", wanudge:"أسرع طريقة يوصلك فيها عرض السعر — افتح المحادثة الآن.",
+      wamsg:"مرحباً اطلبلي 👋 أنا {name} — أرسلت طلب تسعير رقم {oid}"},
   en:{eyebrow:"A quote within hours", h1a:"Order ", h1b:"now",
       sub:"Paste your Amazon product links, pick how you want to pay, and we'll send the final quote to your WhatsApp.",
-      s1:"Choose how to pay", p1t:"Pay now — 0% commission",
-      p1d:"Pay in full before we order — a flat $5 fee whatever the order value.",
-      p2tag:"Most popular", p2t:"ZERO RISK",
-      p2d:"A small deposit now, the rest in cash on delivery — commission based on order value.",
+      s1:"Choose how to pay", p1t:"Pay up front — 0% commission",
+      p1d:"For the confident: full amount now, a flat $5 fee — the cheapest way to order.",
+      p2tag:"Most popular", p2t:"Receive first — pay the rest at your door",
+      p2g1:"Lost or damaged parcel — compensation on us",
+      p2g2:"Extra customs fees — on us",
+      p2g3:"Free cancellation before shipping",
+      p2fee1:"Small deposit to confirm · commission from 8%", p2fee2:"calculate yours",
+      plansnote:"The final fees appear in your quote before you confirm — no surprises.",
+      "m.home":"Home", "m.shop":"Shop", "m.plans":"Pricing", "m.track":"Track a shipment", "m.account":"My account",
       s2:"Your Amazon product links", linkph:"https://www.amazon.com/…", addlink:"＋ Add another link",
       s3:"Your details", name:"Full name", phone:"WhatsApp number (we send the quote there)",
       send:"Send me the quote", sending:"Sending…",
       hint:"Free, no commitment — the final price arrives on WhatsApp for you to confirm.",
       needlink:"Add at least one Amazon product link.", needinfo:"Name and WhatsApp number are required.",
       doneT:"We got your request! 🎉", doneP:"We'll review the links and send your final quote on WhatsApp during working hours.",
-      keep:"Your order number — keep it to follow up:", more:"→ Back to home"}
+      keep:"Your order number — keep it to follow up:", more:"→ Back to home",
+      wabtn:"Message us on WhatsApp now", wanudge:"The fastest way to get your quote — open the chat now.",
+      wamsg:"Hi Otlobly 👋 I'm {name} — I just sent quote request {oid}"}
 };
 function t(k){return T[LANG][k];}
 function setLang(l){ LANG=l; document.documentElement.lang=l; document.documentElement.dir=l==="ar"?"rtl":"ltr";
@@ -191,9 +247,16 @@ async function submitQuote(){
     body:JSON.stringify({plan:PLAN,links,name,phone})})).json(); }catch(e){ d={error:"network"}; }
   b.disabled=false; b.textContent=t("send");
   if(!d.ok){ $("out").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
+  let waBtn="";
+  if(window.OTL_WA_NUMBER){
+    const msg=t("wamsg").replace("{name}",name).replace("{oid}",d.order_id);
+    waBtn=`<a class="btn-wa-done" href="https://wa.me/${window.OTL_WA_NUMBER}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">🟢 ${t("wabtn")}</a>
+      <p style="font-size:.78rem;color:var(--muted);margin:0 0 8px">${t("wanudge")}</p>`;
+  }
   $("main").innerHTML=`<div class="done"><div class="big">📦</div>
     <h3>${t("doneT")}</h3><p>${t("doneP")}</p>
-    <p style="margin-top:16px;font-size:.8rem;color:var(--muted)">${t("keep")}</p>
+    ${waBtn}
+    <p style="margin-top:14px;font-size:.8rem;color:var(--muted)">${t("keep")}</p>
     <div class="oid">${esc(d.order_id)}</div>
     <p><a href="/">${t("more")}</a></p></div>`;
 }
