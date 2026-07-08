@@ -93,6 +93,7 @@ async function load(){
   const r=await fetch("/api/draft/"+DRAFT_ID);
   if(!r.ok){ $("form").style.display="none"; $("out").innerHTML=`<div class="err">${t("expired")}</div>`; return; }
   DRAFT=await r.json(); render();
+  if(DRAFT.prefill){ $("f_name").value=DRAFT.prefill.name||""; $("f_phone").value=DRAFT.prefill.phone||""; }
 }
 async function submitIntake(btn){
   if(!$("f_name").value.trim()||!$("f_phone").value.trim()){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }

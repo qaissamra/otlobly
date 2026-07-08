@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>اطلب الآن · Otlobly — عرض سعر خلال ساعات</title>
+<meta name="description" content="الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب — اطلبلي توصل أمازون إلى فلسطين.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#111111">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--ink:#111;--muted:#8a7f6d;--line:#ede9e4;--orange:#ff5a1f;--bg:#f7f5f2;--card:#fff;--good:#16a34a}
+  body{font-family:'Cairo','IBM Plex Sans Arabic','Poppins',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:#fff;
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+  .brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
+  .brand .mark{width:36px;height:36px;border-radius:10px;flex-shrink:0}
+  .brand .word{font-size:1.25rem;font-weight:800;letter-spacing:-.02em}
+  .brand .word em{color:var(--orange);font-style:normal}
+  .langtog{display:flex;gap:4px;background:#f0ede8;border-radius:99px;padding:3px}
+  .langtog button{border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:.82rem;
+    font-weight:700;padding:5px 14px;border-radius:99px;color:#555;transition:all .18s}
+  .langtog button.on{background:#fff;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+  .wrap{max-width:640px;margin:0 auto;padding:28px 16px 60px}
+  .hero{text-align:center;margin-bottom:22px}
+  .hero .eyebrow{display:inline-block;background:#fff3ee;color:var(--orange);font-size:.8rem;font-weight:700;
+    padding:5px 16px;border-radius:99px;margin-bottom:12px}
+  .hero h1{font-size:clamp(1.7rem,5.5vw,2.4rem);font-weight:900;line-height:1.15;margin-bottom:8px}
+  .hero h1 em{color:var(--orange);font-style:normal}
+  .hero p{color:var(--muted);font-size:.95rem;max-width:460px;margin:0 auto}
+  .stepnum{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+    background:#111;color:#fff;font-size:.8rem;font-weight:800;flex:none}
+  h2.sec{display:flex;align-items:center;gap:9px;font-size:1.02rem;font-weight:800;margin:26px 2px 12px}
+  /* plan cards */
+  .plans{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:560px){.plans{grid-template-columns:1fr 1fr}}
+  .plan{position:relative;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:16px 15px;
+    cursor:pointer;transition:border-color .15s, box-shadow .15s}
+  .plan.on{border-color:var(--orange);box-shadow:0 6px 22px rgba(255,90,31,.13)}
+  .plan .tick{position:absolute;inset-inline-end:12px;top:12px;width:22px;height:22px;border-radius:50%;
+    border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.75rem;color:#fff}
+  .plan.on .tick{background:var(--orange);border-color:var(--orange)}
+  .plan .ic{font-size:1.5rem}
+  .plan b{display:block;font-size:1rem;margin:6px 0 3px}
+  .plan small{color:var(--muted);font-size:.8rem;line-height:1.5;display:block}
+  .plan .tag{position:absolute;inset-inline-start:12px;top:-9px;background:var(--orange);color:#fff;font-size:.66rem;
+    font-weight:800;padding:2px 10px;border-radius:99px}
+  /* link rows */
+  .links{display:flex;flex-direction:column;gap:8px}
+  .lrow{display:flex;gap:8px}
+  .lrow input{flex:1;font-family:inherit;font-size:.9rem;padding:12px 13px;border:1.5px solid var(--line);
+    border-radius:12px;background:#fff;direction:ltr;text-align:left}
+  .lrow input:focus{outline:none;border-color:var(--orange)}
+  .lrow .rm{border:1.5px solid var(--line);background:#fff;border-radius:12px;width:44px;cursor:pointer;
+    color:#b42318;font-size:1rem;flex:none}
+  .addlink{margin-top:10px;border:1.5px dashed #d8d2c8;background:none;border-radius:12px;width:100%;padding:11px;
+    font-family:inherit;font-weight:700;font-size:.88rem;color:var(--muted);cursor:pointer}
+  .addlink:hover{color:var(--ink);border-color:var(--ink)}
+  /* contact */
+  label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin:12px 2px 5px}
+  .fin{width:100%;font-family:inherit;font-size:.95rem;padding:12px 13px;border:1.5px solid var(--line);
+    border-radius:12px;background:#fff}
+  .fin:focus{outline:none;border-color:var(--orange)}
+  .go{width:100%;margin-top:20px;border:none;border-radius:14px;background:var(--orange);color:#fff;
+    font-family:inherit;font-size:1rem;font-weight:800;padding:15px;cursor:pointer}
+  .go:disabled{opacity:.6}
+  .hintline{color:var(--muted);font-size:.76rem;text-align:center;margin-top:10px}
+  .err{background:#fef2f2;border:1px solid #f3c9c9;color:#b42318;border-radius:12px;padding:11px 13px;
+    font-size:.86rem;margin-top:12px;text-align:center}
+  /* success */
+  .done{text-align:center;padding:36px 10px}
+  .done .big{font-size:46px}
+  .done h3{margin:10px 0 6px;font-size:1.25rem}
+  .done p{color:var(--muted);font-size:.9rem;max-width:400px;margin:0 auto}
+  .done .oid{font-size:1.35rem;font-weight:800;background:#fff;border:1px dashed #d8d2c8;border-radius:12px;
+    padding:12px;margin:16px auto;max-width:260px;letter-spacing:1px}
+  .done a{color:var(--orange);font-weight:700}
+</style>
+<body>
+<div class="topbar">
+  <a class="brand" href="/">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+    <span class="word">Otlob<em>ly</em></span>
+  </a>
+  <div class="langtog" role="group" aria-label="Language">
+    <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+    <button id="lang-en" onclick="setLang('en')">EN</button>
+  </div>
+</div>
+
+<div class="wrap" id="main">
+  <div class="hero">
+    <div class="eyebrow" data-i18n="eyebrow">عرض سعر خلال ساعات</div>
+    <h1><span data-i18n="h1a">اطلب </span><em data-i18n="h1b">الآن</em></h1>
+    <p data-i18n="sub">الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.</p>
+  </div>
+
+  <h2 class="sec"><span class="stepnum">1</span><span data-i18n="s1">اختر طريقة الدفع</span></h2>
+  <div class="plans">
+    <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
+      <span class="tick">✓</span>
+      <span class="ic">💰</span>
+      <b data-i18n="p1t">ادفع الآن — 0% عمولة</b>
+      <small data-i18n="p1d">تدفع كامل المبلغ قبل ما نطلب — رسوم ثابتة $5 فقط مهما كانت قيمة الطلب.</small>
+    </div>
+    <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
+      <span class="tag" data-i18n="p2tag">الأكثر شيوعًا</span>
+      <span class="tick">✓</span>
+      <span class="ic">🛡️</span>
+      <b data-i18n="p2t">زيرو ريسك</b>
+      <small data-i18n="p2d">عربون بسيط الآن والباقي كاش عند الاستلام — عمولة حسب قيمة الطلب.</small>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="stepnum">2</span><span data-i18n="s2">روابط منتجاتك من أمازون</span></h2>
+  <div class="links" id="links"></div>
+  <button class="addlink" onclick="addLink()" data-i18n="addlink">＋ أضف رابطاً آخر</button>
+
+  <h2 class="sec"><span class="stepnum">3</span><span data-i18n="s3">بياناتك</span></h2>
+  <label data-i18n="name">الاسم الكامل</label>
+  <input class="fin" id="f_name" autocomplete="name">
+  <label data-i18n="phone">رقم الواتساب (نرسل عليه عرض السعر)</label>
+  <input class="fin" id="f_phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" style="direction:ltr;text-align:left" autocomplete="tel">
+
+  <button class="go" id="goBtn" onclick="submitQuote()" data-i18n="send">أرسل لي عرض السعر</button>
+  <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
+  <div id="out"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+let LANG="ar", PLAN="zero_risk";
+const T={
+  ar:{eyebrow:"عرض سعر خلال ساعات", h1a:"اطلب ", h1b:"الآن",
+      sub:"الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.",
+      s1:"اختر طريقة الدفع", p1t:"ادفع الآن — 0% عمولة",
+      p1d:"تدفع كامل المبلغ قبل ما نطلب — رسوم ثابتة $5 فقط مهما كانت قيمة الطلب.",
+      p2tag:"الأكثر شيوعًا", p2t:"زيرو ريسك",
+      p2d:"عربون بسيط الآن والباقي كاش عند الاستلام — عمولة حسب قيمة الطلب.",
+      s2:"روابط منتجاتك من أمازون", linkph:"https://www.amazon.com/…", addlink:"＋ أضف رابطاً آخر",
+      s3:"بياناتك", name:"الاسم الكامل", phone:"رقم الواتساب (نرسل عليه عرض السعر)",
+      send:"أرسل لي عرض السعر", sending:"جارٍ الإرسال…",
+      hint:"مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.",
+      needlink:"أضف رابط منتج واحداً على الأقل من أمازون.", needinfo:"الاسم ورقم الواتساب مطلوبان.",
+      doneT:"وصلنا طلبك! 🎉", doneP:"سنراجع الروابط ونرسل لك عرض السعر النهائي على واتساب خلال ساعات العمل.",
+      keep:"رقم طلبك — احتفظ به للمتابعة:", more:"→ العودة للرئيسية"},
+  en:{eyebrow:"A quote within hours", h1a:"Order ", h1b:"now",
+      sub:"Paste your Amazon product links, pick how you want to pay, and we'll send the final quote to your WhatsApp.",
+      s1:"Choose how to pay", p1t:"Pay now — 0% commission",
+      p1d:"Pay in full before we order — a flat $5 fee whatever the order value.",
+      p2tag:"Most popular", p2t:"ZERO RISK",
+      p2d:"A small deposit now, the rest in cash on delivery — commission based on order value.",
+      s2:"Your Amazon product links", linkph:"https://www.amazon.com/…", addlink:"＋ Add another link",
+      s3:"Your details", name:"Full name", phone:"WhatsApp number (we send the quote there)",
+      send:"Send me the quote", sending:"Sending…",
+      hint:"Free, no commitment — the final price arrives on WhatsApp for you to confirm.",
+      needlink:"Add at least one Amazon product link.", needinfo:"Name and WhatsApp number are required.",
+      doneT:"We got your request! 🎉", doneP:"We'll review the links and send your final quote on WhatsApp during working hours.",
+      keep:"Your order number — keep it to follow up:", more:"→ Back to home"}
+};
+function t(k){return T[LANG][k];}
+function setLang(l){ LANG=l; document.documentElement.lang=l; document.documentElement.dir=l==="ar"?"rtl":"ltr";
+  $("lang-ar").classList.toggle("on",l==="ar"); $("lang-en").classList.toggle("on",l==="en");
+  document.querySelectorAll("[data-i18n]").forEach(e=>{ const v=t(e.dataset.i18n); if(v!=null) e.textContent=v; });
+  document.querySelectorAll("#links input").forEach(i=>i.placeholder=t("linkph"));
+}
+function pickPlan(p){ PLAN=p;
+  ["prepaid","zero_risk"].forEach(x=>{ const el=$("plan-"+x); el.classList.toggle("on",x===p);
+    el.setAttribute("aria-checked", x===p ? "true":"false"); });
+}
+function addLink(focus=true){
+  const rows=document.querySelectorAll("#links .lrow");
+  if(rows.length>=15) return;
+  const div=document.createElement("div"); div.className="lrow";
+  div.innerHTML=`<input type="url" inputmode="url" placeholder="${esc(t("linkph"))}" autocomplete="off" spellcheck="false">
+    <button class="rm" title="remove" onclick="this.parentNode.remove()">✕</button>`;
+  $("links").appendChild(div);
+  if(focus) div.querySelector("input").focus();
+}
+async function submitQuote(){
+  const links=[...document.querySelectorAll("#links input")].map(i=>i.value.trim())
+    .filter(v=>/^https?:\/\//i.test(v));
+  const name=$("f_name").value.trim(), phone=$("f_phone").value.trim();
+  if(!links.length){ $("out").innerHTML=`<div class="err">${t("needlink")}</div>`; return; }
+  if(!name||!phone){ $("out").innerHTML=`<div class="err">${t("needinfo")}</div>`; return; }
+  const b=$("goBtn"); b.disabled=true; b.textContent=t("sending");
+  let d; try{ d=await (await fetch("/api/quote/request",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({plan:PLAN,links,name,phone})})).json(); }catch(e){ d={error:"network"}; }
+  b.disabled=false; b.textContent=t("send");
+  if(!d.ok){ $("out").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
+  $("main").innerHTML=`<div class="done"><div class="big">📦</div>
+    <h3>${t("doneT")}</h3><p>${t("doneP")}</p>
+    <p style="margin-top:16px;font-size:.8rem;color:var(--muted)">${t("keep")}</p>
+    <div class="oid">${esc(d.order_id)}</div>
+    <p><a href="/">${t("more")}</a></p></div>`;
+}
+addLink(false);
+const qp=new URLSearchParams(location.search).get("plan");
+if(qp==="prepaid"||qp==="zero_risk") pickPlan(qp);
+setLang("ar");
+</script>
+</body>
+</html>

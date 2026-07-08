@@ -11,8 +11,7 @@ const I18N = {
     "hero.sub":       "اطلبلي تشتري لك أي منتج من أمازون وتشحنه حتى باب بيتك — بدون بطاقة ائتمان: عربون بسيط يؤكّد طلبك، وتدفع الباقي بالدولار كاش عند الاستلام.",
     "sheet.title":    "استلم العالم على باب بيتك",
     "sheet.sub":      "من الطلب حتى التسليم — نحن نتكفّل بكل شيء.",
-    "cta.browse":     "تصفّح المنتجات",
-    "cta.wa":         "اطلب عبر واتساب",
+    "cta.order":      "اطلب الآن",
     "cta.track":      "تتبّع طلبك",
     "trust.cod":      "الدفع عند الاستلام",
     "trust.door":     "حتى باب البيت",
@@ -66,8 +65,7 @@ const I18N = {
     "hero.sub":       "Otlobly buys any Amazon product and ships it to your door — no credit card: a small deposit confirms your order, and you pay the rest in USD cash on delivery.",
     "sheet.title":    "Receive the world at your doorstep",
     "sheet.sub":      "From order to delivery — we handle everything.",
-    "cta.browse":     "Browse products",
-    "cta.wa":         "Order on WhatsApp",
+    "cta.order":      "Order now",
     "cta.track":      "Track your order",
     "trust.cod":      "Cash on delivery",
     "trust.door":     "To your door",
@@ -179,22 +177,6 @@ function smoothTo(id, e) {
   }
 }
 
-/* ── Hero tracking bar ── */
-function heroTrack() {
-  var input = document.getElementById("hero-track-input");
-  var bar = document.querySelector(".hero-track-bar");
-  var val = input.value.trim();
-  if (!val) {
-    bar.classList.remove("err");
-    void bar.offsetWidth; /* restart animation */
-    bar.classList.add("err");
-    bar.addEventListener("animationend", function() { bar.classList.remove("err"); }, { once: true });
-    input.focus();
-    return;
-  }
-  doTrackLookup(val);
-}
-
 /* ── Track section submit ── */
 function trackSubmit() {
   var input = document.getElementById("track-input");
@@ -222,7 +204,6 @@ function doTrackLookup(code) {
 /* keyboard: Enter triggers track */
 document.addEventListener("keydown", function(e) {
   if (e.key === "Enter") {
-    if (document.activeElement && document.activeElement.id === "hero-track-input") heroTrack();
     if (document.activeElement && document.activeElement.id === "track-input") trackSubmit();
   }
 });

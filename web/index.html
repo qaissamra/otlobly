@@ -1760,14 +1760,16 @@ function neRowHtml(o,kind){
     const extra=items.length>MAX?`<span class="more">+${items.length-MAX}</span>`:'';
     prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
   }
-  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
+  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.payment_plan==="prepaid"?`<span class="pill" style="background:#dcfce7;color:#15803d" title="يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front">💰 مسبق 0%</span>`:''}${o.payment_plan==="zero_risk"?`<span class="pill" style="background:#fef3c7;color:#92400e" title="عربون + الباقي عند الاستلام · deposit + cash on delivery">🛡️ زيرو ريسك</span>`:''}${o.customer_confirmed_at?`<span class="pill" style="background:#dcfce7;color:#15803d" title="أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link">✓ أكّد العميل</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
   const statusCell = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
     : statusPill(o.status);   // shared per-status colour (same map as the card)
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
   const rem=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd-(o.deposit_usd||0)):'—';
   const nm=poEsc((o.customer||'').replace(/'/g,''));
   let acts='';
-  if(kind==="pending") acts=`<button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
+  if(kind==="pending") acts=`${o.amount_to_collect_usd==null?`<button class="po-btn" title="سعّر الطلب (إجمالي أمازون → السعر النهائي) · price the order" onclick="event.stopPropagation();neQuotePrice('${poEsc(oid)}')">💲</button>`:''}
+    <button class="po-btn" title="أرسل عرض السعر برابط على واتساب · send the quotation link on WhatsApp" onclick="event.stopPropagation();neQuoteLink('${poEsc(oid)}')">🔗</button>
+    <button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
     <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>`;
   else if(kind==="incart") acts=`<button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="event.stopPropagation();neUncart('${poEsc(oid)}')">↩</button>`;
   else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
@@ -1777,6 +1779,7 @@ function neRowHtml(o,kind){
   const bits=[fld('Phone',`<span class="mono">${poEsc((o.phones&&o.phones.length?o.phones.join(' · '):o.phone)||'—')}</span>`)];
   if(o.city) bits.push(fld('City',poEsc(o.city)));
   if(o.address) bits.push(fld('Address',poEsc(o.address)));
+  if(o.payment_plan) bits.push(fld('الخطة · Plan', o.payment_plan==="prepaid"?"💰 دفع مسبق — 0% عمولة":"🛡️ زيرو ريسك — عربون + الباقي عند الاستلام"));
   if(o.deposit_usd>0) bits.push(fld('عربون · Deposit',`${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}`,'color:#15803d;font-weight:700'));
   if(kind==="ordered"&&o.amazon_order_number) bits.push(fld('Amazon #',`<span class="mono">${poEsc(o.amazon_order_number)}</span>`));
   if(o.est_delivery_customer) bits.push(fld('ETA',poEsc(o.est_delivery_customer)));
@@ -1925,6 +1928,24 @@ async function neDelete(orderId,name){
   const r=await post("/api/orders/delete",{ids:[orderId]});
   if(r&&r.ok){ toast("تم النقل إلى سلة المهملات · moved to Trash"); loadNeedOrder(); loadHomeActivity&&loadHomeActivity(); }
   else toast("Delete failed: "+((r&&r.error)||""));
+}
+// 💲 on a queue row: price the order (same /api/quote as the Orders table) and stay in the queue.
+async function neQuotePrice(id){
+  const t=prompt("Amazon checkout total in USD\n(the order total Amazon shows at checkout — item + shipping + Import Fees Deposit):");
+  if(t===null) return;
+  const total=parseFloat(String(t).replace(/[^0-9.]/g,''));
+  if(isNaN(total)||total<=0){ toast("Enter the checkout total as a number"); return; }
+  const r=await post("/api/quote",{id,total});
+  if(r.ok){ toast(`${id} → ${money(r.amount)} (checkout ${money(total)} + ${Math.round(r.markup_pct*100)}%)`); loadNeedOrder(); }
+  else toast("Quote failed: "+(r.error||""));
+}
+// 🔗 on a queue row: one click → quotation link for THIS order + WhatsApp to the customer.
+async function neQuoteLink(id){
+  let r; try{ r=await post("/api/order/quote_link",{id}); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"Couldn't build the quotation link"); return; }
+  try{ await navigator.clipboard.writeText(r.url); }catch(e){}
+  if(r.wa_link) window.open(r.wa_link,"_blank");
+  toast(r.wa_link?"فتحنا واتساب — الرابط منسوخ أيضاً · WhatsApp opened, link copied":"الرابط منسوخ · quotation link copied");
 }
 // Capture the internal Amazon (SERP) price onto a To-order item — the card's 💲 button.
 // Works for any product however the order was added; stored staff-only, never sent to the customer.

@@ -744,6 +744,47 @@ def pricing_page():
     return render_template("pricing.html", wa_number=_wa_business_number())
 
 
+@app.route("/order")
+def order_request_page():
+    """Public: the 'اطلب الآن' funnel — plan + Amazon links + WhatsApp number.
+    (Coexists with /order/<draft_id>, the quotation-confirm page.)"""
+    return render_template("order_request.html")
+
+
+@app.route("/api/quote/request", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_quote_request():
+    """Public: a website quote request → an unpriced REQUESTED order in the
+    To-order queue. Staff price it (💲) and send the quotation link back on
+    WhatsApp (🔗). The chosen payment plan rides on the order like `source`."""
+    b = request.get_json(force=True, silent=True) or {}
+    plan = b.get("plan") if b.get("plan") in ("prepaid", "zero_risk") else "zero_risk"
+    phones = normalize.collect_phones(b.get("phone"))
+    if not (b.get("name") or "").strip() or not phones:
+        return jsonify({"error": "الاسم ورقم واتساب صالح مطلوبان · "
+                                 "Name and a valid WhatsApp number are required."}), 400
+    raw = b.get("links") if isinstance(b.get("links"), list) else []
+    links = [str(l).strip() for l in raw if str(l).strip().lower().startswith("http")][:15]
+    if not links:
+        return jsonify({"error": "أضف رابط منتج واحداً على الأقل · "
+                                 "Add at least one product link."}), 400
+    items = normalize.parse_items(links, expand=False)   # a.co → needs_expand for the queue
+    if not items:
+        return jsonify({"error": "لم نتعرف على الروابط — تأكد أنها من أمازون · "
+                                 "Links not recognized — make sure they're Amazon links."}), 400
+    o = make_order(name=b.get("name", ""), phones=phones, address="", city="",
+                   items=items, status="REQUESTED", amount_to_collect_usd=None,
+                   notes="🌐 طلب تسعير من الموقع · website quote request")
+    o["source"] = "website"
+    o["payment_plan"] = plan
+    db.upsert_order(o)
+    _ensure_customer(o)
+    db.audit({"username": "customer"}, "quote_request", "order", o["order_id"], plan)
+    activity.log("created", "order", o["order_id"], _olabel(o),
+                 detail=f"website quote request · {plan}", user="customer")
+    return jsonify({"ok": True, "order_id": o["order_id"]})
+
+
 @app.route("/api/catalog/public")
 @limiter.limit("30 per minute")
 def api_catalog_public():
@@ -1933,6 +1974,45 @@ def api_draft():
                     "url": request.host_url.rstrip("/") + f"/order/{did}"})
 
 
+@app.route("/api/order/quote_link", methods=["POST"])
+@auth.require("edit_order")
+def api_order_quote_link():
+    """One click on a priced order → a customer-facing quotation link (the
+    /order/<draft_id> page with pictures + final price + confirm form) plus a
+    wa.me link to the CUSTOMER's WhatsApp carrying it. The draft remembers
+    order_id, so the customer's confirmation updates THIS order (no duplicate)."""
+    b = request.get_json(force=True, silent=True) or {}
+    o = db.get_order((b.get("id") or "").strip())
+    if not o:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    if o.get("amount_to_collect_usd") is None:
+        return jsonify({"ok": False,
+                        "error": "سعّر الطلب أولاً (💲) · Price the order first (💲)."}), 400
+    products = [{"image": it.get("image"), "title": it.get("title"),
+                 "qty": it.get("qty") or 1,
+                 "link": it.get("clean_url") or it.get("raw_url"),
+                 "asin": it.get("asin"),
+                 "serp_price_usd": it.get("serp_price_usd"),
+                 "serp_price_at": it.get("serp_price_at")}
+                for it in (o.get("items") or [])]
+    did = uuid.uuid4().hex[:10]
+    db.set_setting(f"draft:{did}", {
+        "products": products, "amount": o["amount_to_collect_usd"],
+        "order_id": o["order_id"],
+        "created_at": db.now_iso(), "used": False,
+    })
+    url = request.host_url.rstrip("/") + f"/order/{did}"
+    ph = store.primary_phone(o)
+    name = (o.get("customer") or {}).get("name") or ""
+    text = (f"مرحباً {name} 👋 عرض سعرك من اطلبلي جاهز:\n{url}\n"
+            "افتح الرابط لتأكيد الطلب · open the link to confirm")
+    wa = f"https://wa.me/{ph['wa']}?text={_urlquote(text)}" if ph and ph.get("wa") else None
+    db.audit(auth.actor(), "quote_link", "order", o["order_id"], did)
+    activity.log("sent", "order", o["order_id"], _olabel(o),
+                 detail="quotation link generated", user=_user())
+    return jsonify({"ok": True, "url": url, "wa_link": wa})
+
+
 @app.route("/api/bridge/draft", methods=["POST"])
 def api_bridge_draft():
     """Server-to-server: sara-tool (deployed) creates a pre-filled draft here.
@@ -1991,8 +2071,17 @@ def api_draft_get(draft_id):
     d = db.get_setting(f"draft:{draft_id}")
     if not d:
         return jsonify({"error": "not found"}), 404
-    return jsonify({"products": d.get("products") or [], "amount": d.get("amount"),
-                    "used": d.get("used", False)})
+    out = {"products": d.get("products") or [], "amount": d.get("amount"),
+           "used": d.get("used", False)}
+    if d.get("order_id"):
+        # quotation drafts know their order → pre-fill the confirm form (the
+        # customer already gave name+WhatsApp on the /order request page)
+        oo = db.get_order(d["order_id"])
+        if oo:
+            ph = store.primary_phone(oo)
+            out["prefill"] = {"name": (oo.get("customer") or {}).get("name") or "",
+                              "phone": (ph.get("e164") if ph else "") or ""}
+    return jsonify(out)
 
 
 @app.route("/api/order/intake", methods=["POST"])
@@ -2011,6 +2100,30 @@ def api_order_intake():
     phones = normalize.collect_phones(b.get("phone"))
     if not (b.get("name") or "").strip() or not phones:
         return jsonify({"error": "Name and a valid phone are required."}), 400
+    if d.get("order_id"):
+        # Quotation drafts (🔗 from the To-order queue) price an EXISTING order —
+        # the customer's confirm fills their address and stamps acceptance; it must
+        # never create a duplicate. Single-use, like every draft.
+        if d.get("used"):
+            return jsonify({"error": "This link has expired."}), 404
+        o = db.get_order(d["order_id"])
+        if not o:
+            return jsonify({"error": "This link has expired."}), 404
+        cu = o.setdefault("customer", {})
+        cu["address"] = (b.get("address") or "").strip() or cu.get("address") or ""
+        cu["city"] = (b.get("city") or "").strip() or cu.get("city") or ""
+        if not (cu.get("name") or "").strip():
+            cu["name"] = b.get("name", "").strip()
+        if not cu.get("phones"):
+            cu["phones"] = phones
+        o["customer_confirmed_at"] = db.now_iso()
+        db.upsert_order(o)
+        _ensure_customer(o)
+        db.set_setting(f"draft:{b['draft_id']}", {**d, "used": True})
+        db.audit({"username": "customer"}, "quote_confirmed", "order", o["order_id"], "")
+        activity.log("confirmed", "order", o["order_id"], _olabel(o),
+                     detail="customer confirmed the quotation", user="customer")
+        return jsonify({"ok": True, "order_id": o["order_id"]})
     items = normalize.parse_items([p.get("link") or
                                    (f"https://www.amazon.com/dp/{p.get('asin')}" if p.get("asin") else "")
                                    for p in prods], expand=False)

@@ -46,6 +46,7 @@ def _row(o):
                           if o.get("amount_to_collect_usd") is not None else None),
         "status": o["status"],
         "source": o.get("source"),
+        "payment_plan": o.get("payment_plan"),
         "created_at": o.get("created_at"),
         "amazon_order_number": o.get("amazon_order_number"),
         "tracking_number": o.get("tracking_number"),
