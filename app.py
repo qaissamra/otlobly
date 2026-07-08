@@ -731,6 +731,12 @@ def catalog_page():
     return render_template("catalog.html")
 
 
+@app.route("/pricing")
+def pricing_page():
+    """Public: service fees / plans (imported Replit design)."""
+    return render_template("pricing.html", wa_number=_wa_business_number())
+
+
 @app.route("/api/catalog/public")
 @limiter.limit("30 per minute")
 def api_catalog_public():

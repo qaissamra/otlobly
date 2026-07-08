@@ -1,193 +1,302 @@
-<!doctype html>
-<html dir="rtl" lang="ar">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Otlobly — اطلبلي · نشتري لك من أمازون ونوصلها إلى فلسطين</title>
-<meta name="description" content="اطلبلي تشتري لك من أمازون وتشحن حتى باب بيتك في فلسطين — بدون بطاقة ائتمان، عربون بسيط والدفع عند الاستلام بالدولار. Otlobly buys from Amazon for you and delivers to Palestine, cash on delivery in USD.">
-<meta property="og:title" content="Otlobly — اطلبلي">
-<meta property="og:description" content="نشتري لك من أمازون ونوصلها إلى فلسطين — الدفع عند الاستلام بالدولار.">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="apple-touch-icon" href="/favicon.svg">
-<meta name="theme-color" content="#111111">
-<style>
-  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--wa:#25D366}
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
-    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-  .wrap{max-width:720px;margin:0 auto;padding:18px 16px 40px}
-  /* header */
-  .top{display:flex;align-items:center;gap:10px;padding:4px 2px 18px}
-  .top h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
-  .top .ly{color:var(--accent)}
-  .lang{margin-inline-start:auto;display:flex;gap:6px}
-  .lang span{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);
-    border-radius:20px;padding:3px 11px;background:var(--card)}
-  .lang span.on{background:#111;color:#fff;border-color:#111}
-  /* hero */
-  .hero{background:var(--card);border:1px solid var(--line);border-radius:22px;
-    box-shadow:0 10px 40px rgba(20,18,12,.06);padding:34px 24px 28px;text-align:center}
-  .hero .mark{margin-bottom:14px}
-  .hero h2{font-size:clamp(24px,5.4vw,34px);line-height:1.25;font-weight:800;letter-spacing:-.6px;margin:0 0 10px}
-  .hero h2 em{color:var(--accent);font-style:normal}
-  .hero p{color:var(--muted);font-size:15.5px;max-width:520px;margin:0 auto 22px}
-  .cta{display:flex;flex-direction:column;gap:10px;max-width:360px;margin:0 auto}
-  .btn{display:block;text-decoration:none;text-align:center;font-size:15.5px;font-weight:800;
-    border-radius:12px;padding:14px 18px;cursor:pointer;border:1px solid transparent}
-  .btn.wa{background:var(--wa);color:#fff}
-  .btn.main{background:var(--accent);color:#fff}
-  .btn.line{background:var(--card);color:var(--ink);border-color:var(--line)}
-  .trust{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:20px;
-    color:var(--muted);font-size:12px;font-weight:600}
-  .trust span{display:flex;align-items:center;gap:5px}
-  /* sections */
-  h3.sec{font-size:16px;font-weight:800;margin:30px 4px 12px;text-align:start}
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-  .step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 14px}
-  .step .n{width:28px;height:28px;border-radius:50%;background:#111;color:#fff;font-weight:800;font-size:13px;
-    display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-  .step b{display:block;font-size:13.5px;margin-bottom:5px}
-  .step small{color:var(--muted);font-size:12px;line-height:1.5;display:block}
-  .feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-  .feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:10px;align-items:flex-start}
-  .feat .ic{font-size:20px;line-height:1}
-  .feat b{display:block;font-size:13px;margin-bottom:3px}
-  .feat small{color:var(--muted);font-size:11.5px;line-height:1.45;display:block}
-  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-  .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 14px;text-align:center;
-    text-decoration:none;color:var(--ink);transition:border-color .15s}
-  .tile:hover{border-color:var(--accent)}
-  .tile .ic{font-size:22px;display:block;margin-bottom:8px}
-  .tile b{font-size:13.5px;display:block}
-  .tile small{color:var(--muted);font-size:11.5px}
-  .foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);
-    font-size:11.5px;text-align:center}
-  .foot a{color:var(--muted)}
-</style>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Otlobly · اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين</title>
+  <meta name="description" content="اطلبلي تشتري لك من أمازون وتشحن حتى باب بيتك في فلسطين — بدون بطاقة ائتمان، عربون بسيط والدفع عند الاستلام بالدولار. Otlobly buys from Amazon for you and delivers to Palestine, cash on delivery in USD.">
+  <meta property="og:title" content="Otlobly — اطلبلي">
+  <meta property="og:description" content="نشتري لك من أمازون ونوصلها إلى فلسطين — الدفع عند الاستلام بالدولار.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/favicon.svg">
+  <meta name="theme-color" content="#111111">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
-<div class="wrap">
-  <div class="top">
-    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
-      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
-      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
-    <h1>Otlob<span class="ly">ly</span></h1>
-    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
-  </div>
 
-  <div class="hero">
-    <div class="mark">
-      <svg width="58" height="58" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
-        <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
-        <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
+  <!-- ══════════ STICKY NAVBAR ══════════ -->
+  <nav class="sitenav" id="sitenav">
+    <div class="sitenav-inner wrap">
+      <a class="sitenav-brand" href="/">
+        <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+        <span class="word">Otlob<em>ly</em></span>
+      </a>
+
+      <div class="sitenav-links">
+        <a href="/catalog" data-i18n="nav.shop">تسوّق</a>
+        <a href="#how" onclick="smoothTo('how',event)" data-i18n="nav.how">كيف تعمل</a>
+        <a href="/pricing" data-i18n="nav.plans">الباقات</a>
+        <a href="#track" onclick="smoothTo('track',event)" data-i18n="nav.track">تتبّع</a>
+      </div>
+
+      <!-- lang toggle: always visible on all screen sizes -->
+      <div class="sitenav-lang langtog" role="group" aria-label="Language">
+        <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+        <button id="lang-en" onclick="setLang('en')">EN</button>
+      </div>
+
+      <!-- WA pill: visible on desktop, hidden on mobile (hamburger covers it) -->
+      <a class="sitenav-wa" id="wa-sitenav" href="#" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+        <span data-i18n="nav.wa.cta">واتساب</span>
+      </a>
+
+      <button class="sitenav-burger" id="nav-burger" aria-label="القائمة" onclick="toggleNav()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
     </div>
-    <h2 data-i18n-html="heroTitle"></h2>
-    <p data-i18n="heroSub"></p>
-    <div class="cta">
-      <a class="btn main" href="/catalog">🛍️ <span data-i18n="ctaShop"></span></a>
-      {% if wa_number %}<a class="btn wa" id="waBtn" href="#" target="_blank" rel="noopener">🟢 <span data-i18n="ctaWa"></span></a>{% endif %}
-      <a class="btn line" href="/track">📦 <span data-i18n="ctaTrack"></span></a>
+
+    <!-- Mobile dropdown -->
+    <div class="sitenav-mobile" id="nav-mobile">
+      <a href="/catalog" data-i18n="nav.shop">تسوّق</a>
+      <a href="#how" onclick="smoothTo('how',event);toggleNav()" data-i18n="nav.how">كيف تعمل</a>
+      <a href="/pricing" data-i18n="nav.plans">الباقات</a>
+      <a href="#track" onclick="smoothTo('track',event);toggleNav()" data-i18n="nav.track">تتبّع</a>
+      <a class="sitenav-wa-mob" id="wa-mob" href="#" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+        <span data-i18n="nav.wa.cta">واتساب</span>
+      </a>
     </div>
-    <div class="trust">
-      <span>💵 <span data-i18n="trustCod"></span></span>
-      <span>🚚 <span data-i18n="trustDoor"></span></span>
-      <span>🔒 <span data-i18n="trustNoCard"></span></span>
+  </nav>
+
+  <!-- ══════════ HERO ══════════ -->
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <div class="eyebrow" data-i18n="hero.eyebrow">أمازون ← فلسطين</div>
+        <h1>
+          <span data-i18n="hero.title1">اطلب من أمازون،</span><br>
+          <em data-i18n="hero.title2">ونوصلها إلى فلسطين</em>
+        </h1>
+        <p class="hero-sub" data-i18n="hero.sub">اطلبلي تشتري لك أي منتج من أمازون وتشحنه حتى باب بيتك — بدون بطاقة ائتمان: عربون بسيط يؤكّد طلبك، وتدفع الباقي بالدولار كاش عند الاستلام.</p>
+      </div>
+
+      <!-- Truck: sits here in mobile flow (between copy and sheet); moved to right column on desktop via grid -->
+      <div class="hero-truck">
+        <div class="illo" style="aspect-ratio:16/11">
+          <img src="/static/assets/truck.png" alt="" onerror="showPh(this)">
+          <div class="ph" style="display:none"><b data-i18n="ph.truck">شاحنة توصيل ثلاثية الأبعاد</b><small>truck.png · transparent PNG · ~880×620</small></div>
+        </div>
+      </div>
+
+      <!-- White bottom sheet with CTAs -->
+      <div class="sheet">
+        <div class="sheet-inner">
+          <h2 data-i18n="sheet.title">استلم العالم على باب بيتك</h2>
+          <p data-i18n="sheet.sub">من الطلب حتى التسليم — نحن نتكفّل بكل شيء.</p>
+          <div class="cta-col">
+            <a class="btn btn-orange" href="/catalog">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path><path d="M3 6h18"></path><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+              <span data-i18n="cta.browse">تصفّح المنتجات</span>
+            </a>
+            <a class="btn btn-wa" id="wa-hero" href="#" target="_blank" rel="noopener">
+              <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.07c-.25.7-1.44 1.32-1.98 1.36-.53.05-.53.42-3.34-.7-2.81-1.12-4.55-4-4.68-4.18-.14-.18-1.12-1.49-1.12-2.84 0-1.35.71-2.01.96-2.29.25-.28.54-.35.72-.35.18 0 .36.002.52.01.17.007.39-.06.61.47.25.6.83 2.06.9 2.2.07.14.12.32.02.5-.09.18-.14.29-.28.45-.14.16-.29.35-.42.47-.14.14-.28.29-.12.57.16.28.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.22 1.37.28.14.44.12.6-.07.18-.21.7-.81.88-1.09.18-.28.36-.23.61-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.32.07.11.07.64-.18 1.34Z"></path></svg>
+              <span data-i18n="cta.wa">اطلب عبر واتساب</span>
+            </a>
+            <!-- Hero OTL tracking bar -->
+            <div class="hero-track-bar">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <input type="text" id="hero-track-input" data-i18n-ph="track.inputph" placeholder="أدخل رقم تتبّع OTL…" autocomplete="off" spellcheck="false">
+              <button id="hero-track-btn" onclick="heroTrack()" data-i18n="track.submit">تتبّع</button>
+            </div>
+          </div>
+          <div class="trust">
+            <span class="chip">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg>
+              <span data-i18n="trust.cod">الدفع عند الاستلام</span>
+            </span>
+            <span class="chip">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"></path></svg>
+              <span data-i18n="trust.door">حتى باب البيت</span>
+            </span>
+            <span class="chip">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+              <span data-i18n="trust.nocard">بدون بطاقة ائتمان</span>
+            </span>
+          </div>
+        </div><!-- /sheet-inner -->
+      </div><!-- /sheet -->
+    </div><!-- /hero-inner -->
+  </header>
+
+  <main class="wrap">
+
+    <!-- ══════════ TRACKING TEASER ══════════ -->
+    <section id="track" class="blk reveal">
+      <div class="sec-head">
+        <h2 data-i18n="track.head">شحنتك الحالية</h2>
+        <span class="see" onclick="location.href='/track'" data-i18n="track.seeall">عرض الكل</span>
+      </div>
+
+      <!-- Track search bar -->
+      <div class="track-search">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        <input type="text" id="track-input" data-i18n-ph="track.inputph" placeholder="أدخل رقم تتبّع OTL…" autocomplete="off" spellcheck="false">
+        <button id="track-btn" onclick="trackSubmit()" data-i18n="track.submit">تتبّع</button>
+      </div>
+
+      <div class="track-card">
+        <div class="track-top">
+          <div class="track-thumb">
+            <div class="illo">
+              <img src="/static/assets/product.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>product.png</small></div>
+            </div>
+          </div>
+          <div class="track-meta">
+            <div class="nm" data-i18n="track.prod">سماعة Sony XM5</div>
+            <div class="id" id="track-otl-code">OTL-1234</div>
+          </div>
+          <div class="track-rider">
+            <div class="illo">
+              <img src="/static/assets/rider.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>rider.png</small></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prog" aria-hidden="true">
+          <span class="node done"></span><span class="seg fill"></span>
+          <span class="node done"></span><span class="seg fill"></span>
+          <span class="node cur"></span><span class="seg"></span>
+          <span class="node"></span>
+        </div>
+        <div class="prog-labels">
+          <span data-i18n="track.s1">تم الطلب</span>
+          <span data-i18n="track.s2">تم الشحن</span>
+          <span data-i18n="track.s3">وصلت فلسطين</span>
+          <span data-i18n="track.s4">قيد التوصيل</span>
+        </div>
+
+        <div class="track-fields">
+          <div class="f">
+            <div class="k">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <span data-i18n="track.loc">الموقع</span>
+            </div>
+            <div class="v" data-i18n="track.locv">رام الله — المستودع</div>
+          </div>
+          <div class="f">
+            <div class="k">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+              <span data-i18n="track.eta">الوصول المتوقّع</span>
+            </div>
+            <div class="v" data-i18n="track.etav">خلال ٢٤ ساعة</div>
+          </div>
+        </div>
+        <a class="btn" href="/track" data-i18n="track.cta">تتبّع هذه الشحنة</a>
+      </div>
+    </section>
+
+    <!-- ══════════ HOW IT WORKS ══════════ -->
+    <section id="how" class="blk reveal">
+      <div class="sec-head">
+        <h2 data-i18n="how.head">كيف تعمل الخدمة؟</h2>
+      </div>
+      <div class="steps">
+        <div class="step peach">
+          <div class="n">١</div>
+          <h3 data-i18n="how.s1t">أرسل الرابط</h3>
+          <p data-i18n="how.s1p">ابعتلنا رابط المنتج من أمازون على واتساب.</p>
+          <div class="art">
+            <div class="illo">
+              <img src="/static/assets/step-1.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>PNG</small></div>
+            </div>
+          </div>
+        </div>
+        <div class="step lav">
+          <div class="n">٢</div>
+          <h3 data-i18n="how.s2t">أكّد بعربون</h3>
+          <p data-i18n="how.s2p">ادفع عربون بسيط لتأكيد الطلب والبدء بالشراء.</p>
+          <div class="art">
+            <div class="illo">
+              <img src="/static/assets/step-2.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>PNG</small></div>
+            </div>
+          </div>
+        </div>
+        <div class="step mint">
+          <div class="n">٣</div>
+          <h3 data-i18n="how.s3t">نشتري ونشحن</h3>
+          <p data-i18n="how.s3p">نطلب المنتج ونشحنه مع رقم تتبّع OTL خاص فيك.</p>
+          <div class="art">
+            <div class="illo">
+              <img src="/static/assets/step-3.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>PNG</small></div>
+            </div>
+          </div>
+        </div>
+        <div class="step sky">
+          <div class="n">٤</div>
+          <h3 data-i18n="how.s4t">استلم وادفع</h3>
+          <p data-i18n="how.s4p">استلم على باب البيت وادفع الباقي بالدولار كاش.</p>
+          <div class="art">
+            <div class="illo">
+              <img src="/static/assets/step-4.png" alt="" loading="lazy" onerror="showPh(this)">
+              <div class="ph" style="display:none"><small>PNG</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ WHY OTLOBLY ══════════ -->
+    <section class="blk reveal">
+      <div class="sec-head">
+        <h2 data-i18n="why.head">ليش اطلبلي؟</h2>
+      </div>
+      <div class="whys">
+        <div class="why b1">
+          <div class="badge">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          </div>
+          <div>
+            <h3 data-i18n="why.1t">تتبّع مباشر OTL</h3>
+            <p data-i18n="why.1p">رقم تتبّع خاص لكل شحنة، وتحديثات لحظية من الطلب حتى بابك.</p>
+          </div>
+        </div>
+        <div class="why b2">
+          <div class="badge">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg>
+          </div>
+          <div>
+            <h3 data-i18n="why.2t">بدون بطاقة ائتمان</h3>
+            <p data-i18n="why.2p">عربون بسيط فقط، والباقي بالدولار كاش عند الاستلام.</p>
+          </div>
+        </div>
+        <div class="why b3">
+          <div class="badge">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
+          <div>
+            <h3 data-i18n="why.3t">حساب شخصي</h3>
+            <p data-i18n="why.3p">كل طلباتك ومدفوعاتك في مكان واحد.</p>
+            <a class="lnk" href="/account" data-i18n="why.3l">افتح حسابك ←</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer>
+    <div class="wrap">
+      <div class="fmark">
+        <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#000"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+        <span class="word">Otlob<em>ly</em></span>
+      </div>
+      <p data-i18n="foot.tag">اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين.</p>
+      <a class="stafflink" href="/login" data-i18n="foot.staff">دخول الموظفين</a>
     </div>
-  </div>
+  </footer>
 
-  <h3 class="sec" data-i18n="howTitle"></h3>
-  <div class="steps">
-    <div class="step"><div class="n">1</div><b data-i18n="s1t"></b><small data-i18n="s1d"></small></div>
-    <div class="step"><div class="n">2</div><b data-i18n="s2t"></b><small data-i18n="s2d"></small></div>
-    <div class="step"><div class="n">3</div><b data-i18n="s3t"></b><small data-i18n="s3d"></small></div>
-    <div class="step"><div class="n">4</div><b data-i18n="s4t"></b><small data-i18n="s4d"></small></div>
-  </div>
+  <script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
+  <script src="/static/app.js"></script>
 
-  <h3 class="sec" data-i18n="whyTitle"></h3>
-  <div class="feats">
-    <div class="feat"><span class="ic">🔎</span><div><b data-i18n="f1t"></b><small data-i18n="f1d"></small></div></div>
-    <div class="feat"><span class="ic">💵</span><div><b data-i18n="f2t"></b><small data-i18n="f2d"></small></div></div>
-    <div class="feat"><span class="ic">👤</span><div><b data-i18n="f3t"></b><small data-i18n="f3d"></small></div></div>
-  </div>
-
-  <h3 class="sec" data-i18n="goTitle"></h3>
-  <div class="tiles">
-    <a class="tile" href="/catalog"><span class="ic">🛍️</span><b data-i18n="tShop"></b><small data-i18n="tShopD"></small></a>
-    <a class="tile" href="/track"><span class="ic">📦</span><b data-i18n="tTrack"></b><small data-i18n="tTrackD"></small></a>
-    <a class="tile" href="/account"><span class="ic">👤</span><b data-i18n="tAcc"></b><small data-i18n="tAccD"></small></a>
-    {% if wa_number %}<a class="tile" id="waTile" href="#" target="_blank" rel="noopener"><span class="ic">💬</span><b data-i18n="tWa"></b><small data-i18n="tWaD"></small></a>{% endif %}
-  </div>
-
-  <div class="foot">
-    <span data-i18n="foot"></span> · <a href="/login" data-i18n="staff"></a>
-  </div>
-</div>
-<script>
-const WA_NUM = "{{ wa_number }}";
-let LANG = "ar";
-const T = {
-  ar: {
-    heroTitle: 'اطلب من أمازون،<br>ونحن نوصلها إلى <em>فلسطين</em>',
-    heroSub: 'اطلبلي تشتري لك أي منتج من أمازون وتشحنه حتى باب بيتك — بدون بطاقة ائتمان: عربون بسيط للتأكيد، وتدفع الباقي عند الاستلام بالدولار.',
-    ctaShop: 'تصفح المنتجات', ctaWa: 'اطلب الآن عبر واتساب', ctaTrack: 'تتبّع طلبك',
-    trustCod: 'الدفع عند الاستلام', trustDoor: 'حتى باب البيت', trustNoCard: 'بدون بطاقة ائتمان',
-    howTitle: 'كيف تعمل الخدمة؟',
-    s1t: 'اختر منتجك', s1d: 'أرسل لنا رابط المنتج من أمازون عبر واتساب.',
-    s2t: 'ادفع العربون', s2d: 'نرسل لك السعر النهائي شامل الشحن، وتؤكد طلبك بعربون بسيط.',
-    s3t: 'نطلب ونشحن', s3d: 'نشتري المنتج ونشحنه إلى فلسطين — وتتابع رحلته برقم تتبّع خاص.',
-    s4t: 'استلم وادفع الباقي', s4d: 'يصلك الطلب حتى باب البيت، وتدفع المتبقي عند الاستلام بالدولار.',
-    whyTitle: 'ليش اطلبلي؟',
-    f1t: 'تتبّع مباشر', f1d: 'رقم تتبّع OTL لكل شحنة — تعرف وين طلبك بأي لحظة.',
-    f2t: 'بدون بطاقة', f2d: 'عربون للتأكيد فقط، والباقي كاش عند الاستلام بالدولار.',
-    f3t: 'حساب شخصي', f3d: 'كل طلباتك ودفعاتك وشحناتك في صفحة واحدة.',
-    goTitle: 'وين بدك تروح؟',
-    tShop: 'المتجر', tShopD: 'منتجات مختارة جاهزة للطلب',
-    tTrack: 'تتبّع شحنتك', tTrackD: 'برقم الجوال أو رقم OTL',
-    tAcc: 'حسابي', tAccD: 'طلباتك ودفعاتك',
-    tWa: 'تواصل معنا', tWaD: 'واتساب مباشر',
-    foot: 'Otlobly · اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين',
-    staff: 'دخول الموظفين',
-    waText: 'مرحباً اطلبلي 👋 بدي أطلب من أمازون'
-  },
-  en: {
-    heroTitle: 'Shop Amazon,<br>delivered to <em>Palestine</em>',
-    heroSub: 'Otlobly buys any Amazon product for you and ships it to your door — no credit card needed: a small deposit confirms your order, and you pay the rest in USD cash on delivery.',
-    ctaShop: 'Browse products', ctaWa: 'Order now on WhatsApp', ctaTrack: 'Track your order',
-    trustCod: 'Cash on delivery', trustDoor: 'To your door', trustNoCard: 'No credit card',
-    howTitle: 'How it works',
-    s1t: 'Pick your product', s1d: 'Send us the Amazon product link on WhatsApp.',
-    s2t: 'Pay a deposit', s2d: 'We quote the final price incl. shipping — confirm with a small deposit.',
-    s3t: 'We order & ship', s3d: 'We buy it and ship to Palestine — follow it live with your OTL tracking number.',
-    s4t: 'Receive & pay the rest', s4d: 'Delivered to your door — pay the remainder in USD on delivery.',
-    whyTitle: 'Why Otlobly?',
-    f1t: 'Live tracking', f1d: 'An OTL tracking number for every shipment — know where your order is anytime.',
-    f2t: 'No card needed', f2d: 'Just a confirmation deposit; the rest is cash on delivery in USD.',
-    f3t: 'Your account', f3d: 'All your orders, payments and shipments in one page.',
-    goTitle: 'Where to?',
-    tShop: 'Shop', tShopD: 'Hand-picked, ready to order',
-    tTrack: 'Track a shipment', tTrackD: 'By phone or OTL number',
-    tAcc: 'My account', tAccD: 'Your orders & payments',
-    tWa: 'Contact us', tWaD: 'Direct WhatsApp',
-    foot: 'Otlobly — we buy from Amazon and deliver to Palestine',
-    staff: 'Staff login',
-    waText: 'Hi Otlobly 👋 I want to order from Amazon'
-  }
-};
-function setLang(l){
-  LANG = l;
-  document.documentElement.lang = l;
-  document.documentElement.dir = l === "ar" ? "rtl" : "ltr";
-  document.getElementById("l_ar").classList.toggle("on", l === "ar");
-  document.getElementById("l_en").classList.toggle("on", l === "en");
-  const d = T[l];
-  document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = d[e.dataset.i18n] || ""; });
-  document.querySelectorAll("[data-i18n-html]").forEach(e => { e.innerHTML = d[e.dataset.i18nHtml] || ""; });
-  if (WA_NUM) {
-    const url = "https://wa.me/" + WA_NUM + "?text=" + encodeURIComponent(d.waText);
-    const b = document.getElementById("waBtn"), t = document.getElementById("waTile");
-    if (b) b.href = url;
-    if (t) t.href = url;
-  }
-}
-setLang("ar");
-</script>
 </body>
 </html>

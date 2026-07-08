@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>باقات اطلبلي · Otlobly Pricing</title>
+  <meta name="description" content="باقات وأسعار خدمة اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين: ادفع مقدماً برسوم ثابتة، أو عربون والباقي عند الاستلام، أو عضوية شهرية برسوم أقل.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/favicon.svg">
+  <meta name="theme-color" content="#111111">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* ─── Reset & Base ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Cairo','IBM Plex Sans Arabic','Poppins',system-ui,sans-serif;
+  background:#f7f5f2;
+  color:#111;
+  min-height:100vh;
+  padding-bottom:80px;
+}
+
+/* ─── Topbar ─── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;
+  background:#fff;
+  border-bottom:1px solid #ede9e4;
+  position:sticky;top:0;z-index:100;
+}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
+.brand .mark{width:36px;height:36px;border-radius:10px;flex-shrink:0}
+.brand .word{font-size:1.25rem;font-weight:800;letter-spacing:-.02em}
+.brand .word em{color:#ff5a1f;font-style:normal}
+.langtog{display:flex;gap:4px;background:#f0ede8;border-radius:99px;padding:3px}
+.langtog button{
+  border:none;background:transparent;cursor:pointer;
+  font-family:inherit;font-size:.82rem;font-weight:700;
+  padding:5px 14px;border-radius:99px;color:#555;transition:all .18s;
+}
+.langtog button.on{background:#fff;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+/* ─── Hero band ─── */
+.pricing-hero{
+  text-align:center;
+  padding:56px 20px 48px;
+  background:linear-gradient(160deg,#fff8f5 0%,#fff 60%);
+}
+.pricing-hero .eyebrow{
+  display:inline-block;
+  background:#fff3ee;color:#ff5a1f;
+  font-size:.82rem;font-weight:700;letter-spacing:.04em;
+  padding:5px 16px;border-radius:99px;
+  margin-bottom:18px;
+}
+.pricing-hero h1{
+  font-size:clamp(2rem,6vw,3.4rem);
+  font-weight:900;line-height:1.1;
+  color:#111;margin-bottom:12px;
+}
+.pricing-hero h1 em{color:#ff5a1f;font-style:normal}
+.pricing-hero .sub{
+  font-size:1.05rem;color:#666;max-width:520px;margin:0 auto;
+}
+
+/* ─── Slider section ─── */
+.slider-wrap{
+  max-width:820px;margin:0 auto 40px;
+  padding:28px 24px 24px;
+  background:#fff;border-radius:20px;
+  box-shadow:0 2px 16px rgba(0,0,0,.06);
+}
+.slider-label{
+  font-size:1.05rem;font-weight:700;color:#333;
+  margin-bottom:16px;text-align:center;
+}
+.slider-label span{color:#ff5a1f;font-size:1.25rem}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:6px;
+  background:linear-gradient(to right,#ff5a1f var(--pct,50%),#ede9e4 var(--pct,50%));
+  border-radius:99px;outline:none;cursor:pointer;
+}
+html[dir=rtl] input[type=range]{
+  background:linear-gradient(to left,#ff5a1f var(--pct,50%),#ede9e4 var(--pct,50%));
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:22px;height:22px;
+  background:#ff5a1f;border:3px solid #fff;
+  border-radius:50%;box-shadow:0 2px 8px rgba(255,90,31,.4);
+  cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:22px;height:22px;background:#ff5a1f;border:3px solid #fff;
+  border-radius:50%;box-shadow:0 2px 8px rgba(255,90,31,.4);cursor:pointer;border:none;
+}
+.slider-ticks{
+  display:flex;justify-content:space-between;
+  font-size:.75rem;color:#aaa;margin-top:8px;padding:0 2px;
+}
+
+/* ─── Plan cards ─── */
+.plans-outer{max-width:1060px;margin:0 auto;padding:0 16px}
+.plans-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+  margin-bottom:14px;
+}
+.plan-card{
+  background:#fff;border-radius:20px;
+  padding:28px 22px 24px;
+  border:2px solid transparent;
+  box-shadow:0 2px 12px rgba(0,0,0,.06);
+  position:relative;
+  display:flex;flex-direction:column;
+  transition:box-shadow .2s,border-color .2s,transform .2s;
+}
+.plan-card:hover{box-shadow:0 6px 28px rgba(0,0,0,.10);transform:translateY(-3px)}
+.plan-card.featured{border-color:#ff5a1f}
+.plan-badge{
+  position:absolute;top:-13px;
+  right:50%;transform:translateX(50%);
+  background:#ff5a1f;color:#fff;
+  font-size:.74rem;font-weight:800;letter-spacing:.03em;
+  padding:4px 14px;border-radius:99px;white-space:nowrap;
+}
+html[dir=ltr] .plan-badge{right:auto;left:50%;transform:translateX(-50%)}
+.plan-name{font-size:1.25rem;font-weight:800;color:#111;margin-bottom:4px}
+.plan-tagline{font-size:.85rem;color:#888;margin-bottom:20px;line-height:1.4}
+.plan-rate{
+  font-size:2.6rem;font-weight:900;color:#111;
+  line-height:1;margin-bottom:4px;
+}
+.plan-rate sup{font-size:1.1rem;vertical-align:super;font-weight:700}
+.plan-rate-sub{font-size:.82rem;color:#888;margin-bottom:8px;line-height:1.4}
+.plan-fee-live{
+  background:#fff8f5;border-radius:12px;
+  padding:10px 14px;margin-bottom:20px;
+  font-size:.92rem;
+}
+.plan-fee-live .fee-label{color:#888;font-size:.8rem;margin-bottom:2px}
+.plan-fee-live .fee-val{font-weight:800;color:#ff5a1f;font-size:1.15rem}
+.plan-features{list-style:none;margin-bottom:24px;flex:1}
+.plan-features li{
+  display:flex;align-items:flex-start;gap:8px;
+  font-size:.88rem;color:#444;padding:5px 0;
+  border-bottom:1px solid #f5f2ef;
+}
+.plan-features li:last-child{border-bottom:none}
+.plan-features li::before{
+  content:"✓";color:#ff5a1f;font-weight:800;font-size:.9rem;
+  flex-shrink:0;margin-top:1px;
+}
+html[dir=ltr] .plan-features li{flex-direction:row}
+.btn-plan{
+  display:block;text-align:center;
+  background:#111;color:#fff;
+  font-family:inherit;font-size:.92rem;font-weight:700;
+  padding:13px 20px;border-radius:12px;
+  text-decoration:none;border:none;cursor:pointer;
+  transition:background .18s,transform .15s;
+}
+.btn-plan:hover{background:#333;transform:translateY(-1px)}
+.btn-plan.orange{background:#ff5a1f}
+.btn-plan.orange:hover{background:#e04e18}
+.plans-note{
+  text-align:center;font-size:.8rem;color:#aaa;
+  margin-bottom:16px;
+}
+.plans-trust{
+  text-align:center;font-size:.8rem;color:#bbb;
+  margin-bottom:40px;padding:0 20px;
+  letter-spacing:.01em;
+}
+.plan-note-muted{
+  font-size:.74rem;color:#bbb;text-align:center;
+  margin-top:-10px;margin-bottom:16px;padding:0 6px;line-height:1.5;
+}
+.plan-features li.feature-parent{
+  font-weight:700;color:#222;
+  border-bottom:1px solid #ede9e4;
+}
+.plan-features li.feature-parent::before{color:#222}
+.plan-features li.feature-exclusive{font-weight:700;color:#ff5a1f}
+.plan-features li.feature-exclusive::before{color:#ff5a1f}
+
+/* ─── Membership band ─── */
+.member-band{
+  max-width:1060px;margin:0 auto 48px;padding:0 16px;
+}
+.member-inner{
+  background:#fff;border-radius:24px;
+  box-shadow:0 2px 16px rgba(0,0,0,.07);
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:0;
+  overflow:hidden;
+}
+.member-left{
+  grid-column:1/2;
+  padding:40px 36px;
+  background:linear-gradient(135deg,#fff8f5,#fff);
+  border-inline-end:1px solid #f0ede8;
+  display:flex;flex-direction:column;justify-content:center;
+}
+.member-left h2{
+  font-size:1.7rem;font-weight:900;line-height:1.2;
+  color:#111;margin-bottom:16px;
+}
+.member-left h2 em{color:#ff5a1f;font-style:normal}
+.member-left p{font-size:.92rem;color:#555;line-height:1.65;margin-bottom:12px}
+.member-left .trial-pill{
+  display:inline-block;
+  background:#fff3ee;color:#ff5a1f;
+  font-size:.85rem;font-weight:800;
+  padding:7px 18px;border-radius:99px;margin-top:4px;
+  border:none;cursor:pointer;font-family:inherit;
+  transition:background .18s;
+}
+.member-left .trial-pill:hover{background:#ffe5d8}
+.member-cards{
+  grid-column:2/4;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+}
+.mem-card{padding:32px 28px;display:flex;flex-direction:column}
+.mem-card+.mem-card{border-inline-start:1px solid #f0ede8}
+.mem-card .mc-name{font-size:1rem;font-weight:800;color:#111;margin-bottom:4px}
+.mem-card .mc-sub{font-size:.8rem;color:#888;margin-bottom:18px}
+.mem-price{margin-bottom:6px}
+.mem-price .amount{font-size:2.1rem;font-weight:900;color:#111;line-height:1}
+.mem-price .period{font-size:.85rem;color:#888}
+.mem-price .original{font-size:.85rem;color:#bbb;text-decoration:line-through;margin-inline-start:6px}
+.billing-toggle{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:18px;margin-top:8px;
+}
+.billing-toggle .tog-wrap{
+  background:#f0ede8;border-radius:99px;padding:3px;display:flex;
+}
+.billing-toggle button{
+  border:none;background:transparent;cursor:pointer;
+  font-family:inherit;font-size:.76rem;font-weight:700;
+  padding:4px 12px;border-radius:99px;color:#666;transition:all .18s;
+}
+.billing-toggle button.on{background:#fff;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.billing-toggle .save-tag{
+  font-size:.74rem;font-weight:700;
+  background:#e8f5e9;color:#2e7d32;
+  padding:3px 8px;border-radius:99px;
+}
+.mem-features{list-style:none;margin-bottom:12px;flex:1}
+.mem-features li{
+  display:flex;align-items:flex-start;gap:7px;
+  font-size:.84rem;color:#444;padding:4px 0;
+}
+.mem-features li::before{
+  content:"✓";color:#ff5a1f;font-weight:800;flex-shrink:0;margin-top:1px;
+}
+.mem-card.enterprise .amount{font-size:1.8rem}
+.mem-card.enterprise .mc-sub{margin-bottom:22px}
+.mem-highlight{
+  background:#fff8f5;color:#ff5a1f;font-weight:700;
+  border-radius:8px;padding:5px 10px;margin:0 0 10px;font-size:.81rem;
+  display:inline-block;
+}
+.mem-features .item-note{font-size:.78rem;color:#bbb}
+.mem-feat-primary{font-size:.88rem;font-weight:700;color:#222}
+.mem-feat-primary::before{font-weight:900}
+.feat-divider{height:1px;background:#f0ede8;padding:0;margin:4px 0}
+.feat-divider::before{display:none}
+.mem-value-anchor{
+  font-size:.77rem;font-weight:700;color:#999;
+  text-align:center;margin-bottom:16px;
+  border-top:1px dashed #ede9e4;padding-top:10px;
+}
+
+/* ─── Comparison table ─── */
+.compare-wrap{max-width:1060px;margin:0 auto 48px;padding:0 16px}
+.compare-toggle{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  background:none;border:none;cursor:pointer;
+  font-family:inherit;font-size:.95rem;font-weight:700;color:#ff5a1f;
+  padding:12px 0;width:100%;
+}
+.compare-toggle svg{transition:transform .25s}
+.compare-toggle.open svg{transform:rotate(180deg)}
+.compare-table-wrap{display:none;margin-top:16px}
+.compare-table-wrap.open{display:block}
+.compare-table{
+  width:100%;border-collapse:collapse;
+  background:#fff;border-radius:16px;overflow:hidden;
+  box-shadow:0 2px 12px rgba(0,0,0,.06);
+  font-size:.88rem;
+}
+.compare-table th{
+  background:#f7f5f2;font-weight:800;
+  padding:14px 18px;text-align:center;
+  border-bottom:2px solid #ede9e4;
+}
+.compare-table th:first-child{text-align:start}
+.compare-table td{
+  padding:12px 18px;text-align:center;
+  border-bottom:1px solid #f0ede8;color:#444;
+}
+.compare-table td:first-child{text-align:start;font-weight:600;color:#111}
+.compare-table tr:last-child td{border-bottom:none}
+.compare-table .chk{color:#ff5a1f;font-size:1rem;font-weight:800}
+.compare-table .dash{color:#ccc}
+.compare-table th.featured-col{background:#fff8f5;color:#ff5a1f}
+.compare-table td.featured-col{background:#fffbf9}
+
+/* ─── Trust chips ─── */
+.trust-row{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:10px;
+  max-width:600px;margin:0 auto 48px;
+  padding:0 16px;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#fff;border:1.5px solid #ede9e4;
+  border-radius:99px;padding:8px 16px;
+  font-size:.84rem;font-weight:600;color:#444;
+}
+.chip .ic{width:16px;height:16px;stroke:#ff5a1f;flex-shrink:0}
+
+/* ─── Footer ─── */
+footer{
+  background:#111;color:#fff;
+  padding:36px 20px;text-align:center;
+}
+footer .fmark{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px}
+footer .mark{width:36px;height:36px;border-radius:10px}
+footer .word{font-size:1.2rem;font-weight:800}
+footer .word em{color:#ff5a1f;font-style:normal}
+footer p{font-size:.84rem;color:#888;margin-bottom:10px}
+footer a{color:#888;font-size:.8rem;text-decoration:none}
+footer a:hover{color:#fff}
+
+/* ─── Floating bottom bar ─── */
+.botbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  display:flex;
+  background:#fff;
+  border-top:1px solid #ede9e4;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.botbar a{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:10px 4px;
+  color:#999;font-size:.68rem;font-weight:600;text-decoration:none;
+  transition:color .15s;
+}
+.botbar a .ic{width:22px;height:22px;stroke:#999;fill:none;stroke-width:2.1;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
+.botbar a.wa .ic{fill:#999;stroke:none}
+.botbar a.on,.botbar a:hover{color:#ff5a1f}
+.botbar a.on .ic,.botbar a:hover .ic{stroke:#ff5a1f}
+.botbar a.wa.on,.botbar a.wa:hover{color:#ff5a1f}
+.botbar a.wa.on .ic,.botbar a.wa:hover .ic{fill:#ff5a1f;stroke:none}
+
+/* ─── Reveal animation ─── */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .5s,transform .5s}
+.reveal.in{opacity:1;transform:none}
+
+/* ─── Responsive ─── */
+@media(max-width:768px){
+  .plans-row{grid-template-columns:1fr}
+  .member-inner{grid-template-columns:1fr}
+  .member-left{grid-column:1;border-inline-end:none;border-bottom:1px solid #f0ede8}
+  .member-cards{grid-column:1;grid-template-columns:1fr}
+  .mem-card+.mem-card{border-inline-start:none;border-top:1px solid #f0ede8}
+  .pricing-hero{padding:36px 16px 32px}
+}
+@media(max-width:520px){
+  .compare-table{font-size:.76rem}
+  .compare-table th,.compare-table td{padding:10px 10px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ TOPBAR ══════════ -->
+<div class="topbar">
+  <a class="brand" href="/">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+    <span class="word">Otlob<em>ly</em></span>
+  </a>
+  <div class="langtog" role="group" aria-label="Language">
+    <button id="lang-ar" class="on" onclick="setLang('ar')">عربي</button>
+    <button id="lang-en" onclick="setLang('en')">EN</button>
+  </div>
+</div>
+
+<!-- ══════════ HERO ══════════ -->
+<section class="pricing-hero">
+  <div class="eyebrow" data-i18n="hero.eyebrow">اطلبلي · التسعيرة</div>
+  <h1><em data-i18n="hero.title.em">باقات اطلبلي</em></h1>
+  <p class="sub" data-i18n="hero.sub">كل ما تدفع أبكر — كل ما توفّر أكثر</p>
+</section>
+
+<!-- ══════════ SLIDER ══════════ -->
+<div class="plans-outer">
+  <div class="slider-wrap reveal">
+    <div class="slider-label" data-i18n="slider.label.pre">قيمة طلبك: <span id="slider-val">$150</span></div>
+    <input type="range" id="order-slider" min="30" max="1000" value="150" step="5" aria-label="قيمة الطلب">
+    <div class="slider-ticks">
+      <span>$30</span>
+      <span>$250</span>
+      <span>$500</span>
+      <span>$750</span>
+      <span>$1000</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PLAN CARDS ══════════ -->
+<div class="plans-outer">
+  <div class="plans-row reveal">
+
+    <!-- Card 1: FREE -->
+    <div class="plan-card" id="card-prepaid">
+      <div class="plan-name" data-i18n="plan1.name">FREE</div>
+      <div class="plan-tagline" data-i18n="plan1.tagline">تدفع كامل المبلغ قبل ما نطلب — وإحنا نتكفل بالباقي</div>
+      <div class="plan-rate">0%<sup></sup></div>
+      <div class="plan-rate-sub" data-i18n="plan1.ratesub">فقط $5 رسوم ثابتة للطلبات حتى $150 · 5% لما فوق</div>
+      <div class="plan-fee-live">
+        <div class="fee-label" data-i18n="fee.label">رسومك لهذا الطلب</div>
+        <div class="fee-val" id="fee-prepaid">$5.00</div>
+      </div>
+      <ul class="plan-features">
+        <li data-i18n="plan1.f1">أرخص طريقة تطلب فيها</li>
+        <li data-i18n="plan1.f2">تسعيرة نهائية شاملة الشحن</li>
+        <li data-i18n="plan1.f3">رقم تتبّع OTL خاص</li>
+        <li data-i18n="plan1.f4">تعويض كامل إذا ضاع أو تضرر الطرد</li>
+        <li data-i18n="plan1.f5">استرداد فوري إذا المنتج غير متوفر</li>
+      </ul>
+      <p class="plan-note-muted" data-i18n="plan1.note">الرسوم الجمركية (إن وجدت) على العميل</p>
+      <a class="btn-plan" id="cta-prepaid" href="#" target="_blank" rel="noopener" data-i18n="plan1.cta">اطلب بالدفع المسبق</a>
+    </div>
+
+    <!-- Card 2: ZERO RISK (featured) -->
+    <div class="plan-card featured" id="card-deposit">
+      <div class="plan-badge" data-i18n="plan2.badge">الأكثر شيوعًا</div>
+      <div class="plan-name" data-i18n="plan2.name">ZERO RISK</div>
+      <div class="plan-tagline" data-i18n="plan2.tagline">ادفع جزء الآن والباقي لما يوصل لبابك</div>
+      <div class="plan-rate"><span id="relax-rate-live">20%</span></div>
+      <div class="plan-rate-sub" id="relax-rate-sub">عمولتك الآن: 20%</div>
+      <div class="plan-fee-live">
+        <div class="fee-label" data-i18n="fee.label">رسومك لهذا الطلب</div>
+        <div class="fee-val" id="fee-deposit">$12.00</div>
+      </div>
+      <ul class="plan-features">
+        <li class="feature-parent" data-i18n="plan2.f0">كل مزايا باقة FREE مشمولة</li>
+        <li class="feature-exclusive" data-i18n="plan2.f1">نغطي أي رسوم جمركية إضافية</li>
+        <li data-i18n="plan2.f2">إلغاء مجاني قبل الشحن</li>
+        <li data-i18n="plan2.f3">رقم تتبّع OTL خاص</li>
+      </ul>
+      <a class="btn-plan orange" id="cta-deposit" href="#" target="_blank" rel="noopener" data-i18n="plan2.cta">ادفع العربون — والباقي عند الاستلام</a>
+    </div>
+
+    <!-- Card 3: VIP -->
+    <div class="plan-card" id="card-cod">
+      <div class="plan-name" data-i18n="plan3.name">VIP</div>
+      <div class="plan-tagline" data-i18n="plan3.tagline">أسعار مخصوصة للطلبات الكبيرة — نتفاهم عليها مع بعض</div>
+      <div class="plan-rate" data-i18n="plan3.rate">أسعار خاصة</div>
+      <div class="plan-rate-sub" data-i18n="plan3.ratesub">للطلبات فوق $1000 أو الكميات الكبيرة</div>
+      <ul class="plan-features">
+        <li class="feature-parent" data-i18n="plan3.f0">كل مزايا ZERO RISK مشمولة</li>
+        <li data-i18n="plan3.f1">مدير حساب خاص يتابع طلبك شخصياً</li>
+        <li data-i18n="plan3.f2">أولوية بالشراء والشحن</li>
+        <li data-i18n="plan3.f3">نشتري ونشحن على حسابنا</li>
+      </ul>
+      <a class="btn-plan orange" id="cta-cod" href="#" target="_blank" rel="noopener" data-i18n="plan3.cta">تواصل معنا</a>
+    </div>
+
+  </div>
+  <p class="plans-note" data-i18n="plans.note">الأسعار عمولة اطلبلي فقط — سعر المنتج والشحن حسب التسعيرة النهائية</p>
+  <p class="plans-trust" data-i18n="plans.trust">تعويض الطرد المفقود مضمون على كل الباقات · رقم تتبّع لكل طلب</p>
+</div>
+
+<!-- ══════════ MEMBERSHIP BAND ══════════ -->
+<div class="member-band reveal">
+  <div class="member-inner">
+    <div class="member-left">
+      <h2 data-i18n="mem.hl"><em>بتطلب 3 مرات</em> أو أكثر بالشهر؟</h2>
+      <p data-i18n="mem.body">عضوية اطلبلي بتنزّل رسومك لـ 5% ثابتة على كل طلب — حتى لو دفعت عند الاستلام</p>
+      <button class="trial-pill" id="trial-btn" onclick="scrollToMembership()">أول شهر بـ $1 — جرّبها</button>
+    </div>
+    <div class="member-cards">
+
+      <!-- Membership card -->
+      <div class="mem-card" id="card-member">
+        <div class="mc-name" data-i18n="mem.card1.name">عضوية اطلبلي</div>
+        <div class="mc-sub" data-i18n="mem.card1.sub">للأفراد الذين يطلبون بانتظام</div>
+
+        <div class="billing-toggle">
+          <div class="tog-wrap">
+            <button id="tog-monthly" class="on" onclick="setMemberBilling('monthly')" data-i18n="tog.monthly">شهري</button>
+            <button id="tog-annual" onclick="setMemberBilling('annual')" data-i18n="tog.annual">سنوي</button>
+          </div>
+          <span class="save-tag" id="save-tag" data-i18n="tog.save">وفّر 20%</span>
+        </div>
+
+        <div class="mem-price">
+          <span class="amount" id="mem-price-val">$7.99</span>
+          <span class="period" data-i18n="mem.period">/شهر</span>
+          <span class="original" id="mem-original" style="display:none">$7.99</span>
+        </div>
+        <div style="font-size:.78rem;color:#aaa;margin-bottom:16px" id="mem-billing-note" data-i18n="mem.billing.monthly">يُفوتر شهريًا</div>
+
+        <p class="mem-highlight" data-i18n="mem.f1.hl">تسدّد نفسها من أول طلب</p>
+        <ul class="mem-features">
+          <li class="mem-feat-primary"><span><span data-i18n="mem.f1">رسوم ثابتة 5% على كل طلب</span><span class="item-note" data-i18n="mem.f1.note"> · حد أدنى $5</span></span></li>
+          <li class="mem-feat-primary"><span><span data-i18n="mem.f4">طلب واحد بدون رسوم كل شهر</span><span class="item-note" data-i18n="mem.f4.note"> · حتى $100</span></span></li>
+          <li class="mem-feat-primary" data-i18n="mem.f3">تغطية الرسوم الجمركية مشمولة في كل طلب</li>
+          <li class="feat-divider"></li>
+          <li data-i18n="mem.f2">أولوية قصوى بالشراء والشحن</li>
+          <li data-i18n="mem.f5">دعم واتساب بأولوية لأعضاء العضوية</li>
+        </ul>
+        <p class="mem-value-anchor" id="mem-value-anchor">توفير $30+ شهريًا بالعادة — مقابل $7.99 فقط</p>
+        <a class="btn-plan orange" id="cta-member" href="#" target="_blank" rel="noopener">ابدأ بـ $1</a>
+      </div>
+
+      <!-- Enterprise/Business card -->
+      <div class="mem-card enterprise">
+        <div class="mc-name" data-i18n="mem.card2.name">حسابات الأعمال والوسطاء</div>
+        <div class="mc-sub" data-i18n="mem.card2.sub">للشركات وبائعي الجملة والوسطاء</div>
+        <div class="mem-price" style="margin-bottom:20px">
+          <span class="amount" data-i18n="mem.card2.price">Custom</span>
+        </div>
+        <ul class="mem-features">
+          <li data-i18n="mem.ent.f1">أسعار خاصة للكميات</li>
+          <li data-i18n="mem.ent.f2">مدير حساب مخصص</li>
+          <li data-i18n="mem.ent.f3">تقارير شهرية</li>
+        </ul>
+        <a class="btn-plan orange" id="cta-biz" href="#" target="_blank" rel="noopener" data-i18n="mem.ent.cta">تواصل معنا</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ COMPARISON TABLE ══════════ -->
+<div class="compare-wrap reveal">
+  <button class="compare-toggle" id="compare-btn" onclick="toggleCompare()" aria-expanded="false">
+    <span data-i18n="cmp.toggle">مقارنة كاملة</span>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+  </button>
+  <div class="compare-table-wrap" id="compare-body">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th data-i18n="cmp.feature">الميزة</th>
+          <th data-i18n="cmp.col1">مسبق الدفع</th>
+          <th class="featured-col" data-i18n="cmp.col2">عربون</th>
+          <th data-i18n="cmp.col3">عند الاستلام</th>
+          <th data-i18n="cmp.col4">العضوية</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-i18n="cmp.row1">العمولة</td>
+          <td data-i18n="cmp.r1c1">$5 ثابت / 5%</td>
+          <td class="featured-col" data-i18n="cmp.r1c2">8%</td>
+          <td data-i18n="cmp.r1c3">10%</td>
+          <td data-i18n="cmp.r1c4">كمسبق الدفع</td>
+        </tr>
+        <tr>
+          <td data-i18n="cmp.row2">الحد الأدنى</td>
+          <td data-i18n="cmp.r2c1">$5</td>
+          <td class="featured-col" data-i18n="cmp.r2c2">$8</td>
+          <td data-i18n="cmp.r2c3">$10</td>
+          <td data-i18n="cmp.r2c4">$5</td>
+        </tr>
+        <tr>
+          <td data-i18n="cmp.row3">الدفع المقدم</td>
+          <td data-i18n="cmp.r3c1">كامل المبلغ</td>
+          <td class="featured-col" data-i18n="cmp.r3c2">عربون جزئي</td>
+          <td data-i18n="cmp.r3c3">صفر</td>
+          <td data-i18n="cmp.r3c4">حسب الطريقة</td>
+        </tr>
+        <tr>
+          <td data-i18n="cmp.row4">أولوية الشراء</td>
+          <td><span class="chk">✓</span></td>
+          <td class="featured-col"><span class="chk">✓</span></td>
+          <td><span class="dash">—</span></td>
+          <td><span class="chk">✓✓</span></td>
+        </tr>
+        <tr>
+          <td data-i18n="cmp.row5">هدية ترحيبية</td>
+          <td><span class="dash">—</span></td>
+          <td class="featured-col"><span class="dash">—</span></td>
+          <td><span class="dash">—</span></td>
+          <td><span class="chk">✓</span></td>
+        </tr>
+        <tr>
+          <td data-i18n="cmp.row6">أفضل لـ</td>
+          <td data-i18n="cmp.r6c1">من يريد أقل رسوم</td>
+          <td class="featured-col" data-i18n="cmp.r6c2">معظم الطلبات</td>
+          <td data-i18n="cmp.r6c3">أول طلب بدون مخاطرة</td>
+          <td data-i18n="cmp.r6c4">من يطلب 3+ بالشهر</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ TRUST CHIPS ══════════ -->
+<div class="trust-row reveal">
+  <span class="chip">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg>
+    <span data-i18n="trust.cod">الدفع عند الاستلام</span>
+  </span>
+  <span class="chip">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"></path></svg>
+    <span data-i18n="trust.door">حتى باب البيت</span>
+  </span>
+  <span class="chip">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+    <span data-i18n="trust.nocard">بدون بطاقة ائتمان</span>
+  </span>
+</div>
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer>
+  <div class="fmark">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#000"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+    <span class="word">Otlob<em>ly</em></span>
+  </div>
+  <p data-i18n="foot.tag">اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين.</p>
+  <a href="/login" data-i18n="foot.staff">دخول الموظفين</a>
+</footer>
+
+<!-- ══════════ FLOATING BOTTOM BAR ══════════ -->
+<nav class="botbar" aria-label="Quick actions">
+  <a href="/catalog">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path><path d="M3 6h18"></path><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+    <span class="lbl" data-i18n="nav.shop">تسوّق</span>
+  </a>
+  <a href="/track">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+    <span class="lbl" data-i18n="nav.track">تتبّع</span>
+  </a>
+  <a href="#" id="wa-nav" class="wa on" target="_blank" rel="noopener">
+    <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.07c-.25.7-1.44 1.32-1.98 1.36-.53.05-.53.42-3.34-.7-2.81-1.12-4.55-4-4.68-4.18-.14-.18-1.12-1.49-1.12-2.84 0-1.35.71-2.01.96-2.29.25-.28.54-.35.72-.35.18 0 .36.002.52.01.17.007.39-.06.61.47.25.6.83 2.06.9 2.2.07.14.12.32.02.5-.09.18-.14.29-.28.45-.14.16-.29.35-.42.47-.14.14-.28.29-.12.57.16.28.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.22 1.37.28.14.44.12.6-.07.18-.21.7-.81.88-1.09.18-.28.36-.23.61-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.32.07.11.07.64-.18 1.34Z"></path></svg>
+    <span class="lbl" data-i18n="nav.wa">واتساب</span>
+  </a>
+</nav>
+
+<script>
+/* ══════════════════════════════════════════
+   PRICES — edit ONLY here to retune numbers
+══════════════════════════════════════════ */
+const PRICES = {
+  prepaidFlat: 5,          /* FREE tier — always this, no math    */
+  relaxStartPct: 20,       /* rate at $50 (slider min)            */
+  relaxMidPct:   10,       /* rate at $500                        */
+  relaxEndPct:    8,       /* rate at $1000+ (slider max)         */
+  relaxMin: 8,
+  memberMonthly: 10,
+  memberAnnualDiscountPct: 20,
+  memberTrialFirstMonth: 1,
+  vipContact: true
+};
+
+/* ─── Config ─── */
+const WA_NUMBER = "{{ wa_number }}";   /* injected by Flask — the real business number */
+
+/* ─── Fee calculators ─── */
+function calcPrepaid() {
+  return PRICES.prepaidFlat; /* always $5 — never changes */
+}
+function relaxRate(orderVal) {
+  /* two-segment linear interpolation:
+     $50–$500  : 20% → 10%
+     $500–$1000: 10% →  8%
+     $1000+    : 8% flat */
+  if (orderVal >= 1000) return PRICES.relaxEndPct;
+  if (orderVal >= 500) {
+    return PRICES.relaxMidPct - ((orderVal - 500) / 500) * (PRICES.relaxMidPct - PRICES.relaxEndPct);
+  }
+  const t = Math.max(0, (orderVal - 50) / 450);
+  return PRICES.relaxStartPct - t * (PRICES.relaxStartPct - PRICES.relaxMidPct);
+}
+function calcRelax(orderVal) {
+  return Math.max(PRICES.relaxMin, orderVal * (relaxRate(orderVal) / 100));
+}
+
+/* ─── i18n ─── */
+const I18N = {
+  ar: {
+    "hero.eyebrow":           "اطلبلي · التسعيرة",
+    "hero.title.em":          "باقات اطلبلي",
+    "hero.sub":               "كل ما تدفع أبكر — كل ما توفّر أكثر",
+    "slider.label.pre":       "قيمة طلبك: ",
+    "fee.label":              "رسومك لهذا الطلب",
+    "plan1.name":             "FREE",
+    "plan1.tagline":          "تدفع كامل المبلغ قبل ما نطلب — وإحنا نتكفل بالباقي",
+    "plan1.ratesub":          "رسوم ثابتة $5 على أي طلب — مهما كانت القيمة",
+    "plan1.f1":               "أرخص طريقة تطلب فيها",
+    "plan1.f2":               "تسعيرة نهائية شاملة الشحن",
+    "plan1.f3":               "رقم تتبّع OTL خاص",
+    "plan1.f4":               "تعويض كامل إذا ضاع أو تضرر الطرد",
+    "plan1.f5":               "استرداد فوري إذا المنتج غير متوفر",
+    "plan1.note":             "الرسوم الجمركية (إن وجدت) على العميل",
+    "plan1.cta":              "اطلب بالدفع المسبق",
+    "plan2.badge":            "الأكثر شيوعًا",
+    "plan2.name":             "ZERO RISK",
+    "plan2.tagline":          "ادفع جزء الآن والباقي لما يوصل لبابك",
+    "plan2.ratesub.ar":       "عمولتك الآن: ",
+    "plan2.f0":               "كل مزايا باقة FREE مشمولة",
+    "plan2.f1":               "نغطي أي رسوم جمركية إضافية",
+    "plan2.f2":               "إلغاء مجاني قبل الشحن",
+    "plan2.f3":               "رقم تتبّع OTL خاص",
+    "plan2.cta":              "ادفع العربون — والباقي عند الاستلام",
+    "plan3.name":             "VIP",
+    "plan3.rate":             "أسعار خاصة",
+    "plan3.tagline":          "أسعار مخصوصة للطلبات الكبيرة — نتفاهم عليها مع بعض",
+    "plan3.ratesub":          "للطلبات فوق $1000 أو الكميات الكبيرة",
+    "plan3.f0":               "كل مزايا ZERO RISK مشمولة",
+    "plan3.f1":               "مدير حساب خاص يتابع طلبك شخصياً",
+    "plan3.f2":               "أولوية بالشراء والشحن",
+    "plan3.f3":               "نشتري ونشحن على حسابنا",
+    "plan3.cta":              "تواصل معنا",
+    "plans.note":             "الأسعار عمولة اطلبلي فقط — سعر المنتج والشحن حسب التسعيرة النهائية",
+    "plans.trust":            "تعويض الطرد المفقود مضمون على كل الباقات · رقم تتبّع لكل طلب",
+    "mem.hl":                 "بتطلب 3 مرات أو أكثر بالشهر؟",
+    "mem.body":               "عضوية اطلبلي بتنزّل رسومك لـ 5% ثابتة على كل طلب — حتى لو دفعت عند الاستلام",
+    "mem.trial":              "أول شهر بـ $1 — جرّبها",
+    "mem.card1.name":         "عضوية اطلبلي",
+    "mem.card1.sub":          "للأفراد الذين يطلبون بانتظام",
+    "tog.monthly":            "شهري",
+    "tog.annual":             "سنوي",
+    "tog.save":               "وفّر 20%",
+    "mem.period":             "/شهر",
+    "mem.billing.monthly":    "يُفوتر شهريًا",
+    "mem.billing.annual":     "يُفوتر سنويًا",
+    "mem.f1":                 "رسوم ثابتة 5% على كل طلب",
+    "mem.f1.note":            " · حد أدنى $5",
+    "mem.f1.hl":              "تسدّد نفسها من أول طلب",
+    "mem.f2":                 "أولوية قصوى بالشراء والشحن",
+    "mem.f3":                 "تغطية الرسوم الجمركية مشمولة في كل طلب",
+    "mem.f4":                 "طلب واحد بدون رسوم كل شهر",
+    "mem.f4.note":            " · حتى $100",
+    "mem.f5":                 "دعم واتساب بأولوية لأعضاء العضوية",
+    "mem.f6":                 "نجمّع طلباتك في شحنة واحدة لتوفير رسوم الشحن",
+    "mem.f7":                 "وصول مبكر لصفقات الشراء الجماعي",
+    "mem.value.monthly":      "توفير $30+ شهريًا بالعادة — مقابل $10 فقط",
+    "mem.value.annual":       "توفير $30+ شهريًا بالعادة — مقابل $8 فقط",
+    "mem.cta.monthly":        "ابدأ بـ $1",
+    "mem.cta.annual":         "اشترك سنويًا — وفّر 20%",
+    "mem.panel.cta.monthly":  "أول شهر بـ $1 — جرّبها",
+    "mem.panel.cta.annual":   "وفّر 20% سنويًا",
+    "mem.card2.name":         "حسابات الأعمال والوسطاء",
+    "mem.card2.sub":          "للشركات وبائعي الجملة والوسطاء",
+    "mem.card2.price":        "Custom",
+    "mem.ent.f1":             "أسعار خاصة للكميات",
+    "mem.ent.f2":             "مدير حساب مخصص",
+    "mem.ent.f3":             "تقارير شهرية",
+    "mem.ent.cta":            "تواصل معنا",
+    "cmp.toggle":             "مقارنة كاملة",
+    "cmp.feature":            "الميزة",
+    "cmp.col1":               "FREE",
+    "cmp.col2":               "RELAX",
+    "cmp.col3":               "VIP",
+    "cmp.col4":               "العضوية",
+    "cmp.row1":               "العمولة",
+    "cmp.r1c1":               "$5 ثابت / 5%",
+    "cmp.r1c2":               "20% أو 10%",
+    "cmp.r1c3":               "أسعار خاصة",
+    "cmp.r1c4":               "كمسبق الدفع",
+    "cmp.row2":               "الحد الأدنى",
+    "cmp.r2c1":               "$5",
+    "cmp.r2c2":               "$8",
+    "cmp.r2c3":               "—",
+    "cmp.r2c4":               "$5",
+    "cmp.row3":               "الدفع المقدم",
+    "cmp.r3c1":               "كامل المبلغ",
+    "cmp.r3c2":               "عربون جزئي",
+    "cmp.r3c3":               "صفر",
+    "cmp.r3c4":               "حسب الطريقة",
+    "cmp.row4":               "أولوية الشراء",
+    "cmp.row5":               "هدية ترحيبية",
+    "cmp.row6":               "أفضل لـ",
+    "cmp.r6c1":               "من يريد أقل رسوم",
+    "cmp.r6c2":               "معظم الطلبات",
+    "cmp.r6c3":               "أول طلب بدون مخاطرة",
+    "cmp.r6c4":               "من يطلب 3+ بالشهر",
+    "trust.cod":              "الدفع عند الاستلام",
+    "trust.door":             "حتى باب البيت",
+    "trust.nocard":           "بدون بطاقة ائتمان",
+    "foot.tag":               "اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين.",
+    "foot.staff":             "دخول الموظفين",
+    "nav.shop":               "تسوّق",
+    "nav.track":              "تتبّع",
+    "nav.wa":                 "واتساب",
+    "wa.prepaid":             "مرحباً اطلبلي 👋 بدي أطلب منتج بالدفع المسبق. الرابط:",
+    "wa.deposit":             "مرحباً اطلبلي 👋 بدي أطلب منتج — باقة RELAX. الرابط:",
+    "wa.cod":                 "مرحباً اطلبلي 👋 بدي أعرف أكثر عن باقة VIP للطلبات الكبيرة.",
+    "wa.member":              "مرحباً اطلبلي 👋 بدي أشترك بعضوية اطلبلي بـ $1 للشهر الأول.",
+    "wa.biz":                 "مرحباً اطلبلي 👋 عندي حساب أعمال، بدي أتكلم معكم.",
+    "wa.nav":                 "مرحباً اطلبلي 👋"
+  },
+  en: {
+    "hero.eyebrow":           "Otlobly · Pricing",
+    "hero.title.em":          "Otlobly Pricing",
+    "hero.sub":               "The earlier you pay, the more you save.",
+    "slider.label.pre":       "Your order value: ",
+    "fee.label":              "Your fee for this order",
+    "plan1.name":             "FREE",
+    "plan1.tagline":          "Pay the full amount before we order — we handle the rest",
+    "plan1.ratesub":          "Flat $5 fee on any order — regardless of order value",
+    "plan1.f1":               "Cheapest way to order",
+    "plan1.f2":               "Final price includes shipping",
+    "plan1.f3":               "Dedicated OTL tracking number",
+    "plan1.f4":               "Full refund if the package is lost or damaged",
+    "plan1.f5":               "Instant refund if the item is out of stock",
+    "plan1.note":             "Customs fees (if any) are the customer's responsibility",
+    "plan1.cta":              "Order — Pay Upfront",
+    "plan2.badge":            "Most Popular",
+    "plan2.name":             "ZERO RISK",
+    "plan2.tagline":          "Pay part now, the rest when it arrives at your door",
+    "plan2.ratesub.en":       "Your rate now: ",
+    "plan2.f0":               "All FREE plan benefits included",
+    "plan2.f1":               "We cover any additional customs fees",
+    "plan2.f2":               "Free cancellation before shipping",
+    "plan2.f3":               "Dedicated OTL tracking number",
+    "plan2.cta":              "Pay Deposit — rest on delivery",
+    "plan3.name":             "VIP",
+    "plan3.rate":             "Custom pricing",
+    "plan3.tagline":          "Custom rates for large orders — we work it out together",
+    "plan3.ratesub":          "For orders above $1000 or bulk quantities",
+    "plan3.f0":               "All ZERO RISK benefits included",
+    "plan3.f1":               "Dedicated account manager follows your order personally",
+    "plan3.f2":               "Priority purchasing and shipping",
+    "plan3.f3":               "We buy and ship at our expense",
+    "plan3.cta":              "Contact us",
+    "plans.note":             "Fees are Otlobly commission only — product price and shipping per final quote",
+    "plans.trust":            "Lost package compensation guaranteed on all plans · tracking number for every order",
+    "mem.hl":                 "Ordering 3+ times a month?",
+    "mem.body":               "Otlobly Membership drops your fee to a flat 5% on every order — even when you pay on delivery",
+    "mem.trial":              "First month for $1 — try it",
+    "mem.card1.name":         "Otlobly Membership",
+    "mem.card1.sub":          "For individuals who order regularly",
+    "tog.monthly":            "Monthly",
+    "tog.annual":             "Annual",
+    "tog.save":               "Save 20%",
+    "mem.period":             "/mo",
+    "mem.billing.monthly":    "Billed monthly",
+    "mem.billing.annual":     "Billed annually",
+    "mem.f1":                 "Flat 5% fee on every order",
+    "mem.f1.note":            " · Min $5",
+    "mem.f1.hl":              "Pays for itself in one order",
+    "mem.f2":                 "Top priority for purchasing and shipping",
+    "mem.f3":                 "Customs coverage included on every order",
+    "mem.f4":                 "One fee-free order every month",
+    "mem.f4.note":            " · Up to $100",
+    "mem.f5":                 "Priority WhatsApp support for members",
+    "mem.f6":                 "We consolidate your orders into one shipment to save on shipping",
+    "mem.f7":                 "Early access to group-buy deals",
+    "mem.value.monthly":      "$30+/month in typical savings — for $10",
+    "mem.value.annual":       "$30+/month in typical savings — for $8",
+    "mem.cta.monthly":        "Start for $1",
+    "mem.cta.annual":         "Subscribe yearly — save 20%",
+    "mem.panel.cta.monthly":  "First month for $1",
+    "mem.panel.cta.annual":   "Save 20% yearly",
+    "mem.card2.name":         "Business & Resellers",
+    "mem.card2.sub":          "For companies, bulk buyers and resellers",
+    "mem.card2.price":        "Custom",
+    "mem.ent.f1":             "Volume pricing",
+    "mem.ent.f2":             "Dedicated account manager",
+    "mem.ent.f3":             "Monthly reports",
+    "mem.ent.cta":            "Contact us",
+    "cmp.toggle":             "Full comparison",
+    "cmp.feature":            "Feature",
+    "cmp.col1":               "FREE",
+    "cmp.col2":               "RELAX",
+    "cmp.col3":               "VIP",
+    "cmp.col4":               "Membership",
+    "cmp.row1":               "Commission",
+    "cmp.r1c1":               "$5 flat / 5%",
+    "cmp.r1c2":               "20% or 10%",
+    "cmp.r1c3":               "Custom pricing",
+    "cmp.r1c4":               "Like Pay Upfront",
+    "cmp.row2":               "Minimum",
+    "cmp.r2c1":               "$5",
+    "cmp.r2c2":               "$8",
+    "cmp.r2c3":               "—",
+    "cmp.r2c4":               "$5",
+    "cmp.row3":               "Upfront payment",
+    "cmp.r3c1":               "Full amount",
+    "cmp.r3c2":               "Partial deposit",
+    "cmp.r3c3":               "Zero",
+    "cmp.r3c4":               "Per method",
+    "cmp.row4":               "Purchase priority",
+    "cmp.row5":               "Welcome gift",
+    "cmp.row6":               "Best for",
+    "cmp.r6c1":               "Lowest fees",
+    "cmp.r6c2":               "Most orders",
+    "cmp.r6c3":               "First order, zero risk",
+    "cmp.r6c4":               "3+ orders/month",
+    "trust.cod":              "Cash on delivery",
+    "trust.door":             "To your door",
+    "trust.nocard":           "No credit card",
+    "foot.tag":               "Otlobly — we buy from Amazon and deliver it to Palestine.",
+    "foot.staff":             "Staff login",
+    "nav.shop":               "Shop",
+    "nav.track":              "Track",
+    "nav.wa":                 "WhatsApp",
+    "wa.prepaid":             "Hi Otlobly 👋 I'd like to place an order — Pay Upfront. Link:",
+    "wa.deposit":             "Hi Otlobly 👋 I'd like to place an order — RELAX plan. Link:",
+    "wa.cod":                 "Hi Otlobly 👋 I'd like to learn more about the VIP plan for large orders.",
+    "wa.member":              "Hi Otlobly 👋 I'd like to join the Otlobly Membership for $1 first month.",
+    "wa.biz":                 "Hi Otlobly 👋 I have a business account and would like to talk.",
+    "wa.nav":                 "Hi Otlobly 👋"
+  }
+};
+
+let currentLang = "ar";
+let currentBilling = "monthly";
+
+/* ─── i18n engine ─── */
+function setLang(lang) {
+  currentLang = lang;
+  const dict = I18N[lang];
+  document.documentElement.lang = lang;
+  document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
+  document.querySelectorAll("[data-i18n]").forEach(function(el) {
+    const k = el.getAttribute("data-i18n");
+    if (dict[k] != null) el.textContent = dict[k];
+  });
+  document.getElementById("lang-ar").classList.toggle("on", lang === "ar");
+  document.getElementById("lang-en").classList.toggle("on", lang === "en");
+
+  /* re-render slider label (has dynamic value) */
+  updateSlider();
+  /* re-render wa links */
+  buildWaLinks();
+  /* re-render membership billing note */
+  updateMemberBilling();
+}
+
+/* ─── Slider ─── */
+const slider = document.getElementById("order-slider");
+const sliderVal = document.getElementById("slider-val");
+
+function updateSlider() {
+  const v = parseInt(slider.value, 10);
+  sliderVal.textContent = "$" + v;
+
+  /* update track fill */
+  const min = parseInt(slider.min, 10);
+  const max = parseInt(slider.max, 10);
+  const pct = ((v - min) / (max - min)) * 100;
+  slider.style.setProperty("--pct", pct + "%");
+
+  /* update fee displays */
+  document.getElementById("fee-prepaid").textContent = "$" + calcPrepaid().toFixed(2);
+  document.getElementById("fee-deposit").textContent = "$" + calcRelax(v).toFixed(2);
+
+  /* update ZERO RISK live rate on the card (big number + sub-label) */
+  const rPct = relaxRate(v);
+  const rStr = Math.round(rPct * 10) / 10 + "%";
+  document.getElementById("relax-rate-live").textContent = rStr;
+  const prefix = currentLang === "ar" ? "عمولتك الآن: " : "Your rate now: ";
+  document.getElementById("relax-rate-sub").textContent = prefix + rStr;
+}
+
+slider.addEventListener("input", updateSlider);
+
+/* ─── WhatsApp links ─── */
+function buildWaLinks() {
+  const d = I18N[currentLang];
+  function wa(msg) {
+    if (!WA_NUMBER) return "#";   /* not configured (local dev) → no-op links */
+    return "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(msg);
+  }
+  document.getElementById("cta-prepaid").href  = wa(d["wa.prepaid"]);
+  document.getElementById("cta-deposit").href   = wa(d["wa.deposit"]);
+  document.getElementById("cta-cod").href       = wa(d["wa.cod"]);
+  document.getElementById("cta-member").href    = wa(d["wa.member"]);
+  document.getElementById("cta-biz").href       = wa(d["wa.biz"]);
+  document.getElementById("wa-nav").href        = wa(d["wa.nav"]);
+}
+
+/* ─── Membership billing toggle ─── */
+function scrollToMembership() {
+  setMemberBilling("monthly");
+  document.getElementById("card-member").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function setMemberBilling(mode) {
+  currentBilling = mode;
+  document.getElementById("tog-monthly").classList.toggle("on", mode === "monthly");
+  document.getElementById("tog-annual").classList.toggle("on", mode === "annual");
+  updateMemberBilling();
+}
+
+function updateMemberBilling() {
+  const d = I18N[currentLang];
+  const monthly = PRICES.memberMonthly;
+  const annualMonthly = +(monthly * (1 - PRICES.memberAnnualDiscountPct / 100)).toFixed(2);
+  const priceEl    = document.getElementById("mem-price-val");
+  const origEl     = document.getElementById("mem-original");
+  const noteEl     = document.getElementById("mem-billing-note");
+  const saveTag    = document.getElementById("save-tag");
+  const anchorEl   = document.getElementById("mem-value-anchor");
+  const ctaEl      = document.getElementById("cta-member");
+  const trialBtn   = document.getElementById("trial-btn");
+
+  if (currentBilling === "annual") {
+    priceEl.textContent = "$" + annualMonthly;
+    origEl.textContent  = "$" + monthly.toFixed(2);
+    origEl.style.display = "inline";
+    noteEl.textContent  = d["mem.billing.annual"];
+    saveTag.style.display = "";
+    if (anchorEl)  anchorEl.textContent  = d["mem.value.annual"];
+    if (ctaEl)     ctaEl.textContent     = d["mem.cta.annual"];
+    if (trialBtn)  trialBtn.textContent  = d["mem.panel.cta.annual"];
+  } else {
+    priceEl.textContent = "$" + monthly.toFixed(2);
+    origEl.style.display = "none";
+    noteEl.textContent  = d["mem.billing.monthly"];
+    saveTag.style.display = "";
+    if (anchorEl)  anchorEl.textContent  = d["mem.value.monthly"];
+    if (ctaEl)     ctaEl.textContent     = d["mem.cta.monthly"];
+    if (trialBtn)  trialBtn.textContent  = d["mem.panel.cta.monthly"];
+  }
+}
+
+/* ─── Comparison table toggle ─── */
+function toggleCompare() {
+  const btn  = document.getElementById("compare-btn");
+  const body = document.getElementById("compare-body");
+  const open = body.classList.toggle("open");
+  btn.classList.toggle("open", open);
+  btn.setAttribute("aria-expanded", open);
+}
+
+/* ─── Scroll reveal ─── */
+const revealObserver = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("in");
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.08 });
+document.querySelectorAll(".reveal").forEach(function(el) { revealObserver.observe(el); });
+window.addEventListener("load", function() {
+  setTimeout(function() {
+    document.querySelectorAll(".reveal:not(.in)").forEach(function(el) { el.classList.add("in"); });
+  }, 900);
+});
+
+/* ─── Init ─── */
+updateSlider();
+buildWaLinks();
+updateMemberBilling();
+</script>
+
+</body>
+</html>
