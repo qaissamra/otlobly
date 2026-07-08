@@ -330,6 +330,9 @@ footer .stafflink:hover{border-color:#4d473c;color:#c7c0b4}
   .sitenav-links{display:none}
   .sitenav-wa{display:none}
   .sitenav-burger{display:flex}
+  /* push the menu button to the far side (opposite the logo) instead of
+     letting it bunch next to the lang toggle */
+  .sitenav-burger{margin-inline-start:auto}
 }
 
 /* ══ Desktop ══ */

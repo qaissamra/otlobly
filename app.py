@@ -2659,4 +2659,8 @@ except Exception as _e:                      # noqa: BLE001
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 8789)), debug=False)
+    # threaded=True: the dev server must handle concurrent requests, or a single
+    # slow external call (GAASH tracking, SerpAPI) blocks every other request —
+    # pages/assets/preview appear to freeze. Prod uses gunicorn (unaffected).
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 8789)),
+            debug=False, threaded=True)
