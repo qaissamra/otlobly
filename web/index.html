@@ -750,6 +750,15 @@
         <span id="waTestOut" style="font-size:12.5px"></span>
       </div>
     </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">✉️ Customer login (Email)</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">Customers with a linked email can sign in with a code + magic link sent by email (Resend). Status: <b id="emStatus">…</b>. Send yourself a test email to verify the Resend setup before customers rely on it.</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <input id="emTestAddr" style="width:210px" placeholder="you@example.com">
+        <button class="po-btn accent" onclick="emailTest(this)">Send test email</button>
+        <span id="emTestOut" style="font-size:12.5px"></span>
+      </div>
+    </div>
   </div>
 
   <!-- Trash / Recycle bin -->
@@ -2346,6 +2355,7 @@ async function loadSettings(){
   if($("s_f_screenshot")) $("s_f_screenshot").checked=!!cf.screenshot;
   if($("s_f_second_currency")) $("s_f_second_currency").checked=!!cf.second_currency;
   waLoadStatus();
+  emailLoadStatus();
 }
 async function waLoadStatus(){
   const el=$("waStatus"); if(!el) return;
@@ -2361,6 +2371,22 @@ async function waTest(btn){
   let d; try{ d=await post("/api/admin/whatsapp_test",{phone}); }catch(e){ d={error:"network error"}; }
   btn.disabled=false; btn.textContent=old;
   if(d&&d.ok){ out.style.color="var(--good)"; out.textContent="✅ Sent to "+d.sent_to+" — check WhatsApp."; }
+  else { out.style.color="var(--warn)"; out.textContent="⚠ "+((d&&d.error)||"failed"); }
+}
+async function emailLoadStatus(){
+  const el=$("emStatus"); if(!el) return;
+  try{ const d=await (await fetch("/api/admin/email_test")).json();
+    el.textContent = d.configured ? "✅ Email connected (Resend)" : "⚠ not set up yet — codes show on screen (dev)";
+    el.style.color = d.configured ? "var(--good)" : "var(--warn)";
+  }catch(e){ el.textContent="?"; }
+}
+async function emailTest(btn){
+  const email=($("emTestAddr").value||"").trim(), out=$("emTestOut");
+  if(!email){ out.style.color="var(--warn)"; out.textContent="Enter your email first"; return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent="Sending…"; out.textContent="";
+  let d; try{ d=await post("/api/admin/email_test",{email}); }catch(e){ d={error:"network error"}; }
+  btn.disabled=false; btn.textContent=old;
+  if(d&&d.ok){ out.style.color="var(--good)"; out.textContent="✅ Sent to "+d.sent_to+" — check your inbox."; }
   else { out.style.color="var(--warn)"; out.textContent="⚠ "+((d&&d.error)||"failed"); }
 }
 function lblBucketSel(v){ return ['transit','arrived','customs','cleared','delivered'].map(b=>`<option ${b===v?'selected':''}>${b}</option>`).join(""); }

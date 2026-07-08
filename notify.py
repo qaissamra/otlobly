@@ -36,15 +36,14 @@ def configured():
     return bool(tok and pid)
 
 
-def send_whatsapp_otp(e164, code, lang=None):
-    """Send a one-time login code over WhatsApp. Returns {ok:True, id} on success,
+def _send_template(e164, template, lang, components):
+    """POST one template message to the Cloud API. Returns {ok:True, id} on success,
     {ok:False, dev:True} when WhatsApp isn't configured (caller uses the dev fallback),
     or {ok:False, error} on a real send failure."""
-    tok, pid, template, deflang = _cfg()
+    tok, pid, _, deflang = _cfg()
     if not (tok and pid):
         return {"ok": False, "dev": True, "error": "WhatsApp not configured"}
     to = "".join(c for c in str(e164) if c.isdigit())
-    # Meta's "authentication" template = one body variable (the code) + a copy-code URL button.
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -52,11 +51,7 @@ def send_whatsapp_otp(e164, code, lang=None):
         "template": {
             "name": template,
             "language": {"code": lang or deflang},
-            "components": [
-                {"type": "body", "parameters": [{"type": "text", "text": str(code)}]},
-                {"type": "button", "sub_type": "url", "index": "0",
-                 "parameters": [{"type": "text", "text": str(code)}]},
-            ],
+            "components": components,
         },
     }
     req = request.Request(f"{GRAPH}/{pid}/messages",
@@ -72,6 +67,32 @@ def send_whatsapp_otp(e164, code, lang=None):
         return {"ok": False, "error": f"WhatsApp {e.code}: {body}"}
     except Exception as e:  # noqa
         return {"ok": False, "error": str(e)}
+
+
+def send_whatsapp_otp(e164, code, lang=None):
+    """Send a one-time login code over WhatsApp (authentication template)."""
+    _, _, template, _ = _cfg()
+    # Meta's "authentication" template = one body variable (the code) + a copy-code URL button.
+    return _send_template(e164, template, lang, [
+        {"type": "body", "parameters": [{"type": "text", "text": str(code)}]},
+        {"type": "button", "sub_type": "url", "index": "0",
+         "parameters": [{"type": "text", "text": str(code)}]},
+    ])
+
+
+def send_account_verify(e164, name, token, lang=None):
+    """Send the UTILITY "account verification" template whose "Verify account" button
+    is a dynamic URL carrying a one-time login token (…/account?vt={{1}}) — a WhatsApp
+    magic link. The library template has two body variables ({{1}} greeting name,
+    {{2}} what to verify), so both are always sent; template comes from env
+    WHATSAPP_VERIFY_TEMPLATE so a renamed/customised template is a config change."""
+    template = os.environ.get("WHATSAPP_VERIFY_TEMPLATE", "account_creation_confirmation_3")
+    return _send_template(e164, template, lang, [
+        {"type": "body", "parameters": [{"type": "text", "text": (name or "").strip() or "عميلنا"},
+                                        {"type": "text", "text": "حسابك · your account"}]},
+        {"type": "button", "sub_type": "url", "index": "0",
+         "parameters": [{"type": "text", "text": str(token)}]},
+    ])
 
 
 if __name__ == "__main__":

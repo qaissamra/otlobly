@@ -58,16 +58,24 @@ def send_email(to, subject, html):
         return {"ok": False, "error": str(e)}
 
 
-def send_login_code(to, code):
+def send_login_code(to, code, link=None):
     """The one email this app sends: a 6-digit portal code (AR+EN, both logins
-    and link-verification reuse it)."""
+    and link-verification reuse it). When `link` is given (login only, not
+    email-linking) a one-tap "Sign in" magic-link button rides above the code —
+    one email, two ways in."""
+    button = f"""
+          <a href="{link}" style="display:block;text-align:center;background:#ff5a1f;color:#fff;
+               font-size:16px;font-weight:800;text-decoration:none;border-radius:12px;
+               padding:14px 16px;margin:0 0 14px">تسجيل الدخول بضغطة واحدة · Tap to sign in</a>
+          <p style="color:#7a766c;font-size:13px;margin:0 0 4px;text-align:center">
+             أو أدخل هذا الرمز · or enter this code:</p>""" if link else f"""
+          <p style="color:#7a766c;font-size:14px">رمز الدخول الخاص بك · your login code:</p>"""
     return send_email(
         to,
         f"رمز الدخول إلى اطلبلي · Otlobly login code: {code}",
         f"""<div dir="rtl" style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
              max-width:420px;margin:0 auto;padding:24px;color:#15140f">
-          <h2 style="margin:0 0 4px">Otlob<span style="color:#ff5a1f">ly</span> · اطلبلي</h2>
-          <p style="color:#7a766c;font-size:14px">رمز الدخول الخاص بك · your login code:</p>
+          <h2 style="margin:0 0 4px">Otlob<span style="color:#ff5a1f">ly</span> · اطلبلي</h2>{button}
           <div style="font-size:34px;font-weight:800;letter-spacing:8px;text-align:center;
                background:#f7f5ef;border:1px solid #e8e4d8;border-radius:12px;padding:16px">{code}</div>
           <p style="color:#7a766c;font-size:12px">صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز تجاهل الرسالة.<br>

@@ -82,28 +82,30 @@
       <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
   </div>
 
-  <!-- STATE 1: enter phone -->
+  <!-- STATE 1: enter phone. Primary = WhatsApp verify-button (utility template whose
+       "Verify account" button carries a one-time login link — no code to type).
+       wa.me tap stays as the free fallback, email third. -->
   <div id="s_phone" style="display:none">
     <p class="sub" id="t_introphone"></p>
-    <button id="b_wa" onclick="waLogin()"
-            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer">
-      🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
-    <div id="waStatus" style="margin-top:10px"></div>
+    <label id="t_phonelbl"></label>
+    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
+           onkeydown="if(event.key==='Enter')vlStart()">
+    <button id="b_vl" onclick="vlStart()"></button>
+    <div class="hint" id="t_phonehint"></div>
+    <div id="vlOut"></div>
     <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
       <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
+    <button id="b_wa" onclick="waLogin()"
+            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:13px;font-size:14.5px;font-weight:800;cursor:pointer;margin-top:12px">
+      🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
+    <div id="waStatus" style="margin-top:10px"></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
             style="border:1px solid var(--line);border-radius:12px;width:100%;padding:12px;font-size:14px"></button>
-    <!-- Phone+code fallback hidden: push-OTP needs a verified Meta business; WhatsApp-tap
-         above is the live login. Kept in the DOM (paint() references these ids) so it can
-         return the day business verification lands and template OTP works again. -->
+    <!-- Push-OTP (typed code) hidden until the auth template clears Meta review.
+         Kept in the DOM (paint()/sendCode() reference these ids) — it reuses the
+         visible #phone input above the day it returns. -->
     <div style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 8px">
-        <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
-      <label id="t_phonelbl"></label>
-      <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
-             onkeydown="if(event.key==='Enter')sendCode()">
       <button id="b_send" onclick="sendCode()"></button>
-      <div class="hint" id="t_phonehint"></div>
       <div id="out1"></div>
     </div>
   </div>
@@ -165,7 +167,10 @@ const $=id=>document.getElementById(id);
 let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false;
 const T={
   ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"إرسال رمز الدخول",
-      phonehint:"سنرسل رمزاً إلى رقمك على واتساب.",
+      phonehint:"سنرسل رسالة واتساب فيها زر «تأكيد الحساب» — اضغطه لتسجيل الدخول.",
+      vlbtn:"📲 أرسلوا لي زر الدخول على واتساب",
+      vlsent:"إذا كان رقمك مسجلاً لدينا، وصلتك رسالة واتساب الآن — اضغط زر «تأكيد الحساب» فيها.",
+      vlwait:"⏳ بانتظار تسجيل دخولك…",
       introcode:"أدخل الرمز المكوّن من 6 أرقام المُرسل إلى واتساب.", codelbl:"رمز الدخول",
       verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", logout:"خروج",
       deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
@@ -179,7 +184,10 @@ const T={
       elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
   en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
-      phonehint:"We'll send a code to your number on WhatsApp.",
+      phonehint:"We'll WhatsApp you a message with a “Verify account” button — tap it to sign in.",
+      vlbtn:"📲 Send me a login button on WhatsApp",
+      vlsent:"If this number has an account, a WhatsApp message is on its way — tap its “Verify account” button.",
+      vlwait:"⏳ Waiting for your sign-in…",
       introcode:"Enter the 6-digit code sent to your WhatsApp.", codelbl:"Login code",
       verify:"Sign in", resend:"Change number", hello:"Hi", logout:"Log out",
       deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
@@ -217,6 +225,7 @@ function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
   $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
 function paint(){
   ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments","introemail","emaillbl","ecodelbl"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
+  $("b_vl").textContent=t("vlbtn");
   $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
   $("b_email").textContent=t("emailbtn"); $("b_eback").textContent=t("eback");
@@ -232,6 +241,26 @@ async function sendCode(){
   if(!d.ok){ $("out1").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
   paint(); show("s_code"); $("code").focus();
   if(d.dev_code){ $("out2").innerHTML=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("code").value=d.dev_code; }
+}
+/* ---- WhatsApp verify-button login (primary): we send the utility template whose
+   "Verify account" button carries a one-time ?vt= link. The tap opens /account in a
+   new tab that gets the session cookie; this tab polls /api/customer/me and flips to
+   the dashboard as soon as the login lands (same browser = same cookie jar). ---- */
+let VL_POLL=null;
+async function vlStart(){
+  const p=$("phone").value.trim(); if(!p)return;
+  const b=$("b_vl"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("vlOut").innerHTML="";
+  const d=await post("/api/customer/wa_verify/start",{phone:p});
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("vlOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  $("vlOut").innerHTML=`<div class="hint" style="line-height:1.7">${t("vlsent")}</div><div class="hint">${t("vlwait")}</div>`;
+  if(d.dev_link){ $("vlOut").innerHTML+=`<div class="dev">رابط تجريبي (dev): <a href="${esc(d.dev_link)}" target="_blank">${esc(d.dev_link)}</a></div>`; }
+  clearInterval(VL_POLL); VL_POLL=setInterval(vlPoll,3000);
+  setTimeout(()=>clearInterval(VL_POLL),10*60*1000);   // give up after the token TTL
+}
+async function vlPoll(){
+  let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ return; }
+  if(me&&me.logged_in){ clearInterval(VL_POLL); loadDashboard(); }
 }
 let WA_POLL=null;
 async function waLogin(){
@@ -254,7 +283,7 @@ async function waPoll(){
     $("waStatus").innerHTML=`<div class="hint">انتهت المهلة — اضغط الزر لتجربة أخرى · timed out, tap again</div>`; }
   // pending → keep polling
 }
-function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; clearInterval(WA_POLL); $("phone").focus(); }
+function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; clearInterval(WA_POLL); clearInterval(VL_POLL); $("phone").focus(); }
 async function verifyCode(){
   const c=($("code").value||"").trim(); if(!c)return;
   const b=$("b_verify"); b.disabled=true; const o=b.textContent; b.textContent=t("verifying"); $("out2").innerHTML="";
@@ -374,8 +403,21 @@ async function loadDashboard(){
 }
 async function init(){
   setLang("ar");
+  // ?vt= — one-time login token from the WhatsApp "Verify account" button or the
+  // email magic link. Strip it from the URL/history first, then redeem via POST.
+  const vt=new URLSearchParams(location.search).get("vt");
+  let vtErr="";
+  if(vt){
+    history.replaceState(null,"",location.pathname);
+    const d=await post("/api/customer/magic/verify",{token:vt});
+    if(d&&d.ok){ loadDashboard(); return; }
+    vtErr=(d&&d.error)||"";
+  }
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
-  if(me&&me.logged_in){ loadDashboard(); } else { show("s_phone"); $("phone").focus(); }
+  if(me&&me.logged_in){ loadDashboard(); }
+  else { show("s_phone");
+    if(vtErr)$("vlOut").innerHTML=`<div class="err">${esc(vtErr)}</div>`;
+    $("phone").focus(); }
 }
 init();
 </script>

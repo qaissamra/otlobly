@@ -99,6 +99,9 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(os.environ.get("OTLOBLY_SECURE")),
+    # "Trust this device": only CUSTOMER logins set session.permanent, so this 180-day
+    # window applies to the portal only — staff Flask-Login sessions stay browser-scoped.
+    PERMANENT_SESSION_LIFETIME=timedelta(days=180),
 )
 auth.login_manager.init_app(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
@@ -2504,6 +2507,78 @@ def api_customer_otp_verify():
     return jsonify({"ok": True, "name": session["cust_name"]})
 
 
+# ---- Magic-link tokens (shared by WhatsApp verify-button + email link) -------- #
+# One namespace, two delivery channels: a high-entropy single-use token rides in a
+# URL (?vt=) — the WhatsApp utility template's "Verify account" dynamic-URL button,
+# or the "Sign in" button in the login-code email. Same KV discipline as walogin:/
+# otp:/emailotp: — hashed key (raw tokens must not show in admin settings tooling),
+# TTL, single-use. The verify is a POST so mail/WA link-scanner GET prefetches
+# can't burn the token.
+
+def _token_kv_key(token):
+    return "logintoken:" + hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def _mint_login_token(core, name):
+    """Create a one-time login token for a known customer; returns the raw token."""
+    token = secrets.token_urlsafe(24)
+    db.set_setting(_token_kv_key(token),
+                   {"core": core, "name": name or "", "expires": time.time() + OTP_TTL})
+    return token
+
+
+def _portal_base():
+    """Absolute base for login links: env override for prod, else this request's root
+    (keeps local-dev links local)."""
+    return (os.environ.get("PORTAL_BASE_URL") or request.url_root).rstrip("/")
+
+
+@app.route("/api/customer/magic/verify", methods=["POST"])
+@limiter.limit("10 per 10 minutes")
+def api_customer_magic_verify():
+    b = request.get_json(force=True, silent=True) or {}
+    token = (b.get("token") or "").strip()
+    rec = db.get_setting(_token_kv_key(token)) if token else None
+    if not rec or rec.get("used") or time.time() > (rec.get("expires") or 0):
+        # one generic answer for missing/used/expired — nothing to enumerate
+        return jsonify({"ok": False,
+                        "error": "انتهت صلاحية الرابط — اطلب رابطاً جديداً · "
+                                 "Link expired — request a new one."}), 400
+    db.set_setting(_token_kv_key(token), {"used": True, "expires": 0})   # one-time
+    session["cust_phone"] = rec["core"]
+    session["cust_name"] = rec.get("name") or _match_customer(rec["core"])[1]
+    session.permanent = True
+    return jsonify({"ok": True, "name": session["cust_name"]})
+
+
+@app.route("/api/customer/wa_verify/start", methods=["POST"])
+@limiter.limit("5 per 10 minutes")
+def api_customer_wa_verify_start():
+    """Send the WhatsApp utility template whose "Verify account" button carries a
+    one-time login link. Anti-enumeration: ALWAYS {"ok":true} once the number parses —
+    a message is only actually sent when the phone belongs to a known customer."""
+    b = request.get_json(force=True, silent=True) or {}
+    core = normalize.phone_core(b.get("phone") or "")
+    if len(core) < 9:
+        return jsonify({"ok": False,
+                        "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    matched, name = _match_customer(core)
+    out = {"ok": True}
+    if matched:
+        token = _mint_login_token(core, name)
+        pin = normalize.normalize_phone(b.get("phone") or "")
+        e164 = (pin or {}).get("e164") or ("+" + core)
+        res = notify.send_account_verify(e164, name, token)
+        if not res.get("ok"):
+            app.logger.warning("wa_verify for %s not sent: %s", core, res.get("error"))
+            if os.environ.get("OTLOBLY_OTP_DEV"):   # local testing without WhatsApp creds
+                out["dev_link"] = f"/account?vt={token}"
+            else:
+                return jsonify({"ok": False,
+                                "error": "تعذّر الإرسال حالياً · Couldn't send right now."}), 502
+    return jsonify(out)
+
+
 # ---- Customer email login (second method — WhatsApp stays) ------------------- #
 # Bootstrap: no emails exist, so a customer first logs in via WhatsApp, then links
 # + verifies an email from the dashboard; after that email+code login works too.
@@ -2534,10 +2609,11 @@ def _email_kv_key(email):
     return "emailotp:" + hashlib.sha256(email.encode()).hexdigest()[:16]
 
 
-def _send_or_dev(email, code):
-    """Send the code; in OTLOBLY_EMAIL_DEV echo it instead of failing when the
-    email API isn't configured (mirrors the OTP dev fallback)."""
-    res = mailer.send_login_code(email, code)
+def _send_or_dev(email, code, link=None):
+    """Send the code (plus a sign-in link when given); in OTLOBLY_EMAIL_DEV echo it
+    instead of failing when the email API isn't configured (mirrors the OTP dev
+    fallback)."""
+    res = mailer.send_login_code(email, code, link)
     if res.get("ok"):
         return {"ok": True}
     app.logger.warning("email code for %s = %s (not sent: %s)", email, code, res.get("error"))
@@ -2621,9 +2697,12 @@ def api_customer_email_login_start():
             db.set_setting(_email_kv_key(email),
                            {"hash": auth.hash_pw(code), "expires": time.time() + OTP_TTL,
                             "attempts": 0, "core": core, "name": row.get("name") or ""})
-            sent = _send_or_dev(email, code)
+            # same email carries a one-tap magic link next to the code (one email, two ways in)
+            token = _mint_login_token(core, row.get("name") or "")
+            sent = _send_or_dev(email, code, f"{_portal_base()}/account?vt={token}")
             if sent.get("dev_code"):
                 out["dev_code"] = sent["dev_code"]
+                out["dev_link"] = f"/account?vt={token}"
     return jsonify(out)
 
 
@@ -2674,6 +2753,29 @@ def api_admin_whatsapp_test():
     res = notify.send_whatsapp_otp(e164, code)
     if res.get("ok"):
         return jsonify({"ok": True, "sent_to": e164, "message_id": res.get("id")})
+    return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
+
+
+@app.route("/api/admin/email_test", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_admin_email_test():
+    """Admin diagnostic for the customer-login email (Resend), mirroring the WhatsApp
+    test above. GET reports whether RESEND_API_KEY is set; POST sends a REAL test code
+    to an address and surfaces Resend's exact error — so the setup can be validated
+    before customers rely on it. The test code is a delivery test only, never a login."""
+    if request.method == "GET":
+        return jsonify({"configured": mailer.configured()})
+    b = request.get_json(force=True, silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "Enter a valid email address."}), 400
+    if not mailer.configured():
+        return jsonify({"ok": False, "configured": False,
+                        "error": "Email not configured yet — set RESEND_API_KEY (+ EMAIL_FROM) "
+                                 "in Render, then redeploy."})
+    res = mailer.send_login_code(email, f"{secrets.randbelow(1000000):06d}")
+    if res.get("ok"):
+        return jsonify({"ok": True, "sent_to": email, "message_id": res.get("id")})
     return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
 
 
