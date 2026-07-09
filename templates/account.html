@@ -1,80 +1,165 @@
 <!doctype html>
+<html lang="ar" dir="rtl">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Otlobly — حسابي · My account</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <meta name="theme-color" content="#111111">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
 <style>
-  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;
-        --good:#16a34a;--transit:#2563eb;--customs:#d97706;--cleared:#16a34a;--delivered:#16a34a;--arrived:#7c3aed}
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    display:flex;justify-content:center;padding:22px 14px 60px}
-  .card{width:100%;max-width:560px;background:var(--card);border:1px solid var(--line);border-radius:20px;
-    box-shadow:0 10px 40px rgba(20,18,12,.06);padding:22px 20px}
+  /* Portal-local styles — build on style.css tokens (--orange, pastels, --card-r, shadows). */
+  body{margin:0;min-height:100vh;background:#f6f3ec;color:var(--ink);
+    font-family:var(--body),-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:15px;line-height:1.55;display:flex;justify-content:center;padding:20px 14px 46px}
+  body.hasnav{padding-bottom:130px}   /* room for the floating pill nav */
+  .card{width:100%;max-width:560px;background:#fff;border:none;border-radius:var(--card-r);
+    box-shadow:var(--shadow-card);padding:22px 18px;height:fit-content}
   .brand{display:flex;align-items:center;gap:10px;justify-content:flex-end}
-  .brand h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
-  .brand .ly{color:var(--accent)}
+  .brand h1{font-family:var(--head),sans-serif;font-size:21px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .brand .ly{color:var(--orange)}
   .lang{margin-inline-end:auto;display:flex;gap:6px}
   .lang span{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);
     border-radius:20px;padding:3px 11px}
-  .lang span.on{background:#111;color:#fff;border-color:#111}
+  .lang span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .sub{color:var(--muted);font-size:13px;margin:6px 0 16px;text-align:start}
-  label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;text-align:start}
-  input{width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);border-radius:12px;
-    background:#fbfaf6;text-align:center;letter-spacing:1px}
-  input:focus{outline:none;border-color:var(--accent);background:#fff}
-  button{width:100%;margin-top:14px;font-size:15px;font-weight:800;color:#fff;background:var(--accent);
-    border:0;border-radius:12px;padding:14px;cursor:pointer}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;text-align:start;font-weight:600}
+  input{width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;
+    background:#fbfaf6;text-align:center;letter-spacing:1px;font-family:inherit}
+  input:focus{outline:none;border-color:var(--orange);background:#fff}
+  button{width:100%;margin-top:14px;font-size:15px;font-weight:800;color:#fff;background:var(--orange);
+    border:0;border-radius:999px;padding:14px;cursor:pointer;font-family:var(--head),sans-serif;
+    box-shadow:0 10px 22px rgba(255,90,31,.28);transition:transform .12s ease}
+  button:active{transform:scale(.98)}
   button:disabled{opacity:.6}
-  .ghost{background:none;color:var(--muted);font-weight:600;font-size:12.5px;padding:8px;margin-top:6px}
+  .ghost{background:none;color:var(--muted);font-weight:600;font-size:12.5px;padding:8px;margin-top:6px;box-shadow:none}
   .hint{color:var(--muted);font-size:11.5px;text-align:center;margin-top:8px}
-  .err{background:#fef2f2;border:1px solid #f3c9c9;color:#b42318;border-radius:10px;padding:10px 12px;
+  .err{background:#fef2f2;border:1px solid #f3c9c9;color:#b42318;border-radius:12px;padding:10px 12px;
     font-size:13px;margin-top:12px;text-align:center}
-  .dev{background:#fffbe6;border:1px dashed #e6c200;border-radius:10px;padding:8px 12px;font-size:12px;
+  .dev{background:#fffbe6;border:1px dashed #e6c200;border-radius:12px;padding:8px 12px;font-size:12px;
     margin-top:10px;text-align:center;color:#8a6d00}
-  .hello{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
-  .hello b{font-size:18px}
-  .out{cursor:pointer;color:var(--muted);font-size:12px;border:1px solid var(--line);
-    border-radius:20px;padding:4px 11px;background:none;width:auto;margin:0;font-weight:600}
-  h2.sec{font-size:14px;font-weight:800;margin:20px 0 10px;text-align:start}
-  .ship{border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:12px;background:#fbfaf6}
-  .now{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .now .dot{width:13px;height:13px;border-radius:50%;flex:none;background:var(--transit)}
-  .now .big{font-weight:800;font-size:16px}
-  .now small{color:var(--muted);font-size:11px;display:block}
-  .b-transit .dot,.b-transit.dotc{background:var(--transit)}
-  .b-customs .dot,.b-customs.dotc{background:var(--customs)}
-  .b-cleared .dot,.b-cleared.dotc{background:var(--cleared)}
-  .b-arrived .dot,.b-arrived.dotc{background:var(--arrived)}
-  .b-delivered .dot,.b-delivered.dotc{background:var(--delivered)}
-  .items{display:flex;flex-direction:column;gap:7px;margin:8px 0 2px}
+  .lhero{border-radius:20px;overflow:hidden;margin:14px 0 4px;aspect-ratio:16/8}
+  .lhero img{width:100%;height:100%;object-fit:cover;display:block}
+  /* ── dashboard header: greeting + bell ── */
+  .hello{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 12px;position:relative}
+  .hello b{font-family:var(--head),sans-serif;font-size:19px}
+  .hello small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+  button.bell{width:42px;height:42px;margin:0;padding:0;border-radius:50%;background:#f4f1ea;color:var(--ink);
+    box-shadow:none;display:flex;align-items:center;justify-content:center;flex:none;position:relative}
+  .bell .bdot{position:absolute;top:9px;inset-inline-end:10px;width:9px;height:9px;border-radius:50%;
+    background:var(--orange);border:2px solid #f4f1ea;display:none}
+  .belldrop{display:none;position:absolute;top:50px;inset-inline-end:0;z-index:40;background:#fff;
+    border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-soft);padding:12px 14px;
+    width:min(300px,84vw);text-align:start}
+  .belldrop.open{display:block}
+  .belldrop .bh{font-weight:800;font-size:13px;margin-bottom:6px;font-family:var(--head),sans-serif}
+  .belldrop .bi{font-size:12.5px;padding:7px 0;border-top:1px solid #f4f1ec}
+  .belldrop .bi b{color:var(--orange)}
+  .belldrop .bnone{color:var(--muted);font-size:12.5px}
+  /* ── quick actions ── */
+  .qacts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:2px 0 6px}
+  .qa{display:block;border-radius:22px;padding:14px 14px 10px;min-height:126px;position:relative;overflow:hidden;
+    color:var(--ink);text-decoration:none;box-shadow:var(--shadow-card)}
+  .qa b{font-family:var(--head),sans-serif;font-size:15.5px;line-height:1.25;display:block}
+  .qa .qsub{font-size:11px;color:rgba(35,24,10,.55);display:block;margin-top:2px}
+  .qa.peach{background:linear-gradient(160deg,var(--peach),var(--peach-2))}
+  .qa.lav{background:linear-gradient(160deg,var(--lav-2),var(--lav))}
+  .qa .qart{position:absolute;bottom:4px;inset-inline-end:6px;width:76px;height:64px}
+  /* ── shipment cards (track-card, portal edition) ── */
+  .tcard{border-radius:var(--card-r);padding:16px;margin-bottom:14px;background:var(--pbg);box-shadow:var(--shadow-card)}
+  .p-lav{--pa:#5b52d8;--pbg:linear-gradient(160deg,#e2e0fb,#cbc8f6)}
+  .p-sky{--pa:#3068c9;--pbg:linear-gradient(160deg,#e0ebfe,#c8dcfb)}
+  .p-mint{--pa:#177f58;--pbg:linear-gradient(160deg,#dcf3e8,#c4ecd9)}
+  .p-peach{--pa:#d24a12;--pbg:linear-gradient(160deg,#ffe4d3,#ffd2b8)}
+  .tc-top{display:flex;align-items:center;gap:11px}
+  .tc-thumb{width:56px;height:56px;flex:none;border-radius:16px;background:#fff;overflow:hidden;
+    box-shadow:0 4px 12px rgba(35,24,10,.10);display:flex;align-items:center;justify-content:center}
+  .tc-thumb img{width:100%;height:100%;object-fit:contain}
+  .tc-thumb svg{width:70%;height:70%}
+  .tc-meta{flex:1;min-width:0}
+  .tc-meta .nm{font-family:var(--head),sans-serif;font-weight:800;font-size:14.5px;line-height:1.3;
+    max-height:2.6em;overflow:hidden}
+  .tc-meta .id{font-size:11px;color:rgba(35,24,10,.55);direction:ltr;text-align:start;
+    unicode-bidi:embed;margin-top:2px}
+  html[dir=rtl] .tc-meta .id{text-align:end}
+  .tc-art{width:84px;flex:none;margin-inline-start:auto}
+  .tc-art svg{width:100%;height:auto;display:block}
+  .tcard .prog{display:flex;align-items:center;margin:18px 2px 6px}
+  .tcard .prog .node{width:15px;height:15px;border-radius:50%;flex:none;background:#fff;
+    border:3px solid rgba(35,24,10,.15);z-index:1;position:relative}
+  .tcard .prog .node.done{background:var(--pa);border-color:var(--pa)}
+  .tcard .prog .node.cur{background:#fff;border-color:var(--pa);box-shadow:0 0 0 5px rgba(35,24,10,.08)}
+  .tcard .prog .seg{flex:1;height:4px;background:rgba(255,255,255,.6);border-radius:4px;margin:0 -2px}
+  .tcard .prog .seg.fill{background:var(--pa)}
+  .tcard .prog-labels{display:flex;font-size:10px;font-weight:600;color:rgba(35,24,10,.6);margin:2px 0 4px}
+  .tcard .prog-labels span{flex:1;text-align:center}
+  .tcard .prog-labels span:first-child{text-align:start}
+  .tcard .prog-labels span:last-child{text-align:end}
+  .tc-fields{display:flex;gap:10px;margin-top:12px}
+  .tc-fields .f{flex:1;min-width:0}
+  .tc-fields .k{display:flex;align-items:center;gap:5px;font-size:10.5px;color:rgba(35,24,10,.55);font-weight:600}
+  .tc-fields .k svg{width:13px;height:13px;flex:none}
+  .tc-fields .v{font-family:var(--head),sans-serif;font-weight:800;font-size:13.5px;margin-top:2px}
+  .tc-stale{font-size:10.5px;color:rgba(35,24,10,.5);margin-top:8px}
+  button.detbtn{width:auto;margin:10px 0 0;padding:7px 16px;font-size:12px;background:rgba(255,255,255,.65);
+    color:var(--ink);box-shadow:none;font-weight:700}
+  .det{display:none;margin-top:12px;background:rgba(255,255,255,.55);border-radius:16px;padding:12px}
+  .det.open{display:block}
+  .items{display:flex;flex-direction:column;gap:7px;margin:0 0 4px}
   .prod{display:flex;align-items:center;gap:9px;font-size:12.5px}
   .prod img,.prod .ph{width:38px;height:38px;border-radius:8px;object-fit:contain;background:#f0ede4;
     border:1px solid var(--line);flex:none}
-  .tnum{color:var(--muted);font-size:11.5px;text-align:start;margin-top:6px}
-  .eta{margin-top:8px;background:#ecfdf3;border:1px solid #bbf7d0;color:#15803d;border-radius:9px;
-    padding:7px 10px;font-size:12.5px}
-  .tl{list-style:none;margin:11px 0 0;padding:0}
-  .tl li{position:relative;padding:0 0 14px 18px;margin:0}
-  .tl li::before{content:"";position:absolute;inset-inline-start:4px;top:14px;bottom:-2px;width:2px;background:var(--line)}
+  .tl{list-style:none;margin:8px 0 0;padding:0}
+  .tl li{position:relative;padding:0 0 13px 18px;margin:0}
+  [dir=rtl] .tl li{padding:0 18px 13px 0}
+  .tl li::before{content:"";position:absolute;inset-inline-start:4px;top:14px;bottom:-2px;width:2px;background:rgba(35,24,10,.12)}
   .tl li:last-child::before{display:none}
-  .tl .dot{position:absolute;inset-inline-start:0;top:3px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .tl .dot{position:absolute;inset-inline-start:0;top:3px;width:10px;height:10px;border-radius:50%;
+    border:2px solid #fff;box-shadow:0 0 0 1px rgba(35,24,10,.15);background:var(--pa)}
   .tl .lab{font-weight:650;font-size:12.5px}
-  .tl .when{color:var(--muted);font-size:11px}
-  .ord{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;
-    padding:9px 11px;margin-bottom:8px;background:#fff}
-  .ord .thumb{width:42px;height:42px;border-radius:8px;object-fit:contain;background:#f0ede4;border:1px solid var(--line);flex:none}
+  .tl .when{color:rgba(35,24,10,.5);font-size:11px}
+  /* ── money tiles ── */
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px}
+  .stat{flex:1;min-width:130px;border-radius:18px;padding:12px 14px;box-shadow:var(--shadow-card)}
+  .stat .n{font-family:var(--head),sans-serif;font-size:20px;font-weight:800}
+  .stat .l{font-size:11.5px;font-weight:600;margin-top:1px}
+  .stat.mint{background:linear-gradient(160deg,var(--mint-2),var(--mint))}
+  .stat.mint .n,.stat.mint .l{color:#116a49}
+  .stat.rose{background:linear-gradient(160deg,#ffe3da,#ffd0c2)}
+  .stat.rose .n,.stat.rose .l{color:#b23310}
+  .stat.sky{background:linear-gradient(160deg,var(--sky-2),var(--sky))}
+  .stat.sky .n,.stat.sky .l{color:#1c4f9e}
+  /* ── sections / lists ── */
+  h2.sec{font-family:var(--head),sans-serif;font-size:15px;font-weight:800;margin:20px 0 10px;text-align:start}
+  .ord{display:flex;align-items:center;gap:10px;border:none;border-radius:18px;
+    padding:10px 12px;margin-bottom:9px;background:#faf8f3}
+  .ord .thumb{width:44px;height:44px;border-radius:12px;object-fit:contain;background:#fff;
+    border:1px solid var(--line);flex:none}
   .ord .t{flex:1;min-width:0;font-size:12.5px;font-weight:600;line-height:1.3;max-height:2.6em;overflow:hidden}
   .pill{font-size:10.5px;font-weight:800;border-radius:20px;padding:3px 9px;white-space:nowrap}
   .empty{color:var(--muted);font-size:13px;text-align:center;padding:18px}
+  .osearch{display:flex;align-items:center;gap:8px;background:#faf8f3;border:1px solid var(--line);
+    border-radius:999px;padding:4px 14px;margin:2px 0 12px}
+  .osearch svg{width:17px;height:17px;flex:none;color:var(--muted)}
+  .osearch input{border:none;background:none;text-align:start;letter-spacing:0;font-size:14px;padding:9px 2px}
+  .osearch input:focus{background:none}
   .foot{margin-top:18px;color:var(--muted);font-size:11.5px;text-align:center}
-  [dir=rtl] .tl li{padding:0 18px 14px 0}
+  /* ── floating bottom pill nav (dashboard only) ── */
+  .pillnav{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;
+    background:#17130c;border-radius:999px;padding:8px;gap:4px;box-shadow:0 16px 38px rgba(20,14,5,.35)}
+  .pillnav.show{display:flex}
+  .pillnav button{width:52px;height:52px;margin:0;padding:0;border-radius:50%;background:transparent;
+    color:#a49c8e;box-shadow:none;display:flex;align-items:center;justify-content:center;flex:none}
+  .pillnav button.on{background:var(--orange);color:#fff}
+  /* ── settings ── */
+  .setbox{border:1px solid var(--line);border-radius:16px;padding:12px;margin:0 0 12px;background:#fbfaf6}
   /* ☰ menu (shared pattern across the public pages) — overrides the page's global button style */
   button.burger{width:38px;height:38px;margin:0;padding:0;border:none;background:#f0ede8;border-radius:10px;
-    cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+    cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none;box-shadow:none}
   .navmenu{display:none;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:#fff;
     padding:4px 12px;margin:12px 0 4px}
   .navmenu.open{display:flex}
@@ -85,7 +170,10 @@
   .navmenu .wa-menu{background:#25D366;color:#fff;border-radius:999px;justify-content:center;
     margin:8px 0;padding:11px 16px;border-bottom:none}
   .navmenu .wa-menu svg{opacity:1}
+  @media (max-width:420px){ .card{padding:18px 14px} .qa .qart{width:66px;height:56px} }
 </style>
+</head>
+<body>
 <div class="card">
   <div class="brand">
     <button class="burger" id="burger" aria-label="القائمة · menu" onclick="toggleMenu(event)">
@@ -128,6 +216,7 @@
        "Verify account" button carries a one-time login link — no code to type).
        wa.me tap stays as the free fallback, email third. -->
   <div id="s_phone" style="display:none">
+    <div class="lhero"><img src="/static/assets/truck.jpg" alt=""></div>
     <p class="sub" id="t_introphone"></p>
     <label id="t_phonelbl"></label>
     <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
@@ -138,11 +227,11 @@
     <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
       <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
     <button id="b_wa" onclick="waLogin()"
-            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:13px;font-size:14.5px;font-weight:800;cursor:pointer;margin-top:12px">
+            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:999px;padding:13px;font-size:14.5px;font-weight:800;cursor:pointer;margin-top:12px;box-shadow:0 10px 22px rgba(37,211,102,.28)">
       🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
     <div id="waStatus" style="margin-top:10px"></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
-            style="border:1px solid var(--line);border-radius:12px;width:100%;padding:12px;font-size:14px"></button>
+            style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
     <!-- Push-OTP (typed code) hidden until the auth template clears Meta review.
          Kept in the DOM (paint()/sendCode() reference these ids) — it reuses the
          visible #phone input above the day it returns. -->
@@ -179,31 +268,106 @@
     <div id="out3"></div>
   </div>
 
-  <!-- STATE 3: dashboard -->
+  <!-- STATE 3: dashboard — app-style: greeting+bell, quick actions, shipment cards,
+       tabbed sections driven by the floating pill nav. -->
   <div id="s_dash" style="display:none">
-    <div class="hello"><b id="t_hello"></b></div>
-    <div id="emailLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
-    <div id="emailMgr" style="display:none;border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 12px;background:#fbfaf6">
-      <input id="memail" type="email" inputmode="email" placeholder="name@example.com" style="letter-spacing:0">
-      <div id="mcodeBox" style="display:none">
-        <input id="mcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" style="margin-top:8px">
-      </div>
-      <button id="b_mgo" onclick="linkGo()" style="margin-top:10px;padding:11px"></button>
-      <div id="out4"></div>
+    <div class="hello">
+      <div><b id="t_hello"></b><small id="t_hellosub"></small></div>
+      <button class="bell" id="bell" onclick="bellToggle(event)" aria-label="تنبيهات · notifications">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="bdot" id="bellDot"></span>
+      </button>
+      <div class="belldrop" id="bellDrop"></div>
     </div>
-    <div id="balSum"></div>
-    <h2 class="sec" id="t_deliveries"></h2>
-    <div id="shipments"></div>
-    <h2 class="sec" id="t_orders"></h2>
-    <div id="orders"></div>
-    <h2 class="sec" id="t_payments" style="display:none"></h2>
-    <div id="payments"></div>
-    <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
-      <button class="out" id="b_logout" onclick="logout()" style="padding:8px 26px;font-size:13px"></button></div>
+
+    <!-- HOME tab -->
+    <div id="sec_home">
+      <div id="balSum"></div>
+      <div class="qacts">
+        <a class="qa peach" href="/order">
+          <b id="t_qorder"></b><span class="qsub" id="t_qordersub"></span>
+          <!-- interim brand SVG — swap to a generated 3D PNG when assets are ready -->
+          <svg class="qart" viewBox="0 0 96 80" aria-hidden="true">
+            <ellipse cx="48" cy="70" rx="34" ry="5" fill="rgba(35,24,10,.10)"/>
+            <rect x="6" y="26" width="50" height="34" rx="7" fill="#ff5a1f"/>
+            <rect x="12" y="18" width="26" height="14" rx="4" fill="#e2ab74"/>
+            <rect x="22.5" y="18" width="5" height="14" fill="#ffd7c2"/>
+            <path d="M56 34h16a5 5 0 0 1 4 2l8 11a5 5 0 0 1 1 3v6a4 4 0 0 1-4 4H56Z" fill="#ff7a3f"/>
+            <rect x="60" y="38" width="13" height="10" rx="2" fill="#fff"/>
+            <circle cx="24" cy="63" r="8" fill="#241d15"/><circle cx="24" cy="63" r="3.4" fill="#fff"/>
+            <circle cx="68" cy="63" r="8" fill="#241d15"/><circle cx="68" cy="63" r="3.4" fill="#fff"/>
+          </svg>
+        </a>
+        <a class="qa lav" href="/track">
+          <b id="t_qtrack"></b><span class="qsub" id="t_qtracksub"></span>
+          <!-- interim brand SVG — swap to a generated 3D PNG when assets are ready -->
+          <svg class="qart" viewBox="0 0 96 80" aria-hidden="true">
+            <ellipse cx="48" cy="72" rx="30" ry="5" fill="rgba(35,24,10,.10)"/>
+            <polygon points="48,14 80,29 48,44 16,29" fill="#f3cba0"/>
+            <polygon points="16,29 48,44 48,72 16,56" fill="#e2ab74"/>
+            <polygon points="80,29 48,44 48,72 80,56" fill="#d29a62"/>
+            <polygon points="44.5,15.6 51.5,18.9 51.5,42.3 44.5,39" fill="#ff5a1f"/>
+            <polygon points="44.5,42.4 51.5,45.7 51.5,70.3 44.5,67" fill="#ff5a1f" opacity=".85"/>
+          </svg>
+        </a>
+      </div>
+      <h2 class="sec" id="t_deliveries"></h2>
+      <div id="shipments"></div>
+    </div>
+
+    <!-- ORDERS tab -->
+    <div id="sec_orders" style="display:none">
+      <h2 class="sec" id="t_orders"></h2>
+      <div class="osearch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+        <input id="osearch" oninput="renderOrders()" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="orders"></div>
+    </div>
+
+    <!-- PAYMENTS tab -->
+    <div id="sec_pay" style="display:none">
+      <h2 class="sec" id="t_payments"></h2>
+      <div id="payments"></div>
+    </div>
+
+    <!-- SETTINGS tab -->
+    <div id="sec_set" style="display:none">
+      <h2 class="sec" id="t_sethead"></h2>
+      <div id="emailLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
+      <div id="emailMgr" class="setbox" style="display:none">
+        <input id="memail" type="email" inputmode="email" placeholder="name@example.com" style="letter-spacing:0">
+        <div id="mcodeBox" style="display:none">
+          <input id="mcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" style="margin-top:8px">
+        </div>
+        <button id="b_mgo" onclick="linkGo()" style="margin-top:10px;padding:11px"></button>
+        <div id="out4"></div>
+      </div>
+      <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+        <button class="ghost" id="b_logout" onclick="logout()" style="border:1px solid var(--line);border-radius:999px;padding:10px 32px;font-size:13px;width:auto"></button>
+      </div>
+    </div>
   </div>
 
   <div class="foot" id="t_foot"></div>
 </div>
+
+<!-- floating pill nav — dashboard only -->
+<nav class="pillnav" id="pillnav" aria-label="portal">
+  <button id="nb_home" onclick="switchTab('home')">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
+  </button>
+  <button id="nb_orders" onclick="switchTab('orders')">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+  </button>
+  <button id="nb_pay" onclick="switchTab('pay')">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+  </button>
+  <button id="nb_set" onclick="switchTab('set')">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+  </button>
+</nav>
+
 <script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
 <script>
 const $=id=>document.getElementById(id);
@@ -211,11 +375,12 @@ const $=id=>document.getElementById(id);
 function toggleMenu(e){ if(e) e.stopPropagation(); $("navmenu").classList.toggle("open"); }
 document.addEventListener("click", function(e){
   const m=$("navmenu"); if(m && m.classList.contains("open") && !m.contains(e.target)) m.classList.remove("open");
+  const b=$("bellDrop"); if(b && b.classList.contains("open") && !b.contains(e.target) && e.target.closest("#bell")===null) b.classList.remove("open");
 });
 (function(){ const el=document.getElementById("wa-menu"); if(!el) return;
   if(window.OTL_WA_NUMBER){ el.href="https://wa.me/"+window.OTL_WA_NUMBER+"?text="+encodeURIComponent("مرحباً اطلبلي 👋"); }
   else el.style.display="none"; })();
-let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false;
+let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false, D=null, TAB="home";
 const T={
   ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"إرسال رمز الدخول",
       phonehint:"سنرسل رسالة واتساب فيها زر «تأكيد الحساب» — اضغطه لتسجيل الدخول.",
@@ -223,12 +388,17 @@ const T={
       vlsent:"إذا كان رقمك مسجلاً لدينا، وصلتك رسالة واتساب الآن — اضغط زر «تأكيد الحساب» فيها.",
       vlwait:"⏳ بانتظار تسجيل دخولك…",
       introcode:"أدخل الرمز المكوّن من 6 أرقام المُرسل إلى واتساب.", codelbl:"رمز الدخول",
-      verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", logout:"خروج",
-      deliveries:"📦 شحناتك", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
-      curr:"الحالة الحالية", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
+      verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", hellosub:"كل شحناتك وطلباتك هنا", logout:"خروج",
+      deliveries:"📦 شحناتك الحالية", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
+      curr:"الحالة", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", etalbl:"الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
       deposit:"دفعت", remaining:"المتبقّي", paidsum:"إجمالي ما دفعته", remainsum:"المتبقّي عليك", asof:"🕓 آخر تحديث",
       creditsum:"رصيدك لدينا", payments:"💵 سجل دفعاتك", credittag:"رصيد لحسابك",
       kdeposit:"عربون", kcollect:"دفعة", krefund:"استرجاع",
+      qorder:"اطلب الآن", qordersub:"من أمازون إلى بابك", qtrack:"تتبّع شحنة", qtracksub:"برقم OTL أو جوالك",
+      s1:"تم الطلب", s2:"تم الشحن", s3:"وصلت فلسطين", s4:"التسليم",
+      details:"التفاصيل ▾", detailsh:"إخفاء ▴", searchph:"ابحث باسم المنتج أو رقم الطلب…",
+      sethead:"⚙️ الإعدادات", bellhead:"تحديثات شحناتك", bellnone:"لا تحديثات جديدة 👌",
+      navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
       emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
       emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
@@ -240,12 +410,17 @@ const T={
       vlsent:"If this number has an account, a WhatsApp message is on its way — tap its “Verify account” button.",
       vlwait:"⏳ Waiting for your sign-in…",
       introcode:"Enter the 6-digit code sent to your WhatsApp.", codelbl:"Login code",
-      verify:"Sign in", resend:"Change number", hello:"Hi", logout:"Log out",
-      deliveries:"📦 Your shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
-      curr:"current status", track:"Tracking #", eta:"🚚 Expected arrival", prep:"We're preparing your order",
+      verify:"Sign in", resend:"Change number", hello:"Hi", hellosub:"All your shipments & orders, in one place", logout:"Log out",
+      deliveries:"📦 Current shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
+      curr:"Status", track:"Tracking #", eta:"🚚 Expected arrival", etalbl:"Expected arrival", prep:"We're preparing your order",
       deposit:"Deposited", remaining:"Remaining", paidsum:"Total you've paid", remainsum:"Remaining balance", asof:"🕓 last updated",
       creditsum:"Your credit", payments:"💵 Your payments", credittag:"Account credit",
       kdeposit:"Deposit", kcollect:"Payment", krefund:"Refund",
+      qorder:"New order", qordersub:"Amazon to your door", qtrack:"Track package", qtracksub:"by OTL # or phone",
+      s1:"Ordered", s2:"Shipped", s3:"In Palestine", s4:"Delivery",
+      details:"Details ▾", detailsh:"Hide ▴", searchph:"Search by product or order #…",
+      sethead:"⚙️ Settings", bellhead:"Shipment updates", bellnone:"No new updates 👌",
+      navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
       emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
       emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
       eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
@@ -272,18 +447,37 @@ function fmt(d){ if(!d)return""; const x=new Date(d); if(isNaN(x))return esc(d);
 function fmtRange(a,b){ const loc=LANG==="ar"?"ar":"en-GB";
   const f=d=>new Date(d).toLocaleDateString(loc,{day:"2-digit",month:"short"});
   return f(a)+" – "+f(b)+" "+new Date(b).getFullYear(); }
-function setLang(l){ LANG=l; document.body.dir=l==="ar"?"rtl":"ltr";
-  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); paint(); }
+function setLang(l){ LANG=l;
+  document.documentElement.dir=l==="ar"?"rtl":"ltr";      // html dir drives style.css font vars
+  document.documentElement.lang=l; document.body.dir=l==="ar"?"rtl":"ltr";
+  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en");
+  paint();
+  if(D && $("s_dash").style.display!=="none") renderLists();  // re-render cards in the new language
+}
 function paint(){
-  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments","introemail","emaillbl","ecodelbl"].forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
+  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments",
+   "introemail","emaillbl","ecodelbl","qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
+    .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_vl").textContent=t("vlbtn");
   $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
   $("b_email").textContent=t("emailbtn"); $("b_eback").textContent=t("eback");
   $("b_esend").textContent=ECODE?t("everify"):t("esend");
   $("b_mgo").textContent=MCODE?t("everify"):t("esend");
+  $("osearch").placeholder=t("searchph");
+  [["nb_home","navhome"],["nb_orders","navorders"],["nb_pay","navpay"],["nb_set","navset"]]
+    .forEach(([id,k])=>{ $(id).title=t(k); $(id).setAttribute("aria-label",t(k)); });
 }
-function show(state){ ["s_phone","s_code","s_email","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none"); }
+function show(state){ ["s_phone","s_code","s_email","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none");
+  const dash=state==="s_dash";
+  $("pillnav").classList.toggle("show",dash);
+  document.body.classList.toggle("hasnav",dash); }
+function switchTab(k){ TAB=k;
+  [["home","sec_home","nb_home"],["orders","sec_orders","nb_orders"],
+   ["pay","sec_pay","nb_pay"],["set","sec_set","nb_set"]].forEach(([key,sec,nb])=>{
+    $(sec).style.display=key===k?"block":"none";
+    $(nb).classList.toggle("on",key===k); });
+}
 async function sendCode(){
   const p=$("phone").value.trim(); if(!p)return; PHONE=p;
   const b=$("b_send"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("out1").innerHTML="";
@@ -343,8 +537,8 @@ async function verifyCode(){
   if(!d.ok){ $("out2").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
   loadDashboard();
 }
-async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} backToPhone(); show("s_phone"); }
-/* ---- email login (second method) + link/change from the dashboard ---- */
+async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} D=null; backToPhone(); show("s_phone"); }
+/* ---- email login (second method) + link/change from the settings tab ---- */
 async function post(url,body){ try{ return await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json(); }catch(e){ return {error:"network"}; } }
 function emailOpen(){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); show("s_email"); $("lemail").focus(); }
 function emailBack(){ if(ECODE){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); $("lemail").focus(); } else { show("s_phone"); } }
@@ -366,7 +560,7 @@ async function emailVerify(){
 async function refreshEmailLine(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
-  $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--accent);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
+  $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
 }
 function toggleEmailMgr(){
   const m=$("emailMgr"); const open=m.style.display!=="none";
@@ -389,25 +583,65 @@ async function linkVerify(){
   MCODE=false; $("emailMgr").style.display="none"; $("out4").innerHTML="";
   refreshEmailLine();
 }
-function shipCard(s){
-  const cur=s.current||{}; const bucket=cur.bucket||"transit";
+/* ---- dashboard rendering ---------------------------------------------------- */
+const PALS=["p-lav","p-sky","p-mint","p-peach"];
+// bucket → progress step (1..4). Exact status text still shown in the fields row.
+function stepOf(s){
+  const b=((s.current||{}).bucket)||""; const hasTrack=!!(s.tracking&&(s.events||[]).length);
+  if(b==="delivered") return 5;                 // all four done
+  if(b==="arrived")   return 4;
+  if(b==="customs"||b==="cleared") return 3;
+  if(b==="transit")   return hasTrack?2:( (s.est_delivery)?2:1 );
+  return 1;
+}
+const BOX_SVG=`<svg viewBox="0 0 96 96" aria-hidden="true"><polygon points="48,20 78,34 48,48 18,34" fill="#f3cba0"/><polygon points="18,34 48,48 48,80 18,64" fill="#e2ab74"/><polygon points="78,34 48,48 48,80 78,64" fill="#d29a62"/><polygon points="44.8,21.5 51.2,24.5 51.2,46.5 44.8,43.5" fill="#ff5a1f"/></svg>`;
+const RIDE_SVG=`<svg viewBox="0 0 96 84" aria-hidden="true"><ellipse cx="48" cy="76" rx="34" ry="5" fill="rgba(35,24,10,.12)"/><rect x="8" y="34" width="30" height="26" rx="6" fill="#ff5a1f"/><rect x="14" y="26" width="18" height="12" rx="3" fill="#e2ab74"/><rect x="21" y="26" width="4" height="12" fill="#ffd7c2"/><path d="M38 42h14a5 5 0 0 1 4 2l7 9a5 5 0 0 1 1 3v4a4 4 0 0 1-4 4H38Z" fill="#ff7a3f"/><rect x="42" y="46" width="11" height="8" rx="2" fill="#fff"/><circle cx="22" cy="66" r="8" fill="#241d15"/><circle cx="22" cy="66" r="3.2" fill="#fff"/><circle cx="54" cy="66" r="8" fill="#241d15"/><circle cx="54" cy="66" r="3.2" fill="#fff"/><path d="M70 62c4-14 12-16 18-16" stroke="#c9c0b2" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="1 7"/></svg>`;
+function shipCard(s,i){
+  const cur=s.current||{}; const pal=PALS[i%PALS.length];
+  const first=(s.items||[])[0]||{};
+  const more=(s.items||[]).length>1?` <span style="font-weight:600;font-size:11px">+${s.items.length-1}</span>`:"";
+  const step=stepOf(s);
+  const nodes=[1,2,3,4].map(n=>{
+    const cls=(step===5||n<step)?"done":(n===step?"cur":"");
+    const seg=n<4?`<span class="seg ${ (step===5||n<step)?"fill":"" }"></span>`:"";
+    return `<span class="node ${cls}"></span>${seg}`;
+  }).join("");
+  const eta=(s.est_from&&s.est_to)?fmtRange(s.est_from,s.est_to):(s.est_delivery?fmt(s.est_delivery):"—");
   const items=(s.items||[]).map(it=>`<div class="prod">${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(it.title)}</span></div>`).join("");
-  const tnum=s.tracking?`<div class="tnum">${t("track")} · ${esc(s.tracking)}</div>`:"";
-  const eta=(s.est_from&&s.est_to)?`<div class="eta">${t("eta")}: <b>${fmtRange(s.est_from,s.est_to)}</b></div>`
-    :(s.est_delivery?`<div class="eta">${t("eta")}: <b>${fmt(s.est_delivery)}</b></div>`:"");
   const evs=(s.events||[]).slice().reverse();
-  const tl=evs.length?`<ul class="tl">${evs.map((e,i)=>`<li class="b-${e.bucket||'transit'}"><span class="dot dotc b-${e.bucket||'transit'}"></span><div class="lab" dir="auto">${esc(e.label)}</div><div class="when">${fmt(e.date)}</div></li>`).join("")}</ul>`:"";
-  const asof=(s.stale&&s.as_of)?`<div class="hint">${t("asof")} ${fmt(s.as_of)}</div>`:"";
-  return `<div class="ship">
-    <div class="now b-${bucket}"><span class="dot"></span><div><div class="big" dir="auto">${esc(cur.label)||t("prep")}</div><small>${t("curr")}</small></div></div>
-    ${asof}${items?`<div class="items">${items}</div>`:""}${tnum}${eta}${tl}</div>`;
+  const tl=evs.length?`<ul class="tl">${evs.map(e=>`<li><span class="dot"></span><div class="lab" dir="auto">${esc(e.label)}</div><div class="when">${fmt(e.date)}</div></li>`).join("")}</ul>`:"";
+  const det=(items||tl)?`<button class="detbtn" onclick="toggleDet(this)">${t("details")}</button>
+    <div class="det">${items?`<div class="items">${items}</div>`:""}${tl}</div>`:"";
+  const asof=(s.stale&&s.as_of)?`<div class="tc-stale">${t("asof")} ${fmt(s.as_of)}</div>`:"";
+  return `<div class="tcard ${pal}">
+    <div class="tc-top">
+      <div class="tc-thumb">${first.image?`<img src="${esc(first.image)}" loading="lazy" alt="">`:BOX_SVG}</div>
+      <div class="tc-meta">
+        <div class="nm" dir="auto">${esc(first.title)||t("prep")}${more}</div>
+        ${s.tracking?`<div class="id">${esc(s.tracking)}</div>`:""}
+      </div>
+      <div class="tc-art">${RIDE_SVG}</div>
+    </div>
+    <div class="prog" aria-hidden="true">${nodes}</div>
+    <div class="prog-labels"><span>${t("s1")}</span><span>${t("s2")}</span><span>${t("s3")}</span><span>${t("s4")}</span></div>
+    <div class="tc-fields">
+      <div class="f"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>${t("curr")}</span></div>
+        <div class="v" dir="auto">${esc(cur.label)||t("prep")}</div></div>
+      <div class="f"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>${t("etalbl")}</span></div>
+        <div class="v">${eta}</div></div>
+    </div>
+    ${asof}${det}</div>`;
+}
+function toggleDet(btn){
+  const d=btn.nextElementSibling; const open=d.classList.toggle("open");
+  btn.textContent=open?t("detailsh"):t("details");
 }
 function orderRow(o){
   // Unknown/internal statuses must NEVER leak raw to the customer — generic "preparing".
   const st=STAT[o.status]||{ar:"قيد التجهيز",en:"In progress",c:"#92400e",b:"#fef3c7"};
   const it=(o.items||[])[0]||{};
   const more=(o.items||[]).length>1?` +${o.items.length-1}`:"";
-  const eta=o.est_delivery?` · ${t("eta").replace('🚚 ','')} ${fmt(o.est_delivery)}`:"";
+  const eta=o.est_delivery?` · ${t("etalbl")} ${fmt(o.est_delivery)}`:"";
   const done=(o.status==="COLLECTED"||o.status==="CANCELLED");
   const moneyLine=(o.deposit_usd>0)
     ? `<div style="font-size:11px;font-weight:600;margin-top:2px"><span style="color:#15803d">${t("deposit")} ${money(o.deposit_usd)}</span>${(!done&&o.remaining_usd!=null)?` · <span style="color:#b42318">${t("remaining")} ${money(o.remaining_usd)}</span>`:""}</div>`
@@ -422,35 +656,63 @@ function payRow(p){
   const kind=t(refund?"krefund":(p.kind==="collect"?"kcollect":"kdeposit"));
   const ils=(p.currency==="ILS"&&p.amount_entered!=null)?` · ₪${Number(p.amount_entered).toFixed(0)}`:"";
   const where=p.order_code?esc(p.order_code):t("credittag");
-  return `<div class="ord" style="background:#fbfaf6">
+  return `<div class="ord">
     <div class="t" dir="auto"><b>${kind}</b><div style="color:var(--muted);font-weight:500;font-size:11px">${fmt(p.paid_at)} · ${where}</div></div>
     <span style="font-size:14px;font-weight:800;white-space:nowrap;color:${refund?"#b42318":"#15803d"}">${refund?"−":""}${money(Math.abs(p.amount_usd||0))}<small style="color:var(--muted);font-weight:600">${ils}</small></span></div>`;
+}
+function renderOrders(){
+  const q=($("osearch").value||"").trim().toLowerCase();
+  let list=(D&&D.orders)||[];
+  if(q) list=list.filter(o=>((o.items||[]).some(it=>(it.title||"").toLowerCase().includes(q)))
+                            ||((o.order_id||"").toLowerCase().includes(q)));
+  $("orders").innerHTML=list.length?list.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
+}
+function renderLists(){
+  if(!D) return;
+  const tot=D.totals||{};
+  $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0||(tot.credit_usd||0)>0)
+    ? `<div class="stats">
+         <div class="stat mint"><div class="n">${money(tot.deposited_usd||0)}</div><div class="l">${t("paidsum")}</div></div>
+         <div class="stat rose"><div class="n">${money(tot.remaining_usd||0)}</div><div class="l">${t("remainsum")}</div></div>
+         ${(tot.credit_usd||0)>0?`<div class="stat sky"><div class="n">${money(tot.credit_usd)}</div><div class="l">${t("creditsum")}</div></div>`:""}
+       </div>` : "";
+  $("shipments").innerHTML=(D.shipments&&D.shipments.length)
+    ? D.shipments.map(shipCard).join("") : `<div class="empty">${t("noship")}</div>`;
+  renderOrders();
+  const pays=D.payments||[];
+  $("t_payments").textContent=t("payments");
+  $("payments").innerHTML=pays.length?pays.map(payRow).join(""):`<div class="empty">—</div>`;
+  $("nb_pay").style.display=pays.length?"flex":"none";
+  if(TAB==="pay"&&!pays.length) switchTab("home");
+}
+/* ---- notification bell: diff shipment statuses vs the last visit (localStorage) ---- */
+let BELL_CHANGES=[], BELL_CUR={};
+function bellCheck(){
+  let snap={}; try{ snap=JSON.parse(localStorage.getItem("otl_ship_snap")||"{}"); }catch(e){}
+  BELL_CUR={}; BELL_CHANGES=[];
+  (D.shipments||[]).forEach(s=>{ const k=s.tracking||"?"; const lab=(s.current||{}).label||"";
+    BELL_CUR[k]=lab;
+    if(Object.prototype.hasOwnProperty.call(snap,k) && snap[k]!==lab) BELL_CHANGES.push({k,lab}); });
+  if(!localStorage.getItem("otl_ship_snap"))            // first visit — just remember, no dot
+    localStorage.setItem("otl_ship_snap",JSON.stringify(BELL_CUR));
+  $("bellDot").style.display=BELL_CHANGES.length?"block":"none";
+}
+function bellToggle(e){ if(e) e.stopPropagation();
+  const d=$("bellDrop"); const open=d.classList.toggle("open"); if(!open) return;
+  d.innerHTML=`<div class="bh">🔔 ${t("bellhead")}</div>`+(BELL_CHANGES.length
+    ? BELL_CHANGES.map(c=>`<div class="bi"><span dir="ltr">${esc(c.k)}</span> ← <b dir="auto">${esc(c.lab)}</b></div>`).join("")
+    : `<div class="bnone">${t("bellnone")}</div>`);
+  localStorage.setItem("otl_ship_snap",JSON.stringify(BELL_CUR));   // seen → clear the dot
+  BELL_CHANGES=[]; $("bellDot").style.display="none";
 }
 async function loadDashboard(){
   let d; try{ d=await (await fetch("/api/customer/orders")).json(); }catch(e){ d=null; }
   if(!d){ backToPhone(); return; }
-  paint(); show("s_dash");
+  D=d; paint(); show("s_dash"); switchTab(TAB==="pay"&&!(d.payments||[]).length?"home":TAB);
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
   refreshEmailLine();
-  const tot=d.totals||{};
-  $("balSum").innerHTML=((tot.deposited_usd||0)>0||(tot.remaining_usd||0)>0||(tot.credit_usd||0)>0)
-    ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px">
-         <div style="flex:1;min-width:130px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:12px;padding:10px 13px">
-           <div style="font-size:20px;font-weight:800;color:#15803d">${money(tot.deposited_usd||0)}</div>
-           <div style="font-size:11.5px;color:#166534">${t("paidsum")}</div></div>
-         <div style="flex:1;min-width:130px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:10px 13px">
-           <div style="font-size:20px;font-weight:800;color:#b42318">${money(tot.remaining_usd||0)}</div>
-           <div style="font-size:11.5px;color:#991b1b">${t("remainsum")}</div></div>
-         ${(tot.credit_usd||0)>0?`<div style="flex:1;min-width:130px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:10px 13px">
-           <div style="font-size:20px;font-weight:800;color:#1d4ed8">${money(tot.credit_usd)}</div>
-           <div style="font-size:11.5px;color:#1e40af">${t("creditsum")}</div></div>`:""}
-       </div>` : "";
-  $("shipments").innerHTML=(d.shipments&&d.shipments.length)?d.shipments.map(shipCard).join(""):`<div class="empty">${t("noship")}</div>`;
-  $("orders").innerHTML=(d.orders&&d.orders.length)?d.orders.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
-  const pays=d.payments||[];
-  $("t_payments").style.display=pays.length?"block":"none";
-  $("t_payments").textContent=t("payments");
-  $("payments").innerHTML=pays.map(payRow).join("");
+  renderLists();
+  bellCheck();
 }
 async function init(){
   setLang("ar");
@@ -472,3 +734,5 @@ async function init(){
 }
 init();
 </script>
+</body>
+</html>
