@@ -112,15 +112,6 @@ img{max-width:100%;display:block}
 }
 .sitenav-lang button.on{background:var(--ink);color:#fff}
 
-.sitenav-wa{
-  display:inline-flex;align-items:center;gap:7px;
-  background:var(--wa);color:#fff;
-  font-family:var(--body);font-weight:700;font-size:13.5px;
-  padding:8px 16px;border-radius:999px;
-  transition:filter .15s;white-space:nowrap;
-}
-.sitenav-wa:hover{filter:brightness(1.06)}
-
 .sitenav-burger{
   /* always visible — the ☰ holds the language toggle now, desktop included */
   display:flex;background:none;border:none;cursor:pointer;
@@ -333,7 +324,6 @@ footer .stafflink:hover{border-color:#4d473c;color:#c7c0b4}
 @media (max-width:767px){
   /* only links + WA pill collapse — lang toggle stays visible */
   .sitenav-links{display:none}
-  .sitenav-wa{display:none}
   .sitenav-burger{display:flex}
   /* push the menu button to the far side (opposite the logo) instead of
      letting it bunch next to the lang toggle */

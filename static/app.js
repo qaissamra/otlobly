@@ -146,7 +146,7 @@ function setLang(lang) {
 function buildWa() {
   var msg = I18N[currentLang]["wa.msg"];
   var url = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(msg);
-  ["wa-hero", "wa-sitenav", "wa-mob"].forEach(function(id) {
+  ["wa-mob"].forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
     if (WA_NUMBER) { el.href = url; el.style.display = ""; }
