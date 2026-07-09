@@ -46,7 +46,10 @@ def send_email(to, subject, html):
     req = request.Request(RESEND_API,
                           data=json.dumps(payload).encode(),
                           headers={"Authorization": f"Bearer {key}",
-                                   "Content-Type": "application/json"})
+                                   "Content-Type": "application/json",
+                                   # Cloudflare in front of api.resend.com blocks urllib's
+                                   # default UA with "403 error code: 1010"
+                                   "User-Agent": "otlobly-orders/1.0 (+https://otlobly.onrender.com)"})
     try:
         with request.urlopen(req, timeout=20) as r:
             out = json.loads(r.read().decode() or "{}")
