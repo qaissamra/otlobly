@@ -95,7 +95,7 @@ body{
   font-size:1.05rem;font-weight:700;color:#333;
   margin-bottom:16px;text-align:center;
 }
-.slider-label span{color:#ff5a1f;font-size:1.25rem}
+.slider-label span:last-child{color:#ff5a1f;font-size:1.25rem}
 input[type=range]{
   -webkit-appearance:none;appearance:none;
   width:100%;height:6px;
@@ -155,8 +155,9 @@ html[dir=ltr] .plan-badge{right:auto;left:50%;transform:translateX(-50%)}
 }
 .plan-rate sup{font-size:1.1rem;vertical-align:super;font-weight:700}
 .plan-rate-sub{font-size:.82rem;color:#888;margin-bottom:8px;line-height:1.4}
-.fee-orderval{font-size:.8rem;font-weight:700;color:#111;background:#f0ede8;border-radius:99px;
-  display:inline-block;padding:4px 14px;margin-bottom:10px}
+.card-slider{margin:2px 0 14px}
+.card-slider-label{font-size:.82rem;font-weight:700;color:#333;margin-bottom:8px;text-align:center}
+.card-slider-label span:last-child{color:#ff5a1f;font-size:.95rem}
 .plan-fee-live{
   background:#fff8f5;border-radius:12px;
   padding:10px 14px;margin-bottom:20px;
@@ -457,7 +458,7 @@ footer a:hover{color:#fff}
 <!-- ══════════ SLIDER ══════════ -->
 <div class="plans-outer">
   <div class="slider-wrap reveal">
-    <div class="slider-label" data-i18n="slider.label.pre">قيمة طلبك: <span id="slider-val">$150</span></div>
+    <div class="slider-label"><span data-i18n="slider.label.pre">قيمة طلبك: </span><span id="slider-val">$150</span></div>
     <input type="range" id="order-slider" min="30" max="1000" value="150" step="5" aria-label="قيمة الطلب">
     <div class="slider-ticks">
       <span>$30</span>
@@ -501,7 +502,10 @@ footer a:hover{color:#fff}
       <div class="plan-tagline" data-i18n="plan2.tagline">ادفع جزء الآن والباقي لما يوصل لبابك</div>
       <div class="plan-rate"><span id="relax-rate-live">20%</span></div>
       <div class="plan-rate-sub" id="relax-rate-sub">عمولتك الآن: 20%</div>
-      <div class="fee-orderval" id="deposit-orderval">لطلب بقيمة $150</div>
+      <div class="card-slider">
+        <div class="card-slider-label"><span data-i18n="slider.label.pre">قيمة طلبك: </span><span id="card-slider-val">$150</span></div>
+        <input type="range" id="order-slider-card" min="30" max="1000" value="150" step="5" aria-label="قيمة الطلب">
+      </div>
       <div class="plan-fee-live">
         <div class="fee-label" data-i18n="fee.label">رسومك لهذا الطلب</div>
         <div class="fee-val" id="fee-deposit">$12.00</div>
@@ -1032,13 +1036,18 @@ function updateSlider() {
   document.getElementById("relax-rate-live").textContent = rStr;
   const prefix = currentLang === "ar" ? "عمولتك الآن: " : "Your rate now: ";
   document.getElementById("relax-rate-sub").textContent = prefix + rStr;
-  /* the slider is off-screen on mobile — repeat its order value inside the card
-     so the % always has visible context */
-  const ovPfx = currentLang === "ar" ? "لطلب بقيمة " : "for an order of ";
-  document.getElementById("deposit-orderval").textContent = ovPfx + "$" + v;
+  /* mirror into the card's own slider — on mobile the main slider is
+     off-screen, so the card carries a synced copy */
+  cardSlider.value = v;
+  cardSlider.style.setProperty("--pct", pct + "%");
+  cardSliderVal.textContent = "$" + v;
 }
 
 slider.addEventListener("input", updateSlider);
+/* the in-card twin drives the same value: copy into the main slider, repaint all */
+const cardSlider = document.getElementById("order-slider-card");
+const cardSliderVal = document.getElementById("card-slider-val");
+cardSlider.addEventListener("input", function() { slider.value = cardSlider.value; updateSlider(); });
 
 /* ─── WhatsApp links ─── */
 function buildWaLinks() {
