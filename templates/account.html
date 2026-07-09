@@ -71,12 +71,14 @@
   .qa.peach{background:linear-gradient(160deg,var(--peach),var(--peach-2))}
   .qa.lav{background:linear-gradient(160deg,var(--lav-2),var(--lav))}
   .qa .qart{position:absolute;bottom:4px;inset-inline-end:6px;width:76px;height:64px}
-  /* ── shipment cards (track-card, portal edition) ── */
-  .tcard{border-radius:var(--card-r);padding:16px;margin-bottom:14px;background:var(--pbg);box-shadow:var(--shadow-card)}
-  .p-lav{--pa:#5b52d8;--pbg:linear-gradient(160deg,#e2e0fb,#cbc8f6)}
-  .p-sky{--pa:#3068c9;--pbg:linear-gradient(160deg,#e0ebfe,#c8dcfb)}
-  .p-mint{--pa:#177f58;--pbg:linear-gradient(160deg,#dcf3e8,#c4ecd9)}
-  .p-peach{--pa:#d24a12;--pbg:linear-gradient(160deg,#ffe4d3,#ffd2b8)}
+  /* ── shipment cards (track-card, portal edition) — cream + Otlobly-orange,
+       matching the landing tracking cards. --pa (accent) drives the progress,
+       timeline dots and field icons; --pbg is the card background. The old
+       .p-lav/.p-sky/.p-mint/.p-peach cycle is collapsed to one brand scheme
+       (shipCard() still adds those classes — now harmless no-ops). ── */
+  .tcard{--pa:var(--orange);--pbg:linear-gradient(160deg,#fff6ef,#ffe9db);
+    border:1px solid #ffe3d1;border-radius:var(--card-r);padding:16px;margin-bottom:14px;
+    background:var(--pbg);box-shadow:var(--shadow-card)}
   .tc-top{display:flex;align-items:center;gap:11px}
   .tc-thumb{width:56px;height:56px;flex:none;border-radius:16px;background:#fff;overflow:hidden;
     box-shadow:0 4px 12px rgba(35,24,10,.10);display:flex;align-items:center;justify-content:center}
@@ -94,8 +96,8 @@
   .tcard .prog .node{width:15px;height:15px;border-radius:50%;flex:none;background:#fff;
     border:3px solid rgba(35,24,10,.15);z-index:1;position:relative}
   .tcard .prog .node.done{background:var(--pa);border-color:var(--pa)}
-  .tcard .prog .node.cur{background:#fff;border-color:var(--pa);box-shadow:0 0 0 5px rgba(35,24,10,.08)}
-  .tcard .prog .seg{flex:1;height:4px;background:rgba(255,255,255,.6);border-radius:4px;margin:0 -2px}
+  .tcard .prog .node.cur{background:#fff;border-color:var(--pa);box-shadow:0 0 0 5px rgba(255,90,31,.18)}
+  .tcard .prog .seg{flex:1;height:4px;background:#f0ddcb;border-radius:4px;margin:0 -2px}
   .tcard .prog .seg.fill{background:var(--pa)}
   .tcard .prog-labels{display:flex;font-size:10px;font-weight:600;color:rgba(35,24,10,.6);margin:2px 0 4px}
   .tcard .prog-labels span{flex:1;text-align:center}
