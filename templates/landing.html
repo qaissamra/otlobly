@@ -138,6 +138,8 @@
         <button id="track-btn" onclick="trackSubmit()" data-i18n="track.submit">تتبّع</button>
       </div>
 
+      <!-- Idle teaser (fake sample). Hidden once a real lookup runs; restored via "بحث جديد". -->
+      <div id="track-demo">
       <div class="track-card">
         <div class="track-top">
           <div class="track-thumb">
@@ -189,6 +191,11 @@
         </div>
         <a class="btn" href="/track" data-i18n="track.cta">تتبّع هذه الشحنة</a>
       </div>
+      </div><!-- /#track-demo -->
+
+      <!-- Inline live tracking: status message + real result card(s) render here -->
+      <div id="track-status"></div>
+      <div id="track-results"></div>
     </section>
 
     <!-- ══════════ HOW IT WORKS ══════════ -->

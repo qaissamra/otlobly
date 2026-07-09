@@ -28,8 +28,17 @@ const I18N = {
     "track.eta":      "الوصول المتوقّع",
     "track.etav":     "خلال ٢٤ ساعة",
     "track.cta":      "تتبّع هذه الشحنة",
-    "track.inputph":  "أدخل رقم تتبّع OTL…",
+    "track.inputph":  "أدخل رقم تتبّع OTL أو جوالك…",
     "track.submit":   "تتبّع",
+    "track.searching":"…",
+    "track.notfound": "لم نجد شحنة بهذا الرقم. تأكد من رقم OTL أو أدخل رقم جوالك كاملاً.",
+    "track.status":   "الحالة الحالية",
+    "track.yourship": "شحنتك",
+    "track.newsearch":"↺ بحث جديد",
+    "track.showtl":   "عرض التتبّع",
+    "track.hidetl":   "إخفاء التتبّع",
+    "track.asof":     "🕓 آخر تحديث",
+    "track.count":    "وجدنا {n} شحنات",
     "how.head":       "كيف تعمل الخدمة؟",
     "how.s1t":        "أرسل الرابط",
     "how.s1p":        "ابعتلنا رابط المنتج من أمازون على واتساب.",
@@ -83,8 +92,17 @@ const I18N = {
     "track.eta":      "Est. arrival",
     "track.etav":     "Within 24 hours",
     "track.cta":      "Track this shipment",
-    "track.inputph":  "Enter OTL tracking number…",
+    "track.inputph":  "Enter your OTL number or mobile…",
     "track.submit":   "Track",
+    "track.searching":"…",
+    "track.notfound": "No shipment found for that. Check the OTL number, or enter your full mobile number.",
+    "track.status":   "Current status",
+    "track.yourship": "Your shipment",
+    "track.newsearch":"↺ New search",
+    "track.showtl":   "Show tracking",
+    "track.hidetl":   "Hide tracking",
+    "track.asof":     "🕓 last updated",
+    "track.count":    "Found {n} shipments",
     "how.head":       "How it works",
     "how.s1t":        "Send the link",
     "how.s1p":        "Send us the Amazon product link on WhatsApp.",
@@ -195,12 +213,116 @@ function trackSubmit() {
   doTrackLookup(val);
 }
 
-/* ── Shared track lookup: hand off to the real tracking page.
-      /track auto-runs from ?t= (OTL number) or ?q= (phone). ── */
+/* ── Inline live tracking: query /api/track and render the real result card(s)
+      right inside the #track section — no navigation. The endpoint itself
+      branches on OTL-number vs full-mobile, so we just pass the raw query.
+      "عرض الكل" (.see) still routes to the full-history /track page. ── */
+function trEsc(s){ return (s||"").replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+function tL(k){ var d=I18N[currentLang]||I18N.en; return (d[k]!=null)?d[k]:(I18N.en[k]||k); }
+function trFmt(d){ if(!d) return ""; var x=new Date(d); if(isNaN(x)) return trEsc(d);
+  return x.toLocaleDateString(currentLang==="ar"?"ar":"en-GB",{day:"2-digit",month:"short",year:"numeric"}); }
+function trFmtRange(a,b){ var loc=currentLang==="ar"?"ar":"en-GB";
+  var f=function(d){ return new Date(d).toLocaleDateString(loc,{day:"2-digit",month:"short"}); };
+  return f(a)+" – "+f(b)+" "+new Date(b).getFullYear(); }
+/* bucket → progress step (1..4); 5 = fully delivered. Same mapping as the account portal. */
+function trStep(s){
+  var b=(s.current&&s.current.bucket)||"";
+  var hasTrack=!!(s.tracking&&(s.events||[]).length);
+  if(b==="delivered") return 5;
+  if(b==="arrived") return 4;
+  if(b==="customs"||b==="cleared") return 3;
+  if(b==="transit") return (hasTrack||s.est_delivery)?2:1;
+  return 1;
+}
+var TR_PIN='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
+var TR_CLK='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>';
+var TR_BOX='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>';
+
 function doTrackLookup(code) {
-  var normalized = code.toUpperCase().replace(/\s+/g, "");
-  var param = /^OTL/i.test(normalized) ? "t" : "q";
-  window.location.href = "/track?" + param + "=" + encodeURIComponent(normalized);
+  var btn = document.getElementById("track-btn");
+  var status = document.getElementById("track-status");
+  var results = document.getElementById("track-results");
+  var demo = document.getElementById("track-demo");
+  var oldTxt = btn.textContent;
+  btn.disabled = true; btn.textContent = tL("track.searching");
+  status.innerHTML = "";
+  fetch("/api/track", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: code }) })
+    .then(function(r){ return r.json(); })
+    .catch(function(){ return { found: false }; })
+    .then(function(d){
+      btn.disabled = false; btn.textContent = oldTxt;
+      if (!d || !d.found || !(d.shipments && d.shipments.length)) {
+        results.innerHTML = ""; if (demo) demo.style.display = "";
+        status.innerHTML = '<div class="track-msg">' + tL("track.notfound") + '</div>';
+        return;
+      }
+      if (demo) demo.style.display = "none";
+      var head = (d.count > 1) ? '<div class="track-count">' + tL("track.count").replace("{n}", d.count) + '</div>' : "";
+      var reset = '<button class="track-newsearch" onclick="trackReset()">' + tL("track.newsearch") + '</button>';
+      results.innerHTML = head + d.shipments.map(renderLandingShip).join("") + reset;
+    });
+}
+
+function trackReset(){
+  var results = document.getElementById("track-results");
+  var status = document.getElementById("track-status");
+  var demo = document.getElementById("track-demo");
+  var input = document.getElementById("track-input");
+  if (results) results.innerHTML = "";
+  if (status) status.innerHTML = "";
+  if (demo) demo.style.display = "";
+  if (input) { input.value = ""; input.focus(); }
+}
+
+/* toggle a card's inline event timeline open/closed */
+function trTimeline(btn){
+  var tl = btn.parentNode.querySelector(".track-tl");
+  if (!tl) return;
+  var open = tl.classList.toggle("open");
+  btn.textContent = open ? tL("track.hidetl") : tL("track.showtl");
+}
+
+function renderLandingShip(s){
+  var cur = s.current || {};
+  var first = (s.items || [])[0] || {};
+  var more = ((s.items || []).length > 1) ? ' <span class="tk-more">+' + (s.items.length - 1) + '</span>' : "";
+  var step = trStep(s);
+  var nodes = "";
+  for (var n = 1; n <= 4; n++) {
+    var done = (step === 5 || n < step), isCur = (n === step);
+    nodes += '<span class="node' + (done ? ' done' : (isCur ? ' cur' : '')) + '"></span>';
+    if (n < 4) nodes += '<span class="seg' + ((step === 5 || n < step) ? ' fill' : '') + '"></span>';
+  }
+  var eta = (s.est_from && s.est_to) ? trFmtRange(s.est_from, s.est_to)
+          : (s.est_delivery ? trFmt(s.est_delivery) : "—");
+  var thumb = first.image
+    ? '<div class="illo"><img src="' + trEsc(first.image) + '" loading="lazy" alt="" onerror="showPh(this)"><div class="ph" style="display:none"><small>📦</small></div></div>'
+    : '<div class="tk-noimg">' + TR_BOX + '</div>';
+  var evs = (s.events || []).slice().reverse();
+  var tl = evs.length ? ('<ul class="track-tl">' + evs.map(function(e){
+      return '<li class="b-' + (e.bucket || 'transit') + '"><span class="tl-dot"></span>'
+           + '<div class="tl-lab" dir="auto">' + trEsc(e.label) + '</div>'
+           + '<div class="tl-when">' + trFmt(e.date) + '</div></li>';
+    }).join("") + '</ul>') : "";
+  var asof = (s.stale && s.as_of) ? '<div class="track-asof">' + tL("track.asof") + ' ' + trFmt(s.as_of) + '</div>' : "";
+  var toggle = tl ? '<button class="btn" onclick="trTimeline(this)">' + tL("track.showtl") + '</button>' : "";
+  return '<div class="track-card">'
+    + '<div class="track-top">'
+    +   '<div class="track-thumb">' + thumb + '</div>'
+    +   '<div class="track-meta"><div class="nm" dir="auto">' + (trEsc(first.title) || tL("track.yourship")) + more + '</div>'
+    +     (s.tracking ? '<div class="id">' + trEsc(s.tracking) + '</div>' : '') + '</div>'
+    +   '<div class="track-rider"><div class="illo"><img src="/static/assets/rider.png" alt="" loading="lazy" onerror="showPh(this)"><div class="ph" style="display:none"><small>rider.png</small></div></div></div>'
+    + '</div>'
+    + '<div class="prog" aria-hidden="true">' + nodes + '</div>'
+    + '<div class="prog-labels"><span>' + tL("track.s1") + '</span><span>' + tL("track.s2") + '</span><span>' + tL("track.s3") + '</span><span>' + tL("track.s4") + '</span></div>'
+    + '<div class="track-fields">'
+    +   '<div class="f"><div class="k">' + TR_PIN + '<span>' + tL("track.status") + '</span></div><div class="v" dir="auto">' + (trEsc(cur.label) || "—") + '</div></div>'
+    +   '<div class="f"><div class="k">' + TR_CLK + '<span>' + tL("track.eta") + '</span></div><div class="v">' + eta + '</div></div>'
+    + '</div>'
+    + asof + toggle + tl
+    + '</div>';
 }
 
 /* keyboard: Enter triggers track */
