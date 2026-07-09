@@ -46,6 +46,19 @@
   .items{margin:10px 0 0;display:flex;flex-direction:column;gap:8px}
   .prod{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink)}
   .prod img,.prod .ph{width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f1efe8;border:1px solid var(--line);flex:none}
+  /* ☰ menu (shared pattern across the public pages) */
+  .burger{width:38px;height:38px;margin:0 0 0 0;margin-inline-start:auto;padding:0;border:none;
+    background:#f0ede8;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+  .navmenu{display:none;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:#fff;
+    padding:4px 12px;margin:12px 0 4px}
+  .navmenu.open{display:flex}
+  .navmenu a{display:flex;align-items:center;gap:9px;padding:11px 4px;border-bottom:1px solid #f4f1ec;
+    color:var(--ink);text-decoration:none;font-weight:700;font-size:14px}
+  .navmenu a svg{flex:none;opacity:.75}
+  .navmenu a:last-of-type{border-bottom:none}
+  .navmenu .wa-menu{background:#25D366;color:#fff;border-radius:999px;justify-content:center;
+    margin:8px 0;padding:11px 16px;border-bottom:none}
+  .navmenu .wa-menu svg{opacity:1}
 </style>
 <div class="card">
   <div class="brand">
@@ -53,6 +66,35 @@
       <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
       <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
     <h1>Otlob<span class="ly">ly</span></h1>
+    <button class="burger" id="burger" aria-label="القائمة · menu" onclick="toggleMenu(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="navmenu" id="navmenu">
+    <a href="/order">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span>اطلب الآن · Order</span>
+    </a>
+    <a href="/pricing">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+      <span>الباقات · Pricing</span>
+    </a>
+    <a href="/track">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>تتبّع · Track</span>
+    </a>
+    <a href="/#how">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+      <span>كيف تعمل · How it works</span>
+    </a>
+    <a href="/account">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>حسابي · Account</span>
+    </a>
+    <a class="wa-menu" id="wa-menu" href="#" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+      <span>واتساب · WhatsApp</span>
+    </a>
   </div>
   <p class="sub">تتبّع شحنتك · Track your package</p>
   <label>رقم الجوال كاملاً · Full mobile number</label>
@@ -64,8 +106,17 @@
   <div class="foot"><a href="/account" style="color:var(--accent);font-weight:700;text-decoration:none">🔑 حسابي · My account</a></div>
   <div class="foot">Otlobly · لأي استفسار تواصل معنا · contact us anytime</div>
 </div>
+<script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
 <script>
 const $=id=>document.getElementById(id);
+/* ☰ menu (shared pattern) */
+function toggleMenu(e){ if(e) e.stopPropagation(); $("navmenu").classList.toggle("open"); }
+document.addEventListener("click", function(e){
+  const m=$("navmenu"); if(m && m.classList.contains("open") && !m.contains(e.target)) m.classList.remove("open");
+});
+(function(){ const el=document.getElementById("wa-menu"); if(!el) return;
+  if(window.OTL_WA_NUMBER){ el.href="https://wa.me/"+window.OTL_WA_NUMBER+"?text="+encodeURIComponent("مرحباً اطلبلي 👋"); }
+  else el.style.display="none"; })();
 function fmt(s){ if(!s) return ""; const d=new Date(s); if(isNaN(d)) return s;
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+
     ' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }

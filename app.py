@@ -738,7 +738,7 @@ def api_catalog_refresh_price():
 
 @app.route("/catalog")
 def catalog_page():
-    return render_template("catalog.html")
+    return render_template("catalog.html", wa_number=_wa_business_number())
 
 
 @app.route("/pricing")
@@ -2238,7 +2238,7 @@ def _shipments_for(pairs, names, oids):
 
 @app.route("/track", methods=["GET"])
 def track_page():
-    return render_template("track.html")
+    return render_template("track.html", wa_number=_wa_business_number())
 
 
 @app.route("/api/track", methods=["POST"])
@@ -2321,7 +2321,7 @@ def _customer_orders(core):
 
 @app.route("/account", methods=["GET"])
 def account_page():
-    return render_template("account.html")
+    return render_template("account.html", wa_number=_wa_business_number())
 
 
 @app.route("/api/customer/me")
