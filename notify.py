@@ -95,6 +95,26 @@ def send_account_verify(e164, name, token, lang=None):
     ])
 
 
+def send_track_package(e164, name, order_ref, delivery_date, otl=None, lang=None):
+    """Send the UTILITY "track_package" template — "your package is on the way":
+      body {{1}} name · {{2}} order/tracking ref · {{3}} estimated delivery date
+      button "تتبع الطلب" (dynamic URL …/track?t={{1}}) carrying the OTL number.
+    Template name from env WHATSAPP_TRACK_TEMPLATE so a rename is a config change.
+    Pass otl only when the button is a Dynamic URL (omit it for a Static button)."""
+    template = os.environ.get("WHATSAPP_TRACK_TEMPLATE", "track_package")
+    components = [
+        {"type": "body", "parameters": [
+            {"type": "text", "text": (name or "").strip() or "عميلنا"},
+            {"type": "text", "text": str(order_ref or "")},
+            {"type": "text", "text": str(delivery_date or "")},
+        ]},
+    ]
+    if otl:
+        components.append({"type": "button", "sub_type": "url", "index": "0",
+                           "parameters": [{"type": "text", "text": str(otl)}]})
+    return _send_template(e164, template, lang, components)
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 3:

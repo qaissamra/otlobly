@@ -1130,6 +1130,9 @@ function itemsCell(o){
 }
 
 function waMenu(o){
+  // 📦 = send the track_package template (auto WhatsApp: "on the way" + delivery date + track link).
+  // Distinct from the 💬 menu, which opens wa.me with prefilled text for the staffer to send.
+  const track=`<button class="po-btn" title="Notify customer: package on the way + delivery date (WhatsApp)" onclick="notifyTrack('${o.order_id}',this)">📦</button>`;
   return `<select class="statussel" onchange="sendWa('${o.order_id}',this.value);this.selectedIndex=0">
     <option>💬 message…</option>
     <option value="quote">Quote</option>
@@ -1137,7 +1140,17 @@ function waMenu(o){
     <option value="payment_due">Amount due</option>
     <option value="order_placed">Order placed</option>
     <option value="status_update">Status update</option>
-    <option value="ready_for_pickup">Ready for pickup</option></select>`;
+    <option value="ready_for_pickup">Ready for pickup</option></select> ${track}`;
+}
+async function notifyTrack(id,btn,force){
+  if(!force && !confirm("Send the customer a WhatsApp 'package is on the way' message with their delivery date?")) return;
+  btn.disabled=true; const o=btn.textContent; btn.textContent="…";
+  let d; try{ d=await (await fetch("/api/customer_notify/track",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({order_id:id,force:!!force})})).json(); }catch(e){ d={error:"network"}; }
+  btn.disabled=false; btn.textContent=o;
+  if(d.ok&&d.dev){ toast(`DEV preview → ${d.preview.to} · ${d.preview.name} · ${d.preview.delivery_date} · ${d.preview.otl}`); }
+  else if(d.ok){ toast(`✅ Sent to ${d.sent_to} · ETA ${d.eta}`); }
+  else if(d.already){ if(confirm(`Already notified ${d.notified_at||''}. Resend?`)) notifyTrack(id,btn,true); }
+  else { toast("⚠ "+(d.error||"failed")); }
 }
 
 function render(){

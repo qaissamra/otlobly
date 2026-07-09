@@ -2819,6 +2819,80 @@ def api_customer_orders():
                     "shipments": shipments, "count": len(shipments)})
 
 
+def _pkg_for_order(pdb, order_id):
+    """(po, pk) for the package carrying this order's items, or (None, None).
+    A package can hold several customers' items; we match on customer_order_id."""
+    oid = (order_id or "").strip().upper()
+    for po in pdb.get("purchase_orders", []):
+        for pk in po.get("packages", []):
+            if any((it.get("customer_order_id") or "").strip().upper() == oid
+                   for it in pk.get("items", [])):
+                return po, pk
+    return None, None
+
+
+def _fmt_delivery(iso):
+    """A friendly delivery date for the customer message; passthrough if unparseable."""
+    try:
+        return datetime.strptime((iso or "")[:10], "%Y-%m-%d").strftime("%d %b %Y")
+    except Exception:  # noqa: BLE001
+        return (iso or "").strip()
+
+
+@app.route("/api/customer_notify/track", methods=["POST"])
+@auth.require("edit_fulfillment")
+@limiter.limit("30 per 10 minutes")
+def api_customer_notify_track():
+    """Staff: send the customer the 'your package is on the way' WhatsApp (track_package
+    template) with their delivery date + a track link. Manual, per order — anti-spam
+    'already notified' guard (override with force). Dev fallback previews without sending."""
+    b = request.get_json(force=True, silent=True) or {}
+    order = db.get_order((b.get("order_id") or "").strip())
+    if not order:
+        return jsonify({"ok": False, "error": "Order not found."}), 404
+    oid = order.get("order_id")
+    cust = order.get("customer") or {}
+    name = (cust.get("name") or "").strip()
+    e164 = None
+    for ph in (cust.get("phones") or []):
+        pin = normalize.normalize_phone(ph.get("e164") or ph.get("raw") or "")
+        if pin and pin.get("e164"):
+            e164 = pin["e164"]
+            break
+    if not e164:
+        return jsonify({"ok": False, "error": "No valid phone on this order."}), 400
+    eta = _fmt_delivery(order.get("est_delivery_customer"))
+    if not eta:
+        return jsonify({"ok": False, "error": "Set the estimated delivery date first."}), 400
+    pdb = purchases.load()
+    po, pk = _pkg_for_order(pdb, oid)
+    if not pk:
+        return jsonify({"ok": False, "error": "This order isn't in a shipped package yet."}), 400
+    if not (pk.get("customer_tracking") or "").strip():
+        pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
+        purchases.save(pdb)
+    otl = pk["customer_tracking"]
+    seen = pk.get("track_notified") or {}          # {order_id: iso} — one send per order
+    if seen.get(oid) and not b.get("force"):
+        return jsonify({"ok": False, "already": True, "notified_at": seen[oid],
+                        "error": "Already notified — resend?"}), 409
+    res = notify.send_track_package(e164, name, otl, eta, otl=otl)
+    dev = (not res.get("ok")) and bool(os.environ.get("OTLOBLY_OTP_DEV"))  # local preview, no WhatsApp creds
+    if res.get("ok") or dev:
+        seen[oid] = db.now_iso()                   # stamp so the guard works (dev branch never runs in prod)
+        pk["track_notified"] = seen
+        purchases.save(pdb)
+        if res.get("ok"):
+            activity.log("notify", "order", oid, oid,
+                         detail=f"track_package → {e164} · ETA {eta} · {otl}", user=_user())
+            return jsonify({"ok": True, "sent_to": e164, "otl": otl, "eta": eta})
+        return jsonify({"ok": True, "dev": True,
+                        "preview": {"to": e164, "name": name, "order_ref": otl,
+                                    "delivery_date": eta, "otl": otl}})
+    app.logger.warning("track_package for %s not sent: %s", oid, res.get("error"))
+    return jsonify({"ok": False, "error": res.get("error") or "send failed"}), 502
+
+
 @app.route("/api/customer_tracking/generate", methods=["POST"])
 @auth.require("edit_fulfillment")
 def api_gen_customer_tracking():
