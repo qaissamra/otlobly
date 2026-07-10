@@ -47,6 +47,7 @@ def _row(o):
         "status": o["status"],
         "source": o.get("source"),
         "payment_plan": o.get("payment_plan"),
+        "est_delivery_customer": o.get("est_delivery_customer"),   # gates the 📦 notify button
         "created_at": o.get("created_at"),
         "amazon_order_number": o.get("amazon_order_number"),
         "tracking_number": o.get("tracking_number"),

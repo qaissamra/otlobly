@@ -2861,13 +2861,19 @@ def api_customer_notify_track():
             break
     if not e164:
         return jsonify({"ok": False, "error": "No valid phone on this order."}), 400
-    eta = _fmt_delivery(order.get("est_delivery_customer"))
-    if not eta:
-        return jsonify({"ok": False, "error": "Set the estimated delivery date first."}), 400
     pdb = purchases.load()
     po, pk = _pkg_for_order(pdb, oid)
     if not pk:
         return jsonify({"ok": False, "error": "This order isn't in a shipped package yet."}), 400
+    # The order's stamped ETA, else straight from the package's Arrives date + buffer —
+    # so Notify works the moment the date is typed, before reconcile stamps the order.
+    eta_iso = order.get("est_delivery_customer")
+    if not eta_iso and (pk.get("arrival") or "").strip():
+        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", 8)
+        eta_iso = purchases._arrival_plus(pk["arrival"].strip(), buf)
+    eta = _fmt_delivery(eta_iso)
+    if not eta:
+        return jsonify({"ok": False, "error": "Set the package's Arrives date first."}), 400
     if not (pk.get("customer_tracking") or "").strip():
         pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
         purchases.save(pdb)

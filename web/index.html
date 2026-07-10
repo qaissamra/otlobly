@@ -899,6 +899,22 @@
   </div>
 </div>
 
+<!-- 📱 Notify customers: pick who in the package gets the track_package WhatsApp -->
+<div id="notifyModal" class="az-modal hidden" onclick="if(event.target===this)ntfClose()">
+  <div class="az-box" style="width:480px;max-width:95vw;max-height:88vh;overflow:auto">
+    <div class="az-head"><b id="ntfPkgTitle">📱 Notify customers</b><span class="az-x" onclick="ntfClose()">✕</span></div>
+    <div style="padding:12px 16px 16px">
+      <div class="muted2" style="font-size:12px;margin-bottom:8px">كل عميل يستلم رسالة باسمه وتاريخ تسليمه · each customer gets their own name + delivery date, with a "تتبع الطلب" button.</div>
+      <div id="ntfList"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="po-btn accent" onclick="ntfSend(this)">📤 Send WhatsApp</button>
+        <button class="po-btn" onclick="ntfClose()">Close</button>
+        <span id="ntfOut" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- P&L drill-down: the rows behind one card (click any P&L number) -->
 <div id="pnlDrillModal" class="az-modal hidden" onclick="if(event.target===this)closePnlDrill()">
   <div class="az-box" style="width:760px;max-width:96vw;max-height:90vh;overflow:auto">
@@ -1132,7 +1148,10 @@ function itemsCell(o){
 function waMenu(o){
   // 📦 = send the track_package template (auto WhatsApp: "on the way" + delivery date + track link).
   // Distinct from the 💬 menu, which opens wa.me with prefilled text for the staffer to send.
-  const track=`<button class="po-btn" title="Notify customer: package on the way + delivery date (WhatsApp)" onclick="notifyTrack('${o.order_id}',this)">📦</button>`;
+  // Gated on the delivery date — same rule as the 📱 Notify button on the Purchases page.
+  const track=o.est_delivery_customer
+    ?`<button class="po-btn" title="Notify customer: package on the way + delivery date (WhatsApp)" onclick="notifyTrack('${o.order_id}',this)">📦</button>`
+    :`<button class="po-btn" disabled title="set the package's Arrives date first (Purchases page) — then you can notify" style="opacity:.5;cursor:not-allowed">📦</button>`;
   return `<select class="statussel" onchange="sendWa('${o.order_id}',this.value);this.selectedIndex=0">
     <option>💬 message…</option>
     <option value="quote">Quote</option>
@@ -2869,6 +2888,9 @@ function poPkgHtml(p,pk,pi){
       ${poThumbStrip(pk.items)}
       <span class="pkg-actions">
         ${(F.multilogin&&p.profile_box)?`<button class="po-btn" title="auto-get this package's tracking #s from Amazon (profile ${p.profile_box})" onclick="azTrackFetch(this,'${p.po_id}',${pi})">🤖 Get tracking</button>`:''}
+        ${pk.arrival
+          ?`<button class="po-btn accent" title="WhatsApp each customer in this package: on the way + their delivery date" onclick="pkgNotifyOpen('${p.po_id}',${pi})">📱 Notify</button>`
+          :`<button class="po-btn" disabled title="set the Arrives date first ↓ then you can notify the customers" style="opacity:.5;cursor:not-allowed">📱 Notify</button>`}
         <button class="po-btn" title="check where this package is" onclick="trackPkg(this,'${p.po_id}',${pi})">🔎 Check shipping</button>
         <button class="po-btn accent" title="add a product to this package" onclick="poAddItem('${p.po_id}',${pi})">＋ Add product</button>
         <button class="po-btn danger" title="delete this package" onclick="poDelPkg('${p.po_id}',${pi})">🗑</button>
@@ -2902,6 +2924,51 @@ function poAddPkg(id){ const p=poFind(id); p.packages=p.packages||[]; p.packages
 async function poDelPkg(id,pi){ if(!confirm("Delete this package? It moves to Trash — you can restore it."))return;
   const r=await post("/api/purchase/package/delete",{id,pi});
   if(r.ok){ const p=poFind(id); p.packages.splice(pi,1); p.packages.forEach((pk,i)=>pk.package_no=i+1); renderPurchases(); toast("Package moved to Trash"); loadHomeActivity(); } }
+
+/* ---- 📱 Notify customers (track_package WhatsApp) — per-package picker ---- */
+let NTF_CTX=null;
+function pkgNotifyOpen(id,pi){
+  const p=poFind(id), pk=p&&(p.packages||[])[pi]; if(!pk)return;
+  const seen={}, rows=[];
+  (pk.items||[]).forEach(it=>{
+    const oid=(it.customer_order_id||'').trim(); if(!oid||seen[oid])return; seen[oid]=1;
+    rows.push({oid,name:(it.customer_name||'').trim()||oid});
+  });
+  if(!rows.length){ toast("⚠ No matched customers in this package — set each product's customer first"); return; }
+  const sent=pk.track_notified||{};
+  const etaOf=oid=>{ const o=DATA&&(DATA.orders||[]).find(x=>x.order_id===oid); return (o&&o.est_delivery_customer)||''; };
+  $("ntfList").innerHTML=rows.map(r=>{
+    const was=sent[r.oid], eta=etaOf(r.oid);
+    return `<label style="display:flex;align-items:center;gap:9px;padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer">
+      <input type="checkbox" class="ntfChk" value="${poEsc(r.oid)}" ${was?'':'checked'}>
+      <span style="flex:1;min-width:0"><b>${poEsc(r.name)}</b>
+        <span class="mono" style="color:var(--muted);font-size:11px">${poEsc(r.oid)}${eta?` · 🚚 ${poEsc(eta)}`:''}</span></span>
+      <span class="ntfState mono" data-oid="${poEsc(r.oid)}" style="font-size:11.5px;color:var(--muted)">${was?`✓ sent ${poEsc(String(was).slice(0,10))}`:''}</span>
+    </label>`;}).join("");
+  NTF_CTX={id,pi};
+  $("ntfPkgTitle").textContent=`📱 Package ${pk.package_no} · arrives ${pk.arrival||"—"}`;
+  $("ntfOut").textContent="";
+  $("notifyModal").classList.remove("hidden");
+}
+function ntfClose(){ $("notifyModal").classList.add("hidden"); NTF_CTX=null; }
+async function ntfSend(btn){
+  const boxes=[...document.querySelectorAll('.ntfChk:checked')];
+  if(!boxes.length){ toast("اختر عميلاً أولاً · pick at least one customer"); return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent="Sending…";
+  let okN=0, errN=0;
+  for(const bx of boxes){
+    const oid=bx.value, st=document.querySelector(`.ntfState[data-oid="${CSS.escape(oid)}"]`);
+    if(st){ st.textContent="…"; st.style.color="var(--muted)"; }
+    let d; try{ d=await post("/api/customer_notify/track",{order_id:oid,force:true}); }catch(e){ d={error:"network"}; }
+    if(d.ok){ okN++; bx.checked=false;
+      if(st){ st.style.color="var(--good)"; st.textContent=d.dev?`DEV ✅ ${d.preview.delivery_date}`:`✅ sent · ${d.eta}`; }
+      const p=NTF_CTX&&poFind(NTF_CTX.id), pk=p&&(p.packages||[])[NTF_CTX.pi];
+      if(pk){ pk.track_notified=pk.track_notified||{}; pk.track_notified[oid]=new Date().toISOString(); }
+    } else { errN++; if(st){ st.style.color="var(--bad)"; st.textContent=`⚠ ${d.error||'failed'}`; } }
+  }
+  btn.disabled=false; btn.textContent=old;
+  $("ntfOut").textContent=`${okN} sent${errN?` · ${errN} failed`:''}`;
+}
 function poAddItem(id,pi){ const p=poFind(id); p.packages[pi].items.push({title:"",asin:"",qty:1,status:"ORDERED"}); poSave(p); renderPurchases(); }
 async function poDelItem(id,pi,ii){ const r=await post("/api/purchase/item/delete",{id,pi,ii});
   if(r.ok){ const p=poFind(id); p.packages[pi].items.splice(ii,1); renderPurchases(); toast("Product moved to Trash"); loadHomeActivity(); } }
