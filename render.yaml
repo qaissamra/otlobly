@@ -78,11 +78,11 @@ services:
         sync: false
       - key: EMAIL_FROM            # e.g. 'Otlobly <login@otlobly.com>' once the domain is verified
         sync: false
-      # ── Branded links: AFTER https://otlobly.co is live (DNS set + cert issued),
-      # ── uncomment so customer links (login magic links, quote links) use the new
-      # ── domain even when generated from the onrender.com host or a webhook call.
-      # - key: PORTAL_BASE_URL
-      #   value: https://otlobly.co
+      # ── Branded links: customer links (login magic links, quote links) use the
+      # ── custom domain even when generated from the onrender.com host or a
+      # ── webhook call. Only safe while https://otlobly.co serves a valid cert.
+      - key: PORTAL_BASE_URL
+        value: https://otlobly.co
     disk:
       name: otlobly-data
       mountPath: /var/data
