@@ -26,6 +26,7 @@ def _f(v, default=0.0):
 # code default when config.json has no public.sections.* key yet — so prod needs
 # no migration. Membership ships hidden (owner call, 2026-07-10).
 PUBLIC_SECTIONS = {
+    "pricing_vip":        False,   # /pricing — VIP / custom-pricing plan card
     "pricing_membership": False,   # /pricing — Otlobly Membership band
     "pricing_compare":    True,    # /pricing — plan comparison table
     "landing_track":      True,    # landing — شحنتك الحالية tracking teaser
