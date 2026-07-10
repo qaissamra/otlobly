@@ -9,8 +9,8 @@
   :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--good:#16a34a;--bad:#dc2626}
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    display:flex;align-items:flex-start;justify-content:center;padding:28px 14px}
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:0}
+  .pagewrap{display:flex;align-items:flex-start;justify-content:center;padding:28px 14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;
     width:440px;max-width:100%;box-shadow:0 8px 30px rgba(30,25,10,.07)}
   .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
@@ -38,14 +38,9 @@
   .ordid{font-size:22px;font-weight:800;letter-spacing:1px}
   body[dir=rtl]{direction:rtl}
 </style>
+{% include "_nav.html" %}
+<div class="pagewrap">
 <div class="card" id="card">
-  <div class="brand">
-    <svg width="34" height="34" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="#111"/>
-      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
-      <circle cx="46" cy="52" r="6" fill="#fff"/><circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>
-    <h1>Otlob<span class="ly">ly</span></h1>
-    <span class="lang"><span id="l_ar" onclick="setLang('ar')">عربي</span><span id="l_en" onclick="setLang('en')">EN</span></span>
-  </div>
   <p class="sub" id="intro"></p>
   <div id="products"></div>
   <div id="totalRow" class="total" style="display:none"><span id="totalLbl"></span><b id="totalVal"></b></div>
@@ -58,6 +53,7 @@
   </div>
   <div id="out"></div>
 </div>
+</div><!-- /.pagewrap -->
 <script>
 const $=id=>document.getElementById(id);
 const DRAFT_ID=location.pathname.split("/").pop();
@@ -74,7 +70,8 @@ const T={
 };
 function t(k){return (T[LANG]||T.en)[k];}
 function setLang(l){LANG=l; document.body.setAttribute("dir", l==="ar"?"rtl":"ltr");
-  $("l_ar").classList.toggle("on",l==="ar"); $("l_en").classList.toggle("on",l==="en"); render();}
+  if($("l_ar")) $("l_ar").classList.toggle("on",l==="ar");   // shared nav owns lang toggle now
+  if($("l_en")) $("l_en").classList.toggle("on",l==="en"); render();}
 function render(){
   $("intro").textContent=t("intro"); $("lbl_name").textContent=t("name"); $("lbl_phone").textContent=t("phone");
   $("lbl_city").textContent=t("city"); $("lbl_addr").textContent=t("addr"); $("submitBtn").textContent=t("submit");

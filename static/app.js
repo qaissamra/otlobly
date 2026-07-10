@@ -154,9 +154,10 @@ function setLang(lang) {
     if (dict[k] != null) el.placeholder = dict[k];
   });
 
-  /* lang toggle active state */
-  document.getElementById("lang-ar").classList.toggle("on", lang === "ar");
-  document.getElementById("lang-en").classList.toggle("on", lang === "en");
+  /* lang toggle active state — the shared navbar (_nav.html) owns the toggle now,
+     so these may be absent; guard against null. */
+  var _la = document.getElementById("lang-ar"); if (_la) _la.classList.toggle("on", lang === "ar");
+  var _le = document.getElementById("lang-en"); if (_le) _le.classList.toggle("on", lang === "en");
 
   buildWa();
 }

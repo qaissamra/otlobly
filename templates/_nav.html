@@ -1,0 +1,150 @@
+{# Shared site navbar — included on every public page. Self-contained: own
+   scoped .otlnav CSS + JS (collision-free namespace), no dependency on
+   style.css. Desktop (≥768px): logo + inline links + login/WhatsApp/lang, no ☰.
+   Mobile: logo + ☰ dropdown. navLang() drives the nav's own i18n and also calls
+   the page's window.setLang() (if any) so page content translates too.
+   Requires: {{ wa_number }} in the template context (WhatsApp hides if empty). #}
+<nav class="otlnav" id="otlnav" dir="rtl">
+  <div class="otlnav-in">
+    <a class="otlnav-brand" href="/" aria-label="Otlobly">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#111"></rect><circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"></circle><circle cx="46" cy="52" r="6" fill="#fff"></circle><circle cx="72" cy="30" r="9" fill="#ff5a1f"></circle></svg>
+      <span class="word">Otlob<em>ly</em></span>
+    </a>
+
+    <div class="otlnav-links">
+      <a id="nv-order" href="/order">اطلب الآن</a>
+      <a id="nv-plans" href="/pricing">الباقات</a>
+      <a id="nv-track" href="/track">تتبّع</a>
+      <a id="nv-how" href="/#how">كيف تعمل</a>
+    </div>
+
+    <div class="otlnav-actions">
+      <a class="otlnav-login" id="nv-login" href="/account">حسابي</a>
+      <a class="otlnav-wa" id="nv-wa" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+        <span id="nv-wa-t">واتساب</span>
+      </a>
+      <div class="otlnav-lang">
+        <button class="nvlang on" data-l="ar" onclick="navLang('ar')">عربي</button>
+        <button class="nvlang" data-l="en" onclick="navLang('en')">EN</button>
+      </div>
+    </div>
+
+    <button class="otlnav-burger" id="nv-burger" aria-label="القائمة · menu" onclick="navToggle(event)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+  </div>
+
+  <div class="otlnav-drop" id="nv-drop">
+    <a href="/order"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg><span id="nvm-order">اطلب الآن</span></a>
+    <a href="/pricing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span id="nvm-plans">الباقات</span></a>
+    <a href="/track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg><span id="nvm-track">تتبّع</span></a>
+    <a href="/#how"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg><span id="nvm-how">كيف تعمل</span></a>
+    <a href="/account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span id="nvm-login">حسابي</span></a>
+    <a class="otlnav-wa-m" id="nv-wa-m" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+      <span id="nvm-wa">واتساب</span>
+    </a>
+    <div class="otlnav-langrow">
+      <button class="nvlang on" data-l="ar" onclick="navLang('ar')">عربي</button>
+      <button class="nvlang" data-l="en" onclick="navLang('en')">EN</button>
+    </div>
+  </div>
+</nav>
+
+<style>
+  .otlnav{position:sticky;top:0;z-index:200;background:rgba(255,255,255,.97);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid #eadfce;box-shadow:0 1px 12px rgba(35,24,10,.06);
+    font-family:'Cairo','IBM Plex Sans Arabic','Poppins',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .otlnav *{box-sizing:border-box}
+  .otlnav-in{display:flex;align-items:center;gap:10px;height:60px;max-width:1100px;margin:0 auto;padding:0 18px}
+  .otlnav-brand{display:flex;align-items:center;gap:9px;flex-shrink:0;text-decoration:none;color:#15140f}
+  .otlnav-brand .mark{width:30px;height:30px;flex:none}
+  .otlnav-brand .word{font-weight:800;font-size:19px;letter-spacing:-.02em}
+  .otlnav-brand .word em{color:#ff5a1f;font-style:normal}
+  .otlnav-links{flex:1;display:flex;align-items:center;justify-content:center;gap:4px}
+  .otlnav-links a{font-weight:700;font-size:14px;color:#15140f;text-decoration:none;
+    padding:7px 13px;border-radius:999px;transition:.15s;opacity:.72;white-space:nowrap}
+  .otlnav-links a:hover{opacity:1;background:#f7f4ef}
+  .otlnav-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .otlnav-login{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+    font-weight:800;font-size:13.5px;color:#e6410c;background:#fff;border:1.5px solid #ffd0b8;
+    padding:8px 16px;border-radius:999px;white-space:nowrap;transition:.15s}
+  .otlnav-login:hover{background:#fff5ef;border-color:#ff5a1f}
+  /* WhatsApp — deliberately NOT green, so it doesn't over-stand-out (owner's call) */
+  .otlnav-wa{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+    font-weight:700;font-size:13.5px;color:#5a5348;background:#f4f1ea;
+    border:1px solid #e8e2d6;padding:8px 14px;border-radius:999px;white-space:nowrap;transition:.15s}
+  .otlnav-wa svg{width:16px;height:16px;opacity:.85}
+  .otlnav-wa:hover{background:#ece7dd}
+  .otlnav-lang{display:inline-flex;background:#f4f1ea;border:1px solid #e8e2d6;border-radius:999px;padding:3px;flex-shrink:0}
+  .otlnav-lang .nvlang{border:none;background:transparent;cursor:pointer;font-family:inherit;
+    font-weight:700;font-size:12.5px;color:#8a7f6d;padding:4px 11px;border-radius:999px;transition:.15s}
+  .otlnav-lang .nvlang.on{background:#15140f;color:#fff}
+  .otlnav-burger{display:none;background:none;border:none;cursor:pointer;color:#15140f;
+    padding:6px;border-radius:8px;flex-shrink:0;margin-inline-start:auto}
+  .otlnav-burger:hover{background:#f7f4ef}
+  /* mobile dropdown */
+  .otlnav-drop{display:none;flex-direction:column;padding:10px 18px 16px;
+    border-top:1px solid #eadfce;background:#fff}
+  .otlnav-drop a{display:flex;align-items:center;gap:9px;text-decoration:none;
+    font-weight:700;font-size:15px;color:#15140f;padding:12px 4px;border-bottom:1px solid #f4f1ec}
+  .otlnav-drop a svg{width:18px;height:18px;flex:none;opacity:.75}
+  .otlnav-drop a:last-of-type{border-bottom:none}
+  .otlnav-wa-m{background:#f4f1ea !important;border:1px solid #e8e2d6;border-radius:999px;
+    justify-content:center;margin-top:10px;padding:12px 16px !important;border-bottom:none !important;color:#5a5348 !important}
+  .otlnav-wa-m svg{opacity:.85}
+  .otlnav-langrow{display:flex;justify-content:center;gap:6px;padding:12px 0 2px;margin-top:8px;border-top:1px solid #f4f1ec}
+  .otlnav-langrow .nvlang{border:1px solid #e8e2d6;background:#fff;cursor:pointer;font-family:inherit;
+    font-weight:700;font-size:13px;color:#8a7f6d;padding:6px 16px;border-radius:999px}
+  .otlnav-langrow .nvlang.on{background:#15140f;color:#fff;border-color:#15140f}
+  .otlnav.open .otlnav-drop{display:flex}
+  /* ── responsive: ☰ + dropdown on mobile, full bar on desktop ── */
+  @media (max-width:767px){
+    .otlnav-links,.otlnav-actions{display:none}
+    .otlnav-burger{display:flex}
+  }
+</style>
+
+<script>
+(function(){
+  /* build WhatsApp links from the injected number; hide the buttons if none */
+  var WA = (window.OTL_WA_NUMBER || "{{ wa_number }}" || "").trim();
+  var waHref = WA ? ("https://wa.me/" + WA + "?text=" + encodeURIComponent("مرحباً اطلبلي 👋")) : "";
+  ["nv-wa","nv-wa-m"].forEach(function(id){
+    var el = document.getElementById(id); if(!el) return;
+    if(WA){ el.href = waHref; } else { el.style.display = "none"; }
+  });
+  /* mobile dropdown toggle */
+  window.navToggle = function(e){ if(e) e.stopPropagation();
+    var n = document.getElementById("otlnav"); if(n) n.classList.toggle("open"); };
+  document.addEventListener("click", function(e){
+    var n = document.getElementById("otlnav");
+    if(n && n.classList.contains("open") && !n.contains(e.target)) n.classList.remove("open");
+  });
+  /* language: translate the nav's own labels, sync all toggles, and hand off to
+     the page's setLang() (if it defines one) so page content translates too */
+  var LBL = {
+    ar:{order:"اطلب الآن",plans:"الباقات",track:"تتبّع",how:"كيف تعمل",login:"حسابي",wa:"واتساب"},
+    en:{order:"Order",plans:"Pricing",track:"Track",how:"How it works",login:"Account",wa:"WhatsApp"}
+  };
+  window.navLang = function(lang){
+    var D = LBL[lang] || LBL.ar;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
+    var _nav = document.getElementById("otlnav");        // keep the bar's own direction in sync
+    if(_nav) _nav.dir = (lang === "ar") ? "rtl" : "ltr";
+    var set = function(id,t){ var e=document.getElementById(id); if(e) e.textContent=t; };
+    set("nv-order",D.order); set("nv-plans",D.plans); set("nv-track",D.track); set("nv-how",D.how);
+    set("nv-login",D.login); set("nv-wa-t",D.wa);
+    set("nvm-order",D.order); set("nvm-plans",D.plans); set("nvm-track",D.track); set("nvm-how",D.how);
+    set("nvm-login",D.login); set("nvm-wa",D.wa);
+    document.querySelectorAll(".nvlang").forEach(function(b){ b.classList.toggle("on", b.getAttribute("data-l")===lang); });
+    if(typeof window.setLang === "function" && window.setLang !== window.navLang){
+      try{ window.setLang(lang); }catch(err){}
+    }
+    document.getElementById("otlnav") && document.getElementById("otlnav").classList.remove("open");
+  };
+})();
+</script>
