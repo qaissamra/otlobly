@@ -123,5 +123,15 @@
   "pipeline": {
     "delivery_buffer_days": 8,
     "_note": "Customer delivery ETA = PO package arrival + this many days (GAASH last-mile to Palestine)."
+  },
+  "public": {
+    "sections": {
+      "pricing_membership": false,
+      "pricing_compare": true,
+      "landing_track": true,
+      "landing_how": true,
+      "landing_why": true,
+      "_note": "Public-website section visibility (true = shown), editable from the staff Settings page. Whitelist lives in settings.PUBLIC_SECTIONS."
+    }
   }
 }

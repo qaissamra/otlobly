@@ -280,7 +280,8 @@ def logout():
 def index():
     """The public landing page — for EVERYONE, staff sessions included, so the
     owner can always see what customers see. The staff dashboard lives at /app."""
-    return render_template("landing.html", wa_number=_wa_business_number())
+    return render_template("landing.html", wa_number=_wa_business_number(),
+                           sections=settings_mod.public_sections())
 
 
 @app.route("/app")
@@ -744,7 +745,8 @@ def catalog_page():
 @app.route("/pricing")
 def pricing_page():
     """Public: service fees / plans (imported Replit design)."""
-    return render_template("pricing.html", wa_number=_wa_business_number())
+    return render_template("pricing.html", wa_number=_wa_business_number(),
+                           sections=settings_mod.public_sections())
 
 
 @app.route("/order")

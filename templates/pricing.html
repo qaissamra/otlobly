@@ -489,6 +489,7 @@ footer a:hover{color:#fff}
 </div>
 
 <!-- ══════════ MEMBERSHIP BAND ══════════ -->
+{% if sections.get('pricing_membership', True) %}
 <div class="member-band reveal">
   <div class="member-inner">
     <div class="member-left">
@@ -549,8 +550,10 @@ footer a:hover{color:#fff}
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- ══════════ COMPARISON TABLE ══════════ -->
+{% if sections.get('pricing_compare', True) %}
 <div class="compare-wrap reveal">
   <button class="compare-toggle" id="compare-btn" onclick="toggleCompare()" aria-expanded="false">
     <span data-i18n="cmp.toggle">مقارنة كاملة</span>
@@ -614,6 +617,7 @@ footer a:hover{color:#fff}
     </table>
   </div>
 </div>
+{% endif %}
 
 <!-- ══════════ TRUST CHIPS ══════════ -->
 <div class="trust-row reveal">
@@ -1009,8 +1013,10 @@ function buildWaLinks() {
   document.getElementById("cta-deposit").href   = wa(d["wa.deposit"]);
   const codBtn = document.getElementById("cta-cod");   /* VIP card temporarily removed */
   if (codBtn) codBtn.href = wa(d["wa.cod"]);
-  document.getElementById("cta-member").href    = wa(d["wa.member"]);
-  document.getElementById("cta-biz").href       = wa(d["wa.biz"]);
+  const memBtn = document.getElementById("cta-member");  /* membership band can be hidden from Settings */
+  if (memBtn) memBtn.href = wa(d["wa.member"]);
+  const bizBtn = document.getElementById("cta-biz");
+  if (bizBtn) bizBtn.href = wa(d["wa.biz"]);
   document.getElementById("wa-nav").href        = wa(d["wa.nav"]);
   /* ☰ menu WhatsApp item — hidden when no number is configured */
   const menuWa = document.getElementById("wa-menu");
@@ -1022,8 +1028,10 @@ function buildWaLinks() {
 
 /* ─── Membership billing toggle ─── */
 function scrollToMembership() {
+  const card = document.getElementById("card-member");   /* band can be hidden from Settings */
+  if (!card) return;
   setMemberBilling("monthly");
-  document.getElementById("card-member").scrollIntoView({behavior:"smooth",block:"center"});
+  card.scrollIntoView({behavior:"smooth",block:"center"});
 }
 function setMemberBilling(mode) {
   currentBilling = mode;
@@ -1037,6 +1045,7 @@ function updateMemberBilling() {
   const monthly = PRICES.memberMonthly;
   const annualMonthly = +(monthly * (1 - PRICES.memberAnnualDiscountPct / 100)).toFixed(2);
   const priceEl    = document.getElementById("mem-price-val");
+  if (!priceEl) return;   /* membership band hidden from Settings — nothing to update */
   const origEl     = document.getElementById("mem-original");
   const noteEl     = document.getElementById("mem-billing-note");
   const saveTag    = document.getElementById("save-tag");

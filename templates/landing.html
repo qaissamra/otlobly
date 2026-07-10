@@ -73,6 +73,7 @@
   <main class="wrap">
 
     <!-- ══════════ TRACKING TEASER ══════════ -->
+    {% if sections.get('landing_track', True) %}
     <section id="track" class="blk reveal">
       <div class="sec-head">
         <h2 data-i18n="track.head">شحنتك الحالية</h2>
@@ -145,8 +146,10 @@
       <div id="track-status"></div>
       <div id="track-results"></div>
     </section>
+    {% endif %}
 
     <!-- ══════════ HOW IT WORKS ══════════ -->
+    {% if sections.get('landing_how', True) %}
     <section id="how" class="blk reveal">
       <div class="sec-head">
         <h2 data-i18n="how.head">كيف تعمل الخدمة؟</h2>
@@ -198,8 +201,10 @@
         </div>
       </div>
     </section>
+    {% endif %}
 
     <!-- ══════════ WHY OTLOBLY ══════════ -->
+    {% if sections.get('landing_why', True) %}
     <section class="blk reveal">
       <div class="sec-head">
         <h2 data-i18n="why.head">ليش اطلبلي؟</h2>
@@ -235,6 +240,7 @@
         </div>
       </div>
     </section>
+    {% endif %}
 
   </main>
 

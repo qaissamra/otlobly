@@ -724,6 +724,18 @@
       <div style="display:flex;justify-content:flex-end;margin-top:13px"><button class="accent" onclick="saveSettings(this)">Save white-label</button></div>
     </div>
     <div class="panel" style="max-width:620px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">🌐 Website sections · أقسام الموقع</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:11px">Show or hide sections of the public website — like Shopify page sections. Checked = visible. Changes apply to the live site the moment you save.</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_sec_membership"> <span><b>Otlobly Membership · العضوية</b> — the membership band on /pricing</span></label>
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_sec_compare"> <span><b>Plan comparison · مقارنة كاملة</b> — the comparison table on /pricing</span></label>
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_sec_track"> <span><b>شحنتك الحالية</b> — the live tracking section on the landing page</span></label>
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_sec_how"> <span><b>كيف تعمل الخدمة</b> — the 4-step how-it-works section on the landing page</span></label>
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer"><input type="checkbox" id="s_sec_why"> <span><b>ليش اطلبلي</b> — the benefits section on the landing page</span></label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:13px"><button class="accent" onclick="saveSettings(this)">Save website sections</button></div>
+    </div>
+    <div class="panel" style="max-width:620px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 Meta ad spend (P&amp;L)</h3>
       <div class="muted2" style="font-size:12px;margin-bottom:10px">اكتب كم صرفت على إعلانات ميتا كل شهر · type what you spent on Meta ads each month (USD) — the P&amp;L subtracts it from profit. Using the Meta API instead? Set META_AD_ACCOUNT_ID + META_ACCESS_TOKEN on the server and press “Refresh sources” on the P&amp;L page.</div>
       <div id="metaSpendRows"></div>
@@ -2386,6 +2398,12 @@ async function loadSettings(){
   if($("s_f_clickup")) $("s_f_clickup").checked=!!cf.clickup;
   if($("s_f_screenshot")) $("s_f_screenshot").checked=!!cf.screenshot;
   if($("s_f_second_currency")) $("s_f_second_currency").checked=!!cf.second_currency;
+  const ps=s.public_sections||{};                    // public-website section visibility
+  if($("s_sec_membership")) $("s_sec_membership").checked=!!ps.pricing_membership;
+  if($("s_sec_compare")) $("s_sec_compare").checked=!!ps.pricing_compare;
+  if($("s_sec_track")) $("s_sec_track").checked=!!ps.landing_track;
+  if($("s_sec_how")) $("s_sec_how").checked=!!ps.landing_how;
+  if($("s_sec_why")) $("s_sec_why").checked=!!ps.landing_why;
   waLoadStatus();
   emailLoadStatus();
 }
@@ -2461,7 +2479,10 @@ async function saveSettings(b){
     card_flags:{ multilogin:!!($("s_f_multilogin")||{}).checked, clickup:!!($("s_f_clickup")||{}).checked,
       screenshot:!!($("s_f_screenshot")||{}).checked, second_currency:!!($("s_f_second_currency")||{}).checked },
     card_labels:{ courier:($("s_courier")||{}).value||"", currency:($("s_cur")||{}).value||"",
-      currency2:($("s_cur2")||{}).value||"", box_term:($("s_boxterm")||{}).value||"" } };
+      currency2:($("s_cur2")||{}).value||"", box_term:($("s_boxterm")||{}).value||"" },
+    public_sections:{ pricing_membership:!!($("s_sec_membership")||{}).checked,
+      pricing_compare:!!($("s_sec_compare")||{}).checked, landing_track:!!($("s_sec_track")||{}).checked,
+      landing_how:!!($("s_sec_how")||{}).checked, landing_why:!!($("s_sec_why")||{}).checked } };
   if($("metaSpendRows")) body.meta_manual=msCollect();   // only when the rows are rendered (never wipe blindly)
   const r=await post("/api/settings",body); b.disabled=false;
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; QSETTINGS=r.settings; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));

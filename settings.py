@@ -22,6 +22,25 @@ def _f(v, default=0.0):
         return default
 
 
+# Public-site section visibility (True = shown). The whitelist doubles as the
+# code default when config.json has no public.sections.* key yet — so prod needs
+# no migration. Membership ships hidden (owner call, 2026-07-10).
+PUBLIC_SECTIONS = {
+    "pricing_membership": False,   # /pricing — Otlobly Membership band
+    "pricing_compare":    True,    # /pricing — plan comparison table
+    "landing_track":      True,    # landing — شحنتك الحالية tracking teaser
+    "landing_how":        True,    # landing — كيف تعمل steps
+    "landing_why":        True,    # landing — ليش اطلبلي
+}
+
+
+def public_sections(config=None):
+    """Merged section-visibility flags: stored value wins, else the code default."""
+    config = config or cfg.load()
+    return {k: bool(cfg.get(config, f"public.sections.{k}", d))
+            for k, d in PUBLIC_SECTIONS.items()}
+
+
 def read(config=None):
     config = config or cfg.load()
     return {
@@ -54,6 +73,8 @@ def read(config=None):
             "currency2": cfg.get(config, "card.labels.currency2", "AED"),
             "box_term": cfg.get(config, "card.labels.box_term", "Profile"),
         },
+        # Public-website section visibility (Shopify-style hide/show from Settings).
+        "public_sections": public_sections(config),
         # Monthly Meta ad spend typed by the admin (USD) — feeds the P&L meta line.
         "meta_manual": cfg.get(config, "pnl.meta.manual", {}) or {},
         # Campaigns excluded from the P&L Meta total (drill-down checkboxes).
@@ -110,6 +131,11 @@ def apply(body, config=None, persist=True):
         for k in ("courier", "currency", "currency2", "box_term"):
             if k in labels:
                 cfg.set_path(config, f"card.labels.{k}", str(labels[k]).strip())
+    secs = body.get("public_sections")
+    if isinstance(secs, dict):
+        for k in PUBLIC_SECTIONS:
+            if k in secs:
+                cfg.set_path(config, f"public.sections.{k}", bool(secs[k]))
     if isinstance(body.get("meta_manual"), dict):
         clean = {}
         for k, v in body["meta_manual"].items():
