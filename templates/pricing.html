@@ -124,9 +124,10 @@ input[type=range]::-moz-range-thumb{
 .plans-outer{max-width:1060px;margin:0 auto;padding:0 16px}
 .plans-row{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
+  grid-template-columns:repeat(2,1fr);
   gap:18px;
-  margin-bottom:14px;
+  max-width:700px;
+  margin:0 auto 14px;
 }
 .plan-card{
   background:#fff;border-radius:20px;
@@ -480,20 +481,7 @@ footer a:hover{color:#fff}
       <a class="btn-plan orange" id="cta-deposit" href="#" target="_blank" rel="noopener" data-i18n="plan2.cta">ادفع عند الاستلام</a>
     </div>
 
-    <!-- Card 3: VIP -->
-    <div class="plan-card" id="card-cod">
-      <div class="plan-name" data-i18n="plan3.name">VIP</div>
-      <div class="plan-tagline" data-i18n="plan3.tagline">أسعار مخصوصة للطلبات الكبيرة — نتفاهم عليها مع بعض</div>
-      <div class="plan-rate" data-i18n="plan3.rate">أسعار خاصة</div>
-      <div class="plan-rate-sub" data-i18n="plan3.ratesub">للطلبات فوق $1000 أو الكميات الكبيرة</div>
-      <ul class="plan-features">
-        <li class="feature-parent" data-i18n="plan3.f0">كل مزايا الدفع عند الاستلام مشمولة</li>
-        <li data-i18n="plan3.f1">مدير حساب خاص يتابع طلبك شخصياً</li>
-        <li data-i18n="plan3.f2">أولوية بالشراء والشحن</li>
-        <li data-i18n="plan3.f3">نشتري ونشحن على حسابنا</li>
-      </ul>
-      <a class="btn-plan orange" id="cta-cod" href="#" target="_blank" rel="noopener" data-i18n="plan3.cta">تواصل معنا</a>
-    </div>
+    <!-- Card 3 (VIP) temporarily removed — markup + plan3.* / wa.cod strings kept below for easy restore -->
 
   </div>
   <p class="plans-note" data-i18n="plans.note">الأسعار عمولة اطلبلي فقط — سعر المنتج والشحن حسب التسعيرة النهائية</p>
@@ -1019,7 +1007,8 @@ function buildWaLinks() {
   }
   document.getElementById("cta-prepaid").href  = wa(d["wa.prepaid"]);
   document.getElementById("cta-deposit").href   = wa(d["wa.deposit"]);
-  document.getElementById("cta-cod").href       = wa(d["wa.cod"]);
+  const codBtn = document.getElementById("cta-cod");   /* VIP card temporarily removed */
+  if (codBtn) codBtn.href = wa(d["wa.cod"]);
   document.getElementById("cta-member").href    = wa(d["wa.member"]);
   document.getElementById("cta-biz").href       = wa(d["wa.biz"]);
   document.getElementById("wa-nav").href        = wa(d["wa.nav"]);
