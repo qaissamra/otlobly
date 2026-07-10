@@ -1974,7 +1974,7 @@ def api_draft():
         "created_at": db.now_iso(), "used": False,
     })
     return jsonify({"ok": True, "draft_id": did, "path": f"/order/{did}",
-                    "url": request.host_url.rstrip("/") + f"/order/{did}"})
+                    "url": _portal_base() + f"/order/{did}"})
 
 
 @app.route("/api/order/quote_link", methods=["POST"])
@@ -2004,7 +2004,7 @@ def api_order_quote_link():
         "order_id": o["order_id"],
         "created_at": db.now_iso(), "used": False,
     })
-    url = request.host_url.rstrip("/") + f"/order/{did}"
+    url = _portal_base() + f"/order/{did}"
     ph = store.primary_phone(o)
     name = (o.get("customer") or {}).get("name") or ""
     text = (f"مرحباً {name} 👋 عرض سعرك من اطلبلي جاهز:\n{url}\n"
@@ -2032,7 +2032,7 @@ def api_bridge_draft():
         "source": b.get("source") or "sara-tool",
     })
     return jsonify({"ok": True, "draft_id": did, "path": f"/order/{did}",
-                    "url": request.host_url.rstrip("/") + f"/order/{did}"})
+                    "url": _portal_base() + f"/order/{did}"})
 
 
 @app.route("/order/<draft_id>", methods=["GET"])
@@ -2528,8 +2528,9 @@ def _mint_login_token(core, name):
 
 
 def _portal_base():
-    """Absolute base for login links: env override for prod, else this request's root
-    (keeps local-dev links local)."""
+    """Absolute base for customer-facing links (login magic links, /order quote
+    links): env override for prod, else this request's root (keeps local-dev
+    links local)."""
     return (os.environ.get("PORTAL_BASE_URL") or request.url_root).rstrip("/")
 
 

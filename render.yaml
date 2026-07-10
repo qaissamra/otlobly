@@ -16,6 +16,13 @@ services:
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     healthCheckPath: /healthz
     autoDeploy: true
+    # Custom domain (registrar: GoDaddy). Render issues TLS automatically once DNS points here:
+    #   A     @    216.24.57.1            (Render's apex IP — replace GoDaddy's "Parked" A record)
+    #   CNAME www  otlobly.onrender.com
+    # Leave the verfication.otlobly.co records (Resend email) untouched.
+    domains:
+      - otlobly.co
+      - www.otlobly.co
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
@@ -71,6 +78,11 @@ services:
         sync: false
       - key: EMAIL_FROM            # e.g. 'Otlobly <login@otlobly.com>' once the domain is verified
         sync: false
+      # ── Branded links: AFTER https://otlobly.co is live (DNS set + cert issued),
+      # ── uncomment so customer links (login magic links, quote links) use the new
+      # ── domain even when generated from the onrender.com host or a webhook call.
+      # - key: PORTAL_BASE_URL
+      #   value: https://otlobly.co
     disk:
       name: otlobly-data
       mountPath: /var/data
