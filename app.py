@@ -255,8 +255,8 @@ def healthz():
 LOGO_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
     '<rect width="100" height="100" rx="26" fill="#111"/>'
-    '<circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>'
-    '<circle cx="46" cy="52" r="6" fill="#fff"/>'
+    '<circle cx="46" cy="52" r="24" fill="#fff"/>'
+    '<circle cx="46" cy="52" r="8.5" fill="#111"/>'
     '<circle cx="72" cy="30" r="9" fill="#ff5a1f"/></svg>'
 )
 
