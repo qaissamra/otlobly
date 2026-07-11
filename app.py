@@ -37,6 +37,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import activity
 import amazon_import
@@ -94,6 +95,10 @@ import meta_sync
 meta_sync.start()          # background 24/7 Meta ad-spend pull (no-op without API creds)
 
 app = Flask(__name__, template_folder="templates")
+# Behind Render's single proxy hop: trust ONE X-Forwarded-For entry so the rate
+# limiter (and logs) key on the real client IP, not the proxy's. x_for=1 reads the
+# rightmost forwarded IP, which the proxy sets — a spoofed header can't win.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.secret_key = os.environ.get("OTLOBLY_SECRET", "dev-secret-change-me")
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -374,7 +379,7 @@ def api_add_order():
                    status=b.get("status", "REQUESTED"),
                    amount_to_collect_usd=(float(b["amount"]) if b.get("amount") else None),
                    notes=notes)
-    db.upsert_order(o, created_by=current_user.id)
+    db.insert_new_order(o, created_by=current_user.id)
     db.upsert_customer(make_customer(name=b.get("name", ""),
                                      whatsapp=phones[0]["e164"] if phones else "",
                                      address=b.get("address", "")))
@@ -782,7 +787,7 @@ def api_quote_request():
                    notes="🌐 طلب تسعير من الموقع · website quote request")
     o["source"] = "website"
     o["payment_plan"] = plan
-    db.upsert_order(o)
+    db.insert_new_order(o)
     _ensure_customer(o)
     db.audit({"username": "customer"}, "quote_request", "order", o["order_id"], plan)
     activity.log("created", "order", o["order_id"], _olabel(o),
@@ -842,7 +847,7 @@ def api_catalog_checkout():
                    amount_to_collect_usd=round(amount, 2) if amount else None,
                    notes="🌐 طلب من متجر الموقع · website order")
     o["source"] = "website"
-    db.upsert_order(o)
+    db.insert_new_order(o)
     _ensure_customer(o)                    # website customers join the CRM / ID page too
     db.audit({"username": "customer"}, "website_order", "order", o["order_id"], "")
     activity.log("created", "order", o["order_id"], _olabel(o),
@@ -1372,7 +1377,7 @@ def api_meta_lead_convert():
     o = make_order(name=lead.get("name") or "Lead", phones=phones, address="", city="",
                    items=[], status="REQUESTED",
                    notes=f"Meta lead · {lead.get('source')}")
-    db.upsert_order(o, created_by=current_user.id)
+    db.insert_new_order(o, created_by=current_user.id)
     _ensure_customer(o)                    # add the converted lead to the CRM / ID page
     db.update_lead(lead["lead_id"], {"status": "converted", "order_id": o["order_id"]})
     activity.log("created", "order", o["order_id"], _olabel(o),
@@ -1732,7 +1737,8 @@ def api_users():
 def _worker_ok():
     tok = os.environ.get("OTLOBLY_WORKER_TOKEN")
     auth_h = request.headers.get("Authorization", "")
-    return tok and auth_h == f"Bearer {tok}"
+    # constant-time compare (matches _backup_ok) so the token can't be timing-probed
+    return bool(tok) and hmac.compare_digest(auth_h, f"Bearer {tok}")
 
 
 @app.route("/api/worker/queue")
@@ -2146,7 +2152,7 @@ def api_order_intake():
                    city=b.get("city", ""), items=items, status="REQUESTED",
                    amount_to_collect_usd=(float(d["amount"]) if d.get("amount") else None))
     o["source"] = "intake"                 # staff-sent draft link (vs 'website' cart orders)
-    db.upsert_order(o)
+    db.insert_new_order(o)
     _ensure_customer(o)                    # add the self-intake customer to the CRM / ID page
     db.set_setting(f"draft:{b['draft_id']}", {**d, "used": True})
     db.audit({"username": "customer"}, "intake_order", "order", o["order_id"], "")
