@@ -550,6 +550,20 @@ def set_setting(key, value):
                   (key, json.dumps(value, ensure_ascii=False)))
 
 
+def claim_once(key):
+    """Atomically claim a one-time task. Returns True for EXACTLY ONE caller — even
+    across the two gunicorn workers both importing app.py at boot — and False for
+    everyone after. The settings PK makes the first INSERT win and the rest raise
+    IntegrityError. Used to run the legacy backfills once per deploy, not per worker."""
+    with connect() as c:
+        try:
+            c.execute("INSERT INTO settings (key, value) VALUES (?,?)",
+                      (key, json.dumps(now_iso())))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
 def audit(actor, action, entity, entity_id, detail=""):
     with connect() as c:
         c.execute("""INSERT INTO audit_log

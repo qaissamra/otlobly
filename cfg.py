@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-from paths import data_path
+from paths import data_path, write_json_atomic
 
 # config.json is WRITABLE (the Settings page saves to it), so it lives in the
 # data dir — the project folder locally, or the persistent disk in a hosted
@@ -65,5 +65,4 @@ def set_path(cfg, dotted, value):
 
 def save(cfg):
     """Persist the config back to config.json (the live, gitignored file)."""
-    import json
-    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2))
+    write_json_atomic(CONFIG_FILE, cfg)        # crash-safe: temp + atomic rename

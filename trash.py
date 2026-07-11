@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from paths import data_path
+from paths import data_path, write_json_atomic
 
 STORE_FILE = data_path("trash.json")
 
@@ -42,7 +42,7 @@ def load():
 
 
 def save(db):
-    STORE_FILE.write_text(json.dumps(db, indent=2, ensure_ascii=False))
+    write_json_atomic(STORE_FILE, db)          # crash-safe: temp + atomic rename
 
 
 def add(db, kind, label, data, origin=None, actor=None):
