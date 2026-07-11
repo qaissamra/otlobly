@@ -62,6 +62,12 @@ def test_deposit_netting():
     db.add_payment({"order_code": "OTL-9002", "kind": "refund", "amount_usd": 15.0,
                     "currency": "USD", "amount_entered": 15.0, "fx_rate": 1.0})
     check("lone refund is negative", db.deposit_total_for_order("OTL-9002"), -15.0)
+    # drift proof: 100 one-cent deposits net to EXACTLY 1.00 (float summation gives
+    # 0.9999999999999999 — this is the whole point of the Decimal ledger).
+    for _ in range(100):
+        db.add_payment({"order_code": "OTL-9003", "kind": "deposit", "amount_usd": 0.01,
+                        "currency": "USD", "amount_entered": 0.01, "fx_rate": 1.0})
+    check("100 × $0.01 nets to exactly 1.00", db.deposit_total_for_order("OTL-9003"), 1.00)
 
 
 def _user(role):

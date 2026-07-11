@@ -18,6 +18,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import db
+import money
 import store
 
 
@@ -41,11 +42,11 @@ def from_orders(orders=None, since=None, until=None):
     """Revenue = only orders that were actually PLACED (ORDERED..COLLECTED) — a
     To-order quote (REQUESTED/QUOTED/PAID) is not revenue until it's ordered.
     By month of created_at + by batch. since/until = 'YYYY-MM-DD' inclusive bounds."""
-    total, n = 0.0, 0
-    by_month = defaultdict(float)
-    by_batch = defaultdict(float)
+    total, n = money.D(0), 0
+    by_month = defaultdict(lambda: money.D(0))
+    by_batch = defaultdict(lambda: money.D(0))
     for o in placed_rows(orders, since, until):
-        amt = o["amount_to_collect_usd"]
+        amt = money.D(o["amount_to_collect_usd"])
         total += amt
         n += 1
         by_month[(o.get("created_at") or "")[:7] or "unknown"] += amt
@@ -55,10 +56,10 @@ def from_orders(orders=None, since=None, until=None):
 
 def _pack(total, n, by_month, source, by_batch=None):
     return {
-        "total_usd": round(total, 2),
+        "total_usd": money.to_usd(total),
         "orders_counted": n,
-        "by_month": {k: round(v, 2) for k, v in sorted(by_month.items())},
-        "by_batch": {k: round(v, 2) for k, v in sorted((by_batch or {}).items())},
+        "by_month": {k: money.to_usd(v) for k, v in sorted(by_month.items())},
+        "by_batch": {k: money.to_usd(v) for k, v in sorted((by_batch or {}).items())},
         "source": source,
         "pulled_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }

@@ -14,6 +14,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+import money
 import store
 
 REPORTS_DIR = Path(__file__).with_name("reports")
@@ -65,12 +66,13 @@ def build(db=None):
     rows = [_row(o) for o in orders]
 
     by_status = defaultdict(int)
-    by_batch = defaultdict(lambda: {"count": 0, "usd": 0.0})
-    by_profile = defaultdict(lambda: {"count": 0, "usd": 0.0})
-    outstanding = collected = total_value = open_deposits = 0.0
+    by_batch = defaultdict(lambda: {"count": 0, "usd": money.D(0)})
+    by_profile = defaultdict(lambda: {"count": 0, "usd": money.D(0)})
+    # money accumulators kept in Decimal so a long sum never drifts a cent
+    outstanding = collected = total_value = open_deposits = money.D(0)
 
     for r in rows:
-        amt = r["amount_to_collect_usd"] or 0
+        amt = money.D(r["amount_to_collect_usd"] or 0)
         by_status[r["status"]] += 1
         b = r["batch"] or "—"
         by_batch[b]["count"] += 1
@@ -82,7 +84,7 @@ def build(db=None):
             total_value += amt
         if r["status"] in OPEN_STATUSES:
             outstanding += amt
-            open_deposits += r["deposit_usd"]
+            open_deposits += money.D(r["deposit_usd"])
         if r["status"] == "COLLECTED":
             collected += amt
 
@@ -90,15 +92,15 @@ def build(db=None):
         "total": len(rows),
         "by_status": dict(by_status),
         "money": {
-            "outstanding_usd": round(outstanding, 2),
-            "collected_usd": round(collected, 2),
-            "total_value_usd": round(total_value, 2),
-            "deposits_usd": round(sum(r["deposit_usd"] for r in rows), 2),
-            "net_outstanding_usd": round(outstanding - open_deposits, 2),
+            "outstanding_usd": money.to_usd(outstanding),
+            "collected_usd": money.to_usd(collected),
+            "total_value_usd": money.to_usd(total_value),
+            "deposits_usd": money.usd_sum(r["deposit_usd"] for r in rows),
+            "net_outstanding_usd": money.to_usd(outstanding - open_deposits),
         },
-        "by_batch": {k: {"count": v["count"], "usd": round(v["usd"], 2)}
+        "by_batch": {k: {"count": v["count"], "usd": money.to_usd(v["usd"])}
                      for k, v in sorted(by_batch.items())},
-        "by_profile": {k: {"count": v["count"], "usd": round(v["usd"], 2)}
+        "by_profile": {k: {"count": v["count"], "usd": money.to_usd(v["usd"])}
                        for k, v in sorted(by_profile.items())},
         "action_queue": {
             "need_order": sum(r["status"] == "REQUESTED" for r in rows),

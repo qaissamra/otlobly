@@ -22,6 +22,7 @@ from pathlib import Path
 from urllib import request, parse, error
 
 import cfg
+import money
 
 CACHE_FILE = Path(__file__).with_name("reports") / "price_cache.json"
 
@@ -38,7 +39,7 @@ def apply_markup(landed_usd, config=None):
     """amount_to_collect = landed_cost * (1 + markup_pct), to the cent."""
     if landed_usd is None:
         return None
-    return round(float(landed_usd) * (1 + markup_pct(config)), 2)
+    return money.mul(landed_usd, 1 + markup_pct(config))
 
 
 def price_from_checkout(checkout, config=None):
@@ -51,7 +52,7 @@ def price_from_checkout(checkout, config=None):
     if total is None:
         parts = [checkout.get(k) or 0 for k in
                  ("subtotal_usd", "shipping_usd", "import_fees_usd")]
-        total = round(sum(parts), 2) if any(parts) else None
+        total = money.usd_sum(parts) if any(parts) else None
     return apply_markup(total, config)
 
 
