@@ -31,6 +31,11 @@
   .hero h1{font-size:clamp(1.7rem,5.5vw,2.4rem);font-weight:900;line-height:1.15;margin-bottom:8px}
   .hero h1 em{color:var(--orange);font-style:normal}
   .hero p{color:var(--muted);font-size:.95rem;max-width:460px;margin:0 auto}
+  .nofriction{display:inline-block;background:#fff;border:1.5px dashed var(--line);border-radius:99px;
+    padding:7px 16px;margin-top:12px;font-size:.82rem;font-weight:800;color:var(--ink)}
+  /* batch-campaign urgency strip (shown only when the Settings toggle is ON) */
+  .batchbar{background:#fff3ee;border:1.5px solid #ffd9c9;color:var(--ink);border-radius:14px;
+    padding:11px 15px;margin:18px 0 4px;font-size:.84rem;font-weight:700;line-height:1.6;text-align:center}
   .stepnum{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
     background:#111;color:#fff;font-size:.8rem;font-weight:800;flex:none}
   h2.sec{display:flex;align-items:center;gap:9px;font-size:1.02rem;font-weight:800;margin:26px 2px 12px}
@@ -45,15 +50,73 @@
   .plan.on .tick{background:var(--orange);border-color:var(--orange)}
   .plan .ic{font-size:1.5rem}
   .plan b{display:block;font-size:1rem;margin:6px 0 3px}
+  .plan .subt{display:block;color:var(--muted);font-size:.8rem;line-height:1.45;margin-bottom:2px}
   .plan small{color:var(--muted);font-size:.8rem;line-height:1.5;display:block}
   .plan .tag{position:absolute;inset-inline-start:12px;top:-9px;background:var(--orange);color:#fff;font-size:.66rem;
     font-weight:800;padding:2px 10px;border-radius:99px}
+  .plan .tag.quiet{background:#efece7;color:#8a7f6d}   /* quiet downsell badge (no fight with the hero badge) */
   .plan ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
-  .plan ul li{font-size:.76rem;color:#444;display:flex;gap:6px;align-items:flex-start;line-height:1.45}
-  .plan ul li::before{content:"✓";color:var(--good);font-weight:800;flex:none}
+  .plan ul li{font-size:.76rem;color:#444;display:flex;gap:6px;align-items:flex-start;line-height:1.45;text-align:right}
+  .plan ul li::before{content:"✓";color:var(--ink);font-weight:800;flex:none}   /* ink check — green is money-only */
   .plan .fee{display:block;margin-top:9px;color:var(--muted);font-size:.74rem;line-height:1.5}
   .plan .fee a{color:var(--orange);font-weight:700;text-decoration:none}
   .plans-note{color:var(--muted);font-size:.78rem;text-align:center;margin:12px 2px 0}
+  /* headline feature bullet — bold orange, the Saver plan's #1 hook (0% commission) */
+  .plan ul li.hilite{color:var(--orange);font-weight:800}
+  .plan ul li.hilite::before{color:var(--orange)}
+  /* folded-in protection bullets — shield + bold ink, distinct from the ✓ feature bullets */
+  .plan ul li.prot{color:var(--ink);font-weight:800;align-items:center;margin-top:3px}
+  .plan ul li.prot::before{content:none}
+  .plan ul li.prot .ico{width:14px;height:14px;color:var(--ink)}
+  .plan ul li.prot span{flex:1}
+  /* slim universal guarantee line under the cards (protection now lives inside each card) */
+  .guarline{display:flex;align-items:center;justify-content:center;gap:7px;font-weight:800;
+    font-size:.88rem;color:var(--ink);margin:14px 0 0}
+  .guarline .ico{width:17px;height:17px}
+  /* free-bonus stack */
+  .bonuses{background:#fff;border:2px solid var(--line);border-radius:16px;padding:15px 16px;margin-top:12px}
+  .bonuses b{display:flex;align-items:center;gap:7px;font-size:.95rem;margin-bottom:8px}
+  .bonuses ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+  .bonuses ul li{font-size:.82rem;color:#333;display:flex;justify-content:space-between;gap:10px;
+    align-items:center;line-height:1.5;text-align:right}
+  .bonuses ul li .bon-txt{display:flex;align-items:center;gap:7px;flex:1}
+  .freechip{background:#e8f7ee;color:var(--good);font-weight:800;font-size:.68rem;border-radius:99px;
+    padding:2px 11px;flex:none}
+  .bon-total{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);text-align:center;
+    font-weight:800;font-size:.84rem;color:var(--good)}   /* green = money */
+  /* social-proof strip (hidden until OFFER.ordersDelivered is set) */
+  .proofline{text-align:center;font-weight:800;font-size:.9rem;color:var(--ink);margin-top:16px}
+  /* inline line-icon set (Lucide outline via the sprite below <body>) */
+  .ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;
+    stroke-linejoin:round;flex:none}
+  .plan .ic .ico{width:28px;height:28px}
+  /* hero primary CTA (above the fold) */
+  .hero-cta{display:inline-block;margin-top:16px;background:var(--orange);color:#fff;text-decoration:none;
+    border:none;border-radius:14px;font-family:inherit;font-size:1rem;font-weight:800;padding:14px 26px;cursor:pointer}
+  .deliverywhy{color:var(--muted);font-size:.8rem;line-height:1.6;max-width:440px;margin:12px auto 0}
+  /* payment-decision framing header */
+  .decide{text-align:center;font-weight:800;font-size:1rem;line-height:1.55;margin:0 2px 14px;color:var(--ink)}
+  /* optional approx-value field (UI-only, drives the live deposit numbers) */
+  .valrow{max-width:300px;margin:0 auto 14px;text-align:center}
+  .valrow label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin:0 0 5px}
+  .valwrap{display:flex;align-items:center;gap:6px;justify-content:center;border:1.5px solid var(--line);
+    border-radius:12px;background:#fff;padding:2px 12px}
+  .valwrap span{font-weight:800;color:var(--muted)}
+  .valwrap input{border:none;outline:none;font-family:inherit;font-size:1rem;font-weight:800;width:110px;
+    padding:10px 4px;text-align:center;background:transparent;direction:ltr}
+  /* payment-timing device */
+  .tl{position:relative;display:flex;margin:10px 0 8px}
+  .tl::before{content:"";position:absolute;top:13px;inset-inline:16%;height:2px;background:var(--line);z-index:0}
+  .tl-step{flex:1;text-align:center;position:relative;z-index:1}
+  .tl-dot{width:26px;height:26px;border-radius:50%;background:#f0ede8;color:var(--ink);font-size:.78rem;
+    font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 5px}
+  .tl-step.paid .tl-dot{background:var(--good);color:#fff}   /* green = money paid here */
+  .tl-lab{font-size:.62rem;line-height:1.3;color:#666;padding:0 3px;white-space:pre-line}
+  .tl-step.paid .tl-lab{color:var(--good);font-weight:800}
+  /* live side-by-side summary (shown once a value is entered) */
+  .mini{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:12px;
+    font-size:.8rem;font-weight:700;text-align:center;line-height:1.7}
+  .mini b{color:var(--good)}
   /* burger + dropdown nav */
   .burger{border:none;background:#f0ede8;border-radius:10px;width:38px;height:38px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
@@ -89,6 +152,10 @@
   .fin{width:100%;font-family:inherit;font-size:.95rem;padding:12px 13px;border:1.5px solid var(--line);
     border-radius:12px;background:#fff}
   .fin:focus{outline:none;border-color:var(--orange)}
+  .phonegrp{display:flex;gap:8px;direction:ltr}   /* code on the left, number on the right (both langs) */
+  .ccsel{flex:none;width:auto;min-width:106px;cursor:pointer}
+  .phonegrp #f_phone{flex:1;width:auto}
+  .ccnote{color:var(--muted);font-size:.76rem;margin:5px 2px 0}
   .go{width:100%;margin-top:20px;border:none;border-radius:14px;background:var(--orange);color:#fff;
     font-family:inherit;font-size:1rem;font-weight:800;padding:15px;cursor:pointer}
   .go:disabled{opacity:.6}
@@ -107,48 +174,132 @@
 <body>
 {% include "_nav.html" %}
 
+<!-- Line-icon sprite (Lucide outline) — referenced via <svg class="ico"><use href="#i-…"/></svg> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h16a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M18 12a1 1 0 0 0 0 4h4v-4z"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><path d="M20 12v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8"/><path d="M2 8h20v4H2z"/><path d="M12 8v13"/><path d="M12 8S10.5 3 7.5 3a2.5 2.5 0 0 0 0 5"/><path d="M12 8s1.5-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h1"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-1"/><path d="M9 18h6"/><circle cx="7.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/></symbol>
+</svg>
+
 <div class="wrap" id="main">
   <div class="hero">
     <div class="eyebrow" data-i18n="eyebrow">عرض سعر خلال ساعات</div>
-    <h1><span data-i18n="h1a">اطلب </span><em data-i18n="h1b">الآن</em></h1>
+    <h1><em data-i18n="h1em">عرض الافتتاح 🇵🇸</em> <span data-i18n="h1rest">— أي منتج من أمازون أمريكا، على بابك، والجمارك علينا</span></h1>
     <p data-i18n="sub">الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.</p>
+    <p class="nofriction" data-i18n="nofriction">بدون فيزا · بدون عنوان · بدون مخاطرة — بس الصق الرابط</p>
+    <div><button class="hero-cta" type="button" onclick="scrollToLinks()" data-i18n="heroCta">احصل على عرض السعر ←</button></div>
+    <p class="deliverywhy" data-i18n="deliverywhy">التوصيل خلال ٢٠–٣٠ يوم — منجمّع الطلبات بدفعات عشان نغطّي جماركك ونوصّلك أرخص</p>
   </div>
 
-  <h2 class="sec"><span class="stepnum">1</span><span data-i18n="s1">اختر طريقة الدفع</span></h2>
-  <div class="plans">
-    <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
-      <span class="tick">✓</span>
-      <span class="ic">💰</span>
-      <b data-i18n="p1t">ادفع مقدماً — 0% عمولة</b>
-      <small data-i18n="p1d">للواثقين: كامل المبلغ الآن ورسوم ثابتة $5 فقط — أرخص طريقة تطلب فيها.</small>
-    </div>
-    <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
-      <span class="tag" data-i18n="p2tag">الأكثر شيوعًا</span>
-      <span class="tick">✓</span>
-      <span class="ic">🛡️</span>
-      <b data-i18n="p2t">استلم أولاً — وادفع الباقي على بابك</b>
-      <ul>
-        <li data-i18n="p2g1">لو ضاع أو تضرر الطرد — التعويض علينا</li>
-        <li data-i18n="p2g2">الجمارك الإضافية علينا</li>
-        <li data-i18n="p2g3">إلغاء مجاني قبل الشحن</li>
-      </ul>
-      <small class="fee"><span data-i18n="p2fee1">عربون بسيط للتأكيد · عمولة تبدأ من 8%</span> — <a href="/pricing" onclick="event.stopPropagation()" data-i18n="p2fee2">احسبها بدقة</a></small>
-    </div>
-  </div>
-  <p class="plans-note" data-i18n="plansnote">الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.</p>
+  {% if sections.get('order_batch_urgency', False) %}
+  <!-- Batch-campaign urgency strip — visibility: Settings › 🌐 Website sections.
+       The day/counts live in OFFER.batch at the top of the script below. -->
+  <div class="batchbar" id="batchbar"></div>
+  {% endif %}
 
-  <h2 class="sec"><span class="stepnum">2</span><span data-i18n="s2">روابط منتجاتك من أمازون</span></h2>
+  <!-- ══ Step 1 — paste Amazon links (the easy, high-intent yes) ══ -->
+  <h2 class="sec" id="step-links"><span class="stepnum">1</span><span data-i18n="s2">روابط منتجاتك من أمازون</span></h2>
   <div class="links" id="links"></div>
   <button class="addlink" onclick="addLink()" data-i18n="addlink">＋ أضف رابطاً آخر</button>
+
+  <!-- ══ Step 2 — choose how to pay (with the payment-timing device) ══ -->
+  <h2 class="sec"><span class="stepnum">2</span><span data-i18n="s1">اختر طريقة الدفع</span></h2>
+  <p class="decide" data-i18n="decide">القرار الوحيد: تدفع الكل الآن وتوفّر؟ ولا تدفع عند الباب وترتاح؟</p>
+  <div class="valrow">
+    <label for="orderval" data-i18n="valLbl">قيمة طلبك التقريبية (اختياري)</label>
+    <div class="valwrap"><span>$</span><input id="orderval" type="number" inputmode="numeric" min="0" step="5" placeholder="100" oninput="paintTimeline()"></div>
+  </div>
+  <div class="plans">
+    <!-- HERO — باقة الأمان: default-selected, right side in RTL -->
+    <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
+      <span class="tag" data-i18n="p2tag">الأكثر أماناً</span>
+      <span class="tick">✓</span>
+      <span class="ic"><svg class="ico"><use href="#i-shield"/></svg></span>
+      <b data-i18n="p2t">باقة الأمان</b>
+      <span class="subt" data-i18n="p2sub">استلم أولاً — وادفع الباقي على بابك</span>
+      <div class="tl">
+        <div class="tl-step paid" id="tl-aman-1"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlAman1">اليوم · عربون ١٠٪ بس</div></div>
+        <div class="tl-step"><div class="tl-dot">2</div><div class="tl-lab" data-i18n="tlAman2">نطلب ونشحن على حسابنا</div></div>
+        <div class="tl-step paid" id="tl-aman-3"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlAman3">يوصل · ادفع الباقي</div></div>
+      </div>
+      <ul>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protPrice">ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا</span></li>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protLost">تعويض كامل لو ضاع الطرد</span></li>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protStock">استرداد فوري لو المنتج مش متوفر</span></li>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protLate">تأخر عن ٣٥ يوم؟ العمولة علينا</span></li>
+        <li data-i18n="p2g1">ما تدفع إلا عربون ١٠٪ بسيط الآن</li>
+        <li data-i18n="clearance">إحنا بنخلّص الجمارك عنك</li>
+      </ul>
+      <small class="fee" data-i18n="p2fee1">مثال: طلب $100 → عمولتك $8</small>
+    </div>
+    <!-- Downsell — باقة التوفير: quiet, left side -->
+    <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
+      <span class="tag quiet" data-i18n="p1badge">للعملاء المكررين</span>
+      <span class="tick">✓</span>
+      <span class="ic"><svg class="ico"><use href="#i-wallet"/></svg></span>
+      <b data-i18n="p1t">باقة التوفير</b>
+      <span class="subt" data-i18n="p1sub">رسوم ثابتة $5 مهما كبر طلبك</span>
+      <div class="tl">
+        <div class="tl-step paid" id="tl-tawfir-1"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlTawfir1">اليوم · ادفع كامل المبلغ</div></div>
+        <div class="tl-step"><div class="tl-dot">2</div><div class="tl-lab" data-i18n="tlTawfir2">نطلب من أمازون فوراً</div></div>
+        <div class="tl-step"><div class="tl-dot">3</div><div class="tl-lab" data-i18n="tlTawfir3">يوصل على بابك</div></div>
+      </div>
+      <ul>
+        <li class="hilite" data-i18n="p1g0">0% عمولة — بس رسوم ثابتة $5</li>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protPrice">ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا</span></li>
+        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protStock">استرداد فوري لو المنتج مش متوفر</span></li>
+        <li data-i18n="p1g3">تسعيرة نهائية شاملة الشحن</li>
+        <li data-i18n="clearance">إحنا بنخلّص الجمارك عنك</li>
+      </ul>
+      <small class="fee" data-i18n="p1who">الأنسب للي واثق وبدّو أقل تكلفة</small>
+    </div>
+  </div>
+  <p class="mini" id="mini" hidden></p>
+  <p class="plans-note" data-i18n="plansnote">الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.</p>
+
+  <!-- ══ Slim universal guarantee line — the per-plan protection bullets live inside each card ══ -->
+  <p class="guarline"><svg class="ico"><use href="#i-shield"/></svg> <span data-i18n="guarLine">كل طلب محمي بضمان الوصول</span></p>
+
+  <!-- ══ Free-bonus stack ══ -->
+  <div class="bonuses">
+    <b><svg class="ico"><use href="#i-gift"/></svg> <span data-i18n="bonT">كل طلب بيشمل مجاناً:</span></b>
+    <ul>
+      <li><span data-i18n="bon1">تغطية الجمارك الكاملة (قيمتها حتى $100)</span><span class="freechip" data-i18n="free">مجاناً</span></li>
+      <li><span data-i18n="bon2">فحص أفضل سعر: بنتأكد إن سعرك أرخص سعر على أمازون قبل ما نطلب</span><span class="freechip" data-i18n="free">مجاناً</span></li>
+      <li><span data-i18n="bon3">تتبع لحظي عبر المنصة</span><span class="freechip" data-i18n="free">مجاناً</span></li>
+      <li><span data-i18n="bon4">إلغاء مجاني قبل الشحن</span><span class="freechip" data-i18n="free">مجاناً</span></li>
+    </ul>
+    <p class="bon-total" data-i18n="bonTotal">قيمة إجمالية $130+ — مجاناً مع كل طلب</p>
+  </div>
 
   <h2 class="sec"><span class="stepnum">3</span><span data-i18n="s3">بياناتك</span></h2>
   <label data-i18n="name">الاسم الكامل</label>
   <input class="fin" id="f_name" autocomplete="name">
   <label data-i18n="phone">رقم الواتساب (نرسل عليه عرض السعر)</label>
-  <input class="fin" id="f_phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" style="direction:ltr;text-align:left" autocomplete="tel">
+  <div class="phonegrp">
+    <select class="fin ccsel" id="f_cc" aria-label="مقدمة الرقم">
+      <option value="" selected disabled data-i18n="ccpick">🇵🇸 اختر المقدمة</option>
+      <option value="970">🇵🇸 +970</option>
+      <option value="972">🇵🇸 +972</option>
+    </select>
+    <input class="fin" id="f_phone" type="tel" inputmode="tel" placeholder="5xxxxxxxx" style="direction:ltr;text-align:left" autocomplete="tel">
+  </div>
+  <p class="ccnote" data-i18n="ccnote">اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)</p>
 
   <button class="go" id="goBtn" onclick="submitQuote()" data-i18n="send">أرسل لي عرض السعر</button>
   <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
+
+  <!-- Social proof — driven by OFFER.ordersDelivered (auto-hidden if 0) -->
+  <p class="proofline" id="proofline" hidden></p>
+  <!-- TESTIMONIALS SLOT — when you have 2-3 WhatsApp screenshots, drop the files next to
+       the app (e.g. web/) and uncomment; keep them small (~300px wide) and blur customer names:
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+    <img src="/testimonial-1.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+    <img src="/testimonial-2.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+    <img src="/testimonial-3.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+  </div>
+  -->
   <div id="out"></div>
 </div>
 <script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
@@ -167,21 +318,61 @@ document.addEventListener("click", function(e){
 });
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 let LANG="ar", PLAN="zero_risk";
+/* ── OFFER — the single source of truth for every number on this page ────────
+   Edit these per batch; nothing is hard-coded in the markup. The urgency banner
+   only shows while the Settings toggle «🚚 Batch urgency banner» is ON.
+   NOTE: depositPct / commissionPct / flatFeeUsd mirror pricing.html's PRICES —
+   keep them in sync by hand until the fee model is server-injected. */
+const OFFER={
+  depositPct:10, commissionPct:8, flatFeeUsd:5,
+  deliveryDays:"20–30", guaranteeDays:35,
+  batch:{closeDay:"الخميس", spotsLeft:6, spotsTotal:20, nextDelayDays:10},
+  ordersDelivered:40,
+};
+/* Localize day-counts to Arabic-Indic digits in AR (dollar amounts stay Latin per the brand rule). */
+const _ARDIG="٠١٢٣٤٥٦٧٨٩";
+function num(n){ return LANG==="ar" ? String(n).replace(/[0-9]/g,d=>_ARDIG[+d]) : String(n); }
 const T={
-  ar:{eyebrow:"عرض سعر خلال ساعات", h1a:"اطلب ", h1b:"الآن",
+  ar:{eyebrow:"عرض سعر خلال ساعات",
+      h1em:"عرض الافتتاح 🇵🇸", h1rest:"— أي منتج من أمازون أمريكا، على بابك، والجمارك علينا",
       sub:"الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.",
-      s1:"اختر طريقة الدفع", p1t:"ادفع مقدماً — 0% عمولة",
-      p1d:"للواثقين: كامل المبلغ الآن ورسوم ثابتة $5 فقط — أرخص طريقة تطلب فيها.",
-      p2tag:"الأكثر شيوعًا", p2t:"استلم أولاً — وادفع الباقي على بابك",
-      p2g1:"لو ضاع أو تضرر الطرد — التعويض علينا",
-      p2g2:"الجمارك الإضافية علينا",
-      p2g3:"إلغاء مجاني قبل الشحن",
-      p2fee1:"عربون بسيط للتأكيد · عمولة تبدأ من 8%", p2fee2:"احسبها بدقة",
+      nofriction:"بدون فيزا · بدون عنوان · بدون مخاطرة — بس الصق الرابط",
+      heroCta:"احصل على عرض السعر ←",
+      deliverywhy:"التوصيل خلال {deliveryDays} يوم — منجمّع الطلبات بدفعات عشان نغطّي جماركك ونوصّلك أرخص",
+      batch:"الدفعة الحالية تسكر يوم {closeDay} — باقي {spotsLeft} أماكن من {spotsTotal}. بعدها طلبك يلحق الدفعة الجاية (+{nextDelayDays} أيام)",
+      s1:"اختر طريقة الدفع", decide:"القرار الوحيد: تدفع الكل الآن وتوفّر؟ ولا تدفع عند الباب وترتاح؟", valLbl:"قيمة طلبك التقريبية (اختياري)",
+      p1badge:"للعملاء المكررين", p1t:"باقة التوفير", p1sub:"رسوم ثابتة $5 مهما كبر طلبك",
+      p1g0:"0% عمولة — بس رسوم ثابتة $5",
+      p1g3:"تسعيرة نهائية شاملة الشحن",
+      p1who:"الأنسب للي واثق وبدّو أقل تكلفة",
+      p2tag:"الأكثر أماناً", p2t:"باقة الأمان", p2sub:"استلم أولاً — وادفع الباقي على بابك",
+      p2g1:"ما تدفع إلا عربون ١٠٪ بسيط الآن",
+      clearance:"إحنا بنخلّص الجمارك عنك",
+      p2fee1:"مثال: طلب $100 → عمولتك $8",
+      tlAman1:"اليوم\nعربون ١٠٪ بس", tlAman2:"نطلب ونشحن\nعلى حسابنا", tlAman3:"يوصل\nادفع الباقي",
+      tlTawfir1:"اليوم\nادفع كامل المبلغ", tlTawfir2:"نطلب من\nأمازون فوراً", tlTawfir3:"يوصل\nعلى بابك",
+      depWord:"عربونك", restWord:"الباقي عند الباب", payNowWord:"ادفع الآن",
+      miniTpl:"الأمان: عربون {dep} الآن + {rest} عند الباب  ·  التوفير: {tot} كامل الآن",
+      protPrice:"ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا",
+      protLost:"تعويض كامل لو ضاع الطرد",
+      protStock:"استرداد فوري لو المنتج مش متوفر",
+      protLate:"تأخر عن {guaranteeDays} يوم؟ العمولة علينا",
+      guarLine:"كل طلب محمي بضمان الوصول",
+      bonT:"كل طلب بيشمل مجاناً:",
+      bon1:"تغطية الجمارك الكاملة (قيمتها حتى $100)",
+      bon2:"فحص أفضل سعر: بنتأكد إن سعرك أرخص سعر على أمازون قبل ما نطلب",
+      bon3:"تتبع لحظي عبر المنصة",
+      bon4:"إلغاء مجاني قبل الشحن",
+      bonTotal:"قيمة إجمالية $130+ — مجاناً مع كل طلب",
+      free:"مجاناً",
+      proof:"+{n} طلب وصل بنجاح لفلسطين 🇵🇸",
       plansnote:"الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.",
       "m.order":"اطلب الآن", "m.plans":"الباقات", "m.track":"تتبّع شحنتك",
       "m.how":"كيف تعمل", "m.account":"حسابي · تسجيل الدخول", "m.wa":"واتساب",
       s2:"روابط منتجاتك من أمازون", linkph:"https://www.amazon.com/…", addlink:"＋ أضف رابطاً آخر",
       s3:"بياناتك", name:"الاسم الكامل", phone:"رقم الواتساب (نرسل عليه عرض السعر)",
+      ccpick:"🇵🇸 اختر المقدمة", ccnote:"اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)",
+      needprefix:"اختر مقدمة الرقم (970 أو 972) أولاً.",
       send:"أرسل لي عرض السعر", sending:"جارٍ الإرسال…",
       hint:"مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.",
       needlink:"أضف رابط منتج واحداً على الأقل من أمازون.", needinfo:"الاسم ورقم الواتساب مطلوبان.",
@@ -189,20 +380,46 @@ const T={
       keep:"رقم طلبك — احتفظ به للمتابعة:", more:"→ العودة للرئيسية",
       wabtn:"راسلنا الآن على واتساب", wanudge:"أسرع طريقة يوصلك فيها عرض السعر — افتح المحادثة الآن.",
       wamsg:"مرحباً اطلبلي 👋 أنا {name} — أرسلت طلب تسعير رقم {oid}"},
-  en:{eyebrow:"A quote within hours", h1a:"Order ", h1b:"now",
+  en:{eyebrow:"A quote within hours",
+      h1em:"Opening offer 🇵🇸", h1rest:"— any product from Amazon USA, at your door, customs on us",
       sub:"Paste your Amazon product links, pick how you want to pay, and we'll send the final quote to your WhatsApp.",
-      s1:"Choose how to pay", p1t:"Pay up front — 0% commission",
-      p1d:"For the confident: full amount now, a flat $5 fee — the cheapest way to order.",
-      p2tag:"Most popular", p2t:"Receive first — pay the rest at your door",
-      p2g1:"Lost or damaged parcel — compensation on us",
-      p2g2:"Extra customs fees — on us",
-      p2g3:"Free cancellation before shipping",
-      p2fee1:"Small deposit to confirm · commission from 8%", p2fee2:"calculate yours",
+      nofriction:"No Visa · no US address · no risk — just paste the link",
+      heroCta:"Get my quote →",
+      deliverywhy:"Delivery in {deliveryDays} days — we batch orders so we can cover your customs and get you a lower price",
+      batch:"The current batch closes {closeDay} — {spotsLeft} of {spotsTotal} spots left. After that, your order joins the next batch (+{nextDelayDays} days)",
+      s1:"Choose how to pay", decide:"The only decision: pay it all now and save? Or pay at the door and relax?", valLbl:"Your approx. order value (optional)",
+      p1badge:"For repeat customers", p1t:"Saver Plan", p1sub:"A flat $5 fee, however big your order",
+      p1g0:"0% commission — just a flat $5 fee",
+      p1g3:"Final quote includes shipping",
+      p1who:"Best if you're confident and want the lowest cost",
+      p2tag:"Safest", p2t:"Safety Plan", p2sub:"Receive first — pay the rest at your door",
+      p2g1:"You pay only a small 10% deposit now",
+      clearance:"We handle customs clearance for you",
+      p2fee1:"Example: a $100 order → your fee is $8",
+      tlAman1:"Today\n10% deposit only", tlAman2:"We buy & ship\non our account", tlAman3:"It arrives\npay the rest",
+      tlTawfir1:"Today\npay in full", tlTawfir2:"We order from\nAmazon right away", tlTawfir3:"It arrives\nat your door",
+      depWord:"Your deposit", restWord:"Rest at the door", payNowWord:"Pay now",
+      miniTpl:"Safety: {dep} deposit now + {rest} at the door  ·  Saver: {tot} in full now",
+      protPrice:"You never pay above the quoted price — any extra customs is on us",
+      protLost:"Full compensation if the parcel is lost",
+      protStock:"Instant refund if the item's unavailable",
+      protLate:"Later than {guaranteeDays} days? Our commission is on us",
+      guarLine:"Every order is protected by our Arrival Guarantee",
+      bonT:"Every order includes, for free:",
+      bon1:"Full customs coverage (worth up to $100)",
+      bon2:"Best-price check: we confirm yours is the lowest price on Amazon before ordering",
+      bon3:"Live tracking on our platform",
+      bon4:"Free cancellation before shipping",
+      bonTotal:"$130+ total value — free with every order",
+      free:"FREE",
+      proof:"+{n} orders delivered to Palestine 🇵🇸",
       plansnote:"The final fees appear in your quote before you confirm — no surprises.",
       "m.order":"Order now", "m.plans":"Pricing", "m.track":"Track a shipment",
       "m.how":"How it works", "m.account":"My account · Sign in", "m.wa":"WhatsApp",
       s2:"Your Amazon product links", linkph:"https://www.amazon.com/…", addlink:"＋ Add another link",
       s3:"Your details", name:"Full name", phone:"WhatsApp number (we send the quote there)",
+      ccpick:"🇵🇸 Select prefix", ccnote:"Pick 970 or 972, then type your number without the leading 0 (e.g. 59…)",
+      needprefix:"Choose your number prefix (970 or 972) first.",
       send:"Send me the quote", sending:"Sending…",
       hint:"Free, no commitment — the final price arrives on WhatsApp for you to confirm.",
       needlink:"Add at least one Amazon product link.", needinfo:"Name and WhatsApp number are required.",
@@ -217,6 +434,44 @@ function setLang(l){ LANG=l; document.documentElement.lang=l; document.documentE
   if($("lang-en")) $("lang-en").classList.toggle("on",l==="en");
   document.querySelectorAll("[data-i18n]").forEach(e=>{ const v=t(e.dataset.i18n); if(v!=null) e.textContent=v; });
   document.querySelectorAll("#links input").forEach(i=>i.placeholder=t("linkph"));
+  paintOffer();
+}
+const _set=(sel,txt)=>{ const e=document.querySelector(sel); if(e) e.textContent=txt; };
+/* Interpolate the OFFER knobs into every place they appear (runs after the generic i18n pass). */
+function paintOffer(){
+  _set('[data-i18n="deliverywhy"]', t("deliverywhy").replace("{deliveryDays}", num(OFFER.deliveryDays)));
+  document.querySelectorAll('[data-i18n="protLate"]').forEach(e=>{ e.textContent=t("protLate").replace("{guaranteeDays}", num(OFFER.guaranteeDays)); });
+  const b=$("batchbar");
+  if(b){ const txt=t("batch").replace("{closeDay}",OFFER.batch.closeDay).replace("{spotsLeft}",num(OFFER.batch.spotsLeft))
+                             .replace("{spotsTotal}",num(OFFER.batch.spotsTotal)).replace("{nextDelayDays}",num(OFFER.batch.nextDelayDays));
+         b.innerHTML='<svg class="ico" style="vertical-align:-4px;margin-inline-end:6px"><use href="#i-truck"/></svg>'+esc(txt); }
+  const p=$("proofline");
+  if(p){ if(OFFER.ordersDelivered>0){ p.textContent=t("proof").replace("{n}",num(OFFER.ordersDelivered)); p.hidden=false; }
+         else p.hidden=true; }
+  paintTimeline();
+}
+/* Live deposit calc — an approx order value turns the timeline labels into real numbers. */
+function paintTimeline(){
+  const v=parseFloat(($("orderval")||{}).value)||0;
+  if(v>0){
+    const dep=Math.round(v*OFFER.depositPct/100), com=Math.round(v*OFFER.commissionPct/100);
+    const rest=v-dep+com, tot=v+OFFER.flatFeeUsd;
+    _set('[data-i18n="tlAman1"]', t("depWord")+"\n$"+dep);
+    _set('[data-i18n="tlAman3"]', t("restWord")+"\n$"+rest);
+    _set('[data-i18n="tlTawfir1"]', t("payNowWord")+"\n$"+tot);
+    const m=$("mini");
+    if(m){ m.hidden=false; m.innerHTML=t("miniTpl").replace("{dep}","<b>$"+dep+"</b>")
+                                   .replace("{rest}","<b>$"+rest+"</b>").replace("{tot}","<b>$"+tot+"</b>"); }
+  } else {
+    _set('[data-i18n="tlAman1"]', t("tlAman1"));
+    _set('[data-i18n="tlAman3"]', t("tlAman3"));
+    _set('[data-i18n="tlTawfir1"]', t("tlTawfir1"));
+    const m=$("mini"); if(m) m.hidden=true;
+  }
+}
+function scrollToLinks(){
+  const s=$("step-links"); if(s) s.scrollIntoView({behavior:"smooth",block:"start"});
+  const inp=document.querySelector("#links input"); if(inp) setTimeout(()=>inp.focus(),350);
 }
 function pickPlan(p){ PLAN=p;
   ["prepaid","zero_risk"].forEach(x=>{ const el=$("plan-"+x); el.classList.toggle("on",x===p);
@@ -234,9 +489,13 @@ function addLink(focus=true){
 async function submitQuote(){
   const links=[...document.querySelectorAll("#links input")].map(i=>i.value.trim())
     .filter(v=>/^https?:\/\//i.test(v));
-  const name=$("f_name").value.trim(), phone=$("f_phone").value.trim();
+  const name=$("f_name").value.trim();
+  const cc=$("f_cc").value;
+  const local=$("f_phone").value.replace(/\D/g,"").replace(/^0+/,"");   // strip separators + leading 0(s)
+  const phone=cc+local;
   if(!links.length){ $("out").innerHTML=`<div class="err">${t("needlink")}</div>`; return; }
-  if(!name||!phone){ $("out").innerHTML=`<div class="err">${t("needinfo")}</div>`; return; }
+  if(!name||!local){ $("out").innerHTML=`<div class="err">${t("needinfo")}</div>`; return; }
+  if(!cc){ $("out").innerHTML=`<div class="err">${t("needprefix")}</div>`; return; }
   const b=$("goBtn"); b.disabled=true; b.textContent=t("sending");
   let d; try{ d=await (await fetch("/api/quote/request",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({plan:PLAN,links,name,phone})})).json(); }catch(e){ d={error:"network"}; }
