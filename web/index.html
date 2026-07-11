@@ -1154,7 +1154,7 @@ function itemsCell(o){
   const flag=o.needs_expand?` <span class="warnflag" title="a.co link needs expanding">⚠</span>`:"";
   const links=o.items.map(it=>{
     const label=it.asin||it.url||"link";
-    return `<a class="lk mono" href="${it.url||'#'}" target="_blank">${label}</a>`;}).join("");
+    return `<a class="lk mono" href="${poEsc(it.url||'#')}" target="_blank">${poEsc(label)}</a>`;}).join("");
   return `<div><b>${o.n_items}</b> item${o.n_items!=1?'s':''}${flag}</div>${links}`;
 }
 
@@ -1214,16 +1214,16 @@ function render(){
     return `<tr class="row">
       <td><input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="toggleOrderSel('${o.order_id}',this.checked)"></td>
       <td class="mono">${o.order_id}${o.source==="website"?`<br><span class="pill" style="background:#e0f2fe;color:#0369a1;font-size:9.5px" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:""}</td>
-      <td><b>${o.customer||"—"}</b><br><span class="mono" style="color:var(--muted)">${o.phone||""}</span></td>
+      <td><b>${poEsc(o.customer)||"—"}</b><br><span class="mono" style="color:var(--muted)">${poEsc(o.phone)||""}</span></td>
       <td>${itemsCell(o)}</td>
       <td class="amt">${amt}</td>
       <td class="amt" style="color:var(--good)">${depCell}</td>
       <td class="amt"><b>${remCell}</b></td>
-      <td><input value="${o.profile_box||''}" style="width:54px;padding:3px 6px;font-size:11.5px"
+      <td><input value="${poEsc(o.profile_box||'')}" style="width:54px;padding:3px 6px;font-size:11.5px"
             onchange="setBox('${o.order_id}',this.value)"></td>
-      <td>${o.batch||"—"}</td>
+      <td>${poEsc(o.batch)||"—"}</td>
       <td>${statusSelect(o)}</td>
-      <td><input value="${o.amazon_order_number||''}" placeholder="113-…" class="mono"
+      <td><input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="mono"
             style="width:104px;padding:3px 6px;font-size:11px"
             onchange="setAmazon('${o.order_id}',this.value)"></td>
       <td>${waMenu(o)}</td>
@@ -1263,12 +1263,12 @@ function renderPicking(){
   });
   $("picking").innerHTML=Object.entries(by).sort().map(([b,os])=>{
     const boxes={}; os.forEach(o=>{(boxes[o.profile_box||"—"]=boxes[o.profile_box||"—"]||[]).push(o);});
-    return `<div class="batchgroup"><h3>Batch ${b} — ${os.length} order(s)</h3>`+
+    return `<div class="batchgroup"><h3>Batch ${poEsc(b)} — ${os.length} order(s)</h3>`+
       Object.entries(boxes).map(([box,oo])=>`
-        <div class="box">Box ${box}</div>
+        <div class="box">Box ${poEsc(box)}</div>
         <table style="margin:4px 0 10px"><thead><tr><th>Order</th><th>Customer</th><th>ASINs</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody>${oo.map(o=>`<tr><td class="mono">${o.order_id}</td><td>${o.customer}</td>
-          <td class="mono">${o.items.map(i=>i.asin||'?').join(", ")}</td>
+        <tbody>${oo.map(o=>`<tr><td class="mono">${o.order_id}</td><td>${poEsc(o.customer)}</td>
+          <td class="mono">${poEsc(o.items.map(i=>i.asin||'?').join(", "))}</td>
           <td class="amt">${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</td>
           <td>${statusPill(o.status)}</td></tr>`).join("")}</tbody></table>`).join("")+
       `</div>`;
@@ -3144,16 +3144,16 @@ function renderCustomers(){
 function showProfile(id){
   const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
   const orders=(c.previous_orders||[]).map(o=>`<div class="kv"><span>${o.order_id} · ${o.status}</span><b>${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b></div>`).join("")||'<div style="color:var(--muted);font-size:12px">No orders yet.</div>';
-  const wa=c.wa?`<a href="https://wa.me/${c.wa}" target="_blank">${c.whatsapp}</a>`:(c.whatsapp||'—');
-  $("custProfile").innerHTML=`<h2>${c.name||'—'} ${c.vip?'★':''}</h2>
+  const wa=c.wa?`<a href="https://wa.me/${poEsc(c.wa)}" target="_blank">${poEsc(c.whatsapp)}</a>`:(poEsc(c.whatsapp)||'—');
+  $("custProfile").innerHTML=`<h2>${poEsc(c.name)||'—'} ${c.vip?'★':''}</h2>
     <div class="kv"><span>WhatsApp</span><b>${wa}</b></div>
-    <div class="kv"><span>Email</span><b>${c.email||'—'}</b></div>
-    <div class="kv"><span>City</span><b>${c.city||'—'}</b></div>
-    <div class="kv"><span>Address</span><b style="max-width:160px;text-align:right">${c.address||'—'}</b></div>
-    <div class="kv"><span>Payment</span><b>${c.payment_method||'—'}</b></div>
+    <div class="kv"><span>Email</span><b>${poEsc(c.email)||'—'}</b></div>
+    <div class="kv"><span>City</span><b>${poEsc(c.city)||'—'}</b></div>
+    <div class="kv"><span>Address</span><b style="max-width:160px;text-align:right">${poEsc(c.address)||'—'}</b></div>
+    <div class="kv"><span>Payment</span><b>${poEsc(c.payment_method)||'—'}</b></div>
     <div class="kv"><span>Orders</span><b>${c.order_count}</b></div>
     <div class="kv"><span>Total spent</span><b style="color:var(--accent)">${money(c.total_spent_usd)}</b></div>
-    ${c.notes?`<div class="kv"><span>Notes</span><b style="max-width:160px;text-align:right">${c.notes}</b></div>`:''}
+    ${c.notes?`<div class="kv"><span>Notes</span><b style="max-width:160px;text-align:right">${poEsc(c.notes)}</b></div>`:''}
     <div class="kv"><span>ID document</span><b>${c.id_image
         ? `<a href="/api/customer_image?file=${encodeURIComponent(c.id_image)}" target="_blank" title="open full size"><img src="/api/customer_image?file=${encodeURIComponent(c.id_image)}" style="height:46px;border-radius:6px;border:1px solid var(--line);vertical-align:middle"></a>`
         : `<span style="color:var(--muted)">none</span>`}</b></div>

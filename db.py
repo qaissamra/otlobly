@@ -319,6 +319,50 @@ def next_order_code():
         return _next_code(c, "orders", "order_code", "OTL")
 
 
+def insert_new_order(order, created_by=None):
+    """Persist a BRAND-NEW order, allocating its OTL-#### code atomically.
+
+    Unlike upsert_order (which does INSERT ... ON CONFLICT DO UPDATE and is for
+    edits to an existing order), this allocates the next code and INSERTs in ONE
+    write transaction (BEGIN IMMEDIATE serialises concurrent creators), using a
+    PLAIN insert. So if two public submissions race for the same code, the loser
+    raises IntegrityError and retries with a freshly-computed code instead of
+    silently overwriting the winner's order. Mutates order['order_id'] to the code
+    actually used and returns the order."""
+    ph = (order.get("customer", {}).get("phones") or [{}])
+    phone = ph[0].get("e164") if ph and ph[0] else None
+    conn = connect()
+    try:
+        conn.isolation_level = None          # take manual control of the transaction
+        for _ in range(50):
+            try:
+                conn.execute("BEGIN IMMEDIATE")   # one writer at a time: alloc + insert atomic
+                code = _next_code(conn, "orders", "order_code", "OTL")
+                order["order_id"] = code
+                conn.execute(
+                    """INSERT INTO orders
+                      (order_code, customer_phone, status, amount_to_collect_usd, batch,
+                       profile_box, amazon_order_number, tracking_number, signature,
+                       created_at, updated_at, created_by, data_json)
+                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (code, phone, order["status"], order.get("amount_to_collect_usd"),
+                     order.get("batch"), order.get("profile_box"),
+                     order.get("amazon_order_number"), order.get("tracking_number"),
+                     order.get("signature"), order.get("created_at", now_iso()),
+                     now_iso(), created_by, json.dumps(order, ensure_ascii=False)))
+                conn.execute("DELETE FROM order_items WHERE order_code=?", (code,))
+                for it in order.get("items", []):
+                    conn.execute("INSERT INTO order_items (order_code, asin, clean_url) "
+                                 "VALUES (?,?,?)", (code, it.get("asin"), it.get("clean_url")))
+                conn.execute("COMMIT")
+                return order
+            except sqlite3.IntegrityError:       # code taken between alloc and insert — retry
+                conn.execute("ROLLBACK")
+        raise RuntimeError("could not allocate a unique order code after 50 tries")
+    finally:
+        conn.close()
+
+
 # --------------------------------------------------------------------------- #
 # Customers
 # --------------------------------------------------------------------------- #

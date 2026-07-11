@@ -13,7 +13,9 @@ services:
     region: frankfurt             # closest to Palestine/Israel; change if you like
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    # One worker + threads: request concurrency for this I/O-bound app while the
+    # in-process rate limiter stays a single shared store (no Redis dependency).
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120
     healthCheckPath: /healthz
     autoDeploy: true
     # Custom domain (registrar: GoDaddy). Render issues TLS automatically once DNS points here:
