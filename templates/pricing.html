@@ -441,8 +441,8 @@ footer a:hover{color:#fff}
 
     <!-- Card 1: FREE -->
     <div class="plan-card" id="card-prepaid">
-      <div class="plan-name" data-i18n="plan1.name">FREE</div>
-      <div class="plan-tagline" data-i18n="plan1.tagline">تدفع كامل المبلغ قبل ما نطلب — وإحنا نتكفل بالباقي</div>
+      <div class="plan-name" data-i18n="plan1.name">باقة التوفير</div>
+      <div class="plan-tagline" data-i18n="plan1.tagline">ادفع الآن ووفّر — رسوم ثابتة $5 على أي طلب</div>
       <div class="plan-rate">0%<sup></sup></div>
       <div class="plan-rate-sub" data-i18n="plan1.ratesub">فقط $5 رسوم ثابتة للطلبات حتى $150 · 5% لما فوق</div>
       <div class="plan-fee-live">
@@ -456,6 +456,7 @@ footer a:hover{color:#fff}
         <li data-i18n="plan1.f2">تسعيرة نهائية شاملة الشحن</li>
         <li data-i18n="plan1.f3">رقم تتبّع OTL خاص</li>
       </ul>
+      <p class="plan-note-muted" data-i18n="plan1.best">الأنسب للي واثق وبدّو أقل تكلفة</p>
       <p class="plan-note-muted" data-i18n="plan1.note">الرسوم الجمركية (إن وجدت) على العميل</p>
       <a class="btn-plan" id="cta-prepaid" href="#" target="_blank" rel="noopener" data-i18n="plan1.cta">اطلب بالدفع المسبق</a>
     </div>
@@ -463,10 +464,10 @@ footer a:hover{color:#fff}
     <!-- Card 2: ZERO RISK (featured) -->
     <div class="plan-card featured" id="card-deposit">
       <div class="plan-badge" data-i18n="plan2.badge">الأكثر شيوعًا</div>
-      <div class="plan-name" data-i18n="plan2.name">الدفع عند الاستلام</div>
+      <div class="plan-name" data-i18n="plan2.name">باقة الأمان</div>
       <div class="plan-tagline" data-i18n="plan2.tagline">ادفع جزء الآن والباقي لما يوصل لبابك</div>
-      <div class="plan-rate"><span id="relax-rate-live">20%</span></div>
-      <div class="plan-rate-sub" id="relax-rate-sub">عمولتك الآن: 20%</div>
+      <div class="plan-rate">8%</div>
+      <div class="plan-rate-sub" data-i18n="plan2.ratesub">عمولة ثابتة 8% · حد أدنى $8</div>
       <div class="card-slider">
         <div class="card-slider-label"><span data-i18n="slider.label.pre">قيمة طلبك: </span><span id="card-slider-val">$150</span></div>
         <input type="range" id="order-slider-card" min="30" max="1000" value="150" step="5" aria-label="قيمة الطلب">
@@ -478,10 +479,11 @@ footer a:hover{color:#fff}
       <ul class="plan-features">
         <li class="feature-exclusive" data-i18n="plan1.f4">تعويض كامل إذا ضاع أو تضرر الطرد</li>
         <li class="feature-exclusive" data-i18n="plan2.f1">نغطي أي رسوم جمركية إضافية</li>
-        <li class="feature-parent" data-i18n="plan2.f0">كل مزايا باقة FREE مشمولة</li>
+        <li class="feature-parent" data-i18n="plan2.f0">كل مزايا باقة التوفير مشمولة</li>
         <li data-i18n="plan2.f2">إلغاء مجاني قبل الشحن</li>
         <li data-i18n="plan2.f3">رقم تتبّع OTL خاص</li>
       </ul>
+      <p class="plan-note-muted" data-i18n="plan2.best">الأنسب لأول طلب أو للي بدّو راحة بال</p>
       <a class="btn-plan orange" id="cta-deposit" href="#" target="_blank" rel="noopener" data-i18n="plan2.cta">ادفع عند الاستلام</a>
     </div>
 
@@ -583,9 +585,9 @@ footer a:hover{color:#fff}
       <thead>
         <tr>
           <th data-i18n="cmp.feature">الميزة</th>
-          <th data-i18n="cmp.col1">مسبق الدفع</th>
-          <th class="featured-col" data-i18n="cmp.col2">عربون</th>
-          <th data-i18n="cmp.col3">عند الاستلام</th>
+          <th data-i18n="cmp.col1">باقة التوفير</th>
+          <th class="featured-col" data-i18n="cmp.col2">باقة الأمان</th>
+          <th data-i18n="cmp.col3">VIP</th>
           <th data-i18n="cmp.col4">العضوية</th>
         </tr>
       </thead>
@@ -593,15 +595,15 @@ footer a:hover{color:#fff}
         <tr>
           <td data-i18n="cmp.row1">العمولة</td>
           <td data-i18n="cmp.r1c1">$5 ثابت / 5%</td>
-          <td class="featured-col" data-i18n="cmp.r1c2">8%</td>
-          <td data-i18n="cmp.r1c3">10%</td>
+          <td class="featured-col" data-i18n="cmp.r1c2">8% ثابتة</td>
+          <td data-i18n="cmp.r1c3">أسعار خاصة</td>
           <td data-i18n="cmp.r1c4">كمسبق الدفع</td>
         </tr>
         <tr>
           <td data-i18n="cmp.row2">الحد الأدنى</td>
           <td data-i18n="cmp.r2c1">$5</td>
           <td class="featured-col" data-i18n="cmp.r2c2">$8</td>
-          <td data-i18n="cmp.r2c3">$10</td>
+          <td data-i18n="cmp.r2c3">—</td>
           <td data-i18n="cmp.r2c4">$5</td>
         </tr>
         <tr>
@@ -686,10 +688,8 @@ footer a:hover{color:#fff}
 ══════════════════════════════════════════ */
 const PRICES = {
   prepaidFlat: 5,          /* FREE tier — always this, no math    */
-  relaxStartPct: 20,       /* rate at $50 (slider min)            */
-  relaxMidPct:   10,       /* rate at $500                        */
-  relaxEndPct:    8,       /* rate at $1000+ (slider max)         */
-  relaxMin: 8,
+  relaxPct: 8,             /* pay-on-delivery — flat, no curve    */
+  relaxMin: 8,             /* fee floor — kicks in under $100     */
   memberMonthly: 10,
   memberAnnualDiscountPct: 20,
   memberTrialFirstMonth: 1,
@@ -710,20 +710,8 @@ document.addEventListener("click", function(e){
 function calcPrepaid() {
   return PRICES.prepaidFlat; /* always $5 — never changes */
 }
-function relaxRate(orderVal) {
-  /* two-segment linear interpolation:
-     $50–$500  : 20% → 10%
-     $500–$1000: 10% →  8%
-     $1000+    : 8% flat */
-  if (orderVal >= 1000) return PRICES.relaxEndPct;
-  if (orderVal >= 500) {
-    return PRICES.relaxMidPct - ((orderVal - 500) / 500) * (PRICES.relaxMidPct - PRICES.relaxEndPct);
-  }
-  const t = Math.max(0, (orderVal - 50) / 450);
-  return PRICES.relaxStartPct - t * (PRICES.relaxStartPct - PRICES.relaxMidPct);
-}
 function calcRelax(orderVal) {
-  return Math.max(PRICES.relaxMin, orderVal * (relaxRate(orderVal) / 100));
+  return Math.max(PRICES.relaxMin, orderVal * (PRICES.relaxPct / 100));
 }
 
 /* ─── i18n ─── */
@@ -736,8 +724,10 @@ const I18N = {
     "hero.sub":               "كل ما تدفع أبكر — كل ما توفّر أكثر",
     "slider.label.pre":       "قيمة طلبك: ",
     "fee.label":              "رسومك لهذا الطلب",
-    "plan1.name":             "FREE",
-    "plan1.tagline":          "تدفع كامل المبلغ قبل ما نطلب — وإحنا نتكفل بالباقي",
+    "plan1.name":             "باقة التوفير",
+    "plan1.tagline":          "ادفع الآن ووفّر — رسوم ثابتة $5 على أي طلب",
+    "plan1.best":             "الأنسب للي واثق وبدّو أقل تكلفة",
+    "plan2.best":             "الأنسب لأول طلب أو للي بدّو راحة بال",
     "plan1.ratesub":          "رسوم ثابتة $5 على أي طلب — مهما كانت القيمة",
     "plan1.f1":               "أرخص طريقة تطلب فيها",
     "plan1.f2":               "تسعيرة نهائية شاملة الشحن",
@@ -747,10 +737,10 @@ const I18N = {
     "plan1.note":             "الرسوم الجمركية (إن وجدت) على العميل",
     "plan1.cta":              "اطلب بالدفع المسبق",
     "plan2.badge":            "الأكثر شيوعًا",
-    "plan2.name":             "الدفع عند الاستلام",
+    "plan2.name":             "باقة الأمان",
     "plan2.tagline":          "ادفع جزء الآن والباقي لما يوصل لبابك",
-    "plan2.ratesub.ar":       "عمولتك الآن: ",
-    "plan2.f0":               "كل مزايا باقة FREE مشمولة",
+    "plan2.ratesub":          "عمولة ثابتة 8% · حد أدنى $8",
+    "plan2.f0":               "كل مزايا باقة التوفير مشمولة",
     "plan2.f1":               "نغطي أي رسوم جمركية إضافية",
     "plan2.f2":               "إلغاء مجاني قبل الشحن",
     "plan2.f3":               "رقم تتبّع OTL خاص",
@@ -802,13 +792,13 @@ const I18N = {
     "mem.ent.cta":            "تواصل معنا",
     "cmp.toggle":             "مقارنة كاملة",
     "cmp.feature":            "الميزة",
-    "cmp.col1":               "FREE",
-    "cmp.col2":               "RELAX",
+    "cmp.col1":               "باقة التوفير",
+    "cmp.col2":               "باقة الأمان",
     "cmp.col3":               "VIP",
     "cmp.col4":               "العضوية",
     "cmp.row1":               "العمولة",
     "cmp.r1c1":               "$5 ثابت / 5%",
-    "cmp.r1c2":               "20% أو 10%",
+    "cmp.r1c2":               "8% ثابتة",
     "cmp.r1c3":               "أسعار خاصة",
     "cmp.r1c4":               "كمسبق الدفع",
     "cmp.row2":               "الحد الأدنى",
@@ -837,7 +827,7 @@ const I18N = {
     "nav.track":              "تتبّع",
     "nav.wa":                 "واتساب",
     "wa.prepaid":             "مرحباً اطلبلي 👋 بدي أطلب منتج بالدفع المسبق. الرابط:",
-    "wa.deposit":             "مرحباً اطلبلي 👋 بدي أطلب منتج — باقة RELAX. الرابط:",
+    "wa.deposit":             "مرحباً اطلبلي 👋 بدي أطلب منتج — باقة الأمان. الرابط:",
     "wa.cod":                 "مرحباً اطلبلي 👋 بدي أعرف أكثر عن باقة VIP للطلبات الكبيرة.",
     "wa.member":              "مرحباً اطلبلي 👋 بدي أشترك بعضوية اطلبلي بـ $1 للشهر الأول.",
     "wa.biz":                 "مرحباً اطلبلي 👋 عندي حساب أعمال، بدي أتكلم معكم.",
@@ -851,8 +841,10 @@ const I18N = {
     "hero.sub":               "The earlier you pay, the more you save.",
     "slider.label.pre":       "Your order value: ",
     "fee.label":              "Your fee for this order",
-    "plan1.name":             "FREE",
-    "plan1.tagline":          "Pay the full amount before we order — we handle the rest",
+    "plan1.name":             "Saver Plan",
+    "plan1.tagline":          "Pay now and save — a flat $5 on any order",
+    "plan1.best":             "Best if you're confident and want the lowest cost",
+    "plan2.best":             "Best for a first order or total peace of mind",
     "plan1.ratesub":          "Flat $5 fee on any order — regardless of order value",
     "plan1.f1":               "Cheapest way to order",
     "plan1.f2":               "Final price includes shipping",
@@ -862,10 +854,10 @@ const I18N = {
     "plan1.note":             "Customs fees (if any) are the customer's responsibility",
     "plan1.cta":              "Order — Pay Upfront",
     "plan2.badge":            "Most Popular",
-    "plan2.name":             "Pay on Delivery",
+    "plan2.name":             "Safety Plan",
     "plan2.tagline":          "Pay part now, the rest when it arrives at your door",
-    "plan2.ratesub.en":       "Your rate now: ",
-    "plan2.f0":               "All FREE plan benefits included",
+    "plan2.ratesub":          "Flat 8% · $8 minimum",
+    "plan2.f0":               "Everything in the Saver Plan, included",
     "plan2.f1":               "We cover any additional customs fees",
     "plan2.f2":               "Free cancellation before shipping",
     "plan2.f3":               "Dedicated OTL tracking number",
@@ -917,13 +909,13 @@ const I18N = {
     "mem.ent.cta":            "Contact us",
     "cmp.toggle":             "Full comparison",
     "cmp.feature":            "Feature",
-    "cmp.col1":               "FREE",
-    "cmp.col2":               "RELAX",
+    "cmp.col1":               "Saver Plan",
+    "cmp.col2":               "Safety Plan",
     "cmp.col3":               "VIP",
     "cmp.col4":               "Membership",
     "cmp.row1":               "Commission",
     "cmp.r1c1":               "$5 flat / 5%",
-    "cmp.r1c2":               "20% or 10%",
+    "cmp.r1c2":               "Flat 8%",
     "cmp.r1c3":               "Custom pricing",
     "cmp.r1c4":               "Like Pay Upfront",
     "cmp.row2":               "Minimum",
@@ -952,7 +944,7 @@ const I18N = {
     "nav.track":              "Track",
     "nav.wa":                 "WhatsApp",
     "wa.prepaid":             "Hi Otlobly 👋 I'd like to place an order — Pay Upfront. Link:",
-    "wa.deposit":             "Hi Otlobly 👋 I'd like to place an order — RELAX plan. Link:",
+    "wa.deposit":             "Hi Otlobly 👋 I'd like to place an order — Safety Plan. Link:",
     "wa.cod":                 "Hi Otlobly 👋 I'd like to learn more about the VIP plan for large orders.",
     "wa.member":              "Hi Otlobly 👋 I'd like to join the Otlobly Membership for $1 first month.",
     "wa.biz":                 "Hi Otlobly 👋 I have a business account and would like to talk.",
@@ -998,16 +990,10 @@ function updateSlider() {
   const pct = ((v - min) / (max - min)) * 100;
   slider.style.setProperty("--pct", pct + "%");
 
-  /* update fee displays */
+  /* update fee displays — the 8% rate is flat, so only the $ amounts move */
   document.getElementById("fee-prepaid").textContent = "$" + calcPrepaid().toFixed(2);
   document.getElementById("fee-deposit").textContent = "$" + calcRelax(v).toFixed(2);
 
-  /* update ZERO RISK live rate on the card (big number + sub-label) */
-  const rPct = relaxRate(v);
-  const rStr = Math.round(rPct * 10) / 10 + "%";
-  document.getElementById("relax-rate-live").textContent = rStr;
-  const prefix = currentLang === "ar" ? "عمولتك الآن: " : "Your rate now: ";
-  document.getElementById("relax-rate-sub").textContent = prefix + rStr;
   /* mirror into the card's own slider — on mobile the main slider is
      off-screen, so the card carries a synced copy */
   cardSlider.value = v;

@@ -85,6 +85,10 @@
   input,textarea{width:100%;font-size:15px;padding:12px 13px;border:1px solid var(--line);border-radius:12px;
     background:#fbfaf6;font-family:inherit}
   input:focus,textarea:focus{outline:none;border-color:var(--accent);background:#fff}
+  .phonegrp{display:flex;gap:8px;direction:ltr}   /* code on the left, number on the right (both langs) */
+  .ccsel{flex:none;width:auto;min-width:106px;font-size:15px;padding:12px 8px;border:1px solid var(--line);border-radius:12px;background:#fbfaf6;font-family:inherit;cursor:pointer}
+  .phonegrp #f_phone{flex:1;width:auto}
+  .ccnote{color:var(--muted);font-size:11.5px;margin:6px 2px 0}
   .go{width:100%;margin-top:16px;font-size:15px;font-weight:800;color:#fff;background:var(--accent);
     border:0;border-radius:12px;padding:14px;cursor:pointer}
   .go:disabled{opacity:.6}
@@ -135,6 +139,8 @@ const T={
       cartTitle:"🛒 سلتك", empty:"سلتك فارغة — تصفح المنتجات وأضِف ما يعجبك.", noitems:"لا توجد منتجات بعد — عد قريباً!",
       total:"المجموع", disc:"السعر النهائي يُؤكد معك عند المراجعة، والدفع عند الاستلام بالدولار بعد عربون بسيط.",
       name:"الاسم الكامل", phone:"رقم الجوال (واتساب)", city:"المدينة", addr:"العنوان بالتفصيل",
+      ccpick:"🇵🇸 اختر المقدمة", ccnote:"اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)",
+      needprefix:"اختر مقدمة الرقم (970 أو 972) أولاً.",
       send:"إرسال الطلب", sending:"جارٍ الإرسال…", back:"→ الرئيسية",
       doneT:"استلمنا طلبك!", doneP:"سنراجعه ونتواصل معك على واتساب لتأكيد السعر النهائي والعربون.",
       keep:"احفظ رقم الطلب لمتابعته:", acc:"تابع طلبك من حسابك", more:"متابعة التسوق"},
@@ -143,6 +149,8 @@ const T={
       cartTitle:"🛒 Your cart", empty:"Your cart is empty — browse and add what you like.", noitems:"No products yet — check back soon!",
       total:"Total", disc:"The final price is confirmed with you on review; pay on delivery in USD after a small deposit.",
       name:"Full name", phone:"Mobile (WhatsApp)", city:"City", addr:"Full address",
+      ccpick:"🇵🇸 Select prefix", ccnote:"Pick 970 or 972, then type your number without the leading 0 (e.g. 59…)",
+      needprefix:"Choose your number prefix (970 or 972) first.",
       send:"Place order", sending:"Sending…", back:"→ Home",
       doneT:"We got your order!", doneP:"We'll review it and confirm the final price and deposit on WhatsApp.",
       keep:"Save your order number to track it:", acc:"Follow it in your account", more:"Keep shopping"}
@@ -193,6 +201,7 @@ function closeCart(){ $("sheet").style.display="none"; }
 function paintSheet(){
   if(STEP==="done") return;   // success view is painted by checkout()
   const rows=cartRows();
+  const pp=splitPhone(ME.whatsapp||"");   // pre-split a saved number into 🇵🇸 code + local
   const list=rows.length?rows.map(r=>`<div class="ci">
       ${r.it.image?`<img src="${esc(r.it.image)}" alt="">`:'<div class="ph"></div>'}
       <div class="t" dir="auto">${esc(r.it.title)}</div>
@@ -205,19 +214,38 @@ function paintSheet(){
     <div class="tot"><span>${t("total")}</span><span>${money(cartTotal())}</span></div>
     <p class="disc">${t("disc")}</p>
     <label>${t("name")}</label><input id="f_name" value="${esc(ME.name||"")}">
-    <label>${t("phone")}</label><input id="f_phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" value="${esc(ME.whatsapp||"")}">
+    <label>${t("phone")}</label>
+    <div class="phonegrp">
+      <select class="ccsel" id="f_cc" aria-label="Palestine prefix">
+        <option value="" ${pp.cc?"":"selected"} disabled>${t("ccpick")}</option>
+        <option value="970" ${pp.cc==="970"?"selected":""}>🇵🇸 +970</option>
+        <option value="972" ${pp.cc==="972"?"selected":""}>🇵🇸 +972</option>
+      </select>
+      <input id="f_phone" type="tel" inputmode="tel" placeholder="5xxxxxxxx" style="direction:ltr;text-align:left" value="${esc(pp.local)}">
+    </div>
+    <p class="ccnote">${t("ccnote")}</p>
     <label>${t("city")}</label><input id="f_city">
     <label>${t("addr")}</label><textarea id="f_addr" rows="2"></textarea>
     <button class="go" id="f_go" onclick="checkout()">${t("send")}</button>
     <div id="f_out"></div>`:""}`;
 }
+/* Split a saved number into 🇵🇸 code + local so an existing number shows the right prefix;
+   an unknown/empty number leaves {cc:""} so the customer still picks. */
+function splitPhone(saved){
+  const d=(saved||"").replace(/\D/g,"").replace(/^00/,"");
+  if(d.startsWith("970")||d.startsWith("972")) return {cc:d.slice(0,3), local:d.slice(3)};
+  return {cc:"", local:d.replace(/^0+/,"")};
+}
 async function checkout(){
-  const name=$("f_name").value.trim(), phone=$("f_phone").value.trim(),
+  const name=$("f_name").value.trim(),
         city=$("f_city").value.trim(), addr=$("f_addr").value.trim();
-  if(!name||!phone){ $("f_out").innerHTML=`<div class="err">${LANG==="ar"?"الاسم ورقم الجوال مطلوبان":"Name and phone are required"}</div>`; return; }
+  const cc=$("f_cc").value;
+  const local=$("f_phone").value.replace(/\D/g,"").replace(/^0+/,"");   // strip separators + leading 0(s)
+  if(!name||!local){ $("f_out").innerHTML=`<div class="err">${LANG==="ar"?"الاسم ورقم الجوال مطلوبان":"Name and phone are required"}</div>`; return; }
+  if(!cc){ $("f_out").innerHTML=`<div class="err">${t("needprefix")}</div>`; return; }
   const b=$("f_go"); b.disabled=true; b.textContent=t("sending");
   let d; try{ d=await (await fetch("/api/catalog/checkout",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({items:CART,name,phone,city,address:addr})})).json(); }catch(e){ d={error:"network"}; }
+    body:JSON.stringify({items:CART,name,phone:cc+local,city,address:addr})})).json(); }catch(e){ d={error:"network"}; }
   b.disabled=false; b.textContent=t("send");
   if(!d.ok){ $("f_out").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
   CART=[]; saveCart(); paintBar(); paintGrid(); STEP="done";

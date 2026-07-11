@@ -29,6 +29,10 @@
   .total b{color:var(--accent);font-size:18px}
   label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:11px 0 4px}
   input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+  .phonegrp{display:flex;gap:8px;direction:ltr}   /* code on the left, number on the right (both langs) */
+  .ccsel{flex:none;width:auto;min-width:104px;padding:11px 8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;cursor:pointer}
+  .phonegrp #f_phone{flex:1;width:auto}
+  .ccnote{color:var(--muted);font-size:12px;margin:4px 2px 0}
   button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:10px;background:var(--accent);
     color:#fff;font:inherit;font-weight:700;cursor:pointer}
   button:disabled{opacity:.6}
@@ -46,7 +50,16 @@
   <div id="totalRow" class="total" style="display:none"><span id="totalLbl"></span><b id="totalVal"></b></div>
   <div id="form">
     <label id="lbl_name"></label><input id="f_name">
-    <label id="lbl_phone"></label><input id="f_phone" placeholder="0599…">
+    <label id="lbl_phone"></label>
+    <div class="phonegrp">
+      <select class="ccsel" id="f_cc" aria-label="Palestine prefix">
+        <option value="" selected disabled id="cc_pick">🇵🇸</option>
+        <option value="970">🇵🇸 +970</option>
+        <option value="972">🇵🇸 +972</option>
+      </select>
+      <input id="f_phone" type="tel" inputmode="tel" placeholder="5xxxxxxxx" style="direction:ltr;text-align:left">
+    </div>
+    <p class="ccnote" id="ccnote"></p>
     <label id="lbl_city"></label><input id="f_city">
     <label id="lbl_addr"></label><input id="f_addr">
     <button id="submitBtn" onclick="submitIntake(this)"></button>
@@ -61,10 +74,14 @@ let LANG="ar", DRAFT=null;
 const T={
   ar:{intro:"أكمل بياناتك لتأكيد طلبك. سيتواصل معك فريق أطلبلي.",total:"الإجمالي المتوقع",
       name:"الاسم الكامل",phone:"رقم الواتساب",city:"المدينة",addr:"العنوان بالتفصيل",
+      ccpick:"🇵🇸 اختر المقدمة",ccnote:"اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)",
+      needprefix:"اختر مقدمة الرقم (970 أو 972) أولاً.",
       submit:"تأكيد الطلب",expired:"انتهت صلاحية هذا الرابط.",need:"الاسم ورقم هاتف صحيح مطلوبان.",
       ok:"تم استلام طلبك ✓",okmsg:"احتفظ برقم الطلب لتتبّعه:",err:"تعذّر الإرسال"},
   en:{intro:"Complete your details to confirm your order. The Otlobly team will contact you.",total:"Estimated total",
       name:"Full name",phone:"WhatsApp number",city:"City",addr:"Full address",
+      ccpick:"🇵🇸 Select prefix",ccnote:"Pick 970 or 972, then type your number without the leading 0 (e.g. 59…)",
+      needprefix:"Choose your number prefix (970 or 972) first.",
       submit:"Confirm order",expired:"This link has expired.",need:"Name and a valid phone are required.",
       ok:"Order received ✓",okmsg:"Keep your order number to track it:",err:"Couldn’t submit"}
 };
@@ -75,6 +92,7 @@ function setLang(l){LANG=l; document.body.setAttribute("dir", l==="ar"?"rtl":"lt
 function render(){
   $("intro").textContent=t("intro"); $("lbl_name").textContent=t("name"); $("lbl_phone").textContent=t("phone");
   $("lbl_city").textContent=t("city"); $("lbl_addr").textContent=t("addr"); $("submitBtn").textContent=t("submit");
+  $("cc_pick").textContent=t("ccpick"); $("ccnote").textContent=t("ccnote");
   if(DRAFT){
     $("products").innerHTML=(DRAFT.products||[]).map(p=>`
       ${p.proof?`<img class="proof" src="${p.proof}" alt="" onclick="window.open(this.src,'_blank')">`:''}
@@ -90,13 +108,23 @@ async function load(){
   const r=await fetch("/api/draft/"+DRAFT_ID);
   if(!r.ok){ $("form").style.display="none"; $("out").innerHTML=`<div class="err">${t("expired")}</div>`; return; }
   DRAFT=await r.json(); render();
-  if(DRAFT.prefill){ $("f_name").value=DRAFT.prefill.name||""; $("f_phone").value=DRAFT.prefill.phone||""; }
+  if(DRAFT.prefill){ $("f_name").value=DRAFT.prefill.name||""; splitPhone(DRAFT.prefill.phone||""); }
+}
+/* Split a saved number into 🇵🇸 code + local so an existing number shows the right prefix;
+   an unknown/empty number leaves the picker empty so the customer still chooses. */
+function splitPhone(saved){
+  const d=(saved||"").replace(/\D/g,"").replace(/^00/,"");
+  if(d.startsWith("970")||d.startsWith("972")){ $("f_cc").value=d.slice(0,3); $("f_phone").value=d.slice(3); }
+  else{ $("f_cc").value=""; $("f_phone").value=d.replace(/^0+/,""); }
 }
 async function submitIntake(btn){
-  if(!$("f_name").value.trim()||!$("f_phone").value.trim()){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }
+  const cc=$("f_cc").value;
+  const local=$("f_phone").value.replace(/\D/g,"").replace(/^0+/,"");   // strip separators + leading 0(s)
+  if(!$("f_name").value.trim()||!local){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }
+  if(!cc){ $("out").innerHTML=`<div class="err">${t("needprefix")}</div>`; return; }
   btn.disabled=true;
   const r=await fetch("/api/order/intake",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({draft_id:DRAFT_ID,name:$("f_name").value,phone:$("f_phone").value,city:$("f_city").value,address:$("f_addr").value})});
+    body:JSON.stringify({draft_id:DRAFT_ID,name:$("f_name").value,phone:cc+local,city:$("f_city").value,address:$("f_addr").value})});
   const d=await r.json(); btn.disabled=false;
   if(d.error){ $("out").innerHTML=`<div class="err">${d.error}</div>`; return; }
   $("form").style.display="none"; $("products").style.display="none"; $("totalRow").style.display="none"; $("intro").style.display="none";

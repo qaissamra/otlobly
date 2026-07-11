@@ -26,6 +26,7 @@ def _f(v, default=0.0):
 # code default when config.json has no public.sections.* key yet — so prod needs
 # no migration. Membership ships hidden (owner call, 2026-07-10).
 PUBLIC_SECTIONS = {
+    "order_batch_urgency": False,  # /order — batch-campaign urgency banner (counts live in the template)
     "pricing_vip":        False,   # /pricing — VIP / custom-pricing plan card
     "pricing_membership": False,   # /pricing — Otlobly Membership band
     "pricing_compare":    True,    # /pricing — plan comparison table
