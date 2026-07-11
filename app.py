@@ -109,12 +109,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=180),
 )
 auth.login_manager.init_app(app)
-# Explicit in-process store. `limits` 4.2 offers no shared backend that doesn't
-# pull in a new dependency (redis/memcached/mongodb), so on the single Render
-# instance the limiter is made authoritative by running ONE gunicorn worker with
-# threads (see Procfile / render.yaml) — every request then shares this one store.
-limiter = Limiter(get_remote_address, app=app, default_limits=[],
-                  storage_uri="memory://")
+limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 
 # --------------------------------------------------------------------------- #
