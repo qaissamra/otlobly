@@ -99,7 +99,16 @@ app = Flask(__name__, template_folder="templates")
 # limiter (and logs) key on the real client IP, not the proxy's. x_for=1 reads the
 # rightmost forwarded IP, which the proxy sets — a spoofed header can't win.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
-app.secret_key = os.environ.get("OTLOBLY_SECRET", "dev-secret-change-me")
+# Session-cookie signing key. In production (OTLOBLY_SECURE set, i.e. the HTTPS
+# deploy) refuse to boot on the built-in dev key — running with a public key would
+# let anyone forge a logged-in session. Locally the dev default is fine.
+_secret = os.environ.get("OTLOBLY_SECRET")
+if not _secret:
+    if os.environ.get("OTLOBLY_SECURE"):
+        raise SystemExit("OTLOBLY_SECRET is not set — refusing to start in production "
+                         "with a known key. Set it in the host's environment.")
+    _secret = "dev-secret-change-me"
+app.secret_key = _secret
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -2926,24 +2935,14 @@ def api_gen_customer_tracking():
     return jsonify({"ok": True, "customer_tracking": pk["customer_tracking"]})
 
 
-# One-time backfill at startup: link any deposits recorded without an order # to
-# the customer's order (matched by phone) so the To-order badge shows for existing
-# entries. Runs once per process, NOT on every request (writing inside a GET caused
-# SQLite lock contention with multiple workers). Guarded so it can never block boot.
-try:
-    _link_unlinked_deposits()
-except Exception as _e:                      # noqa: BLE001
-    app.logger.warning("deposit backfill skipped: %s", _e)
-
-# One-time: ensure every order's customer exists in the CRM (intake/lead orders
-# didn't create one) so To-order customers show on the ID/Customers page.
-try:
-    _backfill_customers_from_orders()
-except Exception as _e:                      # noqa: BLE001
-    app.logger.warning("customer backfill skipped: %s", _e)
-
-# One-time: re-run PO→order matching so manually-assigned PO items (which used to
-# miss customer_order_id) flip their orders to ORDERED + inherit batch/box/ETA.
+# One-time legacy backfills, run ONCE per deploy (not per worker, not per request):
+#   * link deposits recorded without an order # to the customer's order (by phone)
+#   * ensure every order's customer exists in the CRM (intake/lead orders skipped it)
+#   * re-run PO→order matching for manually-assigned items missing customer_order_id
+# These used to run on every worker's boot and could clash on purchases.save;
+# db.claim_once() now lets EXACTLY ONE worker run them, ending that race. Runtime
+# paths keep all three consistent afterwards, so once-per-deploy is enough. Bump the
+# _v suffix to force a re-run on a future deploy.
 def _reconcile_pos_to_orders():
     import purchases
     import cfg as _cfg
@@ -2964,10 +2963,14 @@ def _reconcile_pos_to_orders():
         purchases.save(pdb)
 
 
-try:
-    _reconcile_pos_to_orders()
-except Exception as _e:                      # noqa: BLE001
-    app.logger.warning("PO reconcile skipped: %s", _e)
+if db.claim_once("boot:reconcile_v1"):
+    for _fn, _label in ((_link_unlinked_deposits, "deposit backfill"),
+                        (_backfill_customers_from_orders, "customer backfill"),
+                        (_reconcile_pos_to_orders, "PO reconcile")):
+        try:
+            _fn()
+        except Exception as _e:                  # noqa: BLE001 — never block boot
+            app.logger.warning("%s skipped: %s", _label, _e)
 
 
 if __name__ == "__main__":

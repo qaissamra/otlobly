@@ -19,7 +19,7 @@ from pathlib import Path
 
 import normalize
 import store
-from paths import data_path
+from paths import data_path, write_json_atomic
 
 STORE_FILE = data_path("purchases.json")
 IMAGE_DIR = data_path("po_images")
@@ -37,7 +37,7 @@ def load():
 
 
 def save(db):
-    STORE_FILE.write_text(json.dumps(db, indent=2, ensure_ascii=False))
+    write_json_atomic(STORE_FILE, db)          # crash-safe: temp + atomic rename
 
 
 # --------------------------------------------------------------------------- #
