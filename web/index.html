@@ -717,7 +717,7 @@
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:13px"><button class="accent" onclick="saveSettings(this)">Save white-label</button></div>
     </div>
-    <div class="panel" style="max-width:620px;margin-top:14px">
+    <div class="panel" id="websiteSectionsPanel" style="max-width:620px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">🌐 Website sections · أقسام الموقع</h3>
       <div class="muted2" style="font-size:12px;margin-bottom:11px">Show or hide sections of the public website — like Shopify page sections. Checked = visible. Changes apply to the live site the moment you save.</div>
       <div style="display:flex;flex-direction:column;gap:9px">
@@ -1063,6 +1063,8 @@ async function applyRole(){
   hide("teamBtn", p.includes("manage_users"));
   // Brokers admin: Otlobly's own admin only (business #1). Brokers never see it.
   hide("brokersBtn", p.includes("admin_actions") && !!(ME.business && ME.business.id===1));
+  // Website sections settings: toggles for Otlobly's public site (/pricing, landing) — Otlobly-only.
+  hide("websiteSectionsPanel", !!(ME.business && ME.business.id===1));
   hide("metaLeadsBtn", p.includes("view_meta_leads") && FEAT.leads!==false);
   hide("catalogBtn", FEAT.catalog!==false);
   hide("depositsBtn", p.includes("view_money"));
