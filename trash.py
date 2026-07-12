@@ -18,9 +18,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from db import current_business
 from paths import data_path, write_json_atomic
 
-STORE_FILE = data_path("trash.json")
+STORE_FILE = data_path("trash.json")           # business #1 (Otlobly) — unchanged
 
 KIND_LABELS = {
     "purchase_order": "Purchase order",
@@ -35,14 +36,22 @@ def now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def _store_file():
+    """Per-tenant trash: Otlobly keeps trash.json (also honours the selftest's
+    STORE_FILE override, which runs at business 1); each broker gets trash_b<id>.json."""
+    bid = current_business()
+    return STORE_FILE if bid == 1 else data_path(f"trash_b{bid}.json")
+
+
 def load():
-    if STORE_FILE.exists():
-        return json.loads(STORE_FILE.read_text())
+    f = _store_file()
+    if f.exists():
+        return json.loads(f.read_text())
     return {"trash": [], "seq": 0}
 
 
 def save(db):
-    write_json_atomic(STORE_FILE, db)          # crash-safe: temp + atomic rename
+    write_json_atomic(_store_file(), db)       # crash-safe: temp + atomic rename
 
 
 def add(db, kind, label, data, origin=None, actor=None):

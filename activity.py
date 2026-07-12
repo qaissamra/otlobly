@@ -26,9 +26,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cfg
+from db import current_business
 from paths import data_path
 
-ACTIVITY_FILE = data_path("activity.jsonl")
+ACTIVITY_FILE = data_path("activity.jsonl")    # business #1 (Otlobly) — unchanged
+
+
+def _activity_file():
+    """Per-tenant activity log so a broker's feed shows only its own events."""
+    bid = current_business()
+    return ACTIVITY_FILE if bid == 1 else data_path(f"activity_b{bid}.jsonl")
 
 # Field name → the human label shown in the feed (matches the ClickUp wording the
 # user sees: box dropdown is "NAME", the item's customer is "CUSTOMER NAME", …).
@@ -79,7 +86,7 @@ def log(action, entity, entity_id="", label="", *, field=None,
         "detail": detail or "",
     }
     try:
-        with ACTIVITY_FILE.open("a", encoding="utf-8") as f:
+        with _activity_file().open("a", encoding="utf-8") as f:
             f.write(json.dumps(ev, ensure_ascii=False) + "\n")
     except OSError:
         pass
@@ -95,10 +102,11 @@ def _short(v):
 
 def recent(limit=60, entity=None):
     """Newest-first list of events, optionally filtered to one entity type."""
-    if not ACTIVITY_FILE.exists():
+    af = _activity_file()
+    if not af.exists():
         return []
     out = []
-    for line in ACTIVITY_FILE.read_text(encoding="utf-8").splitlines():
+    for line in af.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
