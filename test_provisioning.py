@@ -73,11 +73,21 @@ def main():
     db.create_user("sales1", auth.hash_pw("s1"), "sales", "S", business_id=1)
     check("sales is 403 on provisioning", client("sales1").get("/api/admin/brokers").status_code == 403)
 
-    # 5) The list shows the broker; the tier can be changed.
+    # 5) The list shows every tenant — Otlobly #1 first as the platform's own
+    #    (internal, unlimited) row, then the broker; only the broker's tier can change.
     lst = co.get("/api/admin/brokers").get_json()
-    check("broker appears in the list", len(lst["brokers"]) == 1 and lst["brokers"][0]["tier"] == "growth")
+    check("Otlobly is first in the list, unlimited",
+          lst["brokers"][0]["id"] == 1 and lst["brokers"][0]["tier"] == "unlimited")
+    check("Otlobly row carries live counts",
+          all(k in lst["brokers"][0] for k in ("orders", "customers", "seats")))
+    brokers_only = [b for b in lst["brokers"] if b["id"] != 1]
+    check("broker appears in the list",
+          len(brokers_only) == 1 and brokers_only[0]["tier"] == "growth")
     co.post("/api/admin/broker/tier", json={"business_id": bid, "tier": "pro"})
     check("tier change persists", quotas.tier(bid) == "pro")
+    check("Otlobly's tier can't be changed",
+          co.post("/api/admin/broker/tier",
+                  json={"business_id": 1, "tier": "pro"}).status_code == 400)
 
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     return 0 if not fails else 1
