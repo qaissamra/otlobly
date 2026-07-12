@@ -303,14 +303,24 @@ def index():
 @login_required
 def staff_app():
     """The staff dashboard (admin/sales/fulfillment). Logged-out visitors are
-    bounced to /login by login_manager.login_view."""
-    return send_file(HERE / "web" / "index.html")
+    bounced to /login by login_manager.login_view. The per-tenant brand (title,
+    favicon, sidebar wordmark) is stitched in SERVER-SIDE so a broker never sees
+    the Otlobly mark — not even a first-paint flash."""
+    import branding
+    html_text = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    brand = branding.resolve(getattr(current_user, "business_id", 1))
+    return app.response_class(branding.render_shell(html_text, brand),
+                              mimetype="text/html")
 
 
 @app.route("/api/me")
 @login_required
 def me():
-    return jsonify(current_user.as_dict())
+    import branding
+    d = current_user.as_dict()
+    bid = getattr(current_user, "business_id", 1)
+    d["business"] = {"id": bid, "brand": branding.resolve(bid)}
+    return jsonify(d)
 
 
 # --------------------------------------------------------------------------- #
@@ -2898,11 +2908,17 @@ def api_customer_notify_track():
         pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
         purchases.save(pdb)
     otl = pk["customer_tracking"]
+    # Amounts the customer sees (only rendered when the 5-var template is live, but always
+    # computed so the dev preview shows them): total = quoted price, due = total − عربون.
+    amt = order.get("amount_to_collect_usd")
+    dep = round(order.get("deposit_usd") or 0, 2)
+    total_txt = f"${amt:.2f}" if amt is not None else "—"
+    due_txt = f"${round(amt - dep, 2):.2f}" if amt is not None else "—"
     seen = pk.get("track_notified") or {}          # {order_id: iso} — one send per order
     if seen.get(oid) and not b.get("force"):
         return jsonify({"ok": False, "already": True, "notified_at": seen[oid],
                         "error": "Already notified — resend?"}), 409
-    res = notify.send_track_package(e164, name, otl, eta, otl=otl)
+    res = notify.send_track_package(e164, name, otl, eta, otl=otl, total=total_txt, due=due_txt)
     dev = (not res.get("ok")) and bool(os.environ.get("OTLOBLY_OTP_DEV"))  # local preview, no WhatsApp creds
     if res.get("ok") or dev:
         seen[oid] = db.now_iso()                   # stamp so the guard works (dev branch never runs in prod)
@@ -2910,11 +2926,14 @@ def api_customer_notify_track():
         purchases.save(pdb)
         if res.get("ok"):
             activity.log("notify", "order", oid, oid,
-                         detail=f"track_package → {e164} · ETA {eta} · {otl}", user=_user())
-            return jsonify({"ok": True, "sent_to": e164, "otl": otl, "eta": eta})
+                         detail=f"track_package → {e164} · ETA {eta} · {otl} · due {due_txt}",
+                         user=_user())
+            return jsonify({"ok": True, "sent_to": e164, "otl": otl, "eta": eta,
+                            "total": total_txt, "due": due_txt})
         return jsonify({"ok": True, "dev": True,
                         "preview": {"to": e164, "name": name, "order_ref": otl,
-                                    "delivery_date": eta, "otl": otl}})
+                                    "delivery_date": eta, "otl": otl,
+                                    "total": total_txt, "due": due_txt}})
     app.logger.warning("track_package for %s not sent: %s", oid, res.get("error"))
     return jsonify({"ok": False, "error": res.get("error") or "send failed"}), 502
 

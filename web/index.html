@@ -1,11 +1,11 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Otlobly — Orders</title>
+<title>__BRAND_TITLE__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%23111'/%3E%3Ccircle cx='46' cy='52' r='20' fill='none' stroke='%23fff' stroke-width='9'/%3E%3Ccircle cx='46' cy='52' r='6' fill='%23fff'/%3E%3Ccircle cx='72' cy='30' r='9' fill='%23ff5a1f'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="__BRAND_FAVICON__">
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -379,15 +379,7 @@
 
 <div class="app">
 <aside id="sidebar">
-  <div class="side-brand">
-    <svg width="38" height="38" viewBox="0 0 100 100" aria-hidden="true">
-      <rect width="100" height="100" rx="26" fill="#111"/>
-      <circle cx="46" cy="52" r="20" fill="none" stroke="#fff" stroke-width="9"/>
-      <circle cx="46" cy="52" r="6" fill="#fff"/>
-      <circle cx="72" cy="30" r="9" fill="#ff5a1f"/>
-    </svg>
-    <span><h1>Otlob<span class="ly">ly</span></h1><div class="bsub">Order management</div></span>
-  </div>
+  <div class="side-brand">__BRAND_SIDEBAR__</div>
   <nav id="sideNav">
     <div class="nav-sec">Main menu</div>
     <button id="homeBtn" class="on" onclick="setView('orders')"><span class="ic">🏠</span>Orders</button>
@@ -2963,13 +2955,17 @@ function pkgNotifyOpen(id,pi){
   });
   if(!rows.length){ toast("⚠ No matched customers in this package — set each product's customer first"); return; }
   const sent=pk.track_notified||{};
-  const etaOf=oid=>{ const o=DATA&&(DATA.orders||[]).find(x=>x.order_id===oid); return (o&&o.est_delivery_customer)||''; };
+  const ordOf=oid=>DATA&&(DATA.orders||[]).find(x=>x.order_id===oid);
+  const money=n=>(n==null)?null:('$'+Number(n).toFixed(2));
   $("ntfList").innerHTML=rows.map(r=>{
-    const was=sent[r.oid], eta=etaOf(r.oid);
+    const was=sent[r.oid], o=ordOf(r.oid), eta=(o&&o.est_delivery_customer)||'';
+    const due=o?money(o.remaining_usd!=null?o.remaining_usd:o.amount_to_collect_usd):null;
+    // what the customer will see: their delivery date + amount due on delivery
+    const meta=[eta?`🚚 ${poEsc(eta)}`:'', due?`💵 ${due}`:''].filter(Boolean).join(' · ');
     return `<label style="display:flex;align-items:center;gap:9px;padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer">
       <input type="checkbox" class="ntfChk" value="${poEsc(r.oid)}" ${was?'':'checked'}>
       <span style="flex:1;min-width:0"><b>${poEsc(r.name)}</b>
-        <span class="mono" style="color:var(--muted);font-size:11px">${poEsc(r.oid)}${eta?` · 🚚 ${poEsc(eta)}`:''}</span></span>
+        <span class="mono" style="color:var(--muted);font-size:11px">${poEsc(r.oid)}${meta?` · ${meta}`:''}</span></span>
       <span class="ntfState mono" data-oid="${poEsc(r.oid)}" style="font-size:11.5px;color:var(--muted)">${was?`✓ sent ${poEsc(String(was).slice(0,10))}`:''}</span>
     </label>`;}).join("");
   NTF_CTX={id,pi};

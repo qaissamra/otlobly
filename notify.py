@@ -95,23 +95,29 @@ def send_account_verify(e164, name, token, lang=None):
     ])
 
 
-def send_track_package(e164, name, order_ref, delivery_date, otl=None, lang=None):
+def send_track_package(e164, name, order_ref, delivery_date, otl=None,
+                       total=None, due=None, lang=None):
     """Send the UTILITY "track_package" template — "your package is on the way":
       body {{1}} name · {{2}} order/tracking ref · {{3}} estimated delivery date
+      (+ {{4}} order total · {{5}} due on delivery when WHATSAPP_TRACK_AMOUNTS is on)
       button "تتبع الطلب" → /track.
     Template name from env WHATSAPP_TRACK_TEMPLATE so a rename is a config change.
-    The APPROVED template's button is a STATIC URL, so no button parameter may be
-    sent (Meta rejects the param-count mismatch). If the template is later edited to
-    a dynamic URL (…/track?t={{1}}), set WHATSAPP_TRACK_BUTTON=dynamic and the OTL
-    deep-link param rides along — env flip, no code change."""
+
+    The body-variable COUNT must match the currently-approved template exactly, so the
+    two amount vars are gated behind env WHATSAPP_TRACK_AMOUNTS and the URL-button param
+    behind WHATSAPP_TRACK_BUTTON=dynamic. With both unset this sends the original 3-var
+    static template; flip both envs together the moment the 5-var dynamic template is
+    approved — atomic switch, no code change."""
     template = os.environ.get("WHATSAPP_TRACK_TEMPLATE", "track_package")
-    components = [
-        {"type": "body", "parameters": [
-            {"type": "text", "text": (name or "").strip() or "عميلنا"},
-            {"type": "text", "text": str(order_ref or "")},
-            {"type": "text", "text": str(delivery_date or "")},
-        ]},
+    body = [
+        {"type": "text", "text": (name or "").strip() or "عميلنا"},
+        {"type": "text", "text": str(order_ref or "")},
+        {"type": "text", "text": str(delivery_date or "")},
     ]
+    if os.environ.get("WHATSAPP_TRACK_AMOUNTS", "").strip():   # 5-var template
+        body.append({"type": "text", "text": str(total if total is not None else "—")})
+        body.append({"type": "text", "text": str(due if due is not None else "—")})
+    components = [{"type": "body", "parameters": body}]
     if otl and os.environ.get("WHATSAPP_TRACK_BUTTON", "").lower() == "dynamic":
         components.append({"type": "button", "sub_type": "url", "index": "0",
                            "parameters": [{"type": "text", "text": str(otl)}]})
