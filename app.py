@@ -223,6 +223,18 @@ def redact_report(rep):
     return rep
 
 
+def _redact_brain(payload):
+    """Same idiom as redact_report: keep counts/structure, null the money."""
+    if current_user.has("view_money"):
+        return payload
+    for sec in payload.get("sections", []):
+        for it in sec.get("items", []):
+            it["amount_usd"] = None
+    for k in ("new_orders_value_usd", "collected_usd"):
+        payload["results"][k] = None
+    return payload
+
+
 def redact_customers(rows):
     if not current_user.has("view_money"):
         for c in rows:
@@ -378,6 +390,17 @@ def api_quota():
 @auth.require("view_orders")
 def api_report():
     return jsonify(redact_report(report_mod.build(orders_db())))
+
+
+@app.route("/api/brain")
+@auth.require("view_orders")
+def api_brain():
+    """The command-center landing payload: urgent / due / forgotten / money /
+    7-day results for the CURRENT tenant (support-view aware via the contextvar).
+    Feature and tier gating happen inside brain.build so a future Telegram digest
+    gets identical output."""
+    import brain
+    return jsonify(_redact_brain(brain.build(db.current_business())))
 
 
 def _pnl_range():
