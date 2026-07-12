@@ -50,6 +50,7 @@ import estimate
 import settings as settings_mod
 import mailer
 import messages
+import money
 import meta_leads as meta_leads_mod
 import normalize
 import notify
@@ -1086,9 +1087,9 @@ def _ils_rate():
 def _to_usd(amount, currency):
     """Convert an entered amount to (amount_usd, fx_rate). USD passes through."""
     if (currency or "ILS").upper() == "USD":
-        return round(float(amount), 2), 1.0
+        return money.to_usd(amount), 1.0
     rate = _ils_rate()
-    return round(float(amount) / rate, 2), rate
+    return money.div(amount, rate), rate
 
 
 def _recompute_order_deposit(order_code):
@@ -1220,19 +1221,19 @@ def api_payments():
     phone = (request.args.get("customer") or "").strip() or None
     core = normalize.phone_core(phone) if phone else None
     rows = db.list_payments(order_code=order_code, customer_phone=core)
-    by_cust, net_total = {}, 0.0
+    by_cust, net_total = {}, money.D(0)
     for r in rows:
         amt = r["amount_usd"] or 0
-        signed = -amt if r["kind"] == "refund" else amt
+        signed = money.D(-amt if r["kind"] == "refund" else amt)   # exact accumulation
         net_total += signed
         key = r.get("customer_phone") or (r.get("customer_name") or "—")
         c = by_cust.setdefault(key, {"name": r.get("customer_name") or "—",
                                      "phone": r.get("customer_phone"),
-                                     "deposited_usd": 0.0, "count": 0})
+                                     "deposited_usd": money.D(0), "count": 0})
         c["deposited_usd"] += signed
         c["count"] += 1
     for c in by_cust.values():
-        c["deposited_usd"] = round(c["deposited_usd"], 2)
+        c["deposited_usd"] = money.to_usd(c["deposited_usd"])       # back to a float for JSON
     # everyone who could receive a deposit: CRM customers + anyone with an order
     # (incl. the pending "To order" queue), so the picker searches the full list.
     seen, people = set(), []
@@ -1254,7 +1255,7 @@ def api_payments():
     people.sort(key=lambda x: x["name"].lower())
     return jsonify({
         "ok": True, "payments": rows, "rate": _ils_rate(),
-        "totals": {"deposited_usd": round(net_total, 2), "count": len(rows)},
+        "totals": {"deposited_usd": money.to_usd(net_total), "count": len(rows)},
         "by_customer": sorted(by_cust.values(), key=lambda x: -x["deposited_usd"]),
         "customers": people,
     })
@@ -2816,16 +2817,16 @@ def api_customer_orders():
     # IN_CART included: a staged order still owes its balance — without it the
     # customer's "remaining" total would dip while the order sits in the cart.
     OPEN = {"REQUESTED", "QUOTED", "IN_CART", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"}
-    deposited = round(sum(o["deposit_usd"] or 0 for o in orders), 2)
-    remaining = round(sum(o["remaining_usd"] or 0 for o in orders
-                          if o["status"] in OPEN and o["remaining_usd"] is not None), 2)
+    deposited = money.usd_sum(o["deposit_usd"] or 0 for o in orders)
+    remaining = money.usd_sum(o["remaining_usd"] or 0 for o in orders
+                              if o["status"] in OPEN and o["remaining_usd"] is not None)
     # Their money trail: full ledger rows (customer-safe fields ONLY — notes and
     # staff names stay internal) + standalone credit = net of payments not attached
     # to any order (deposits/collects − refunds). Order-attached money already shows
     # per order; credit>0 means "money on file with no open order to absorb it".
     pay_rows = db.list_payments(customer_phone=core)
-    credit = round(sum((-(r["amount_usd"] or 0) if r["kind"] == "refund" else (r["amount_usd"] or 0))
-                       for r in pay_rows if not r.get("order_code")), 2)
+    credit = money.usd_sum((-(r["amount_usd"] or 0) if r["kind"] == "refund" else (r["amount_usd"] or 0))
+                           for r in pay_rows if not r.get("order_code"))
     payments = [{"paid_at": r.get("paid_at") or r.get("ts"), "kind": r.get("kind"),
                  "currency": r.get("currency"), "amount_entered": r.get("amount_entered"),
                  "amount_usd": r.get("amount_usd"), "order_code": r.get("order_code")}

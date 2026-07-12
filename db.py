@@ -17,6 +17,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import money
 from paths import data_path
 
 # OTLOBLY_DB pins an exact file; otherwise it lives in the data dir (the project
@@ -711,11 +712,8 @@ def deposit_total_for_order(order_code):
     with connect() as c:
         rows = c.execute("SELECT kind, amount_usd FROM payments WHERE order_code=?",
                          (order_code,)).fetchall()
-    net = 0.0
-    for r in rows:
-        amt = r["amount_usd"] or 0
-        net += -amt if r["kind"] == "refund" else amt
-    return round(net, 2)
+    return money.usd_sum(-(r["amount_usd"] or 0) if r["kind"] == "refund"
+                         else (r["amount_usd"] or 0) for r in rows)
 
 
 if __name__ == "__main__":
