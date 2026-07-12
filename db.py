@@ -490,11 +490,11 @@ def delete_catalog_item(item_id, business_id=1):
 # --------------------------------------------------------------------------- #
 # Users + audit + settings
 # --------------------------------------------------------------------------- #
-def create_user(username, password_hash, role, name=""):
+def create_user(username, password_hash, role, name="", business_id=None):
     with connect() as c:
-        c.execute("""INSERT INTO users (username, password_hash, role, name, created_at)
-                     VALUES (?,?,?,?,?)""",
-                  (username, password_hash, role, name, now_iso()))
+        c.execute("""INSERT INTO users (username, password_hash, role, name, created_at, business_id)
+                     VALUES (?,?,?,?,?,?)""",
+                  (username, password_hash, role, name, now_iso(), business_id))
 
 
 def get_user(username):
