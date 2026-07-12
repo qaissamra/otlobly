@@ -37,6 +37,7 @@ class User(UserMixin):
         self.username = row["username"]
         self.role = row["role"]
         self.name = row.get("name") or row["username"]
+        self.business_id = row.get("business_id") or 1     # which tenant this user belongs to
 
     @property
     def perms(self):
@@ -47,7 +48,8 @@ class User(UserMixin):
 
     def as_dict(self):
         return {"id": self.id, "username": self.username, "role": self.role,
-                "name": self.name, "perms": sorted(self.perms)}
+                "name": self.name, "business_id": self.business_id,
+                "perms": sorted(self.perms)}
 
 
 @login_manager.user_loader
