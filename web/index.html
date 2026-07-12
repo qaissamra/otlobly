@@ -397,6 +397,7 @@
     <div class="nav-sec">System</div>
     <button id="settingsBtn" onclick="setView('settings')" title="markup, shipping/import rules, WhatsApp number"><span class="ic">⚙️</span>Settings</button>
     <button id="teamBtn" style="display:none" onclick="setView('team')" title="manage staff accounts &amp; roles"><span class="ic">👥</span>Team</button>
+    <button id="brokersBtn" style="display:none" onclick="setView('brokers')" title="create &amp; manage Tatabu broker accounts (Otlobly only)"><span class="ic">🏢</span>Brokers</button>
     <button id="trashBtn" onclick="setView('trash')" title="deleted items — restore anything here"><span class="ic">🗑</span>Trash</button>
     <button id="clickupBtn" onclick="syncClickup(this)"><span class="ic">↗</span>Sync ClickUp</button>
   </nav>
@@ -804,6 +805,28 @@
     <div class="panel"><div id="teamList"></div></div>
   </div>
 
+  <!-- Brokers: create & manage Tatabu tenants (Otlobly super-admin only) -->
+  <div id="brokersView" class="hidden">
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🏢 Brokers</h2>
+      <span style="color:var(--muted);font-size:12px">Tatabu tenants — each gets its own brand, data, and plan</span>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2 style="margin:0 0 10px;font-size:15px">Create a broker</h2>
+      <div class="form-grid">
+        <div><label class="fld">Business name</label><input id="bk_name" style="width:100%" placeholder="e.g. ACME Cargo"></div>
+        <div><label class="fld">Brand name (shown to their staff)</label><input id="bk_brand" style="width:100%" placeholder="defaults to Tatabu"></div>
+        <div><label class="fld">Plan</label>
+          <select id="bk_tier" style="width:100%"><option value="starter">Starter</option><option value="growth">Growth</option><option value="pro">Pro</option></select></div>
+        <div><label class="fld">Admin username (login)</label><input id="bk_user" style="width:100%" placeholder="e.g. acme-admin"></div>
+        <div><label class="fld">Admin password</label><input id="bk_pass" type="text" style="width:100%" placeholder="6+ characters"> <a style="cursor:pointer;color:var(--accent);font-size:11px" onclick="$('bk_pass').value=pwGen()">🎲 generate</a></div>
+      </div>
+      <button class="accent" style="margin-top:12px" onclick="createBroker(this)">＋ Create broker</button>
+      <div id="bk_out" style="margin-top:9px;font-size:12.5px"></div>
+    </div>
+    <div class="panel"><div id="brokersList"></div></div>
+  </div>
+
   <!-- Meta leads: Messenger + Instagram DMs + lead-ad forms -->
   <div id="metaLeadsView" class="hidden">
     <div class="toolbar">
@@ -1038,6 +1061,8 @@ async function applyRole(){
   hide("pnlBtn", p.includes("view_pnl"));
   hide("clickupBtn", p.includes("admin_actions") && FEAT.clickup!==false);
   hide("teamBtn", p.includes("manage_users"));
+  // Brokers admin: Otlobly's own admin only (business #1). Brokers never see it.
+  hide("brokersBtn", p.includes("admin_actions") && !!(ME.business && ME.business.id===1));
   hide("metaLeadsBtn", p.includes("view_meta_leads") && FEAT.leads!==false);
   hide("catalogBtn", FEAT.catalog!==false);
   hide("depositsBtn", p.includes("view_money"));
@@ -1341,7 +1366,7 @@ function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -1358,16 +1383,17 @@ function setView(v){
   $("needorderView").classList.toggle("hidden",v!=="needorder");
   $("incartView").classList.toggle("hidden",v!=="incart");
   $("teamView").classList.toggle("hidden",v!=="team");
+  $("brokersView").classList.toggle("hidden",v!=="brokers");
   $("metaLeadsView").classList.toggle("hidden",v!=="metaleads");
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
-    metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
+    brokers:"brokersBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
   const VIEW_TITLES={orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
-    metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
+    brokers:"Brokers",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
   document.querySelectorAll("#sideNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -1381,6 +1407,7 @@ function setView(v){
   if(v==="needorder"){ loadNeedOrder(); loadQuote(); if(QUOTE_JUMP) neQuoteExpand(); QUOTE_JUMP=false; }
   if(v==="incart"){ loadIncart(); }
   if(v==="team"){ loadTeam(); }
+  if(v==="brokers"){ loadBrokers(); }
   if(v==="metaleads"){ loadMetaLeads(); }
   if(v==="deposits"){ loadDeposits(); }
   if(v==="catalog"){ loadCatalog(); }
@@ -1571,6 +1598,39 @@ async function convertLead(id,btn){ if(!confirm("إنشاء طلب من هذا �
   if(r&&r.ok){ toast("Order "+r.order_id+" created — add products in To order"); loadMetaLeads(); } else toast((r&&r.error)||"failed"); }
 function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
 const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
+// ── Brokers (Tatabu tenants) — Otlobly super-admin only ──
+const BK_TIER_LABEL={starter:"Starter",growth:"Growth",pro:"Pro"};
+async function loadBrokers(){
+  let d; try{ d=await (await fetch("/api/admin/brokers")).json(); }catch(e){ d={brokers:[]}; }
+  const rows=(d.brokers||[]).map(bz=>`<tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:9px 6px"><b>${poEsc(bz.name)}</b>${bz.slug?`<br><span class="mono muted2" style="font-size:10.5px">${poEsc(bz.slug)}</span>`:''}</td>
+    <td style="padding:9px 6px">
+      <select onchange="setBrokerTier(${bz.id},this.value)" style="width:auto">
+        ${["starter","growth","pro"].map(t=>`<option value="${t}" ${bz.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select></td>
+    <td style="padding:9px 6px;text-align:right">${bz.orders}</td>
+    <td style="padding:9px 6px;text-align:right">${bz.customers}</td>
+    <td style="padding:9px 6px;text-align:right">${bz.seats}</td></tr>`).join("");
+  $("brokersList").innerHTML=`<h2 style="margin:0 0 8px;font-size:15px">Brokers (${(d.brokers||[]).length})</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line)">
+        <th style="padding:6px">Business</th><th style="padding:6px">Plan</th>
+        <th style="padding:6px;text-align:right">Orders</th><th style="padding:6px;text-align:right">Customers</th><th style="padding:6px;text-align:right">Seats</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No brokers yet — create one above.</td></tr>'}</tbody></table>`;
+}
+async function createBroker(btn){
+  const body={name:$("bk_name").value.trim(), brand_name:$("bk_brand").value.trim(),
+    tier:$("bk_tier").value, admin_username:$("bk_user").value.trim(), admin_password:$("bk_pass").value.trim()};
+  if(!body.name||!body.admin_username||body.admin_password.length<6){
+    $("bk_out").innerHTML='<span style="color:var(--bad)">Business name, admin username, and a 6+ character password are required.</span>'; return; }
+  btn.disabled=true; let r; try{ r=await post("/api/admin/brokers",body); }catch(e){ r={error:"network"}; } btn.disabled=false;
+  if(r&&r.ok){
+    $("bk_out").innerHTML=`<span style="color:var(--good)">✓ Broker <b>${poEsc(body.name)}</b> created on the <b>${BK_TIER_LABEL[r.tier]}</b> plan.
+      They sign in at <b class="mono">/login</b> with username <b class="mono">${poEsc(r.admin_username)}</b> and password <b class="mono">${poEsc(r.admin_password)}</b> — share it now; it can't be shown again.</span>`;
+    $("bk_name").value=$("bk_brand").value=$("bk_user").value=$("bk_pass").value="";
+    loadBrokers();
+  } else $("bk_out").innerHTML=`<span style="color:var(--bad)">${poEsc((r&&r.error)||"Could not create the broker")}</span>`;
+}
+async function setBrokerTier(id,tier){ const r=await post("/api/admin/broker/tier",{business_id:id,tier}); if(r&&r.ok) toast("Plan → "+BK_TIER_LABEL[tier]); else toast((r&&r.error)||"failed"); }
 async function patchUsers(body){ try{ return await (await fetch("/api/users",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json(); }catch(e){ return {error:"network"}; } }
 async function loadTeam(){
   let d; try{ d=await (await fetch("/api/users")).json(); }catch(e){ d={users:[]}; }

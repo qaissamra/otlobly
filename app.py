@@ -1765,6 +1765,76 @@ def api_clickup():
 
 
 # --------------------------------------------------------------------------- #
+# Platform admin: brokers — Otlobly's super-admin provisions Tatabu tenants.
+# --------------------------------------------------------------------------- #
+def _platform_admin():
+    """Only Otlobly's own admin (business #1) may create/list brokers."""
+    return (current_user.is_authenticated and current_user.has("admin_actions")
+            and getattr(current_user, "business_id", 1) == 1)
+
+
+@app.route("/api/admin/brokers", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_admin_brokers():
+    if not _platform_admin():
+        abort(403)
+    if request.method == "POST":
+        b = request.get_json(force=True, silent=True) or {}
+        name = (b.get("name") or "").strip()
+        tier = b.get("tier") if b.get("tier") in quotas.TIERS else quotas.DEFAULT_TIER
+        au = (b.get("admin_username") or "").strip()
+        ap = (b.get("admin_password") or "").strip()
+        if not name or not au or len(ap) < 6:
+            return jsonify({"ok": False, "error": "Broker name, an admin username, and a "
+                                                   "6+ character password are required."}), 400
+        slug = re.sub(r"[^a-z0-9]+", "-", (b.get("slug") or name).lower()).strip("-") or None
+        try:
+            bid = db.create_business(name, slug)
+        except Exception as e:  # noqa: BLE001 — unique slug etc.
+            return jsonify({"ok": False, "error": f"Couldn't create the broker ({e})."}), 400
+        db.set_business_config(bid, "tier", tier)
+        if (b.get("brand_name") or "").strip():
+            db.set_business_config(bid, "brand", {"name": b["brand_name"].strip()})
+        try:
+            db.create_user(au, auth.hash_pw(ap), "admin",
+                           (b.get("admin_name") or name).strip(), business_id=bid)
+        except Exception as e:  # noqa: BLE001 — username is globally unique
+            return jsonify({"ok": False, "error": f"Broker created, but the admin login "
+                                                  f"failed — username taken? ({e})"}), 400
+        db.audit(auth.actor(), "create_broker", "business", str(bid), f"{name} · {tier}")
+        activity.log("created", "business", str(bid), name,
+                     detail=f"new broker · {tier} · admin {au}", user=_user())
+        return jsonify({"ok": True, "business_id": bid, "slug": slug, "tier": tier,
+                        "admin_username": au, "admin_password": ap})
+    # GET: every business except Otlobly #1, with tier + live counts.
+    out = []
+    for biz in db.list_businesses():
+        if biz["id"] == 1:
+            continue
+        out.append({**biz, "tier": quotas.tier(biz["id"]),
+                    "orders": db.count_rows("orders", biz["id"]),
+                    "customers": db.count_rows("customers", biz["id"]),
+                    "seats": db.count_active_users(biz["id"])})
+    return jsonify({"brokers": out, "tiers": list(quotas.TIERS.keys())})
+
+
+@app.route("/api/admin/broker/tier", methods=["POST"])
+@auth.require("admin_actions")
+def api_admin_broker_tier():
+    """Change a broker's plan (Otlobly super-admin only)."""
+    if not _platform_admin():
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    bid = b.get("business_id")
+    tier = b.get("tier")
+    if not (str(bid).isdigit() and int(bid) != 1 and tier in quotas.TIERS):
+        return jsonify({"ok": False, "error": "bad business or tier"}), 400
+    db.set_business_config(int(bid), "tier", tier)
+    db.audit(auth.actor(), "set_broker_tier", "business", str(bid), tier)
+    return jsonify({"ok": True, "tier": tier})
+
+
+# --------------------------------------------------------------------------- #
 # Admin: user management
 # --------------------------------------------------------------------------- #
 @app.route("/api/users", methods=["GET", "POST", "PATCH"])
