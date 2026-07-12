@@ -1846,7 +1846,8 @@ def api_users():
             return jsonify({"ok": False, "error": "username, role, 6+ char password required"}), 400
         try:
             db.create_user(b["username"].strip(), auth.hash_pw(pw),
-                           b["role"], b.get("name", ""))
+                           b["role"], b.get("name", ""),
+                           business_id=db.current_business())
         except Exception as e:  # noqa (unique violation)
             return jsonify({"ok": False, "error": f"{e}"}), 400
         db.audit(auth.actor(), "create_user", "user", b["username"], b["role"])
@@ -1854,6 +1855,9 @@ def api_users():
     if request.method == "PATCH":                 # deactivate/reactivate or reset password
         b = request.get_json(force=True, silent=True) or {}
         u = db.get_user_by_id(int(b["id"])) if str(b.get("id", "")).isdigit() else None
+        # Tenant fence: staff may only touch users of their OWN business (NULL = business 1).
+        if u and (u.get("business_id") or 1) != db.current_business():
+            u = None
         if not u:
             return jsonify({"ok": False, "error": "user not found"}), 404
         if "active" in b:
@@ -1868,7 +1872,7 @@ def api_users():
             db.set_user_password(u["id"], auth.hash_pw(pw))
             db.audit(auth.actor(), "user_reset_pw", "user", u["username"], "")
         return jsonify({"ok": True})
-    return jsonify({"users": db.list_users(), "roles": auth.ROLES})
+    return jsonify({"users": db.list_users(db.current_business()), "roles": auth.ROLES})
 
 
 # --------------------------------------------------------------------------- #

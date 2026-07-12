@@ -606,10 +606,15 @@ def get_user_by_id(uid):
         return dict(r) if r else None
 
 
-def list_users():
+def list_users(business_id=None):
+    """All users, or one tenant's (COALESCE: pre-tenancy rows have NULL = business 1)."""
     with connect() as c:
+        if business_id is None:
+            return [dict(r) for r in c.execute(
+                "SELECT id, username, role, name, active, created_at FROM users ORDER BY id")]
         return [dict(r) for r in c.execute(
-            "SELECT id, username, role, name, active, created_at FROM users ORDER BY id")]
+            "SELECT id, username, role, name, active, created_at FROM users "
+            "WHERE COALESCE(business_id, 1)=? ORDER BY id", (business_id,))]
 
 
 def count_users():
