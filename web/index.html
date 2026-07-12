@@ -1779,9 +1779,9 @@ async function loadBrokers(){
     const plan=bz.id===1?'<span class="muted2" style="font-size:12px">Unlimited · internal</span>'
       :`<select onclick="event.stopPropagation()" onchange="setBrokerTier(${bz.id},this.value)" style="width:auto">
         ${["starter","growth","pro"].map(t=>`<option value="${t}" ${bz.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select>`;
-    const click=bz.id===1?'':` onclick="openBroker(${bz.id})" style="border-bottom:1px solid var(--line);cursor:pointer" title="open this broker's profile"`;
-    return `<tr${click||' style="border-bottom:1px solid var(--line)"'}>
-    <td style="padding:9px 6px"><b>${poEsc(bz.name)}</b>${bz.id===1?' <span class="muted2" style="font-size:10.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px">internal</span>':' <span class="muted2" style="font-size:11px">→</span>'}${bz.slug?`<br><span class="mono muted2" style="font-size:10.5px">${poEsc(bz.slug)}</span>`:''}</td>
+    const click=` onclick="openBroker(${bz.id})" style="border-bottom:1px solid var(--line);cursor:pointer" title="${bz.id===1?'open Otlobly\'s profile (read-only)':'open this broker\'s profile'}"`;
+    return `<tr${click}>
+    <td style="padding:9px 6px"><b>${poEsc(bz.name)}</b>${bz.id===1?' <span class="muted2" style="font-size:10.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px">internal</span>':''} <span class="muted2" style="font-size:11px">→</span>${bz.slug?`<br><span class="mono muted2" style="font-size:10.5px">${poEsc(bz.slug)}</span>`:''}</td>
     <td style="padding:9px 6px">${plan}</td>
     <td style="padding:9px 6px;text-align:right">${bz.orders}</td>
     <td style="padding:9px 6px;text-align:right">${bz.customers}</td>
@@ -1817,13 +1817,23 @@ async function loadBrokerProfile(){
   if(!BK_CUR){ setView("brokers"); return; }
   let d; try{ d=await (await fetch("/api/admin/broker/"+BK_CUR)).json(); }catch(e){ d=null; }
   if(!d||!d.business){ $("brokerProfile").innerHTML='<div class="panel" style="color:var(--bad)">Could not load this broker.</div>'; return; }
-  const bz=d.business, st=d.status||{}, res=st.resources||{};
+  const bz=d.business, st=d.status||{}, res=st.resources||{}, internal=!!d.internal, cnt=d.counts||{};
   if($("pageTitle")) $("pageTitle").textContent=bz.name;
   const bars=["searches","packages","seats","orders"].map(r=>res[r]?quotaBar(r,res[r]):"").join("");
+  // Otlobly (internal) has no plan/quota — show plain counts instead of usage bars.
+  const countStat=(lbl,v)=>`<div style="flex:1"><div style="font-size:22px;font-weight:800">${(+v||0).toLocaleString()}</div>
+      <div class="muted2" style="font-size:11px;text-transform:uppercase;letter-spacing:.03em">${lbl}</div></div>`;
+  const usageBlock=internal
+    ? `<div style="display:flex;gap:16px;margin-top:4px">${countStat("Orders",cnt.orders)}${countStat("Customers",cnt.customers)}${countStat("Seats",cnt.seats)}</div>`
+    : (bars||'<div class="muted2" style="margin-top:8px;font-size:12px">no usage yet</div>');
+  const planControl=internal
+    ? '<span class="muted2" style="font-size:12px"><b>Unlimited</b> · internal</span>'
+    : `<select onchange="setBrokerTier(${bz.id},this.value);setTimeout(loadBrokerProfile,300)" style="width:auto">
+        ${["starter","growth","pro"].map(t=>`<option value="${t}" ${d.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select>`;
   const users=(d.users||[]).map(u=>`<tr style="border-bottom:1px solid var(--line);${u.active?'':'opacity:.5'}">
       <td style="padding:8px 6px"><b class="mono">${poEsc(u.username)}</b>${u.name?` <span class="muted2">${poEsc(u.name)}</span>`:''}</td>
       <td style="padding:8px 6px">${ROLE_LABEL[u.role]||u.role}${u.active?'':' · <span style="color:var(--bad)">inactive</span>'}</td>
-      <td style="padding:8px 6px;text-align:right"><button class="po-btn" onclick="bkResetPw(${u.id},'${poEsc(u.username)}',this)">reset password</button></td></tr>`).join("");
+      ${internal?'':`<td style="padding:8px 6px;text-align:right"><button class="po-btn" onclick="bkResetPw(${u.id},'${poEsc(u.username)}',this)">reset password</button></td>`}</tr>`).join("");
   const acts=(d.activity||[]).map(ev=>`<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px">
       <span class="muted2 mono" style="font-size:10.5px">${(ev.ts||"").slice(0,16).replace("T"," ")}</span>
       <b>${poEsc(ev.user||"")}</b> ${poEsc(ev.action||"")} ${poEsc(ev.label||"")}${ev.field?` · ${poEsc(ev.field)} → ${poEsc(ev.new==null?"":String(ev.new))}`:""}${ev.detail?` <span class="muted2">· ${poEsc(ev.detail)}</span>`:""}</div>`).join("");
@@ -1831,22 +1841,21 @@ async function loadBrokerProfile(){
     <div class="toolbar">
       <button class="minibtn" onclick="setView('brokers')">← Brokers</button>
       <h2 style="margin:0;font-size:17px;font-weight:800">${poEsc(bz.name)}</h2>
-      <span class="muted2 mono" style="font-size:11px">${poEsc(bz.slug||"")}</span>
+      ${internal?'<span class="muted2" style="font-size:10.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px">internal · read-only</span>':`<span class="muted2 mono" style="font-size:11px">${poEsc(bz.slug||"")}</span>`}
       ${bz.active?'':'<span style="color:var(--bad);font-weight:700;font-size:12px">inactive</span>'}
       <span class="spacer"></span>
-      <button class="accent" onclick="startImpersonate(${bz.id},this)" title="see their live dashboard exactly as their staff does">👁 Open their dashboard →</button>
+      ${internal?'':`<button class="accent" onclick="startImpersonate(${bz.id},this)" title="see their live dashboard exactly as their staff does">👁 Open their dashboard →</button>`}
     </div>
     <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div class="panel">
-        <h3 style="margin:0 0 8px;font-size:14px;font-weight:800">Plan &amp; usage</h3>
-        <div style="display:flex;align-items:center;gap:9px">
-          <select onchange="setBrokerTier(${bz.id},this.value);setTimeout(loadBrokerProfile,300)" style="width:auto">
-            ${["starter","growth","pro"].map(t=>`<option value="${t}" ${d.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select>
+        <h3 style="margin:0 0 8px;font-size:14px;font-weight:800">${internal?'Plan &amp; totals':'Plan &amp; usage'}</h3>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
+          ${planControl}
           <span class="muted2" style="font-size:11.5px">brand: <b>${poEsc((d.brand&&d.brand.name)||"Tatabu")}</b> · since ${(bz.created_at||"").slice(0,10)}</span></div>
-        ${bars||'<div class="muted2" style="margin-top:8px;font-size:12px">no usage yet</div>'}
+        ${usageBlock}
       </div>
       <div class="panel">
-        <h3 style="margin:0 0 8px;font-size:14px;font-weight:800">Their team</h3>
+        <h3 style="margin:0 0 8px;font-size:14px;font-weight:800">${internal?'Team':'Their team'}</h3>
         <table style="width:100%;border-collapse:collapse;font-size:12.5px"><tbody>${users||'<tr><td class="muted2" style="padding:8px">no staff</td></tr>'}</tbody></table>
       </div>
     </div>
