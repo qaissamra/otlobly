@@ -56,6 +56,7 @@ import normalize
 import notify
 import pnl as pnl_mod
 import pricing
+import product_import
 import purchases
 import report as report_mod
 import store
@@ -655,7 +656,8 @@ def api_amazon_number():
 @auth.require("edit_order")
 def api_import():
     url = request.args.get("url", "")
-    return jsonify(amazon_import.import_product(url) if url else {"error": "no url"})
+    # Any retailer: Amazon via SerpAPI, AliExpress/SHEIN/iHerb/other via a free OG scrape.
+    return jsonify(product_import.import_product(url) if url else {"error": "no url"})
 
 
 @app.route("/api/item_price")
@@ -700,13 +702,13 @@ def api_catalog_list():
 @app.route("/api/catalog", methods=["POST"])
 @auth.require("edit_order")
 def api_catalog_add():
-    """Paste an Amazon link → title/image/price auto-fetched → catalog row.
-    Display price defaults to the markup-applied quote; staff can override."""
+    """Paste a product link (any retailer) → title/image/price auto-fetched → catalog
+    row. Display price defaults to the markup-applied quote; staff can override."""
     b = request.get_json(force=True, silent=True) or {}
     url = (b.get("url") or "").strip()
     if not url:
         return jsonify({"ok": False, "error": "no url"}), 400
-    d = amazon_import.import_product(url)              # cache-first — no refresh
+    d = product_import.import_product(url)             # Amazon: SerpAPI · others: OG scrape
     if d.get("error"):
         return jsonify({"ok": False, "error": d["error"]}), 400
     try:
