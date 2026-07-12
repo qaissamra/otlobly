@@ -137,6 +137,13 @@ CREATE INDEX IF NOT EXISTS ix_leads_created ON meta_leads(created_time);
 CREATE INDEX IF NOT EXISTS ix_pay_order ON payments(order_code);
 CREATE INDEX IF NOT EXISTS ix_pay_customer ON payments(customer_phone);
 CREATE INDEX IF NOT EXISTS ix_catalog_biz ON catalog_items(business_id, active);
+CREATE TABLE IF NOT EXISTS usage_counters (
+  business_id INTEGER NOT NULL,
+  resource TEXT NOT NULL,              -- searches | …  (metered per-action usage)
+  period TEXT NOT NULL,                -- 'YYYY-MM' (monthly) or 'all'
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (business_id, resource, period)
+);
 """
 
 
@@ -247,6 +254,39 @@ def set_business_config(business_id, key, value):
     with connect() as c:
         c.execute("UPDATE businesses SET data_json=? WHERE id=?",
                   (json.dumps(conf, ensure_ascii=False), business_id))
+
+
+# --------------------------------------------------------------------------- #
+# Quota metering (Tatabu tiers): per-action usage counters + live row counts.
+# --------------------------------------------------------------------------- #
+def bump_usage(business_id, resource, period, n=1):
+    """Increment a metered counter (e.g. SerpAPI 'searches' for the current month)."""
+    with connect() as c:
+        c.execute("""INSERT INTO usage_counters (business_id, resource, period, count)
+                     VALUES (?,?,?,?)
+                     ON CONFLICT(business_id, resource, period)
+                       DO UPDATE SET count = count + excluded.count""",
+                  (business_id, resource, period, n))
+
+
+def get_usage(business_id, resource, period):
+    with connect() as c:
+        r = c.execute("SELECT count FROM usage_counters WHERE business_id=? AND resource=? "
+                      "AND period=?", (business_id, resource, period)).fetchone()
+        return r["count"] if r else 0
+
+
+def count_rows(table, business_id):
+    """COUNT(*) of a tenant table's rows for one business (orders / customers / …)."""
+    with connect() as c:
+        return c.execute(f"SELECT COUNT(*) n FROM {table} WHERE business_id=?",
+                         (business_id,)).fetchone()["n"]
+
+
+def count_active_users(business_id):
+    with connect() as c:
+        return c.execute("SELECT COUNT(*) n FROM users WHERE business_id=? AND active=1",
+                         (business_id,)).fetchone()["n"]
 
 
 # --------------------------------------------------------------------------- #

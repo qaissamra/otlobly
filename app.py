@@ -58,6 +58,7 @@ import pnl as pnl_mod
 import pricing
 import product_import
 import purchases
+import quotas
 import report as report_mod
 import store
 import tracking
@@ -341,8 +342,16 @@ def me():
     d = current_user.as_dict()
     bid = getattr(current_user, "business_id", 1)
     d["business"] = {"id": bid, "brand": branding.resolve(bid),
-                     "features": features.resolve(bid)}
+                     "features": features.resolve(bid), "tier": quotas.tier(bid)}
     return jsonify(d)
+
+
+@app.route("/api/quota")
+@auth.require("view_orders")
+def api_quota():
+    """This tenant's plan + usage vs limits (soft — the dashboard shows an 'upgrade'
+    nudge when over, but nothing is blocked). Otlobly (#1) is unlimited."""
+    return jsonify(quotas.status(getattr(current_user, "business_id", 1)))
 
 
 # --------------------------------------------------------------------------- #
@@ -656,8 +665,13 @@ def api_amazon_number():
 @auth.require("edit_order")
 def api_import():
     url = request.args.get("url", "")
+    if not url:
+        return jsonify({"error": "no url"})
     # Any retailer: Amazon via SerpAPI, AliExpress/SHEIN/iHerb/other via a free OG scrape.
-    return jsonify(product_import.import_product(url) if url else {"error": "no url"})
+    d = product_import.import_product(url)
+    if not d.get("error") and not d.get("cached"):     # a real lookup → count vs the quota
+        quotas.bump_search(db.current_business())
+    return jsonify(d)
 
 
 @app.route("/api/item_price")
@@ -711,6 +725,8 @@ def api_catalog_add():
     d = product_import.import_product(url)             # Amazon: SerpAPI · others: OG scrape
     if d.get("error"):
         return jsonify({"ok": False, "error": d["error"]}), 400
+    if not d.get("cached"):                            # a real lookup → count vs the quota
+        quotas.bump_search(db.current_business())
     try:
         price = round(float(b.get("price_usd")), 2) if b.get("price_usd") not in (None, "") else None
     except (TypeError, ValueError):

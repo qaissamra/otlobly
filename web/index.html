@@ -400,6 +400,7 @@
     <button id="trashBtn" onclick="setView('trash')" title="deleted items — restore anything here"><span class="ic">🗑</span>Trash</button>
     <button id="clickupBtn" onclick="syncClickup(this)"><span class="ic">↗</span>Sync ClickUp</button>
   </nav>
+  <div id="quotaBox"></div>
   <div class="side-user" id="userChip"></div>
 </aside>
 <div class="main">
@@ -1046,6 +1047,32 @@ async function applyRole(){
     document.querySelectorAll("#sideNav button, #addOrderBtn, #refreshBtn").forEach(b=>{ b.style.display = keep.has(b.id) ? "" : "none"; });
   }
   $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b><div>${ME.role} · <a href="/logout">logout</a></div>`;
+  renderQuota();
+}
+// Plan + usage panel (Tatabu tiers). Shown only for broker tenants; Otlobly is
+// unlimited so it renders nothing. Soft: an "upgrade" nudge, never a block.
+const TIER_LABEL={starter:"Starter",growth:"Growth",pro:"Pro"};
+const QUOTA_LBL={searches:"Searches",packages:"Packages",seats:"Seats",orders:"Orders"};
+async function renderQuota(){
+  const box=$("quotaBox"); if(!box) return;
+  if(!ME||!ME.business||!ME.business.tier||ME.business.tier==="unlimited"){ box.innerHTML=""; return; }
+  let q; try{ q=await (await fetch("/api/quota")).json(); }catch(e){ return; }
+  if(!q||q.unlimited){ box.innerHTML=""; return; }
+  const bar=(r,v)=>{
+    const over=v.over, pct=v.pct||0, col=over?"var(--bad)":(pct>=80?"var(--warn)":"var(--good)");
+    return `<div style="margin-top:6px">
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted)">
+        <span>${QUOTA_LBL[r]||r}</span><span style="color:${over?'var(--bad)':'inherit'}">${v.used}/${v.limit}</span></div>
+      <div style="height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-top:2px">
+        <div style="height:100%;width:${pct}%;background:${col}"></div></div></div>`;
+  };
+  const rows=["searches","packages","seats","orders"].map(r=>q.resources[r]?bar(r,q.resources[r]):"").join("");
+  const nudge=q.over_any
+    ? `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--bad)">⬆ You've hit a plan limit — <a href="/pricing" target="_blank" style="color:var(--accent)">upgrade</a></div>`
+    : "";
+  box.innerHTML=`<div style="margin:2px 12px 10px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:var(--card)">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.02em">${TIER_LABEL[q.tier]||q.tier} plan</div>
+    ${rows}${nudge}</div>`;
 }
 async function load(){
   await applyRole();
