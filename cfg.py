@@ -29,16 +29,42 @@ def _seed():
             pass
 
 
+def _merge(base, over):
+    """Deep-merge `over` onto `base` (override wins; nested dicts merged)."""
+    out = dict(base or {})
+    for k, v in (over or {}).items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def _defaults():
+    """Generic, secret-free base for a NEW tenant — the committed config.default.json
+    (NEVER Otlobly's live config.json, so a broker never inherits Otlobly's WhatsApp
+    number, ad spend, tracking map, etc.)."""
+    for p in (DEFAULT_FILE, EXAMPLE_FILE):
+        if p.exists():
+            try:
+                return json.loads(p.read_text())
+            except ValueError:
+                continue
+    return {}
+
+
 def load(required=False):
-    """Return the parsed config. Falls back to the example file so the tool
-    still runs (with placeholders) before the user has filled in real IDs."""
+    """The config for the CURRENT business. Business #1 (Otlobly) = the live
+    config.json, exactly as before. Every other business (broker) = the generic
+    defaults overlaid with that business's own saved settings (in its businesses row)."""
+    from db import current_business, get_business_config   # lazy: cfg is imported very early
     _seed()
-    if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text())
-    if required:
-        raise SystemExit(f"Missing {CONFIG_FILE.name}. "
-                         f"Copy {EXAMPLE_FILE.name} to config.json and fill it in.")
-    return json.loads(EXAMPLE_FILE.read_text())
+    if current_business() == 1:
+        if CONFIG_FILE.exists():
+            return json.loads(CONFIG_FILE.read_text())
+        if required:
+            raise SystemExit(f"Missing {CONFIG_FILE.name}. "
+                             f"Copy {EXAMPLE_FILE.name} to config.json and fill it in.")
+        return json.loads(EXAMPLE_FILE.read_text())
+    overrides = get_business_config(current_business(), "settings", None) or {}
+    return _merge(_defaults(), overrides)
 
 
 def get(cfg, path, default=None):
@@ -64,5 +90,10 @@ def set_path(cfg, dotted, value):
 
 
 def save(cfg):
-    """Persist the config back to config.json (the live, gitignored file)."""
-    write_json_atomic(CONFIG_FILE, cfg)        # crash-safe: temp + atomic rename
+    """Persist the config for the CURRENT business. Business #1 → config.json (the
+    live file, unchanged); a broker → its own settings override in the businesses row."""
+    from db import current_business, set_business_config
+    if current_business() == 1:
+        write_json_atomic(CONFIG_FILE, cfg)    # crash-safe: temp + atomic rename
+    else:
+        set_business_config(current_business(), "settings", cfg)
