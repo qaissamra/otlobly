@@ -1806,11 +1806,10 @@ def api_admin_brokers():
                      detail=f"new broker · {tier} · admin {au}", user=_user())
         return jsonify({"ok": True, "business_id": bid, "slug": slug, "tier": tier,
                         "admin_username": au, "admin_password": ap})
-    # GET: every business except Otlobly #1, with tier + live counts.
+    # GET: every tenant — Otlobly #1 first (tier "unlimited", the platform's own
+    # business), then the brokers — each with tier + live counts.
     out = []
     for biz in db.list_businesses():
-        if biz["id"] == 1:
-            continue
         out.append({**biz, "tier": quotas.tier(biz["id"]),
                     "orders": db.count_rows("orders", biz["id"]),
                     "customers": db.count_rows("customers", biz["id"]),

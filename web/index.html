@@ -1602,20 +1602,27 @@ const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
 const BK_TIER_LABEL={starter:"Starter",growth:"Growth",pro:"Pro"};
 async function loadBrokers(){
   let d; try{ d=await (await fetch("/api/admin/brokers")).json(); }catch(e){ d={brokers:[]}; }
-  const rows=(d.brokers||[]).map(bz=>`<tr style="border-bottom:1px solid var(--line)">
-    <td style="padding:9px 6px"><b>${poEsc(bz.name)}</b>${bz.slug?`<br><span class="mono muted2" style="font-size:10.5px">${poEsc(bz.slug)}</span>`:''}</td>
-    <td style="padding:9px 6px">
-      <select onchange="setBrokerTier(${bz.id},this.value)" style="width:auto">
-        ${["starter","growth","pro"].map(t=>`<option value="${t}" ${bz.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select></td>
+  // Business #1 (Otlobly, the platform's own tenant) is pinned first: an "internal"
+  // badge and a fixed Unlimited plan — its tier can't be changed (the API rejects it).
+  const row=bz=>{
+    const plan=bz.id===1?'<span class="muted2" style="font-size:12px">Unlimited · internal</span>'
+      :`<select onchange="setBrokerTier(${bz.id},this.value)" style="width:auto">
+        ${["starter","growth","pro"].map(t=>`<option value="${t}" ${bz.tier===t?'selected':''}>${BK_TIER_LABEL[t]}</option>`).join("")}</select>`;
+    return `<tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:9px 6px"><b>${poEsc(bz.name)}</b>${bz.id===1?' <span class="muted2" style="font-size:10.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px">internal</span>':''}${bz.slug?`<br><span class="mono muted2" style="font-size:10.5px">${poEsc(bz.slug)}</span>`:''}</td>
+    <td style="padding:9px 6px">${plan}</td>
     <td style="padding:9px 6px;text-align:right">${bz.orders}</td>
     <td style="padding:9px 6px;text-align:right">${bz.customers}</td>
-    <td style="padding:9px 6px;text-align:right">${bz.seats}</td></tr>`).join("");
-  $("brokersList").innerHTML=`<h2 style="margin:0 0 8px;font-size:15px">Brokers (${(d.brokers||[]).length})</h2>
+    <td style="padding:9px 6px;text-align:right">${bz.seats}</td></tr>`; };
+  const all=d.brokers||[];
+  const own=all.filter(b=>b.id===1).map(row).join("");
+  const rows=all.filter(b=>b.id!==1).map(row).join("");
+  $("brokersList").innerHTML=`<h2 style="margin:0 0 8px;font-size:15px">Brokers (${all.filter(b=>b.id!==1).length})</h2>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line)">
         <th style="padding:6px">Business</th><th style="padding:6px">Plan</th>
         <th style="padding:6px;text-align:right">Orders</th><th style="padding:6px;text-align:right">Customers</th><th style="padding:6px;text-align:right">Seats</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No brokers yet — create one above.</td></tr>'}</tbody></table>`;
+      <tbody>${own}${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No brokers yet — create one above.</td></tr>'}</tbody></table>`;
 }
 async function createBroker(btn){
   const body={name:$("bk_name").value.trim(), brand_name:$("bk_brand").value.trim(),
