@@ -394,7 +394,19 @@ def _pnl_range():
 @auth.require("view_pnl")
 def api_pnl():
     since, until = _pnl_range()
-    return jsonify(pnl_mod.build(since=since, until=until))
+    d = pnl_mod.build(since=since, until=until)
+    import features
+    if not features.has(db.current_business(), "meta_ads"):
+        # Meta ads is a plan-linked feature (Pro): lower tiers get a P&L with the
+        # whole Meta slot hidden — net profit is simply revenue − cost.
+        t = d.get("totals") or {}
+        t["meta_usd"] = 0
+        t["net_profit_usd"] = t.get("gross_profit_usd", t.get("net_profit_usd"))
+        t["net_margin_pct"] = t.get("gross_margin_pct")
+        t["cost_per_customer_usd"] = None
+        t["ad_days"] = 0
+        d["sources"]["meta"] = {"connected": False, "hidden": True, "detail": "pro plan"}
+    return jsonify(d)
 
 
 @app.route("/api/pnl/drill")
@@ -403,8 +415,12 @@ def api_pnl_drill():
     # The rows behind one P&L card (metric=revenue|to_order|cogs|customers|meta),
     # same window params as /api/pnl so the drill always matches the cards.
     since, until = _pnl_range()
+    metric = request.args.get("metric", "")
+    import features
+    if metric == "meta" and not features.has(db.current_business(), "meta_ads"):
+        return jsonify({"error": "Meta ads is a Pro-plan feature."}), 403
     try:
-        return jsonify(pnl_mod.drill(request.args.get("metric", ""), since=since, until=until))
+        return jsonify(pnl_mod.drill(metric, since=since, until=until))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 

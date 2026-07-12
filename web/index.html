@@ -747,7 +747,7 @@
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:13px"><button class="accent" onclick="saveSettings(this)">Save website sections</button></div>
     </div>
-    <div class="panel" style="max-width:620px;margin-top:14px">
+    <div class="panel" id="metaSpendPanel" style="max-width:620px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 Meta ad spend (P&amp;L)</h3>
       <div class="muted2" style="font-size:12px;margin-bottom:10px">اكتب كم صرفت على إعلانات ميتا كل شهر · type what you spent on Meta ads each month (USD) — the P&amp;L subtracts it from profit. Using the Meta API instead? Set META_AD_ACCOUNT_ID + META_ACCESS_TOKEN on the server and press “Refresh sources” on the P&amp;L page.</div>
       <div id="metaSpendRows"></div>
@@ -1094,6 +1094,8 @@ async function applyRole(){
   // Website sections settings: toggles for Otlobly's public site (/pricing, landing) — Otlobly-only.
   hide("websiteSectionsPanel", !!(ME.business && ME.business.id===1));
   hide("metaLeadsBtn", p.includes("view_meta_leads") && FEAT.leads!==false);
+  // Meta-ads P&L slot is plan-linked (Pro): hide its Settings panel below that tier.
+  hide("metaSpendPanel", FEAT.meta_ads!==false);
   hide("catalogBtn", FEAT.catalog!==false);
   hide("depositsBtn", p.includes("view_money"));
   RESTRICTED = RESTRICTED_NAV[ME.role] || null;
@@ -3582,6 +3584,7 @@ async function loadPnl(){
 function renderPnl(){
   if(!PNL) return;
   const t=PNL.totals, s=PNL.sources;
+  const showMeta=!(s.meta&&s.meta.hidden);   // Meta-ads slot is plan-linked (Pro)
   const card=(l,v,cls="",metric="",extra="")=>`<div class="card${extra?' '+extra:''}"${metric?` style="cursor:pointer" title="اضغط للتفاصيل · click to see where this number comes from" onclick="openPnlDrill('${metric}')"`:''}><div class="n ${cls}">${v}</div><div class="l">${l}${metric?' <span style="color:var(--muted);font-weight:400">›</span>':''}</div></div>`;
   // hero: NET PROFIT = Revenue − Amazon cost − Meta ads
   const pos=t.net_profit_usd>=0;
@@ -3595,8 +3598,8 @@ function renderPnl(){
        ${card("Revenue (placed orders)", money(t.revenue_usd), "", "revenue")}
        <span class="op">−</span>
        ${card("Amazon cost", money(t.cogs_usd), "", "cogs")}
-       <span class="op">−</span>
-       ${card("Meta ads", money(t.meta_usd), "", "meta")}
+       ${showMeta?`<span class="op">−</span>
+       ${card("Meta ads", money(t.meta_usd), "", "meta")}`:""}
      </div>`;
   // pipeline — pre-purchase money, tinted amber like the IN_CART pill
   $("pnlPipe").innerHTML=`<div class="pnl-sec">🛒 قيد التنفيذ · Pipeline — not bought yet</div>
@@ -3613,10 +3616,10 @@ function renderPnl(){
     stat('أيام نشطة · Days with sales', t.days_active||0, '')+
     stat('متوسط الإيراد/يوم · Avg revenue / day', t.avg_revenue_day_usd==null?'—':money(t.avg_revenue_day_usd), '')+
     stat('متوسط الربح/يوم · Avg profit / day', t.avg_net_day_usd==null?'—':money(t.avg_net_day_usd), '', (t.avg_net_day_usd||0)>=0?'var(--good)':'var(--bad)')+
-    stat('🎯 أيام إعلانات · Ad days', t.ad_days||0, '');
+    (showMeta?stat('🎯 أيام إعلانات · Ad days', t.ad_days||0, ''):'');
   renderActivity();
   const badge=k=>`<span class="qchip">${k}: <b style="color:${s[k].connected?'var(--good)':'var(--warn)'}">${s[k].connected?'connected':'connect'}</b></span>`;
-  $("pnlSources").innerHTML=badge("revenue")+badge("cogs")+badge("meta");
+  $("pnlSources").innerHTML=badge("revenue")+badge("cogs")+(showMeta?badge("meta"):"");
   const batches=Object.entries(PNL.revenue_by_batch||{});
   const totalRev=t.revenue_usd||0;
   $("pnlRows").innerHTML=batches.length?batches.map(([b,v])=>`<tr>
@@ -3630,13 +3633,15 @@ function renderPnl(){
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end" title="Order ${b}: ${money(v)}">
       <div style="width:58%;max-width:60px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
       <div style="font-size:10px;color:var(--muted)">${b==='—'?'—':'#'+b}</div></div>`;}).join("");
-  const miss=["revenue","cogs","meta"].filter(k=>!s[k].connected);
-  const metaEmpty = s.meta.connected && !(t.meta_usd>0);   // connected but no spend typed yet
+  const miss=(showMeta?["revenue","cogs","meta"]:["revenue","cogs"]).filter(k=>!s[k].connected);
+  const metaEmpty = showMeta && s.meta.connected && !(t.meta_usd>0);   // connected but no spend typed yet
   $("pnlNote").innerHTML=(miss.length
     ? `⚠ Not connected: ${miss.join(", ")}. `
-    : `Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · meta ${s.meta.detail}. `)
+    : (showMeta?`Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail} · meta ${s.meta.detail}. `
+               :`Live · revenue ${s.revenue.detail} · cost ${s.cogs.detail}. `))
     + (metaEmpty ? `<a style="cursor:pointer;color:var(--accent);font-weight:600" onclick="setView('settings')">➕ أضف مصروف إعلانات ميتا · add your Meta ad spend in Settings</a> · ` : '')
-    + `COGS &amp; Meta are account totals (not split per batch).`;
+    + (showMeta?`COGS &amp; Meta are account totals (not split per batch).`
+               :`COGS is an account total (not split per batch).`);
 }
 // ---------- P&L Activity chart: revenue per day (🎯 = ad ran) or per month ----------
 let ACT_VIEW='day';
@@ -3649,7 +3654,7 @@ function renderActivity(){
   $("actSummary").innerHTML=`<b>${t.days_active||0}</b> يوم بمبيعات · day(s) with sales`
     +` · متوسط الإيراد · avg revenue <b>${t.avg_revenue_day_usd==null?'—':money(t.avg_revenue_day_usd)}</b>/day`
     +` · متوسط الربح · avg profit <b style="color:${(t.avg_net_day_usd||0)>=0?'var(--good)':'var(--bad)'}">${t.avg_net_day_usd==null?'—':money(t.avg_net_day_usd)}</b>/day`
-    +` · 🎯 <b>${t.ad_days||0}</b> أيام إعلانات · ad day(s)`;
+    +((PNL.sources.meta&&PNL.sources.meta.hidden)?'':` · 🎯 <b>${t.ad_days||0}</b> أيام إعلانات · ad day(s)`);
   if(ACT_VIEW==='month'){
     const rows=PNL.by_month||[];
     const maxV=Math.max(1,...rows.map(r=>r.revenue||0));
@@ -3680,7 +3685,7 @@ function renderActivity(){
       <div style="width:5px;height:5px;border-radius:50%;background:${r.meta>0?'#f59e0b':'transparent'}" title="${r.meta>0?`🎯 ads ${money(r.meta)}`:''}"></div>
       <div style="font-size:8.5px;color:var(--muted)">${r.date.slice(8)}</div></div>`;}).join("")
     :`<div class="empty" style="width:100%">لا نشاط في هذه الفترة · no activity in this period.</div>`;
-  $("actTable").innerHTML=rows.length?`<div style="color:var(--muted);font-size:11px;margin-top:2px">🟠 نقطة برتقالية = يوم فيه إعلانات · orange dot = the ad campaign ran that day${!windowed&&(PNL.by_day||[]).length>30?` · showing the last 30 days with data`:''}</div>`:'';
+  $("actTable").innerHTML=rows.length?`<div style="color:var(--muted);font-size:11px;margin-top:2px">${(PNL.sources.meta&&PNL.sources.meta.hidden)?'':'🟠 نقطة برتقالية = يوم فيه إعلانات · orange dot = the ad campaign ran that day'}${!windowed&&(PNL.by_day||[]).length>30?` · showing the last 30 days with data`:''}</div>`:'';
 }
 async function refreshPnl(b){b.disabled=true;toast("Refreshing P&L sources…");await post("/api/pnl/refresh",{});b.disabled=false;loadPnl();toast("P&L refreshed");}
 let pnlTimer=null;

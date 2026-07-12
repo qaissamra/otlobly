@@ -26,11 +26,20 @@ from pathlib import Path
 from urllib import request, parse, error
 
 import cfg
+import db
 from paths import data_path
 
 CACHE = Path(data_path("meta_cache.json"))   # persistent disk — survives redeploys
 MANUAL = Path(__file__).with_name("meta_spend.json")
 GRAPH = "https://graph.facebook.com/v21.0"
+
+
+# Every source below except the per-tenant Settings months (config pnl.meta.manual)
+# is OTLOBLY's ad account: the env creds, the synced cache, the legacy
+# meta_spend.json. None of it may leak into a broker tenant's P&L — a broker's own
+# Meta data arrives when they connect their own account (Pro tier, later phase).
+def _otlobly():
+    return db.current_business() == 1
 
 
 def _to_usd(amount, currency, config):
@@ -46,7 +55,7 @@ def _to_usd(amount, currency, config):
 
 
 def from_manual(config):
-    data = json.loads(MANUAL.read_text()) if MANUAL.exists() else {}
+    data = json.loads(MANUAL.read_text()) if (MANUAL.exists() and _otlobly()) else {}
     # Monthly spend typed in Settings (config.pnl.meta.manual) wins over the legacy file.
     data.update({str(k): v for k, v in (cfg.get(config, "pnl.meta.manual", {}) or {}).items()})
     cur = cfg.get(config, "pnl.meta.spend_currency", "USD")
@@ -167,7 +176,9 @@ def apply_exclusions(cached, config=None):
 
 
 def has_api_creds():
-    return bool(os.environ.get("META_AD_ACCOUNT_ID") and os.environ.get("META_ACCESS_TOKEN"))
+    # The env creds are Otlobly's ad account — never a broker's.
+    return _otlobly() and bool(os.environ.get("META_AD_ACCOUNT_ID")
+                               and os.environ.get("META_ACCESS_TOKEN"))
 
 
 def effective_mode(config=None):
@@ -182,6 +193,8 @@ def pull(config=None):
 
 
 def read_cache():
+    if not _otlobly():                   # the cache holds Otlobly's ad-account data
+        return None
     try:
         return json.loads(CACHE.read_text()) if CACHE.exists() else None
     except (ValueError, OSError):
@@ -195,6 +208,8 @@ def _now():
 def sync_once(config=None):
     """Pull once and write the cache ATOMICALLY (temp + os.replace, safe across the
     two gunicorn workers). On error keep the last-good totals but record last_error."""
+    if not _otlobly():   # a broker's "Refresh sources" must never touch Otlobly's cache
+        return {"total_usd": 0, "skipped": "meta sync is business-1 only"}
     config = config or cfg.load()
     agg = pull(config)
     prev = read_cache() or {}
