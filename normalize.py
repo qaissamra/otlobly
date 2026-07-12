@@ -181,22 +181,87 @@ def clean_amazon_url(url, expand=False):
                        "&".join(kept), ""))
 
 
+# --------------------------------------------------------------------------- #
+# Multi-retailer support (Tatabu): brokers buy from Amazon, AliExpress, SHEIN, iHerb.
+# Each product URL → (retailer, product_id, clean_url). Amazon keeps its exact ASIN
+# handling (Otlobly is unchanged); the others get a path-based id + tracking stripped.
+# --------------------------------------------------------------------------- #
+# host fragments (each contains a dot, so they match a real domain, not a random
+# substring). The Amazon short domain a.co is matched exactly, separately.
+_RETAILER_HOSTS = (
+    ("amazon", ("amazon.", "amzn.")),
+    ("aliexpress", ("aliexpress.",)),
+    ("shein", ("shein.", "romwe.")),
+    ("iherb", ("iherb.",)),
+)
+_ALI_RE = re.compile(r"/item/(\d+)\.html", re.I)
+_SHEIN_RE = re.compile(r"-p-(\d+)", re.I)
+_IHERB_RE = re.compile(r"/pr/[^/?#]+/(\d+)", re.I)
+
+
+def detect_retailer(url):
+    """'amazon' | 'aliexpress' | 'shein' | 'iherb' | 'other' (any http link) | ''."""
+    u = ascii_digits(str(url or "")).strip().lower()
+    if not u:
+        return ""
+    probe = u if "://" in u else "https://" + u          # bare host → parse as a URL
+    host = urlsplit(probe).netloc
+    if host == "a.co" or host.endswith(".a.co"):          # Amazon short link (exact host)
+        return "amazon"
+    for name, needles in _RETAILER_HOSTS:
+        if any(n in host for n in needles):
+            return name
+    return "other" if u.startswith("http") else ""
+
+
+def product_ref(url):
+    """(retailer, product_id) for a product URL. Amazon → ASIN; the others → their
+    path id; unknown → (retailer, None)."""
+    r = detect_retailer(url)
+    if r == "amazon":
+        return "amazon", extract_asin(url)
+    pat = {"aliexpress": _ALI_RE, "shein": _SHEIN_RE, "iherb": _IHERB_RE}.get(r)
+    m = pat.search(str(url or "")) if pat else None
+    return r, (m.group(1) if m else None)
+
+
+def clean_product_url(url, expand=False):
+    """Canonical clean URL for ANY retailer. Amazon → clean_amazon_url (dp/ASIN form);
+    others → scheme+host+path with the tracking query stripped."""
+    if not url:
+        return None
+    if detect_retailer(url) == "amazon":
+        return clean_amazon_url(url, expand=expand)
+    parts = urlsplit(ascii_digits(str(url)).strip())
+    return urlunsplit((parts.scheme or "https", parts.netloc, parts.path, "", "")) or str(url).strip()
+
+
 def parse_items(cells, expand=False):
-    """Turn raw product-link cells into deduped item dicts.
-    Returns [{'raw_url', 'clean_url', 'asin', 'needs_expand'}]."""
+    """Turn raw product-link cells (from ANY supported retailer) into deduped item
+    dicts. Returns [{'raw_url', 'clean_url', 'asin', 'retailer', 'product_id',
+    'needs_expand'}]. Amazon links behave EXACTLY as before (asin populated); other
+    retailers get retailer + product_id (asin stays None)."""
     items, seen = [], set()
     for raw in cells:
         if not raw or not str(raw).strip():
             continue
         raw = str(raw).strip()
-        clean = clean_amazon_url(raw, expand=expand)
-        asin = extract_asin(clean or "") or extract_asin(raw)
-        needs_expand = (asin is None and bool(re.search(r"//(a\.co|amzn\.to)/", raw)))
-        key = asin or clean or raw
+        retailer = detect_retailer(raw)
+        clean = clean_product_url(raw, expand=expand)
+        _, pid = product_ref(clean or raw)
+        # Amazon: product_id IS the ASIN — keep `asin` set for all the existing ASIN code.
+        asin = pid if retailer == "amazon" else None
+        if retailer == "amazon" and not asin:
+            asin = extract_asin(clean or "") or extract_asin(raw)
+            pid = asin
+        needs_expand = (retailer == "amazon" and asin is None
+                        and bool(re.search(r"//(a\.co|amzn\.to)/", raw)))
+        key = pid or asin or clean or raw
         if key in seen:
             continue
         seen.add(key)
         items.append({"raw_url": raw, "clean_url": clean, "asin": asin,
+                      "retailer": retailer or None, "product_id": pid,
                       "needs_expand": needs_expand})
     return items
 
