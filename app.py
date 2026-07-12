@@ -317,9 +317,11 @@ def staff_app():
 @login_required
 def me():
     import branding
+    import features
     d = current_user.as_dict()
     bid = getattr(current_user, "business_id", 1)
-    d["business"] = {"id": bid, "brand": branding.resolve(bid)}
+    d["business"] = {"id": bid, "brand": branding.resolve(bid),
+                     "features": features.resolve(bid)}
     return jsonify(d)
 
 
@@ -889,6 +891,7 @@ def _az_user():
 
 @app.route("/api/az/profile")
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_profile():
     fresh = request.args.get("fresh", "0") in ("1", "true", "yes")
     return jsonify(az.profile_info(request.args.get("box", ""), force=fresh))
@@ -896,18 +899,21 @@ def api_az_profile():
 
 @app.route("/api/az/rotate_status")
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_rotate_status():
     return jsonify(az.rotate_status(request.args.get("job_id", "")))
 
 
 @app.route("/api/az/track_fetch_status")
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_track_fetch_status():
     return jsonify(az.track_fetch_status(request.args.get("job_id", "")))
 
 
 @app.route("/api/az/ip", methods=["POST"])
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_ip():
     b = request.get_json(force=True, silent=True) or {}
     return jsonify(az.check_ip(b.get("box", "")))
@@ -915,6 +921,7 @@ def api_az_ip():
 
 @app.route("/api/az/launch", methods=["POST"])
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_launch():
     b = request.get_json(force=True, silent=True) or {}
     res = az.launch(b.get("box", ""))
@@ -926,6 +933,7 @@ def api_az_launch():
 
 @app.route("/api/az/stop", methods=["POST"])
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_stop():
     b = request.get_json(force=True, silent=True) or {}
     res = az.stop(b.get("box", ""))
@@ -937,6 +945,7 @@ def api_az_stop():
 
 @app.route("/api/az/rotate", methods=["POST"])
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_rotate():
     b = request.get_json(force=True, silent=True) or {}
     box = b.get("box", "")
@@ -949,6 +958,7 @@ def api_az_rotate():
 
 @app.route("/api/az/track_fetch", methods=["POST"])
 @auth.require("edit_fulfillment")
+@auth.require_feature("multilogin")
 def api_az_track_fetch():
     b = request.get_json(force=True, silent=True) or {}
     box = b.get("box", "")
@@ -1453,6 +1463,7 @@ def api_purchase():
 
 @app.route("/api/purchase/import_clickup", methods=["POST"])
 @auth.require("edit_order")
+@auth.require_feature("clickup")
 def api_purchase_import_clickup():
     import clickup_import
     try:
@@ -1695,6 +1706,7 @@ def api_track_gwd():
 
 @app.route("/api/purchase/clickup", methods=["POST"])
 @auth.require("admin_actions")
+@auth.require_feature("clickup")
 def api_purchase_clickup():
     import clickup_po
     import purchases
@@ -1710,6 +1722,7 @@ def api_purchase_clickup():
 
 @app.route("/api/clickup", methods=["POST"])
 @auth.require("admin_actions")
+@auth.require_feature("clickup")
 def api_clickup():
     return jsonify(run_script("clickup.py"))
 

@@ -1031,10 +1031,14 @@ async function applyRole(){
   CAN_EDIT = p.includes("edit_order");
   CAN_ADMIN = p.includes("admin_actions");
   const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
+  // Per-tenant feature flags (Tatabu white-label): Otlobly-only tools are hidden for
+  // broker tenants. Business #1 has every flag true, so its nav is unchanged.
+  const FEAT=(ME.business&&ME.business.features)||{};
   hide("pnlBtn", p.includes("view_pnl"));
-  hide("clickupBtn", p.includes("admin_actions"));
+  hide("clickupBtn", p.includes("admin_actions") && FEAT.clickup!==false);
   hide("teamBtn", p.includes("manage_users"));
-  hide("metaLeadsBtn", p.includes("view_meta_leads"));
+  hide("metaLeadsBtn", p.includes("view_meta_leads") && FEAT.leads!==false);
+  hide("catalogBtn", FEAT.catalog!==false);
   hide("depositsBtn", p.includes("view_money"));
   RESTRICTED = RESTRICTED_NAV[ME.role] || null;
   if(RESTRICTED){                                  // limited console: keep only the allowed nav buttons
