@@ -118,3 +118,12 @@ def render_shell(html_text, brand):
             .replace("__BRAND_TITLE__", brand["title"])
             .replace("__BRAND_FAVICON__", brand["favicon_href"])
             .replace("__BRAND_SIDEBAR__", brand["sidebar_html"]))
+
+
+def platform_sidebar():
+    """The Tatabu brand block for the platform console — the owner's second world
+    inside the dashboard. Same layout as a tenant's sidebar block, tagline swapped
+    so it's obvious which world you're in."""
+    b = TATABU_BRAND
+    return (f'{b["mark_svg"]}<span><h1>{b["wordmark_html"]}</h1>'
+            '<div class="bsub">platform console</div></span>')
