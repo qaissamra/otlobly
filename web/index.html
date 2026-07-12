@@ -28,12 +28,12 @@
   .side-brand .ly{color:var(--accent)}
   .side-brand .bsub{color:var(--muted);font-size:11px;margin-top:1px}
   .nav-sec{font-size:10.5px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;padding:16px 10px 5px}
-  #sideNav{flex:1;padding:2px 12px 12px;display:flex;flex-direction:column;gap:2px}
-  #sideNav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;
+  #sideNav,#platNav{flex:1;padding:2px 12px 12px;display:flex;flex-direction:column;gap:2px}
+  #sideNav button,#platNav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;
     padding:9px 11px;border-radius:10px;font-weight:600;color:#475467;font-size:13.5px}
-  #sideNav button:hover{background:var(--bg2)}
-  #sideNav button.on{background:#fff0e9;color:var(--ink)}
-  #sideNav button .ic{width:20px;text-align:center;flex:0 0 auto}
+  #sideNav button:hover,#platNav button:hover{background:var(--bg2)}
+  #sideNav button.on,#platNav button.on{background:#fff0e9;color:var(--ink)}
+  #sideNav button .ic,#platNav button .ic{width:20px;text-align:center;flex:0 0 auto}
   .side-user{border-top:1px solid var(--line);padding:13px 16px;font-size:12.5px;color:var(--muted);line-height:1.5}
   .main{flex:1;min-width:0;display:flex;flex-direction:column}
   .topbar{position:sticky;top:0;z-index:30;background:var(--bg);display:flex;align-items:center;gap:11px;
@@ -380,6 +380,19 @@
 <div class="app">
 <aside id="sidebar">
   <div class="side-brand">__BRAND_SIDEBAR__</div>
+  <!-- Tatabu platform console — the owner's second world. Brand + nav ship hidden;
+       setPlatform() swaps them in for Otlobly's super-admin only. -->
+  <div class="side-brand" id="platBrand" style="display:none"></div>
+  <nav id="platNav" style="display:none">
+    <div class="nav-sec">Platform</div>
+    <button id="platOverviewBtn" onclick="setView('platoverview')"><span class="ic">📊</span>Overview</button>
+    <button id="platBrokersBtn" onclick="setView('brokers')" title="create brokers, open their profiles"><span class="ic">🏢</span>Brokers</button>
+    <button id="plansBtn" onclick="setView('plans')" title="tier limits + your monthly prices"><span class="ic">💳</span>Plans &amp; pricing</button>
+    <button id="usageBtn" onclick="setView('usage')" title="every broker's quota bars in one place"><span class="ic">📈</span>Usage</button>
+    <button id="platActivityBtn" onclick="setView('platactivity')" title="all tenants' activity, merged"><span class="ic">🕑</span>Activity</button>
+    <div class="nav-sec">Otlobly</div>
+    <button id="exitPlatBtn" onclick="exitPlatform()"><span class="ic">↩</span>Back to Otlobly</button>
+  </nav>
   <nav id="sideNav">
     <div class="nav-sec">Main menu</div>
     <button id="homeBtn" class="on" onclick="setView('orders')"><span class="ic">🏠</span>Orders</button>
@@ -397,7 +410,7 @@
     <div class="nav-sec">System</div>
     <button id="settingsBtn" onclick="setView('settings')" title="markup, shipping/import rules, WhatsApp number"><span class="ic">⚙️</span>Settings</button>
     <button id="teamBtn" style="display:none" onclick="setView('team')" title="manage staff accounts &amp; roles"><span class="ic">👥</span>Team</button>
-    <button id="brokersBtn" style="display:none" onclick="setView('brokers')" title="create &amp; manage Tatabu broker accounts (Otlobly only)"><span class="ic">🏢</span>Brokers</button>
+    <button id="brokersBtn" style="display:none" onclick="enterPlatform()" title="Tatabu platform console — brokers, plans, usage (Otlobly only)"><span class="ic">🏗</span>Tatabu</button>
     <button id="trashBtn" onclick="setView('trash')" title="deleted items — restore anything here"><span class="ic">🗑</span>Trash</button>
     <button id="clickupBtn" onclick="syncClickup(this)"><span class="ic">↗</span>Sync ClickUp</button>
   </nav>
@@ -836,6 +849,12 @@
     <div id="brokerProfile"></div>
   </div>
 
+  <!-- Tatabu platform console screens (Otlobly super-admin only) -->
+  <div id="platOverviewView" class="hidden"><div id="platOverviewBox"></div></div>
+  <div id="plansView" class="hidden"><div id="plansBox"></div></div>
+  <div id="usageView" class="hidden"><div id="usageBox"></div></div>
+  <div id="platActivityView" class="hidden"><div id="platActivityBox"></div></div>
+
   <!-- Meta leads: Messenger + Instagram DMs + lead-ad forms -->
   <div id="metaLeadsView" class="hidden">
     <div class="toolbar">
@@ -1083,6 +1102,7 @@ async function applyRole(){
     document.querySelectorAll("#sideNav button, #addOrderBtn, #refreshBtn").forEach(b=>{ b.style.display = keep.has(b.id) ? "" : "none"; });
   }
   $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b><div>${ME.role} · <a href="/logout">logout</a></div>`;
+  if(ME.platform && ME.platform.sidebar_html) $("platBrand").innerHTML=ME.platform.sidebar_html;
   // Tatabu support view: the platform admin is inside a broker's dashboard — pin an
   // exit banner. (The rest of the UI already behaves as that tenant via /api/me.)
   if(ME.impersonating){
@@ -1122,6 +1142,7 @@ async function renderQuota(){
 async function load(){
   await applyRole();
   if(RESTRICTED){ setView(RESTRICTED.home); }       // limited roles land on their page, never the orders dashboard
+  else restorePlatform();                            // owner: re-enter the Tatabu console if they were in it
   try{                                              // a server blip shouldn't leave the page frozen at "loading…"
     const r = await fetch("/api/report"); if(!r.ok) throw new Error("HTTP "+r.status);
     DATA = await r.json();
@@ -1385,8 +1406,16 @@ let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true;
 function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
+  // Tatabu platform views live behind the platform gate; entering one flips the
+  // sidebar into platform mode, leaving one flips it back.
+  if(PLAT_VIEWS.has(v)){
+    if(!platAllowed()) v="orders";
+    else if(!PLATFORM) setPlatform(true);
+  } else if(PLATFORM) setPlatform(false);
+  if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
+    v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
+  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -1405,17 +1434,23 @@ function setView(v){
   $("teamView").classList.toggle("hidden",v!=="team");
   $("brokersView").classList.toggle("hidden",v!=="brokers");
   $("brokerProfileView").classList.toggle("hidden",v!=="brokerprofile");
+  $("platOverviewView").classList.toggle("hidden",v!=="platoverview");
+  $("plansView").classList.toggle("hidden",v!=="plans");
+  $("usageView").classList.toggle("hidden",v!=="usage");
+  $("platActivityView").classList.toggle("hidden",v!=="platactivity");
   $("metaLeadsView").classList.toggle("hidden",v!=="metaleads");
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
-    brokers:"brokersBtn",brokerprofile:"brokersBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
+    brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
+    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
   const VIEW_TITLES={orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
-    brokers:"Brokers",brokerprofile:"Broker",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
-  document.querySelectorAll("#sideNav button").forEach(b=>b.classList.remove("on"));
+    brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
+  document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
   document.body.classList.remove("nav-open");        // picking a page closes the mobile drawer
@@ -1430,6 +1465,10 @@ function setView(v){
   if(v==="team"){ loadTeam(); }
   if(v==="brokers"){ loadBrokers(); }
   if(v==="brokerprofile"){ loadBrokerProfile(); }
+  if(v==="platoverview"){ loadPlatOverview(); }
+  if(v==="plans"){ loadPlans(); }
+  if(v==="usage"){ loadUsage(); }
+  if(v==="platactivity"){ loadPlatActivity(); }
   if(v==="metaleads"){ loadMetaLeads(); }
   if(v==="deposits"){ loadDeposits(); }
   if(v==="catalog"){ loadCatalog(); }
@@ -1620,6 +1659,116 @@ async function convertLead(id,btn){ if(!confirm("إنشاء طلب من هذا �
   if(r&&r.ok){ toast("Order "+r.order_id+" created — add products in To order"); loadMetaLeads(); } else toast((r&&r.error)||"failed"); }
 function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
 const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
+// ── Tatabu platform console — the owner's second world (business #1 admin only) ──
+const PLAT_VIEWS=new Set(["platoverview","brokers","brokerprofile","plans","usage","platactivity"]);
+let PLATFORM=false;
+function platAllowed(){ return !!(ME && !ME.local && ME.perms && ME.perms.includes("admin_actions")
+  && ME.business && ME.business.id===1 && !ME.impersonating); }
+function setPlatform(on){
+  PLATFORM=on;
+  $("sideNav").style.display=on?"none":"";
+  document.querySelector(".side-brand").style.display=on?"none":"";
+  $("platNav").style.display=on?"":"none";
+  $("platBrand").style.display=on?"":"none";
+  $("addOrderBtn").style.display=on?"none":"";
+  try{ localStorage.setItem("tatabu_mode",on?"1":"0"); }catch(e){}
+}
+function enterPlatform(){ setView("platoverview"); }
+function exitPlatform(){ try{ localStorage.removeItem("tatabu_view"); }catch(e){} setView("orders"); }
+// Restore platform mode after a reload (owner only). Called from load() after applyRole.
+function restorePlatform(){
+  if(!platAllowed()) return;
+  let mode,view; try{ mode=localStorage.getItem("tatabu_mode"); view=localStorage.getItem("tatabu_view"); }catch(e){}
+  if(mode!=="1") return;
+  if(view && view.indexOf("brokerprofile:")===0){ BK_CUR=+view.split(":")[1]; setView("brokerprofile"); }
+  else if(view && PLAT_VIEWS.has(view)){ setView(view); }
+  else setView("platoverview");
+}
+const money0=n=>"$"+(Math.round(+n||0)).toLocaleString();
+async function loadPlatData(){ try{ return await (await fetch("/api/admin/platform")).json(); }catch(e){ return null; } }
+async function loadPlatOverview(){
+  const d=await loadPlatData(); const box=$("platOverviewBox");
+  if(!d){ box.innerHTML='<div class="panel" style="color:var(--bad)">Could not load platform data.</div>'; return; }
+  const t=d.totals||{}, tile=(lbl,val,sub)=>`<div class="panel" style="margin:0">
+      <div class="muted2" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${lbl}</div>
+      <div style="font-size:26px;font-weight:800;margin-top:3px">${val}</div>
+      ${sub?`<div class="muted2" style="font-size:11.5px">${sub}</div>`:""}</div>`;
+  const over=(d.tenants||[]).filter(x=>x.status&&x.status.over_any);
+  const overList=over.length?`<div class="panel" style="margin-top:14px">
+      <h3 style="margin:0 0 8px;font-size:14px;font-weight:800;color:var(--bad)">⚠ Over a plan limit (${over.length})</h3>
+      ${over.map(x=>`<div style="padding:5px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openBroker(${x.id})">
+        <b>${poEsc(x.name)}</b> <span class="muted2">· ${BK_TIER_LABEL[x.tier]||x.tier}</span></div>`).join("")}</div>`:"";
+  box.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+      ${tile("Brokers",t.brokers||0,`${d.tenants.filter(x=>x.active).length} active`)}
+      ${tile("MRR",money0(d.mrr),"monthly recurring")}
+      ${tile("Orders",(t.orders||0).toLocaleString(),"across all tenants")}
+      ${tile("Customers",(t.customers||0).toLocaleString(),"")}
+      ${tile("Seats in use",t.seats||0,"")}
+      ${tile("Over quota",t.over_quota||0,t.over_quota?"needs an upgrade":"all healthy")}
+    </div>${overList}
+    ${(!d.mrr)?'<div class="muted2" style="margin-top:12px;font-size:12px">💳 No tier prices set yet — set them in <a style="color:var(--accent);cursor:pointer" onclick="setView(\'plans\')">Plans &amp; pricing</a> to see MRR.</div>':""}`;
+}
+async function loadPlans(){
+  const d=await loadPlatData(); const box=$("plansBox");
+  if(!d){ box.innerHTML='<div class="panel" style="color:var(--bad)">Could not load plans.</div>'; return; }
+  const tiers=["starter","growth","pro"], LIM=["searches","packages","seats","orders"];
+  const th=tiers.map(t=>`<th style="padding:8px 10px;text-align:center">${BK_TIER_LABEL[t]}<br><span class="muted2" style="font-weight:500;font-size:11px">${d.tiers[t].count} broker${d.tiers[t].count===1?"":"s"}</span></th>`).join("");
+  const limRows=LIM.map(r=>`<tr style="border-top:1px solid var(--line)">
+      <td style="padding:7px 10px;color:var(--muted)">${QUOTA_LBL[r]||r}</td>
+      ${tiers.map(t=>`<td style="padding:7px 10px;text-align:center">${d.tiers[t].limits[r]}</td>`).join("")}</tr>`).join("");
+  const priceRow=`<tr style="border-top:2px solid var(--line)">
+      <td style="padding:9px 10px;font-weight:700">Price · $/mo</td>
+      ${tiers.map(t=>`<td style="padding:9px 10px;text-align:center">
+        <input id="price_${t}" type="number" min="0" step="1" value="${d.tiers[t].price!=null?d.tiers[t].price:""}" placeholder="—" style="width:80px;text-align:center"></td>`).join("")}</tr>`;
+  const mrrRow=`<tr><td style="padding:7px 10px;color:var(--muted)">Implied MRR</td>
+      ${tiers.map(t=>`<td style="padding:7px 10px;text-align:center muted2" class="muted2">${d.tiers[t].price!=null?money0(d.tiers[t].price*d.tiers[t].count):"—"}</td>`).join("")}</tr>`;
+  box.innerHTML=`
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <h3 style="margin:0;font-size:15px;font-weight:800">Plans &amp; pricing</h3>
+        <span class="muted2" style="font-size:12px">limits are fixed per tier · set your monthly price</span>
+        <span class="spacer" style="flex:1"></span>
+        <b style="font-size:14px">Total MRR: ${money0(d.mrr)}</b></div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr><th style="padding:8px 10px;text-align:left"></th>${th}</tr></thead>
+        <tbody>${limRows}${priceRow}${mrrRow}</tbody></table>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="accent" onclick="savePrices(this)">Save prices</button></div>
+      <div id="plans_out" style="margin-top:8px;font-size:12.5px"></div>
+    </div>`;
+}
+async function savePrices(btn){
+  const prices={}; ["starter","growth","pro"].forEach(t=>{ const v=$("price_"+t).value.trim(); if(v!=="") prices[t]=+v; });
+  if(!Object.keys(prices).length){ $("plans_out").innerHTML='<span style="color:var(--bad)">Enter at least one price.</span>'; return; }
+  btn.disabled=true; let r; try{ r=await post("/api/admin/platform/prices",{prices}); }catch(e){ r=null; } btn.disabled=false;
+  if(r&&r.ok){ $("plans_out").innerHTML='<span style="color:var(--good)">✓ Saved.</span>'; loadPlans(); }
+  else $("plans_out").innerHTML=`<span style="color:var(--bad)">${poEsc((r&&r.error)||"failed")}</span>`;
+}
+async function loadUsage(){
+  const d=await loadPlatData(); const box=$("usageBox");
+  if(!d){ box.innerHTML='<div class="panel" style="color:var(--bad)">Could not load usage.</div>'; return; }
+  if(!d.tenants.length){ box.innerHTML='<div class="panel muted2">No brokers yet.</div>'; return; }
+  box.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">`
+    +d.tenants.map(x=>{
+      const res=(x.status&&x.status.resources)||{};
+      const bars=["searches","packages","seats","orders"].map(r=>res[r]?quotaBar(r,res[r]):"").join("");
+      return `<div class="panel" style="margin:0;cursor:pointer" onclick="openBroker(${x.id})">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <b>${poEsc(x.name)}</b><span class="muted2" style="font-size:11.5px">${BK_TIER_LABEL[x.tier]||x.tier}${x.status&&x.status.over_any?' · <span style="color:var(--bad)">over</span>':''}</span></div>
+        ${bars||'<div class="muted2" style="margin-top:6px;font-size:12px">no usage yet</div>'}</div>`;
+    }).join("")+`</div>`;
+}
+async function loadPlatActivity(){
+  const box=$("platActivityBox");
+  let d; try{ d=await (await fetch("/api/admin/platform/activity?limit=100")).json(); }catch(e){ d=null; }
+  if(!d){ box.innerHTML='<div class="panel" style="color:var(--bad)">Could not load activity.</div>'; return; }
+  const rows=(d.activity||[]).map(ev=>`<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+      <span class="muted2 mono" style="font-size:10.5px">${(ev.ts||"").slice(0,16).replace("T"," ")}</span>
+      <span style="background:var(--bg2);border-radius:6px;padding:1px 6px;font-size:10.5px">${poEsc(ev.business||"")}</span>
+      <b>${poEsc(ev.user||"")}</b> ${poEsc(ev.action||"")} ${poEsc(ev.label||"")}${ev.field?` · ${poEsc(ev.field)} → ${poEsc(ev.new==null?"":String(ev.new))}`:""}${ev.detail?` <span class="muted2">· ${poEsc(ev.detail)}</span>`:""}</div>`).join("");
+  box.innerHTML=`<div class="panel"><h3 style="margin:0 0 8px;font-size:15px;font-weight:800">Platform activity — all tenants</h3>
+    ${rows||'<div class="muted2" style="font-size:12px">nothing yet</div>'}</div>`;
+}
 // ── Brokers (Tatabu tenants) — Otlobly super-admin only ──
 const BK_TIER_LABEL={starter:"Starter",growth:"Growth",pro:"Pro"};
 async function loadBrokers(){

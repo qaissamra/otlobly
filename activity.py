@@ -122,6 +122,20 @@ def recent(limit=60, entity=None, business_id=None):
     return out[:limit]
 
 
+def platform_recent(businesses, limit=100):
+    """Cross-tenant feed for the Tatabu platform admin: every tenant's events
+    merged newest-first, each stamped with the business it came from (the events
+    themselves carry no business tag — the per-tenant FILE is the scope)."""
+    out = []
+    for biz in businesses:
+        for ev in recent(limit, business_id=biz["id"]):
+            ev["business_id"] = biz["id"]
+            ev["business"] = biz.get("name") or f"#{biz['id']}"
+            out.append(ev)
+    out.sort(key=lambda e: e.get("ts") or "", reverse=True)
+    return out[:limit]
+
+
 # --------------------------------------------------------------------------- #
 # Purchase-order diff → granular events ("set NAME to B27", "set CUSTOMER NAME…")
 # --------------------------------------------------------------------------- #
