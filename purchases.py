@@ -19,9 +19,10 @@ from pathlib import Path
 
 import normalize
 import store
+from db import current_business
 from paths import data_path, write_json_atomic
 
-STORE_FILE = data_path("purchases.json")
+STORE_FILE = data_path("purchases.json")       # business #1 (Otlobly) — unchanged
 IMAGE_DIR = data_path("po_images")
 ITEM_STATUSES = ["ORDERED", "SHIPPED", "ARRIVED", "DELIVERED", "RETURNED", "CANCELLED"]
 
@@ -30,14 +31,22 @@ def now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def _store_file():
+    """Per-tenant PO store: Otlobly keeps purchases.json; each broker gets its own
+    purchases_b<id>.json, so a broker's Purchases page never sees another tenant's."""
+    bid = current_business()
+    return STORE_FILE if bid == 1 else data_path(f"purchases_b{bid}.json")
+
+
 def load():
-    if STORE_FILE.exists():
-        return json.loads(STORE_FILE.read_text())
+    f = _store_file()
+    if f.exists():
+        return json.loads(f.read_text())
     return {"purchase_orders": [], "seq": 0}
 
 
 def save(db):
-    write_json_atomic(STORE_FILE, db)          # crash-safe: temp + atomic rename
+    write_json_atomic(_store_file(), db)       # crash-safe: temp + atomic rename
 
 
 # --------------------------------------------------------------------------- #
