@@ -122,6 +122,19 @@ auth.login_manager.init_app(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 
+@app.before_request
+def _scope_current_business():
+    """Tenant isolation: pin every DB read/write in this request to the logged-in
+    user's business. Public / customer-portal / worker requests (no staff login)
+    fall back to business 1 (Otlobly) — correct while it's the only tenant, and the
+    customer-portal's own per-tenant scoping lands with the customer-page phase."""
+    try:
+        bid = current_user.business_id if current_user.is_authenticated else 1
+    except Exception:  # noqa: BLE001 — never let scoping break a request
+        bid = 1
+    db.set_current_business(bid)
+
+
 # --------------------------------------------------------------------------- #
 # Helpers: build orders/customers reusing existing logic, persist via db
 # --------------------------------------------------------------------------- #

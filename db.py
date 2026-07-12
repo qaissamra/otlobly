@@ -10,6 +10,7 @@ logic ports over untouched.
   python3 db.py --stats     # row counts
 """
 
+import contextvars
 import json
 import os
 import sqlite3
@@ -19,6 +20,23 @@ from pathlib import Path
 
 import money
 from paths import data_path
+
+# --------------------------------------------------------------------------- #
+# Tenant scoping — the "current business" for the in-flight request.
+# app.py sets this from the logged-in user's business_id in a before_request hook;
+# db reads filter by it and writes tag it, so a broker tenant only ever sees/writes
+# its OWN rows. Defaults to 1 (Otlobly) — correct for CLI/worker/background and,
+# while Otlobly is the only business, a no-op (all rows are already business 1).
+# --------------------------------------------------------------------------- #
+_CURRENT_BUSINESS = contextvars.ContextVar("business_id", default=1)
+
+
+def current_business():
+    return _CURRENT_BUSINESS.get()
+
+
+def set_current_business(business_id):
+    _CURRENT_BUSINESS.set(int(business_id) if business_id else 1)
 
 # OTLOBLY_DB pins an exact file; otherwise it lives in the data dir (the project
 # folder locally, or the persistent disk in a hosted deploy via OTLOBLY_DATA_DIR).
@@ -252,13 +270,14 @@ def _next_code(c, table, col, prefix):
 def list_orders():
     with connect() as c:
         return [json.loads(r["data_json"])
-                for r in c.execute("SELECT data_json FROM orders ORDER BY order_code")]
+                for r in c.execute("SELECT data_json FROM orders WHERE business_id=? "
+                                   "ORDER BY order_code", (current_business(),))]
 
 
 def get_order(order_code):
     with connect() as c:
-        r = c.execute("SELECT data_json FROM orders WHERE order_code=?",
-                      (order_code,)).fetchone()
+        r = c.execute("SELECT data_json FROM orders WHERE order_code=? AND business_id=?",
+                      (order_code, current_business())).fetchone()
         return json.loads(r["data_json"]) if r else None
 
 
@@ -267,11 +286,13 @@ def upsert_order(order, created_by=None):
     ph = (order.get("customer", {}).get("phones") or [{}])
     phone = ph[0].get("e164") if ph and ph[0] else None
     with connect() as c:
+        # business_id is set ONLY on insert; ON CONFLICT preserves the row's owner
+        # (never re-homes an existing order to a different tenant).
         c.execute("""INSERT INTO orders
           (order_code, customer_phone, status, amount_to_collect_usd, batch,
            profile_box, amazon_order_number, tracking_number, signature,
-           created_at, updated_at, created_by, data_json)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           created_at, updated_at, created_by, data_json, business_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(order_code) DO UPDATE SET
             customer_phone=excluded.customer_phone, status=excluded.status,
             amount_to_collect_usd=excluded.amount_to_collect_usd, batch=excluded.batch,
@@ -284,7 +305,7 @@ def upsert_order(order, created_by=None):
                    order.get("profile_box"), order.get("amazon_order_number"),
                    order.get("tracking_number"), order.get("signature"),
                    order.get("created_at", now_iso()), now_iso(), created_by,
-                   json.dumps(order, ensure_ascii=False)))
+                   json.dumps(order, ensure_ascii=False), current_business()))
         # refresh item rows for portal/search
         c.execute("DELETE FROM order_items WHERE order_code=?", (order["order_id"],))
         for it in order.get("items", []):
@@ -312,7 +333,8 @@ def delete_order(order_code):
     Trash first, so it stays recoverable there."""
     with connect() as c:
         c.execute("DELETE FROM order_items WHERE order_code=?", (order_code,))
-        c.execute("DELETE FROM orders WHERE order_code=?", (order_code,))
+        c.execute("DELETE FROM orders WHERE order_code=? AND business_id=?",
+                  (order_code, current_business()))
 
 
 def next_order_code():
@@ -344,13 +366,14 @@ def insert_new_order(order, created_by=None):
                     """INSERT INTO orders
                       (order_code, customer_phone, status, amount_to_collect_usd, batch,
                        profile_box, amazon_order_number, tracking_number, signature,
-                       created_at, updated_at, created_by, data_json)
-                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       created_at, updated_at, created_by, data_json, business_id)
+                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (code, phone, order["status"], order.get("amount_to_collect_usd"),
                      order.get("batch"), order.get("profile_box"),
                      order.get("amazon_order_number"), order.get("tracking_number"),
                      order.get("signature"), order.get("created_at", now_iso()),
-                     now_iso(), created_by, json.dumps(order, ensure_ascii=False)))
+                     now_iso(), created_by, json.dumps(order, ensure_ascii=False),
+                     current_business()))
                 conn.execute("DELETE FROM order_items WHERE order_code=?", (code,))
                 for it in order.get("items", []):
                     conn.execute("INSERT INTO order_items (order_code, asin, clean_url) "
@@ -370,22 +393,26 @@ def insert_new_order(order, created_by=None):
 def list_customers():
     with connect() as c:
         return [json.loads(r["data_json"])
-                for r in c.execute("SELECT data_json FROM customers ORDER BY customer_code")]
+                for r in c.execute("SELECT data_json FROM customers WHERE business_id=? "
+                                   "ORDER BY customer_code", (current_business(),))]
 
 
 def get_customer(customer_code):
     with connect() as c:
-        r = c.execute("SELECT data_json FROM customers WHERE customer_code=?",
-                      (customer_code,)).fetchone()
+        r = c.execute("SELECT data_json FROM customers WHERE customer_code=? AND business_id=?",
+                      (customer_code, current_business())).fetchone()
         return json.loads(r["data_json"]) if r else None
 
 
 def upsert_customer(cust):
+    # business_id tagged on insert (preserved on conflict). NOTE: match_key is still
+    # globally UNIQUE, so two businesses can't yet share a customer phone — a
+    # per-business unique index is a hardening to add before onboarding a 2nd tenant.
     with connect() as c:
         c.execute("""INSERT INTO customers
           (customer_code, match_key, name, whatsapp, city, vip,
-           created_at, updated_at, data_json)
-          VALUES (?,?,?,?,?,?,?,?,?)
+           created_at, updated_at, data_json, business_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(match_key) DO UPDATE SET
             name=excluded.name, whatsapp=excluded.whatsapp, city=excluded.city,
             vip=excluded.vip, updated_at=excluded.updated_at,
@@ -393,7 +420,7 @@ def upsert_customer(cust):
                   (cust["customer_id"], cust.get("match_key"), cust.get("name"),
                    cust.get("whatsapp"), cust.get("city"), 1 if cust.get("vip") else 0,
                    cust.get("created_at", now_iso()), now_iso(),
-                   json.dumps(cust, ensure_ascii=False)))
+                   json.dumps(cust, ensure_ascii=False), current_business()))
     return cust
 
 
@@ -583,9 +610,9 @@ def upsert_lead(lead):
     with connect() as c:
         c.execute("""
           INSERT INTO meta_leads (lead_id, source, name, phone, email, form_id, form_name,
-            ad_name, last_message, last_activity, created_time, response_min, synced_at)
+            ad_name, last_message, last_activity, created_time, response_min, synced_at, business_id)
           VALUES (:lead_id,:source,:name,:phone,:email,:form_id,:form_name,
-            :ad_name,:last_message,:last_activity,:created_time,:response_min,:synced_at)
+            :ad_name,:last_message,:last_activity,:created_time,:response_min,:synced_at,:business_id)
           ON CONFLICT(lead_id) DO UPDATE SET
             source=excluded.source, name=excluded.name,
             phone=COALESCE(excluded.phone, meta_leads.phone),
@@ -597,19 +624,18 @@ def upsert_lead(lead):
         """, {**{k: lead.get(k) for k in ("lead_id", "source", "name", "phone", "email",
                                           "form_id", "form_name", "ad_name", "last_message",
                                           "last_activity", "created_time", "response_min")},
-              "synced_at": now_iso()})
+              "synced_at": now_iso(), "business_id": current_business()})
 
 
 def list_leads(status=None, source=None):
     q = ("SELECT l.*, u.name AS assignee_name FROM meta_leads l "
          "LEFT JOIN users u ON u.id=l.assigned_to")
-    conds, args = [], []
+    conds, args = ["l.business_id=?"], [current_business()]
     if status:
         conds.append("l.status=?"); args.append(status)
     if source:
         conds.append("l.source=?"); args.append(source)
-    if conds:
-        q += " WHERE " + " AND ".join(conds)
+    q += " WHERE " + " AND ".join(conds)
     q += " ORDER BY l.created_time DESC LIMIT 500"
     with connect() as c:
         return [dict(r) for r in c.execute(q, args)]
@@ -622,30 +648,36 @@ def update_lead(lead_id, changes):
         return None
     sets = ", ".join(f"{k}=?" for k in fields)
     with connect() as c:
-        c.execute(f"UPDATE meta_leads SET {sets} WHERE lead_id=?",
-                  (*fields.values(), lead_id))
-        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=?", (lead_id,)).fetchone()
+        c.execute(f"UPDATE meta_leads SET {sets} WHERE lead_id=? AND business_id=?",
+                  (*fields.values(), lead_id, current_business()))
+        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=? AND business_id=?",
+                      (lead_id, current_business())).fetchone()
         return dict(r) if r else None
 
 
 def get_lead(lead_id):
     with connect() as c:
-        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=?", (lead_id,)).fetchone()
+        r = c.execute("SELECT * FROM meta_leads WHERE lead_id=? AND business_id=?",
+                      (lead_id, current_business())).fetchone()
         return dict(r) if r else None
 
 
 def lead_stats():
+    biz = current_business()
     with connect() as c:
-        rows = c.execute("SELECT status, COUNT(*) n FROM meta_leads GROUP BY status").fetchall()
+        rows = c.execute("SELECT status, COUNT(*) n FROM meta_leads WHERE business_id=? "
+                         "GROUP BY status", (biz,)).fetchall()
         by = {r["status"]: r["n"] for r in rows}
         total = sum(by.values())
         conv, lost = by.get("converted", 0), by.get("lost", 0)
-        avg = c.execute("SELECT AVG(response_min) a FROM meta_leads WHERE response_min IS NOT NULL").fetchone()["a"]
+        avg = c.execute("SELECT AVG(response_min) a FROM meta_leads WHERE response_min IS NOT NULL "
+                        "AND business_id=?", (biz,)).fetchone()["a"]
         team = c.execute("""SELECT u.name nm,
                               SUM(CASE WHEN l.status='converted' THEN 1 ELSE 0 END) conv,
                               COUNT(*) tot
                             FROM meta_leads l JOIN users u ON u.id=l.assigned_to
-                            GROUP BY l.assigned_to ORDER BY conv DESC""").fetchall()
+                            WHERE l.business_id=?
+                            GROUP BY l.assigned_to ORDER BY conv DESC""", (biz,)).fetchall()
     return {
         "total": total, "new": by.get("new", 0), "contacted": by.get("contacted", 0),
         "converted": conv, "lost": lost,
@@ -663,28 +695,27 @@ def add_payment(p):
     with connect() as c:
         cur = c.execute("""INSERT INTO payments
           (ts, paid_at, order_code, customer_phone, customer_name, kind, currency,
-           amount_entered, fx_rate, amount_usd, note, created_by, created_by_name)
+           amount_entered, fx_rate, amount_usd, note, created_by, created_by_name, business_id)
           VALUES (:ts,:paid_at,:order_code,:customer_phone,:customer_name,:kind,:currency,
-           :amount_entered,:fx_rate,:amount_usd,:note,:created_by,:created_by_name)""",
+           :amount_entered,:fx_rate,:amount_usd,:note,:created_by,:created_by_name,:business_id)""",
           {"ts": now_iso(), "paid_at": p.get("paid_at") or now_iso()[:10],
            "order_code": p.get("order_code"), "customer_phone": p.get("customer_phone"),
            "customer_name": p.get("customer_name"), "kind": p.get("kind") or "deposit",
            "currency": p.get("currency") or "ILS", "amount_entered": p.get("amount_entered"),
            "fx_rate": p.get("fx_rate"), "amount_usd": p.get("amount_usd"),
            "note": p.get("note"), "created_by": p.get("created_by"),
-           "created_by_name": p.get("created_by_name")})
+           "created_by_name": p.get("created_by_name"), "business_id": current_business()})
         return cur.lastrowid
 
 
 def list_payments(order_code=None, customer_phone=None):
-    q, args = "SELECT * FROM payments", []
-    conds = []
+    q = "SELECT * FROM payments"
+    conds, args = ["business_id=?"], [current_business()]
     if order_code:
         conds.append("order_code=?"); args.append(order_code)
     if customer_phone:
         conds.append("customer_phone=?"); args.append(customer_phone)
-    if conds:
-        q += " WHERE " + " AND ".join(conds)
+    q += " WHERE " + " AND ".join(conds)
     q += " ORDER BY paid_at DESC, id DESC LIMIT 1000"
     with connect() as c:
         return [dict(r) for r in c.execute(q, args)]
@@ -692,26 +723,29 @@ def list_payments(order_code=None, customer_phone=None):
 
 def get_payment(pid):
     with connect() as c:
-        r = c.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
+        r = c.execute("SELECT * FROM payments WHERE id=? AND business_id=?",
+                      (pid, current_business())).fetchone()
         return dict(r) if r else None
 
 
 def delete_payment(pid):
     with connect() as c:
-        c.execute("DELETE FROM payments WHERE id=?", (pid,))
+        c.execute("DELETE FROM payments WHERE id=? AND business_id=?",
+                  (pid, current_business()))
 
 
 def set_payment_order(pid, order_code):
     """Attach a customer-level deposit to an order after the fact (self-heal)."""
     with connect() as c:
-        c.execute("UPDATE payments SET order_code=? WHERE id=?", (order_code, pid))
+        c.execute("UPDATE payments SET order_code=? WHERE id=? AND business_id=?",
+                  (order_code, pid, current_business()))
 
 
 def deposit_total_for_order(order_code):
     """Net deposit held against one order = deposits + collects − refunds (USD)."""
     with connect() as c:
-        rows = c.execute("SELECT kind, amount_usd FROM payments WHERE order_code=?",
-                         (order_code,)).fetchall()
+        rows = c.execute("SELECT kind, amount_usd FROM payments WHERE order_code=? "
+                         "AND business_id=?", (order_code, current_business())).fetchall()
     return money.usd_sum(-(r["amount_usd"] or 0) if r["kind"] == "refund"
                          else (r["amount_usd"] or 0) for r in rows)
 
