@@ -308,9 +308,65 @@ def _parcelsapp_events(shipment):
     return events
 
 
+def _broker_timelines(gwds, lang="en"):
+    """Broker tracking (Tatabu): parcelsapp (multi-carrier) is the PRIMARY tracker —
+    no GAASH (that's Otlobly's courier). Needs PARCELSAPP_API_KEY (brokers run on the
+    hosted app, which has no local Chrome). Serves the last-known cache in between,
+    with the same per-number cooldown so refreshes don't burn the parcelsapp quota."""
+    res, cache, dirty = {}, _load_cache(), False
+    now = time.time()
+    key = os.environ.get("PARCELSAPP_API_KEY")
+    if key and gwds:
+        eligible = []
+        for g in gwds:
+            cg = clean_tracking(g)
+            at = (cache.get(cg) or {}).get("pa_attempt_at")
+            if cg and (not at or now - at >= PARCELSAPP_COOLDOWN_SEC):
+                eligible.append(cg)
+        if eligible:
+            try:
+                pa = parcelsapp.fetch_statuses(eligible, key, country=PARCELSAPP_COUNTRY,
+                                               poll_timeout=30, retries=2, timeout=20)
+            except Exception as e:  # noqa: BLE001 — parcelsapp down → serve cache
+                print(f"tracking: broker parcelsapp failed ({e})")
+                pa = {}
+            fetched = _now_iso()
+            for g in gwds:
+                cg = clean_tracking(g)
+                if cg not in eligible:
+                    continue
+                entry = cache.get(cg) or {}
+                entry["pa_attempt_at"] = now
+                events = _parcelsapp_events(pa.get(cg))
+                if events:
+                    entry.update(events=events, source="parcelsapp", fetched_at=fetched)
+                    res[g] = {"ok": True, "events": events,
+                              "source": "parcelsapp", "fetched_at": fetched}
+                cache[cg] = entry
+                dirty = True
+    for g in gwds:                          # last-known cache for anything not just resolved
+        if not (res.get(g) or {}).get("ok"):
+            cached = cache.get(clean_tracking(g)) or {}
+            if cached.get("events"):
+                res[g] = {"ok": True, "events": cached["events"], "stale": True,
+                          "source": "cache", "fetched_at": cached.get("fetched_at")}
+    if dirty:
+        _save_cache(cache)
+    return res
+
+
 def timelines_with_fallback(gwds, lang="en"):
     """Tiered timelines(): same contract plus source/fetched_at on every ok
-    entry, and stale:True when the answer is the last-known cache."""
+    entry, and stale:True when the answer is the last-known cache.
+
+    Otlobly (business 1) uses GAASH first (below). A broker tenant uses parcelsapp
+    as the primary tracker instead — see _broker_timelines."""
+    try:
+        from db import current_business
+        if current_business() != 1:
+            return _broker_timelines(gwds, lang)
+    except Exception:  # noqa: BLE001 — scoping unavailable (CLI) → Otlobly/GAASH path
+        pass
     res = timelines(gwds, lang)
     cache = _load_cache()
     now = time.time()
