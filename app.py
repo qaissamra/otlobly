@@ -124,12 +124,18 @@ limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 @app.before_request
 def _scope_current_business():
-    """Tenant isolation: pin every DB read/write in this request to the logged-in
-    user's business. Public / customer-portal / worker requests (no staff login)
-    fall back to business 1 (Otlobly) — correct while it's the only tenant, and the
-    customer-portal's own per-tenant scoping lands with the customer-page phase."""
+    """Tenant isolation: pin every DB read/write in this request to the right business.
+    Staff → their business_id. A logged-in customer → the business we resolved from
+    their phone at login (session['cust_business']). Everything else (worker, the
+    initial public track/login lookups) → business 1 until the handler resolves and
+    overrides it (see _business_for_phone)."""
     try:
-        bid = current_user.business_id if current_user.is_authenticated else 1
+        if current_user.is_authenticated:
+            bid = current_user.business_id
+        elif session.get("cust_business"):
+            bid = int(session["cust_business"])
+        else:
+            bid = 1
     except Exception:  # noqa: BLE001 — never let scoping break a request
         bid = 1
     db.set_current_business(bid)
@@ -2305,9 +2311,9 @@ def api_track():
     q = (b.get("query") or b.get("tracking") or b.get("phone") or "").strip()
     if not q:
         return jsonify({"found": False, "error": "Enter your full mobile number."}), 400
-    pdb = purchases.load()
     names, oids = set(), set()
-    if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number
+    if re.match(r"^OTL\d", q.upper()):            # an OTL tracking number (business 1 for now)
+        pdb = purchases.load()
         po, pk = purchases.find_by_customer_tracking(pdb, q)
         pairs = [(po, pk)] if pk else []
     else:                                         # the customer's FULL mobile number
@@ -2315,6 +2321,8 @@ def api_track():
         if len(core) < 9:
             return jsonify({"found": False,
                             "error": "Please enter your full mobile number (e.g. 0599xxxxxx)."}), 400
+        _scope_to_phone(core)                     # route to the customer's broker
+        pdb = purchases.load()                    # now the broker's own purchases file
         pairs, names, oids = _phone_pairs(core, pdb)
     shipments = _shipments_for(pairs, names, oids)
     if not shipments:
@@ -2338,8 +2346,37 @@ def customer_required(fn):
     return wrapper
 
 
+def _business_for_phone(core):
+    """Which BUSINESS (broker) a customer phone belongs to — searched across ALL
+    tenants, since the public portal has no staff login to tell us. Returns a
+    business_id (the one with this phone's most recent order) or None. The customer
+    portal calls this first, then scopes the request to that business so a broker's
+    customer sees ONLY their broker's data."""
+    if not core:
+        return None
+    best_bid, best_at = None, ""
+    for bid, o in db.orders_business_index():
+        for ph in (o.get("customer", {}).get("phones") or []):
+            if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
+                at = o.get("created_at") or ""
+                if best_bid is None or at > best_at:
+                    best_bid, best_at = bid, at
+                break
+    return best_bid
+
+
+def _scope_to_phone(core):
+    """Resolve a phone's business and pin this request to it. Returns the business_id
+    (or None if the phone belongs to no one). Used by the public track/login lookups."""
+    bid = _business_for_phone(core)
+    if bid:
+        db.set_current_business(bid)
+    return bid
+
+
 def _match_customer(core):
-    """(matched?, name) for a phone core — only KNOWN customers (with an order) can log in."""
+    """(matched?, name) for a phone core — only KNOWN customers (with an order) can log in.
+    Scans within the CURRENT business, so callers scope with _scope_to_phone first."""
     for o in db.list_orders():
         for ph in (o.get("customer", {}).get("phones") or []):
             if normalize.phone_core(ph.get("e164") or ph.get("raw") or "") == core:
@@ -2432,6 +2469,7 @@ def _wa_login_consume(phone_raw, text):
     if not rec or rec.get("status") != "pending" or time.time() > (rec.get("expires") or 0):
         return "ignored"
     core = normalize.phone_core(phone_raw or "")
+    _scope_to_phone(core)                                   # route to the customer's broker
     matched, name = _match_customer(core)                   # only known customers can log in
     status = "verified" if matched else "unknown"
     db.set_setting(f"walogin:{m.group(0)}",
@@ -2497,6 +2535,7 @@ def api_wa_login_poll():
     if st == "verified":
         session["cust_phone"] = rec.get("phone")
         session["cust_name"] = rec.get("name") or ""
+        session["cust_business"] = _business_for_phone(rec.get("phone")) or 1
         session.pop("walogin_nonce", None)
         db.set_setting(f"walogin:{nonce}", {"status": "used", "expires": 0})   # one-time
         return jsonify({"status": "ok", "name": session["cust_name"]})
@@ -2517,6 +2556,7 @@ def api_customer_otp_request():
     if len(core) < 9:
         return jsonify({"ok": False,
                         "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    _scope_to_phone(core)                 # route the lookup to the customer's broker
     matched, name = _match_customer(core)
     if not matched:
         return jsonify({"ok": False,
@@ -2556,7 +2596,10 @@ def api_customer_otp_verify():
         db.set_setting(f"otp:{core}", rec)
         return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
     db.set_setting(f"otp:{core}", {"used": True, "expires": 0})   # one-time
+    bid = _business_for_phone(core) or 1
+    db.set_current_business(bid)                    # scope the name fallback to the right tenant
     session["cust_phone"] = core
+    session["cust_business"] = bid
     session["cust_name"] = rec.get("name") or _match_customer(core)[1]
     session.permanent = True
     return jsonify({"ok": True, "name": session["cust_name"]})
@@ -2601,7 +2644,10 @@ def api_customer_magic_verify():
                         "error": "انتهت صلاحية الرابط — اطلب رابطاً جديداً · "
                                  "Link expired — request a new one."}), 400
     db.set_setting(_token_kv_key(token), {"used": True, "expires": 0})   # one-time
+    bid = _business_for_phone(rec["core"]) or 1
+    db.set_current_business(bid)                    # scope to the customer's broker
     session["cust_phone"] = rec["core"]
+    session["cust_business"] = bid
     session["cust_name"] = rec.get("name") or _match_customer(rec["core"])[1]
     session.permanent = True
     return jsonify({"ok": True, "name": session["cust_name"]})
@@ -2618,6 +2664,7 @@ def api_customer_wa_verify_start():
     if len(core) < 9:
         return jsonify({"ok": False,
                         "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    _scope_to_phone(core)                 # route to the customer's broker
     matched, name = _match_customer(core)
     out = {"ok": True}
     if matched:
@@ -2744,6 +2791,9 @@ def api_customer_email_login_start():
     email = (b.get("email") or "").strip().lower()
     if not EMAIL_RE.match(email):
         return jsonify({"ok": False, "error": "أدخل بريداً صالحاً · Enter a valid email."}), 400
+    ebid = db.find_business_for_email(email)          # route to the customer's broker
+    if ebid:
+        db.set_current_business(ebid)
     row = db.get_customer_by_email(email)
     out = {"ok": True}
     if row and row.get("email_verified_at"):
@@ -2781,7 +2831,10 @@ def api_customer_email_login_verify():
         db.set_setting(_email_kv_key(email), rec)
         return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
     db.set_setting(_email_kv_key(email), {"used": True, "expires": 0})   # one-time
+    bid = _business_for_phone(rec["core"]) or 1
+    db.set_current_business(bid)                    # scope to the customer's broker
     session["cust_phone"] = rec["core"]
+    session["cust_business"] = bid
     session["cust_name"] = rec.get("name") or _match_customer(rec["core"])[1]
     session.permanent = True
     return jsonify({"ok": True, "name": session["cust_name"]})
@@ -2839,6 +2892,7 @@ def api_admin_email_test():
 def api_customer_logout():
     session.pop("cust_phone", None)
     session.pop("cust_name", None)
+    session.pop("cust_business", None)
     return jsonify({"ok": True})
 
 

@@ -281,6 +281,15 @@ def get_order(order_code):
         return json.loads(r["data_json"]) if r else None
 
 
+def orders_business_index():
+    """[(business_id, order_dict)] across ALL businesses — UNSCOPED. Used ONLY by the
+    public customer portal to resolve which broker a phone/OTL belongs to (there's no
+    staff login there to pin the tenant). Never use this for staff-side reads."""
+    with connect() as c:
+        return [(r["business_id"], json.loads(r["data_json"]))
+                for r in c.execute("SELECT business_id, data_json FROM orders")]
+
+
 def upsert_order(order, created_by=None):
     """Insert or replace by order_code. `order` is the full store-shape dict."""
     ph = (order.get("customer", {}).get("phones") or [{}])
@@ -430,14 +439,29 @@ def next_customer_code():
 
 
 # ---- customer email login (portal) ---------------------------------------- #
-def get_customer_by_email(email, business_id=1):
-    """The customer row owning this email (case-blind) — id/whatsapp/name/email
-    columns only, or None."""
+def get_customer_by_email(email, business_id=None):
+    """The customer row owning this email (case-blind) within the CURRENT business —
+    id/whatsapp/name/email columns only, or None."""
+    if business_id is None:
+        business_id = current_business()
     with connect() as c:
         r = c.execute("SELECT id, customer_code, name, whatsapp, email, email_verified_at "
                       "FROM customers WHERE lower(email)=lower(?) AND business_id=?",
                       ((email or "").strip(), business_id)).fetchone()
         return dict(r) if r else None
+
+
+def find_business_for_email(email):
+    """Which business a verified customer email belongs to — searched across ALL
+    tenants (public portal has no staff login). Returns a business_id or None."""
+    e = (email or "").strip()
+    if not e:
+        return None
+    with connect() as c:
+        r = c.execute("SELECT business_id FROM customers "
+                      "WHERE lower(email)=lower(?) AND email IS NOT NULL AND email<>'' "
+                      "ORDER BY id DESC LIMIT 1", (e,)).fetchone()
+        return r["business_id"] if r else None
 
 
 def set_customer_email(row_id, email, verified_at):
@@ -452,8 +476,11 @@ def set_customer_email(row_id, email, verified_at):
         return False
 
 
-def list_customer_login_rows(business_id=1):
-    """Slim rows for phone→customer matching in the portal (no data_json parse)."""
+def list_customer_login_rows(business_id=None):
+    """Slim rows for phone→customer matching in the portal (no data_json parse),
+    within the CURRENT business."""
+    if business_id is None:
+        business_id = current_business()
     with connect() as c:
         return [dict(r) for r in c.execute(
             "SELECT id, customer_code, name, whatsapp, email, email_verified_at "
