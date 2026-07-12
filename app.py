@@ -356,6 +356,10 @@ def me():
     if bid != getattr(current_user, "business_id", 1):
         biz = db.get_business(bid) or {}
         d["impersonating"] = {"business_id": bid, "name": biz.get("name") or f"#{bid}"}
+    elif bid == 1 and _platform_admin():
+        # The owner (and only the owner, not while impersonating) gets the Tatabu
+        # platform-console brand block for the sidebar's second world.
+        d["platform"] = {"sidebar_html": branding.platform_sidebar()}
     return jsonify(d)
 
 
@@ -1932,6 +1936,83 @@ def api_admin_broker_user():
     db.set_user_password(u["id"], auth.hash_pw(pw))
     db.audit(auth.actor(), "platform_reset_pw", "user", u["username"], f"business {bid}")
     return jsonify({"ok": True})
+
+
+@app.route("/api/admin/platform")
+@auth.require("admin_actions")
+def api_admin_platform():
+    """One payload for the Tatabu console's Overview / Plans / Usage screens:
+    every broker tenant with tier + price + live quota status, platform totals,
+    the tier matrix, and MRR (Σ tier price over active brokers)."""
+    if not _platform_admin():
+        abort(403)
+    prices = db.get_setting("platform:tier_prices", {}) or {}
+    tenants = []
+    totals = {"brokers": 0, "orders": 0, "customers": 0, "seats": 0, "over_quota": 0}
+    tier_counts = {t: 0 for t in quotas.TIERS}
+    mrr = 0
+    for biz in db.list_businesses():
+        if biz["id"] == 1:
+            continue
+        t = quotas.tier(biz["id"])
+        st = quotas.status(biz["id"])
+        res = st.get("resources", {})
+        price = float(prices.get(t) or 0)
+        tenants.append({**biz, "tier": t, "price": price, "status": st})
+        totals["brokers"] += 1
+        totals["orders"] += (res.get("orders") or {}).get("used", 0)
+        totals["seats"] += (res.get("seats") or {}).get("used", 0)
+        totals["customers"] += db.count_rows("customers", biz["id"])
+        if st.get("over_any"):
+            totals["over_quota"] += 1
+        tier_counts[t] = tier_counts.get(t, 0) + 1
+        if biz.get("active", 1):
+            mrr += price
+    tiers = {t: {"limits": quotas.TIERS[t], "price": prices.get(t),
+                 "count": tier_counts.get(t, 0)} for t in quotas.TIERS}
+    return jsonify({"tenants": tenants, "totals": totals, "tiers": tiers,
+                    "mrr": round(mrr, 2)})
+
+
+@app.route("/api/admin/platform/activity")
+@auth.require("admin_actions")
+def api_admin_platform_activity():
+    """Cross-tenant activity feed (provisioning, tier changes, every broker's own
+    events), each stamped with its business."""
+    if not _platform_admin():
+        abort(403)
+    try:
+        lim = min(int(request.args.get("limit", 100)), 300)
+    except ValueError:
+        lim = 100
+    return jsonify({"activity": activity.platform_recent(db.list_businesses(), lim)})
+
+
+@app.route("/api/admin/platform/prices", methods=["POST"])
+@auth.require("admin_actions")
+def api_admin_platform_prices():
+    """Set the monthly USD price per tier (global — lives in the settings KV)."""
+    if not _platform_admin():
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    raw = b.get("prices")
+    if not isinstance(raw, dict) or not raw:
+        return jsonify({"ok": False, "error": "prices required"}), 400
+    prices = {}
+    for t, v in raw.items():
+        if t not in quotas.TIERS:
+            return jsonify({"ok": False, "error": f"unknown tier '{t}'"}), 400
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": f"bad price for {t}"}), 400
+        if v < 0:
+            return jsonify({"ok": False, "error": "prices can't be negative"}), 400
+        prices[t] = round(v, 2)
+    db.set_setting("platform:tier_prices", prices)
+    db.audit(auth.actor(), "set_tier_prices", "platform", "",
+             " ".join(f"{t}=${p}" for t, p in sorted(prices.items())))
+    return jsonify({"ok": True, "prices": prices})
 
 
 # --------------------------------------------------------------------------- #
