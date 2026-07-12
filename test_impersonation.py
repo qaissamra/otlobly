@@ -110,13 +110,24 @@ def main():
     # 7) Broker profile endpoint.
     check("profile 403 for broker admin",
           cb.get(f"/api/admin/broker/{bid2}").status_code == 403)
-    check("profile 400 for business 1", co.get("/api/admin/broker/1").status_code == 400)
     check("profile 404 unknown", co.get("/api/admin/broker/999").status_code == 404)
     d = co.get(f"/api/admin/broker/{bid}").get_json()
     check("profile carries identity + tier + usage + staff",
           d["business"]["name"] == "ACME Cargo" and d["tier"] == "starter"
           and "seats" in (d["status"].get("resources") or {})
           and {u["username"] for u in d["users"]} >= {"acme-admin", "debug-helper"})
+    check("broker profile is not internal", d.get("internal") is False)
+
+    # 7b) Otlobly's own row → a READ-ONLY internal profile (no plan/impersonation).
+    ot = co.get("/api/admin/broker/1")
+    check("Otlobly profile is reachable (not 400)", ot.status_code == 200)
+    otj = ot.get_json()
+    check("Otlobly profile is flagged internal + unlimited",
+          otj.get("internal") is True and otj["tier"] == "unlimited")
+    check("Otlobly profile carries plain counts",
+          {"orders", "customers", "seats"} <= set((otj.get("counts") or {}).keys()))
+    check("Otlobly can still never be impersonated",
+          co.post("/api/admin/broker/impersonate", json={"business_id": 1}).status_code == 400)
 
     # 8) Platform password reset — fenced to the right tenant.
     uid = db.get_user("acme-admin")["id"]

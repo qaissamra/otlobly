@@ -1856,12 +1856,12 @@ def api_admin_broker_tier():
 @app.route("/api/admin/broker/<int:bid>")
 @auth.require("admin_actions")
 def api_admin_broker_detail(bid):
-    """One tenant's full profile for the platform admin: identity, plan, live
-    quota/usage, staff, and its recent activity."""
+    """One tenant's profile for the platform admin: identity, plan, live quota/usage
+    (or plain counts for Otlobly, which is unlimited), staff, and recent activity.
+    Business #1 (Otlobly itself) resolves to a read-only profile — `internal: True`,
+    no tier/impersonation (it's the platform's own business, not a broker)."""
     if not _platform_admin():
         abort(403)
-    if bid == 1:
-        return jsonify({"ok": False, "error": "business 1 is Otlobly itself"}), 400
     biz = db.get_business(bid)
     if not biz:
         abort(404)
@@ -1872,8 +1872,12 @@ def api_admin_broker_detail(bid):
         "brand": {"name": brand["name"], "tagline": brand["tagline"]},
         "tier": quotas.tier(bid),
         "status": quotas.status(bid),
+        "counts": {"orders": db.count_rows("orders", bid),
+                   "customers": db.count_rows("customers", bid),
+                   "seats": db.count_active_users(bid)},
         "users": db.list_users(bid),
         "activity": activity.recent(30, business_id=bid),
+        "internal": bid == 1,
     })
 
 
