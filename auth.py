@@ -88,6 +88,23 @@ def require(perm):
     return deco
 
 
+def require_feature(feature):
+    """Route decorator: 401 if not logged in, 403 if the user's BUSINESS doesn't
+    have `feature` on. Stacks on top of require(...) to gate Otlobly-only tools
+    (ClickUp, Multilogin, …) so a broker tenant can never reach them."""
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*a, **k):
+            import features
+            if not current_user.is_authenticated:
+                abort(401)
+            if not features.has(getattr(current_user, "business_id", 1), feature):
+                abort(403)
+            return fn(*a, **k)
+        return wrapper
+    return deco
+
+
 def actor():
     """Current user as a plain dict for the audit log."""
     if current_user.is_authenticated:
