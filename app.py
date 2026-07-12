@@ -134,6 +134,12 @@ def _scope_current_business():
     try:
         if current_user.is_authenticated:
             bid = current_user.business_id
+            # Tatabu support view: business-1 admins may temporarily act AS a broker
+            # tenant (set by /api/admin/broker/impersonate). Inert for everyone else —
+            # a broker user's business_id is never 1, so a forged session key is dead.
+            sv = session.get("support_view_bid")
+            if sv and bid == 1 and current_user.has("admin_actions") and int(sv) != 1:
+                bid = int(sv)
         elif session.get("cust_business"):
             bid = int(session["cust_business"])
         else:
@@ -265,6 +271,7 @@ def login():
                            request.form.get("password", ""))
         if user:
             login_user(user)
+            session.pop("support_view_bid", None)   # a fresh login never inherits a support view
             db.audit(auth.actor(), "login", "user", user.username, "")
             return redirect(url_for("staff_app"))
         return render_template("login.html", error="Wrong username or password.")
@@ -308,6 +315,7 @@ def favicon():
 @app.route("/logout")
 @login_required
 def logout():
+    session.pop("support_view_bid", None)
     logout_user()
     return redirect(url_for("login"))
 
@@ -329,7 +337,9 @@ def staff_app():
     the Otlobly mark — not even a first-paint flash."""
     import branding
     html_text = (HERE / "web" / "index.html").read_text(encoding="utf-8")
-    brand = branding.resolve(getattr(current_user, "business_id", 1))
+    # db.current_business() (not the user's own id) so a Tatabu support view renders
+    # the impersonated broker's shell — the owner sees exactly what the broker sees.
+    brand = branding.resolve(db.current_business())
     return app.response_class(branding.render_shell(html_text, brand),
                               mimetype="text/html")
 
@@ -340,9 +350,12 @@ def me():
     import branding
     import features
     d = current_user.as_dict()
-    bid = getattr(current_user, "business_id", 1)
+    bid = db.current_business()          # the EFFECTIVE tenant (support view aware)
     d["business"] = {"id": bid, "brand": branding.resolve(bid),
                      "features": features.resolve(bid), "tier": quotas.tier(bid)}
+    if bid != getattr(current_user, "business_id", 1):
+        biz = db.get_business(bid) or {}
+        d["impersonating"] = {"business_id": bid, "name": biz.get("name") or f"#{bid}"}
     return jsonify(d)
 
 
@@ -351,7 +364,7 @@ def me():
 def api_quota():
     """This tenant's plan + usage vs limits (soft — the dashboard shows an 'upgrade'
     nudge when over, but nothing is blocked). Otlobly (#1) is unlimited."""
-    return jsonify(quotas.status(getattr(current_user, "business_id", 1)))
+    return jsonify(quotas.status(db.current_business()))
 
 
 # --------------------------------------------------------------------------- #
@@ -1830,7 +1843,95 @@ def api_admin_broker_tier():
         return jsonify({"ok": False, "error": "bad business or tier"}), 400
     db.set_business_config(int(bid), "tier", tier)
     db.audit(auth.actor(), "set_broker_tier", "business", str(bid), tier)
+    biz = db.get_business(int(bid)) or {}
+    activity.log("set", "business", str(bid), biz.get("name") or f"#{bid}",
+                 field="plan", new=tier, user=_user())
     return jsonify({"ok": True, "tier": tier})
+
+
+@app.route("/api/admin/broker/<int:bid>")
+@auth.require("admin_actions")
+def api_admin_broker_detail(bid):
+    """One tenant's full profile for the platform admin: identity, plan, live
+    quota/usage, staff, and its recent activity."""
+    if not _platform_admin():
+        abort(403)
+    if bid == 1:
+        return jsonify({"ok": False, "error": "business 1 is Otlobly itself"}), 400
+    biz = db.get_business(bid)
+    if not biz:
+        abort(404)
+    import branding
+    brand = branding.resolve(bid)
+    return jsonify({
+        "business": {k: biz.get(k) for k in ("id", "name", "slug", "active", "created_at")},
+        "brand": {"name": brand["name"], "tagline": brand["tagline"]},
+        "tier": quotas.tier(bid),
+        "status": quotas.status(bid),
+        "users": db.list_users(bid),
+        "activity": activity.recent(30, business_id=bid),
+    })
+
+
+@app.route("/api/admin/broker/impersonate", methods=["POST"])
+@auth.require("admin_actions")
+def api_admin_impersonate():
+    """Open a broker's dashboard as them (support view). Session-scoped; every
+    write while it's on is a REAL write to the broker's data, attributed to us."""
+    if not _platform_admin():
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    bid = b.get("business_id")
+    if not (str(bid).isdigit() and int(bid) != 1):
+        return jsonify({"ok": False, "error": "bad business"}), 400
+    biz = db.get_business(int(bid))
+    if not biz:
+        abort(404)
+    if not biz.get("active", 1):
+        return jsonify({"ok": False, "error": "business is inactive"}), 400
+    session["support_view_bid"] = int(bid)
+    db.audit(auth.actor(), "impersonate_start", "business", str(bid), biz["name"])
+    activity.log("viewed", "business", str(bid), biz["name"],
+                 detail="support view — opened their dashboard", user=_user())
+    return jsonify({"ok": True, "business_id": int(bid)})
+
+
+@app.route("/api/admin/broker/impersonate/stop", methods=["POST"])
+@auth.require("admin_actions")
+def api_admin_impersonate_stop():
+    """Exit the support view (idempotent)."""
+    if not _platform_admin():
+        abort(403)
+    bid = session.pop("support_view_bid", None)
+    if bid:
+        db.set_current_business(1)   # this request was still scoped to the broker —
+        biz = db.get_business(int(bid)) or {}          # log the exit in OUR feed
+        db.audit(auth.actor(), "impersonate_stop", "business", str(bid), biz.get("name", ""))
+        activity.log("viewed", "business", str(bid), biz.get("name") or f"#{bid}",
+                     detail="support view — exited", user=_user())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/broker/user", methods=["POST"])
+@auth.require("admin_actions")
+def api_admin_broker_user():
+    """Reset a broker staff member's password (platform admin only). Verifies the
+    user really belongs to that broker so an id can't cross tenants."""
+    if not _platform_admin():
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    bid, uid = b.get("business_id"), b.get("user_id")
+    pw = str(b.get("password") or "").strip()
+    if not (str(bid).isdigit() and int(bid) != 1 and str(uid).isdigit()):
+        return jsonify({"ok": False, "error": "bad business or user"}), 400
+    if len(pw) < 6:
+        return jsonify({"ok": False, "error": "password must be 6+ chars"}), 400
+    u = db.get_user_by_id(int(uid))
+    if not u or (u.get("business_id") or 1) != int(bid):
+        return jsonify({"ok": False, "error": "user not found"}), 404
+    db.set_user_password(u["id"], auth.hash_pw(pw))
+    db.audit(auth.actor(), "platform_reset_pw", "user", u["username"], f"business {bid}")
+    return jsonify({"ok": True})
 
 
 # --------------------------------------------------------------------------- #

@@ -98,7 +98,9 @@ def require_feature(feature):
             import features
             if not current_user.is_authenticated:
                 abort(401)
-            if not features.has(getattr(current_user, "business_id", 1), feature):
+            # Effective tenant (db.current_business), not the user's own id: during a
+            # Tatabu support view the owner is fenced exactly like the broker's staff.
+            if not features.has(db.current_business(), feature):
                 abort(403)
             return fn(*a, **k)
         return wrapper

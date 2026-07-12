@@ -32,9 +32,9 @@ from paths import data_path
 ACTIVITY_FILE = data_path("activity.jsonl")    # business #1 (Otlobly) — unchanged
 
 
-def _activity_file():
+def _activity_file(business_id=None):
     """Per-tenant activity log so a broker's feed shows only its own events."""
-    bid = current_business()
+    bid = business_id or current_business()
     return ACTIVITY_FILE if bid == 1 else data_path(f"activity_b{bid}.jsonl")
 
 # Field name → the human label shown in the feed (matches the ClickUp wording the
@@ -100,9 +100,10 @@ def _short(v):
     return s if len(s) <= 120 else s[:117] + "…"
 
 
-def recent(limit=60, entity=None):
-    """Newest-first list of events, optionally filtered to one entity type."""
-    af = _activity_file()
+def recent(limit=60, entity=None, business_id=None):
+    """Newest-first list of events, optionally filtered to one entity type.
+    `business_id` reads another tenant's feed (Tatabu platform admin only)."""
+    af = _activity_file(business_id)
     if not af.exists():
         return []
     out = []
