@@ -3162,10 +3162,12 @@ function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
     (sub?`<span class="muted2" style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(sub)}</span>`:'')+
     `<span class="spacer"></span>${right||''}`; }
 function bulkFoot(html){ $("bulkFoot").innerHTML=html; }
-// Small status pill for the popup rows (same colours as the row pills).
+// Small status pill for the popup rows (same ClickUp values/colours as the row pills).
 function gaashMiniPill(bucket,text){
   if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">none</span>`;
   if(bucket==="delivered") return tonePill("green","Delivered",text);
+  const cu=gashLookup(text,null);
+  if(cu) return solidPill(cu.hex,cu.label,text);
   const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
   const txt=SHORT[bucket]||text||bucket||"—";
   return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,text):tonePill("amber",txt,text);
@@ -3505,9 +3507,37 @@ const TONE={red:"color:#b42318;background:#fef2f2;border-color:#fecaca",
 function tonePill(tone,txt,tip){ return `<span class="pill" style="${TONE[tone]||TONE.gray};font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
 // Pill in an arbitrary hex colour (same recipe as the ClickUp-status dropdown).
 function hexPill(hex,txt,tip){ return `<span class="pill" style="color:${hex};background:${hex}1a;border-color:${hex}55;font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
-// GAASH bucket → hex, matched to the owner's ClickUp workflow colours:
-// shipped #4466ff · ariived at destnation #e5484d · waiting verification #f76808 · in clearance #0f9d9f
+// Solid ClickUp-style chip: full-colour background, white or dark text by luminance
+// (the pastel GASH hexes are unreadable as tinted text-on-light pills).
+function solidPill(hex,txt,tip){ const m=hex.replace('#','');
+  const r=parseInt(m.slice(0,2),16),g=parseInt(m.slice(2,4),16),b=parseInt(m.slice(4,6),16);
+  const ink=(0.299*r+0.587*g+0.114*b)>150?'#1f2430':'#fff';
+  return `<span class="pill" style="color:${ink};background:${hex};border-color:${hex};font-weight:700"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+// GAASH bucket → hex fallback for statuses the GASH_STATUS map doesn't know yet.
 const GAASH_HEX={transit:"#4466ff",arrived:"#e5484d",customs:"#f76808",cleared:"#0f9d9f"};
+// GAASH status text/code → the owner's ClickUp "GASH STATUS" values + colours
+// (custom field 25d6446b on list "AZ (2)" 901523...506, copied 2026-07-13 —
+// names kept verbatim, typos included; TEXT matches first, codes are ambiguous).
+const GASH_STATUS=[
+ ["parcel is on the way to destination country","STILL NOT ARRIVED","#FF4081"],
+ ["vm","STILL NOT ARRIVED","#FF4081"],
+ ["arrived at destination country","ARIIVED Destination","#04A9F4"],
+ ["k3","ARIIVED Destination","#04A9F4"],
+ ["required customer id","customer ID","#f76808"],
+ ["cd","customer ID","#f76808"],
+ ["cleared customs","CLEARED GASH","#1bbc9c"],
+ ["k2","CLEARED GASH","#1bbc9c"],
+ ["picked up by gerizim courier","Picked up by Gerizim","#edadc8"],
+ ["moc - palestinian authority","MOC - Palestinian authority","#ffc53d"],
+ ["ministry of transportation","Ministry of Transportation","#ffc53d"],
+ ["ministry of communications","Ministry of Communications","#ffc53d"],
+];
+function gashLookup(text,code){
+  const t=(text||'').trim().toLowerCase(), c=(code||'').trim().toLowerCase();
+  for(const[m,label,hex] of GASH_STATUS) if(t&&m===t) return {label,hex};
+  for(const[m,label,hex] of GASH_STATUS) if(c&&m===c) return {label,hex};
+  return null;
+}
 function agoTxt(iso){ if(!iso) return ''; const m=Math.round((Date.now()-new Date(iso).getTime())/60000);
   if(!isFinite(m)||m<0) return ''; if(m<1) return 'just now'; if(m<60) return `${m}m ago`;
   const h=Math.round(m/60); return h<24?`${h}h ago`:`${Math.round(h/24)}d ago`; }
@@ -3536,7 +3566,9 @@ function pkgGaashPill(pk){
   const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
   if(!b) return tonePill("gray","Awaiting tracking",tip);
   if(b.bucket==="delivered") return tonePill("green","Delivered",tip);
-  // a SHORT stage word keeps the one-line row tidy — the raw GAASH text is in the tooltip
+  const cu=gashLookup(b.text,b.code);              // the owner's ClickUp "GASH STATUS" value + colour
+  if(cu) return solidPill(cu.hex,cu.label,tip);
+  // unknown status → coarse bucket word in the bucket colour (raw text stays in the tooltip)
   const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
   const txt=SHORT[b.bucket]||b.text||b.label||"In transit";
   return GAASH_HEX[b.bucket]?hexPill(GAASH_HEX[b.bucket],txt,tip):tonePill("amber",txt,tip);
