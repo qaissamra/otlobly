@@ -1077,6 +1077,14 @@
   </div>
 </div>
 
+<!-- New order: one form to fill an Amazon purchase order (fields + products) in one go -->
+<div id="newOrderModal" class="az-modal hidden" onclick="if(event.target===this)noClose()">
+  <div class="az-box" style="width:620px;max-width:96vw">
+    <div class="az-head"><b>🧾 طلب جديد · New order</b><span class="az-x" onclick="noClose()">✕</span></div>
+    <div style="padding:14px 16px;max-height:80vh;overflow:auto" id="noBody"></div>
+  </div>
+</div>
+
 <!-- Package editor: arrival, GAASH tracking #, the customer tracking number -->
 <div id="pkgEditModal" class="az-modal hidden" onclick="if(event.target===this)pkgEditClose()">
   <div class="az-box" style="width:500px;max-width:96vw">
@@ -1440,13 +1448,7 @@ async function sendWa(id,kind){
 // ---- Add order — hosts the full Purchases-style order card inside the Orders view ---- //
 // Reuses poCardHtml + every po* handler; renders into #aoPoTree via PO_MOUNT / PO_ONLY.
 let PO_MOUNT="poTree", PO_ONLY=null;   // PO_MOUNT = container renderPurchases fills; PO_ONLY = show only these po_ids (null = all)
-async function aoOpenForm(){
-  const panel=$("formPanel");
-  if(!panel.classList.contains("hidden")){ aoCloseForm(); return; }   // the topbar button toggles the panel
-  panel.classList.remove("hidden");
-  PO_MOUNT="aoPoTree"; PO_ONLY=[];
-  await aoAddCard();
-}
+function aoOpenForm(){ newOrderOpen(); }   // "＋ Add order" (Orders topbar) → the New-order form
 async function aoAddCard(items){                                       // create a blank order card (optionally pre-filled with items)
   const pkg={package_no:1,arrival:"",tracking_number:"",items:items||[]};
   let r; try{ r=await post("/api/purchase",{amazon_order_number:"",ship_to:"",packages:[pkg]}); }catch(e){ r=null; }
@@ -2872,10 +2874,7 @@ async function qCreateOrder(){
               clean_url:(r.link||"").trim()||(r.asin?'https://www.amazon.com/dp/'+String(r.asin).toUpperCase():""),
               image:r.image||null, qty:parseInt(r.qty)||1, status:"ORDERED",
               serp_price_usd:(r.serp_price!=null?r.serp_price:null), serp_price_at:r.serp_price_at||null}));
-  setView("orders"); $("formPanel").classList.remove("hidden");
-  PO_MOUNT="aoPoTree"; PO_ONLY=[];
-  await aoAddCard(items);                          // opens a pre-filled order card in the Orders view
-  window.scrollTo(0,0); toast(QLANG==="ar"?"تم إنشاء بطاقة الطلب — راجع واحفظ":"Order card created — review below");
+  newOrderOpen(items);                             // open the New-order form pre-filled with the quoted products
 }
 async function loadSettings(){
   const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
@@ -3532,7 +3531,8 @@ function poPkgHtml(p,pk,pi){
         <button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج (رابط، ASIN، صورة، ملاحظات…) · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>
       </div>`).join("")}
     </div>`).join("");
-  return `<div class="pkg open">${head}<div class="pkg-body">${rows||'<div class="empty">لا منتجات · no products</div>'}</div></div>`;
+  return `<div class="pkg open">${head}<div class="pkg-body">${rows||'<div class="empty">لا منتجات · no products</div>'}
+    <button class="po-btn" style="margin:6px 2px 2px" onclick="poAddItem('${p.po_id}',${pi})">＋ إضافة منتج · Add product</button></div></div>`;
 }
 function poAddPkg(id){ const p=poFind(id); p.packages=p.packages||[]; p.packages.push({package_no:p.packages.length+1,arrival:"",tracking_number:"",items:[]}); poSave(p); renderPurchases(); }
 // ── Estimated package cost (Σ Amazon item price × qty; filled by the endpoint) ──
@@ -3707,17 +3707,83 @@ function ieTracking(v){ if(!IE)return; const ref=IE; IE=null; $("itemEditModal")
   poItemTracking(ref.id,ref.pi,ref.ii,v); }   // the item may move to another package → indexes go stale, so close
 async function ieDelete(){ if(!IE)return; const ref=IE; IE=null; $("itemEditModal").classList.add("hidden");
   await poDelItem(ref.id,ref.pi,ref.ii); }
-async function addPO(){
-  let r; try{ r=await post("/api/purchase",{amazon_order_number:"",ship_to:"",packages:[{package_no:1,arrival:"",tracking_number:"",items:[]}]}); }catch(e){ r=null; }
-  if(r&&r.ok){
-    await loadPurchases();
-    toast("طلب أمازون جديد أُضيف · new order added — fill it in below ↓");
-    const cards=document.querySelectorAll('#'+PO_MOUNT+' .po-card');
-    const el=cards[cards.length-1];           // the new PO renders at the bottom — bring it into view
-    if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.style.outline="2px solid var(--accent)"; setTimeout(()=>{el.style.outline="";},1600); }
-  } else {
-    toast("تعذّر إنشاء الطلب · couldn't create order"+(r&&r.error?": "+r.error:""));
-  }
+// ── New order: one form to create a purchase order (fields + products) in one POST ──
+let NO=null;   // {profile, customer, amount, amazon, arrival, gaash, rows:[{link,title,qty,customer}]}
+function addPO(){ newOrderOpen(); }              // "+ New order" (Purchases)
+function newOrderOpen(items){                    // items = optional prefill (quote flow)
+  NO={profile:"", customer:"", amount:"", amazon:"", arrival:"", gaash:"",
+      rows:(items&&items.length?items:[{}]).map(it=>({
+        link:it&&(it.clean_url||it.link)||"", title:it&&it.title||"",
+        asin:it&&it.asin||"", qty:it&&it.qty||1, customer:it&&it.customer_name||""}))};
+  noRender(); $("newOrderModal").classList.remove("hidden");
+}
+function noClose(){ $("newOrderModal").classList.add("hidden"); NO=null; }
+function noSet(f,v){ if(NO){ NO[f]=v; if(f==="customer") noRefreshRowCust(); } }
+function noRowSet(i,f,v){ if(!NO)return; NO.rows[i][f]=v;
+  if(f==="link"){ const a=extractAsinClient(v); if(a) NO.rows[i].asin=a; } }
+function noAddRow(){ if(NO){ NO.rows.push({customer:NO.customer||""}); noRender(); } }
+function noDelRow(i){ if(NO){ NO.rows.splice(i,1); if(!NO.rows.length) NO.rows.push({}); noRender(); } }
+function noRefreshRowCust(){ /* default blank rows to the order customer without clobbering typed ones */
+  (NO.rows||[]).forEach(r=>{ if(!r.customer) r._defaultCust=NO.customer; }); }
+function noRender(){
+  if(!NO) return;
+  const cur=((QSETTINGS&&QSETTINGS.card_labels)||{}).currency||'USD';
+  const boxTerm=((QSETTINGS&&QSETTINGS.card_labels)||{}).box_term||'Profile';
+  const rows=NO.rows.map((r,i)=>`<div class="no-prow" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      <input style="flex:2;min-width:150px" placeholder="🔗 رابط أمازون أو ASIN · paste link / ASIN" value="${poEsc(r.link||r.asin||'')}" onchange="noRowSet(${i},'link',this.value)">
+      <input style="flex:2;min-width:120px" placeholder="اسم المنتج · name" value="${poEsc(r.title||'')}" onchange="noRowSet(${i},'title',this.value)">
+      <input type="number" min="1" style="width:56px" value="${r.qty||1}" title="qty" onchange="noRowSet(${i},'qty',this.value)">
+      <input class="custc" list="poCustList" style="flex:1;min-width:110px" placeholder="العميل · customer" value="${poEsc(r.customer||'')}" onchange="noRowSet(${i},'customer',this.value)">
+      <button class="iconbtn" title="remove" onclick="noDelRow(${i})">✕</button></div>`).join("");
+  $("noBody").innerHTML=`${boxDatalist()}${custDatalist()}
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px"><label class="fld">${poEsc(boxTerm)} <span style="color:var(--bad)">*</span></label>
+        <input class="pobox mono" list="poBoxList" style="width:100%" value="${poEsc(NO.profile)}" placeholder="B19…" onchange="noSet('profile',this.value)"></div>
+      <div style="flex:1;min-width:150px"><label class="fld">العميل · Customer <span style="color:var(--bad)">*</span></label>
+        <input class="custc" list="poCustList" style="width:100%" value="${poEsc(NO.customer)}" placeholder="اسم العميل · name" onchange="noSet('customer',this.value)"></div>
+      <div style="width:120px"><label class="fld">المبلغ ${poEsc(cur)} · Amount <span style="color:var(--bad)">*</span></label>
+        <input type="number" step="0.01" style="width:100%" value="${poEsc(NO.amount)}" placeholder="0.00" onchange="noSet('amount',this.value)"></div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+      <div style="flex:1;min-width:150px"><label class="fld">Amazon order # <span class="muted2">(optional)</span></label>
+        <input class="mono" style="width:100%" value="${poEsc(NO.amazon)}" placeholder="113-…" onchange="noSet('amazon',this.value)"></div>
+      <div style="width:150px"><label class="fld">تاريخ الوصول · Due date</label>
+        <input type="date" style="width:100%" value="${poEsc(NO.arrival)}" onchange="noSet('arrival',this.value)"></div>
+      <div style="flex:1;min-width:150px"><label class="fld">رقم غاش · GAASH #</label>
+        <input class="mono" style="width:100%" value="${poEsc(NO.gaash)}" placeholder="GWD…" onchange="noSet('gaash',this.value)"></div>
+    </div>
+    <label class="fld" style="margin-top:12px">المنتجات · Products</label>
+    ${rows}
+    <button class="minibtn" onclick="noAddRow()" style="margin-top:2px">＋ إضافة منتج · add product</button>
+    <div id="no_err" style="color:var(--bad);font-size:12px;margin-top:10px"></div>
+    <div class="az-actions" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="po-btn" onclick="noClose()">إلغاء · Cancel</button>
+      <button class="accent" onclick="noSave(this)">💾 إنشاء الطلب · Create order</button>
+    </div>`;
+}
+async function noSave(btn){
+  if(!NO) return;
+  const amount=parseFloat(NO.amount);
+  const miss=[]; if(!(NO.profile||'').trim())miss.push("الملف · profile"); if(!(NO.customer||'').trim())miss.push("العميل · customer"); if(!(amount>0))miss.push("المبلغ · amount");
+  if(miss.length){ $("no_err").textContent="عبّئ · fill: "+miss.join(" · "); return; }
+  const items=(NO.rows||[]).filter(r=>(r.link||'').trim()||(r.title||'').trim()||r.asin)
+    .map(r=>{ const asin=(r.asin||extractAsinClient(r.link)||"").toUpperCase();
+      return {title:(r.title||"").trim(), asin:asin||null,
+              clean_url:(r.link||"").trim()||(asin?'https://www.amazon.com/dp/'+asin:""),
+              qty:parseInt(r.qty)||1, status:"", customer_name:(r.customer||NO.customer||"").trim()||null,
+              serp_price_usd:r.serp_price_usd!=null?r.serp_price_usd:null, serp_price_at:r.serp_price_at||null}; });
+  const body={amazon_order_number:(NO.amazon||"").trim(), ship_to:(NO.customer||"").trim(),
+    profile_box:(NO.profile||"").trim(), total_usd:amount,
+    packages:[{package_no:1, arrival:(NO.arrival||"").trim(), tracking_number:(NO.gaash||"").trim(), items}]};
+  btn.disabled=true; let r; try{ r=await post("/api/purchase",body); }catch(e){ r=null; } btn.disabled=false;
+  if(!r||!r.ok){ $("no_err").textContent=(r&&r.error)||"تعذّر إنشاء الطلب · couldn't create order"; return; }
+  noClose();
+  try{ PO_VIEW[r.po_id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); }catch(e){}
+  PO_MOUNT="poTree"; PO_ONLY=null; setView("purchases"); await loadPurchases();
+  const el=[...document.querySelectorAll('#poTree .po-card')].find(c=>c.querySelector('.po-name')&&c.querySelector('.po-name').textContent.includes(r.po_id));
+  if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.style.outline="2px solid var(--accent)"; setTimeout(()=>{el.style.outline="";},1600); }
+  toast(`✅ ${r.po_id} · ${items.length} product${items.length===1?'':'s'}`);
+  loadHomeActivity();
 }
 async function poDelete(id){ if(!confirm("Delete this purchase order? It moves to Trash — you can restore it."))return; const r=await post("/api/purchase/delete",{id}); if(r.ok){ POS=POS.filter(p=>p.po_id!==id); renderPurchases(); toast("Moved to Trash"); loadHomeActivity(); } }
 async function poFetch(btn,id,pi,ii){ const p=poFind(id); const it=p.packages[pi].items[ii];
