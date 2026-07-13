@@ -498,10 +498,10 @@
       <thead><tr>
         <th style="width:26px"><input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)" title="select all shown"></th>
         <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th><th>Deposit</th><th>Remaining</th>
-        <th>Box</th><th>Batch</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
+        <th>Box</th><th>Batch</th><th>Due</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
       </tr></thead>
       <tbody id="rows"></tbody>
-      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td class="amt" id="footDep"></td><td class="amt" id="footRem"></td><td colspan="5"></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td class="amt" id="footDep"></td><td class="amt" id="footRem"></td><td colspan="6"></td></tr></tfoot>
     </table>
   </div>
 
@@ -1314,6 +1314,7 @@ function render(){
       <td><input value="${poEsc(o.profile_box||'')}" style="width:54px;padding:3px 6px;font-size:11.5px"
             onchange="setBox('${o.order_id}',this.value)"></td>
       <td>${poEsc(o.batch)||"—"}</td>
+      <td>${dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))||'<span style="color:var(--muted)">—</span>'}</td>
       <td>${statusSelect(o)}</td>
       <td><input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="mono"
             style="width:104px;padding:3px 6px;font-size:11px"
@@ -1959,6 +1960,29 @@ function relTime(iso){ if(!iso)return""; const t=new Date(iso), s=(Date.now()-t)
   if(s<60)return"just now"; if(s<3600)return Math.floor(s/60)+"m ago";
   if(s<86400)return Math.floor(s/3600)+"h ago"; if(s<604800)return Math.floor(s/86400)+"d ago";
   return t.toLocaleDateString(); }
+// ── ClickUp-style due-date urgency (red = late, orange = today/soon, muted = later) ──
+// Accepts ISO yyyy-mm-dd (est_delivery_customer) AND legacy dd/mm/yyyy (old package
+// arrivals typed before the date input) — a bare `new Date("15/07/2026")` mis-parses.
+function dueDays(s){
+  if(!s) return null;
+  let d=null, m=String(s).slice(0,10).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) d=new Date(+m[1],+m[2]-1,+m[3]);
+  else{ m=String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m) d=new Date(+m[3],+m[2]-1,+m[1]); }
+  if(!d||isNaN(d)) return null;
+  const now=new Date();
+  return Math.round((d-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/86400000);
+}
+function dueChip(s,done){
+  const n=dueDays(s); if(n==null) return "";
+  let txt,css;
+  if(n<0&&!done){ txt=(n===-1?"yesterday":`${-n}d late`); css="color:var(--bad);background:#fef2f2;border-color:#fecaca;font-weight:700"; }
+  else if(n<0){ txt=String(s).slice(0,10); css="color:var(--muted)"; }   // done orders: a quiet date, never "late"
+  else if(n===0){ txt="today"; css="color:var(--warn);background:#fff7ee;border-color:#f3d9be;font-weight:700"; }
+  else if(n<=3){ txt=`in ${n}d`; css="color:var(--warn);background:#fff7ee;border-color:#f3d9be"; }
+  else if(n<=14){ txt=`in ${n}d`; css="color:var(--muted)"; }
+  else{ txt=String(s).slice(0,10); css="color:var(--muted)"; }
+  return `<span class="qchip" style="font-size:10.5px;white-space:nowrap;${css}" title="${poEsc(String(s))}">📅 ${txt}</span>`;
+}
 function actText(e){
   if(e.action==="set"&&e.field) return `set <b>${poEsc(e.field)}</b> to <b>${poEsc(e.new||"—")}</b>`;
   if(e.action==="added")   return `added ${poEsc(e.detail||"an item")}`;
@@ -2170,7 +2194,7 @@ function neRowHtml(o,kind){
   if(o.payment_plan) bits.push(fld('الخطة · Plan', o.payment_plan==="prepaid"?"💰 دفع مسبق — 0% عمولة":"🛡️ زيرو ريسك — عربون + الباقي عند الاستلام"));
   if(o.deposit_usd>0) bits.push(fld('عربون · Deposit',`${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}`,'color:#15803d;font-weight:700'));
   if(kind==="ordered"&&o.amazon_order_number) bits.push(fld('Amazon #',`<span class="mono">${poEsc(o.amazon_order_number)}</span>`));
-  if(o.est_delivery_customer) bits.push(fld('ETA',poEsc(o.est_delivery_customer)));
+  if(o.est_delivery_customer) bits.push(fld('ETA',`${poEsc(o.est_delivery_customer)} ${dueChip(o.est_delivery_customer)}`));
   if(kind==="deleted"&&o.deleted_at) bits.push(fld('Deleted',`${poEsc(o.deleted_at)}${o.deleted_by?` · ${poEsc(o.deleted_by)}`:''}`));
   if(o.notes) bits.push(fld('Notes',poEsc(o.notes)));
   const info=`<div class="ne-meta">${bits.join('')}</div>`;
@@ -2183,7 +2207,7 @@ function neRowHtml(o,kind){
       <td>${prodCell}</td>
       <td class="amt hide-sm" style="color:var(--accent)">${amt}</td>
       <td class="amt hide-sm"><b>${rem}</b></td>
-      <td>${statusCell}</td>
+      <td>${statusCell}${o.est_delivery_customer?` ${dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))}`:''}</td>
       <td><div class="ne-acts">${acts}</div></td>
     </tr>
     <tr class="ne-detail" id="nedet_${poEsc(oid)}" style="display:${isOpen?'':'none'}">
@@ -3257,7 +3281,7 @@ function poPkgHtml(p,pk,pi){
       </span>
     </div>
     <div class="pkg-meta">
-      <span class="field"><span class="lbl">Arrives</span><input type="date" value="${poEsc(pk.arrival)}" onchange="poPkgSet('${p.po_id}',${pi},'arrival',this.value)"></span>
+      <span class="field"><span class="lbl">Arrives</span><input type="date" value="${poEsc(pk.arrival)}" onchange="poPkgSet('${p.po_id}',${pi},'arrival',this.value)"></span>${dueChip(pk.arrival,(pk.tracking_status&&pk.tracking_status.bucket)==="delivered")}
       <span class="field"><span class="lbl">${poEsc(courier).toUpperCase()} #</span><input value="${poEsc(pk.tracking_number)}" placeholder="${poEsc(courier)} #" style="width:150px" class="mono trk-input" onchange="poPkgSet('${p.po_id}',${pi},'tracking_number',this.value)"></span>
       ${pk.customer_tracking
         ? `<span class="ctk" title="customer tracking number — give this to the customer; it maps to the courier # privately"><b class="mono">🎟 ${poEsc(pk.customer_tracking)}</b><a href="#" onclick="copyCtk('${poEsc(pk.customer_tracking)}');return false" title="copy">📋</a><a href="/track?t=${poEsc(pk.customer_tracking)}" target="_blank" rel="noopener" title="open the customer tracking page">↗</a></span>`
@@ -3390,7 +3414,7 @@ function podRender(){
         <div class="muted2" style="font-size:11px">${poEsc(it.customer_name||'⚠ غير معيّن')}${it.qty>1?` · ×${it.qty}`:''}${it.tracking_number?` · <span class="mono">${poEsc(it.tracking_number)}</span>`:''}</div></div>
       <span class="pill">${poEsc(it.status||'ORDERED')}</span></div>`).join("");
     return `<div style="margin-bottom:10px">
-      <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦 Package ${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
+      <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦 Package ${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
       <div style="display:flex;flex-direction:column;gap:5px">${rows||'<div class="muted2" style="font-size:12px">لا منتجات · no products</div>'}</div></div>`;
   }).join("");
   const nItems=(p.packages||[]).reduce((s,pk)=>s+(pk.items||[]).length,0);
