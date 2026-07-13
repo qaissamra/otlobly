@@ -1529,8 +1529,12 @@ def api_purchases_refresh_tracking():
     package is only rewritten on a successful fetch with real statuses.
     Body (optional): {"tracking": "<GWD>"} refreshes just that number (the
     live check-shipping popup calls once per GWD to stream old→new rows);
-    {"force": true} bypasses the TTL (never the delivered skip)."""
+    {"force": true} bypasses the TTL (never the terminal skips).
+    Each GWD is checked against BOTH carriers: GAASH (skipped once its own
+    bucket is delivered) and Gerizim last-mile (until GERIZIM says delivered —
+    GAASH "Delivered" only means handed to the last-mile shelf)."""
     import activity
+    import gerizim
     import purchases
     import tracking
     ttl_min = 30
@@ -1539,15 +1543,20 @@ def api_purchases_refresh_tracking():
     force = bool(b.get("force"))
     pdb = purchases.load()
     cutoff = datetime.now().astimezone() - timedelta(minutes=ttl_min)
+    old_gaash_cut = (datetime.now().astimezone() - timedelta(days=30)).isoformat()
     stale = {}
     for po in pdb["purchase_orders"]:
         for pk in po.get("packages") or []:
             tn = tracking.clean_tracking(pk.get("tracking_number") or "")
             if not tn or (only and tn != only):
                 continue
+            gz = pk.get("gerizim_status") or {}
+            if isinstance(gz, dict) and gz.get("bucket") == "delivered":
+                continue                  # customer has the box — truly terminal
             ts = pk.get("tracking_status") or {}
-            if isinstance(ts, dict) and ts.get("bucket") == "delivered":
-                continue
+            gaash_done = isinstance(ts, dict) and ts.get("bucket") == "delivered"
+            if gaash_done and not gz and (ts.get("time") or "") < old_gaash_cut:
+                continue                  # ancient GAASH-delivered parcel Gerizim never saw
             if not force:
                 try:
                     if datetime.fromisoformat(pk.get("tracking_checked") or "") > cutoff:
@@ -1557,35 +1566,59 @@ def api_purchases_refresh_tracking():
             stale.setdefault(tn, []).append((po, pk))
     updated, changes = 0, []
     if stale:
-        try:
-            api_url, nonce = tracking.get_session()
-        except Exception as e:  # noqa - GAASH down: keep showing stored statuses
-            return jsonify({"ok": False, "updated": 0, "changes": [], "error": str(e)})
+        session = None                    # scraped lazily: gerizim-only rounds skip it
         for i, (tn, pos_pks) in enumerate(stale.items()):
             if i:
                 time.sleep(tracking.REQUEST_GAP)
-            st = tracking.latest_status(tracking.fetch_one(tn, api_url, nonce))
-            if not st:
-                continue
+            need_gaash = any(not (isinstance(pk.get("tracking_status"), dict)
+                                  and pk["tracking_status"].get("bucket") == "delivered")
+                             for _, pk in pos_pks)
+            st = None
+            if need_gaash:
+                if session is None:
+                    try:
+                        session = tracking.get_session()
+                    except Exception as e:  # noqa - GAASH down: keep Gerizim going
+                        session = e
+                if not isinstance(session, Exception):
+                    st = tracking.latest_status(tracking.fetch_one(tn, *session))
+            gz = gerizim.track(tn)
+            gz_new = gz if isinstance(gz, dict) else None
+            if not st and not gz_new:
+                continue                  # both lookups failed / nothing new → no writes
             stamp = db.now_iso()
             for po, pk in pos_pks:
                 old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
-                pk["tracking_status"] = st
+                gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
+                if st:
+                    pk["tracking_status"] = st
+                if gz_new:
+                    pk["gerizim_status"] = gz_new
                 pk["tracking_checked"] = stamp
                 updated += 1
+                cur = st or old
                 changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
                                 "tracking": tn,
                                 "old": {"bucket": (old or {}).get("bucket"),
                                         "text": activity.gaash_text(old)},
-                                "new": {"bucket": st.get("bucket"),
-                                        "text": activity.gaash_text(st)}})
-                # feed the per-PO Activity trail (readable text, GAASH as the actor)
+                                "new": {"bucket": (cur or {}).get("bucket"),
+                                        "text": activity.gaash_text(cur)},
+                                "gz_old": {"bucket": (gz_old or {}).get("bucket"),
+                                           "text": activity.gaash_text(gz_old)},
+                                "gz_new": {"bucket": (gz_new or gz_old or {}).get("bucket"),
+                                           "text": activity.gaash_text(gz_new or gz_old)}})
+                # feed the per-PO Activity trail (readable text, the carrier as actor)
+                header = ("Order # " + po["amazon_order_number"]) if po.get("amazon_order_number") else po.get("po_id", "")
                 ot, nt = activity.gaash_text(old), activity.gaash_text(st)
-                if nt and ot != nt:
-                    header = ("Order # " + po["amazon_order_number"]) if po.get("amazon_order_number") else po.get("po_id", "")
+                if st and nt and ot != nt:
                     activity.log("set", "purchase", po.get("po_id"), header,
                                  field="tracking_status", old=ot or None, new=nt,
                                  detail=f"Package {pk.get('package_no')}", user="GAASH")
+                got, gnt = activity.gaash_text(gz_old), activity.gaash_text(gz_new)
+                if gz_new and gnt and got != gnt:
+                    activity.log("set", "purchase", po.get("po_id"), header,
+                                 field="gerizim_status", old=got or None, new=gnt,
+                                 detail=f"Package {pk.get('package_no')}", user="Gerizim")
     if updated:
         purchases.save(pdb)
         db.audit(auth.actor(), "tracking_refresh", "purchase", "-",

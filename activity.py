@@ -51,6 +51,7 @@ FIELD_LABELS = {
     "tracking_number": "TRACKING",
     "otlobly_status": "OTLOBLY STATUS",
     "tracking_status": "GAASH STATUS",
+    "gerizim_status": "GERIZIM STATUS",
     "title": "PRODUCT NAME",
     "asin": "ASIN",
     "customer_name": "CUSTOMER NAME",
@@ -190,11 +191,12 @@ def po_diff(old, new):
             if _norm(op.get(f)) != _norm(pkg.get(f)):
                 events.append({"field": f, "old": op.get(f), "new": pkg.get(f),
                                "detail": pkg_label})
-        # GAASH status is a dict — diff the readable text, never the raw JSON
-        ot, nt = gaash_text(op.get("tracking_status")), gaash_text(pkg.get("tracking_status"))
-        if nt and ot != nt:
-            events.append({"field": "tracking_status", "old": ot or None, "new": nt,
-                           "detail": pkg_label})
+        # carrier statuses are dicts — diff the readable text, never the raw JSON
+        for f in ("tracking_status", "gerizim_status"):
+            ot, nt = gaash_text(op.get(f)), gaash_text(pkg.get(f))
+            if nt and ot != nt:
+                events.append({"field": f, "old": ot or None, "new": nt,
+                               "detail": pkg_label})
         old_items = {it.get("item_id"): it for it in op.get("items", [])}
         for it in pkg.get("items", []):
             oit = old_items.get(it.get("item_id"))

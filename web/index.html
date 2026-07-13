@@ -3172,6 +3172,10 @@ function gaashMiniPill(bucket,text){
   const txt=SHORT[bucket]||text||bucket||"—";
   return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,text):tonePill("amber",txt,text);
 }
+function gzMiniPill(bucket,text){
+  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">none</span>`;
+  return solidPill(GZ_HEX[bucket]||"#8d8d8d", text||bucket, text);
+}
 // ── Check shipping with a LIVE popup: one row per GWD, old status → new status.
 //    onlyGwd = the per-package ⋯ action (force bypasses the 30-min TTL). ──
 async function poCheckAllShipping(btn){ return poRunShippingCheck(btn,null,false); }
@@ -3182,13 +3186,20 @@ async function poRunShippingCheck(btn,onlyGwd,force){
   POS.forEach(p=>(p.packages||[]).forEach(pk=>{
     const tn=(pk.tracking_number||'').trim(); if(!tn) return;
     if(onlyGwd&&tn!==onlyGwd) return;
-    const ts=pk.tracking_status||{}; if(ts&&ts.bucket==="delivered") return;
+    const gz=pk.gerizim_status||{};
+    if(gz&&gz.bucket==="delivered") return;             // customer has the box — truly terminal
+    // GAASH "delivered" is NOT terminal (box may sit on the Gerizim shelf) — but stop
+    // polling ancient GAASH-delivered parcels Gerizim never saw (mirrors the server rule)
+    const ts=pk.tracking_status||{};
+    if(ts&&ts.bucket==="delivered"&&!pk.gerizim_status){
+      const t=ts.time?new Date(ts.time).getTime():0;
+      if(t&&now-t>30*24*3600*1000) return; }
     if(!force){ const chk=pk.tracking_checked?new Date(pk.tracking_checked).getTime():0;
       if(now-chk<TTL) return; }
     (cand[tn]=cand[tn]||[]).push({p,pk});
   }));
   const gwds=Object.keys(cand);
-  if(!gwds.length){ toast(onlyGwd?"Package already delivered — nothing to check":"Shipping is fresh — nothing to check"); return; }
+  if(!gwds.length){ toast(onlyGwd?"Package fully delivered — nothing to check":"Shipping is fresh — nothing to check"); return; }
   if(btn) btn.disabled=true;
   bulkOpen("🔎 فحص الشحنات · Checking shipping");
   const where=g=>cand[g].map(e=>`${e.p.po_id} 📦${e.pk.package_no}`).join(", ");
@@ -3201,10 +3212,14 @@ async function poRunShippingCheck(btn,onlyGwd,force){
     lastResp=r;
     const c=(r.changes||[]).find(x=>x.tracking===g);
     if(!c){ same++; bulkRow(g,g,where(g),'<span class="muted2">no update</span>'); continue; }
-    const isSame=(c.old&&c.old.text)===(c.new&&c.new.text);
+    const gaSame=(c.old&&c.old.text)===(c.new&&c.new.text);
+    const gzNewTxt=c.gz_new&&c.gz_new.text, gzOldTxt=c.gz_old&&c.gz_old.text;
+    const gzChanged=!!gzNewTxt&&gzNewTxt!==gzOldTxt;
+    const isSame=gaSame&&!gzChanged;
     if(isSame) same++; else changed++;
-    bulkRow(g,g,where(g),
-      `${gaashMiniPill(c.old&&c.old.bucket,c.old&&c.old.text)} <span class="muted2">→</span> ${gaashMiniPill(c.new&&c.new.bucket,c.new&&c.new.text)}${isSame?' <span class="muted2">(no change)</span>':''}`);
+    let html=`${gaashMiniPill(c.old&&c.old.bucket,c.old&&c.old.text)} <span class="muted2">→</span> ${gaashMiniPill(c.new&&c.new.bucket,c.new&&c.new.text)}`;
+    if(gzNewTxt) html+=` <span class="muted2">· GZ:</span> ${gzChanged?`${gzMiniPill(c.gz_old&&c.gz_old.bucket,gzOldTxt)} <span class="muted2">→</span> `:''}${gzMiniPill(c.gz_new.bucket,gzNewTxt)}`;
+    bulkRow(g,g,where(g), html+(isSame?' <span class="muted2">(no change)</span>':''));
   }
   if(lastResp&&lastResp.purchase_orders){ POS=lastResp.purchase_orders; renderPurchases(); }
   bulkFoot(`<b>${changed}</b> changed · ${same} unchanged${failed?` · <span style="color:var(--warn)">${failed} failed</span>`:''}`);
@@ -3573,6 +3588,24 @@ function pkgGaashPill(pk){
   const txt=SHORT[b.bucket]||b.text||b.label||"In transit";
   return GAASH_HEX[b.bucket]?hexPill(GAASH_HEX[b.bucket],txt,tip):tonePill("amber",txt,tip);
 }
+// Pill 4: Gerizim last-mile (postgerizim.com). GAASH "Delivered" only means the
+// box reached the last-mile shelf — this pill says whether the CUSTOMER has it.
+// Rendered only once Gerizim knows the parcel (their API 404s until handoff).
+const GZ_HEX={office:"#8d8d8d",sms:"#0091ff",pickup:"#f76808",out:"#ffc53d",delivered:"#b6b6ff"};
+function gzTip(gz){
+  const bits=[`Gerizim: ${gz.status||gz.label||''}`];
+  if(gz.shelf) bits.push(`shelf ${gz.shelf}`);
+  bits.push(gz.delivery?'home delivery':'shelf pickup');
+  if(gz.sms_at) bits.push(`SMS ${gz.sms_at}`);
+  if(gz.delivered_at) bits.push(`delivered ${gz.delivered_at}`);
+  else if(gz.eta) bits.push(`ETA ${gz.eta}`);
+  return bits.join(' · ');
+}
+function pkgGerizimPill(pk){
+  const gz=(pk&&pk.gerizim_status&&typeof pk.gerizim_status==='object')?pk.gerizim_status:null;
+  if(!gz||!(gz.label||gz.status)) return '';
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", gz.label||gz.status, gzTip(gz));
+}
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
 function poSummaryPill(p){
@@ -3699,6 +3732,7 @@ function poPkgHtml(p,pk,pi){
       <span class="spacer"></span>
       ${pkgDatePill(pk)}
       ${pkgGaashPill(pk)}
+      ${pkgGerizimPill(pk)}
       ${pkgCuSelect(p,pk,pi)}
       ${menu}
     </div></div>`;

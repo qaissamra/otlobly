@@ -321,6 +321,7 @@ def _norm_packages(packages):
             "tracking_number": (p.get("tracking_number") or "").strip() or None,
             "customer_tracking": (p.get("customer_tracking") or "").strip().upper() or None,
             "tracking_status": p.get("tracking_status"),
+            "gerizim_status": p.get("gerizim_status"),       # last-mile (postgerizim.com) status
             "tracking_checked": p.get("tracking_checked"),   # last live GAASH lookup (refresh TTL)
             "otlobly_status": p.get("otlobly_status"),       # owner-set status (ClickUp vocabulary)
             "track_notified": p.get("track_notified") or {},   # {order_id: iso} — customer-notify stamps
