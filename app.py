@@ -1614,6 +1614,76 @@ def api_purchase_package_delete():
     return jsonify({"ok": True})
 
 
+@app.route("/api/purchase/estimate_cost", methods=["POST"])
+@auth.require("edit_order")
+def api_purchase_estimate_cost():
+    """Estimate each product's Amazon COST (raw item price) and sum per package.
+    Reuse-first: a price from a past order (free) → the ASIN import cache (free) →
+    a live SerpApi lookup (one credit, metered). Fills only items with no estimate
+    yet, so re-runs are free. `pi` omitted = the whole PO."""
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    pdb = purchases.load()
+    po = purchases.find(pdb, b.get("id"))
+    if not po:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    pkgs = po.get("packages", [])
+    pi = b.get("pi")
+    targets = ([pkgs[int(pi)]] if (str(pi).isdigit() and int(pi) < len(pkgs)) else pkgs)
+    # A free tenant-wide ASIN → raw-price index from past orders (SERP price first).
+    past = {}
+    for o in db.list_orders():
+        for it in (o.get("items") or []):
+            a = (it.get("asin") or "").upper()
+            price = it.get("serp_price_usd")
+            if price is None:
+                price = it.get("item_usd")
+            if a and price is not None and a not in past:
+                try:
+                    past[a] = float(price)
+                except (TypeError, ValueError):
+                    pass
+    res = {"from_past": 0, "from_cache": 0, "fresh": 0, "unpriced": 0}
+    for pk in targets:
+        for it in (pk.get("items") or []):
+            if it.get("est_cost_at"):
+                continue                                   # already attempted — fill-missing only
+            asin = (it.get("asin") or "").upper()
+            price, src = None, None
+            if asin and asin in past:
+                price, src = past[asin], "past"
+                res["from_past"] += 1
+            elif it.get("clean_url") or asin:
+                try:
+                    d = amazon_import.import_product(it.get("clean_url") or asin, refresh=False)
+                except Exception:  # noqa: BLE001 — a lookup failure must not 500 the batch
+                    d = {}
+                if d.get("price_usd") is not None:
+                    price = d["price_usd"]
+                    if d.get("cached"):
+                        src = "cache"; res["from_cache"] += 1
+                    else:
+                        src = "serp"; res["fresh"] += 1
+                        quotas.bump_search(db.current_business())   # only real lookups cost a credit
+            if price is not None:
+                it["est_cost_usd"] = round(float(price), 2)
+                it["est_cost_src"] = src
+            else:
+                it["est_cost_src"] = "none"                 # attempted, no price found
+                res["unpriced"] += 1
+            it["est_cost_at"] = db.now_iso()               # stamp every attempt so re-runs skip it
+    po["updated_at"] = purchases.now_iso()
+    purchases.save(pdb)
+    db.audit(auth.actor(), "estimate_cost", "purchase", po["po_id"],
+             f"past {res['from_past']} · cache {res['from_cache']} · serp {res['fresh']}")
+    res["packages"] = [{"pi": i,
+                        "est_total_usd": round(sum((it.get("est_cost_usd") or 0) * (it.get("qty") or 1)
+                                                   for it in (pk.get("items") or [])
+                                                   if it.get("est_cost_usd") is not None), 2)}
+                       for i, pk in enumerate(pkgs)]
+    return jsonify({"ok": True, "purchase_order": purchases.summary(po), "result": res})
+
+
 @app.route("/api/purchase/item/delete", methods=["POST"])
 @auth.require("edit_order")
 def api_purchase_item_delete():

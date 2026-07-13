@@ -3454,8 +3454,12 @@ function poCardHtml(p){
     F.screenshot?[`📷 Screenshot`, `poUpload(this,'${p.po_id}')`]:null,
     F.clickup?[`👁 Preview ClickUp`, `clickupPO(this,'${p.po_id}',true)`]:null,
     F.clickup?[`↗ Send to ClickUp`, `clickupPO(this,'${p.po_id}',false)`]:null,
+    [`💰 تقدير تكلفة كل الطرود · Estimate all packages`, `poEstimateCost('${p.po_id}')`],
     [`🗑 حذف الطلب · Delete order`, `poDelete('${p.po_id}')`, true],
   ]);
+  // Estimated cost = Σ product prices (Amazon item cost), shown next to the paid total.
+  const poEst=(p.packages||[]).reduce((s,pk)=>s+pkgEstTotal(pk).sum,0);
+  const estChip=poEst>0?`<span class="muted2" title="مجموع تقدير تكلفة المنتجات · sum of estimated product costs"> · ≈ ${money(poEst)} est</span>`:'';
   const head=`<div class="po-head">
     <div class="po-title">
       <span class="caret" onclick="poToggleCard('${p.po_id}')">${open?'▾':'▸'}</span>
@@ -3463,7 +3467,7 @@ function poCardHtml(p){
       <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(who)||'—'} · ${p.n_items} item${p.n_items===1?'':'s'}${npk>1?` · ${npk} packages`:''}</span>
       <span class="spacer"></span>
       ${profChip}
-      <span class="muted2" style="flex:0 0 auto">${total}</span>
+      <span class="muted2" style="flex:0 0 auto">${total}${estChip}</span>
       ${poSummaryPill(p)}
       ${menu}
     </div></div>`;
@@ -3485,9 +3489,11 @@ function poPkgHtml(p,pk,pi){
     [`📱 إشعار العملاء · Notify customers`, `pkgNotifyOpen('${p.po_id}',${pi})`],
     [`🔎 تتبع الشحنة · Check shipping`, `trackPkg(this,'${p.po_id}',${pi})`],
     (F.multilogin&&p.profile_box)?[`🤖 Get tracking (auto)`, `azTrackFetch(this,'${p.po_id}',${pi})`]:null,
+    [`💰 تقدير التكلفة · Estimate cost`, `pkgEstimateCost('${p.po_id}',${pi})`],
     [`＋ إضافة منتج · Add product`, `poAddItem('${p.po_id}',${pi})`],
     [`🗑 حذف الطرد · Delete package`, `poDelPkg('${p.po_id}',${pi})`, true],
   ]);
+  const est=pkgEstTotal(pk);   // estimated package cost = Σ product prices
   const head=`<div class="pkg-head">
     <div class="pkg-title-row">
       <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
@@ -3502,6 +3508,7 @@ function poPkgHtml(p,pk,pi){
       <span>${ts?`🚚 ${bucketTxt}`:bucketTxt}</span>
       ${pk.arrival?`<span>· due ${fmtDue(pk.arrival)||poEsc(pk.arrival)}</span>`:''}
       <span>· ${gaash?`GAASH <b class="mono" style="color:var(--ink)">${poEsc(gaash)}</b>`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+      ${est.priced?`<span title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">· ≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced} unpriced)</span>`:''}</span>`:''}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
   // Read view: items grouped by customer — photo · name · ×qty · exception chip · ✏️.
@@ -3528,6 +3535,22 @@ function poPkgHtml(p,pk,pi){
   return `<div class="pkg open">${head}<div class="pkg-body">${rows||'<div class="empty">لا منتجات · no products</div>'}</div></div>`;
 }
 function poAddPkg(id){ const p=poFind(id); p.packages=p.packages||[]; p.packages.push({package_no:p.packages.length+1,arrival:"",tracking_number:"",items:[]}); poSave(p); renderPurchases(); }
+// ── Estimated package cost (Σ Amazon item price × qty; filled by the endpoint) ──
+function pkgEstTotal(pk){ let sum=0,priced=0; const items=(pk&&pk.items)||[];
+  items.forEach(it=>{ if(it.est_cost_usd!=null){ sum+=it.est_cost_usd*(it.qty||1); priced++; } });
+  return {sum:Math.round(sum*100)/100, priced, total:items.length}; }
+async function poEstimateCost(id){ return estimateCost(id,null); }
+async function pkgEstimateCost(id,pi){ return estimateCost(id,pi); }
+async function estimateCost(id,pi){
+  toast("Estimating cost…");
+  let r; try{ r=await post("/api/purchase/estimate_cost", pi==null?{id}:{id,pi}); }catch(e){ r=null; }
+  if(!r||!r.ok){ toast((r&&r.error)||"Estimate failed"); return; }
+  const i=POS.findIndex(x=>x.po_id===id); if(i>=0&&r.purchase_order) POS[i]=r.purchase_order;
+  renderPurchases();
+  const x=r.result||{}, reused=(x.from_past||0)+(x.from_cache||0);
+  const tot=(x.packages||[]).reduce((s,p)=>s+(p.est_total_usd||0),0);
+  toast(`≈ ${money(tot)} · ${reused} reused · ${x.fresh||0} fetched${x.unpriced?` · ${x.unpriced} unpriced`:''}`);
+}
 async function poDelPkg(id,pi){ if(!confirm("Delete this package? It moves to Trash — you can restore it."))return;
   const r=await post("/api/purchase/package/delete",{id,pi});
   if(r.ok){ const p=poFind(id); p.packages.splice(pi,1); p.packages.forEach((pk,i)=>pk.package_no=i+1); renderPurchases(); toast("Package moved to Trash"); loadHomeActivity(); } }
