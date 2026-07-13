@@ -796,6 +796,15 @@
       <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save tracking labels</button></div>
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">🏷️ Otlobly stage → what the customer sees</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">عندما تغيّر حالة الطرد يدوياً، هذا ما يظهر للزبون · When you set a package's <b>Otlobly status</b> (the dropdown on Purchases), the customer's tracking page shows this label instead of the carrier status. <code>{name}</code> = اسم الزبون. Carriers can only ever say "في الطريق إلى اطلبلي" — <b>تم التسليم</b> comes only from here.</div>
+      <table style="width:100%;font-size:12.5px;border-collapse:collapse">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>Otlobly status (you set)</th><th>Customer sees</th><th>Colour</th><th></th></tr></thead>
+        <tbody id="otlRows"></tbody></table>
+      <button class="po-btn" style="margin-top:8px" onclick="otlAddRow()">＋ Add stage</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save stages</button></div>
+    </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">💬 Customer login (WhatsApp OTP)</h3>
       <div class="muted2" style="font-size:12px;margin-bottom:9px">Customers sign in to the <b>account portal</b> with a one-time code sent to their WhatsApp. Status: <b id="waStatus">…</b>. Send yourself a test code to verify your Meta setup before customers rely on it.</div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
@@ -2904,6 +2913,7 @@ async function loadSettings(){
   $("s_imptype").value=s.import_rule.type; $("s_impval").value=s.import_rule.value;
   $("s_custmode").value=s.customer_mode?"1":"";
   lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
+  otlRender(s.tracking_otlobly_map);
   msRender(s.meta_manual||{});                       // monthly Meta ad spend rows
   const cf=s.card_flags||{}, cl=s.card_labels||{};   // white-label / card features
   if($("s_courier")) $("s_courier").value=cl.courier||"";
@@ -2957,18 +2967,45 @@ async function emailTest(btn){
   if(d&&d.ok){ out.style.color="var(--good)"; out.textContent="✅ Sent to "+d.sent_to+" — check your inbox."; }
   else { out.style.color="var(--warn)"; out.textContent="⚠ "+((d&&d.error)||"failed"); }
 }
+// Customer-side bucket colours (same as the /track page dots) — tint the selects
+// so the owner scans the maps by colour, like the pills on Purchases.
+const BUCKET_HEX={transit:"#3b82f6",arrived:"#0284c7",customs:"#d97706",cleared:"#16a34a",delivered:"#15803d"};
+function bucketTint(sel){ const h=BUCKET_HEX[sel.value]||"#8d8d8d";
+  sel.style.cssText+=`;color:${h};background:${h}14;border:1px solid ${h}55;border-radius:7px;font-weight:700`; }
 function lblBucketSel(v){ return ['transit','arrived','customs','cleared','delivered'].map(b=>`<option ${b===v?'selected':''}>${b}</option>`).join(""); }
-function lblRowHtml(r){ r=r||{}; return `<tr>
+function lblRowHtml(r){ r=r||{}; const h=BUCKET_HEX[r.bucket||'transit']||"#8d8d8d"; return `<tr>
   <td><input class="l-match mono" style="width:100%" value="${poEsc(r.match||'')}" placeholder="CD  /  Required customer ID"></td>
   <td><input class="l-label" style="width:100%" value="${poEsc(r.label||'')}" placeholder="In clearance"></td>
-  <td><select class="l-bucket">${lblBucketSel(r.bucket||'transit')}</select></td>
+  <td style="white-space:nowrap"><span class="cu-ring" style="border-color:${h};margin-inline-end:5px;vertical-align:middle"></span><select class="l-bucket" onchange="bucketTint(this);this.previousElementSibling.style.borderColor=BUCKET_HEX[this.value]||'#8d8d8d'">${lblBucketSel(r.bucket||'transit')}</select></td>
   <td style="text-align:center"><input type="checkbox" class="l-hide" ${r.hidden?'checked':''}></td>
   <td><button class="iconbtn" title="remove" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
-function lblRender(map){ if($("lblRows"))$("lblRows").innerHTML=(map||[]).map(lblRowHtml).join(""); }
-function lblAddRow(){ $("lblRows").insertAdjacentHTML('beforeend', lblRowHtml({})); }
+function lblRender(map){ if($("lblRows")){ $("lblRows").innerHTML=(map||[]).map(lblRowHtml).join("");
+  $("lblRows").querySelectorAll('.l-bucket').forEach(bucketTint); } }
+function lblAddRow(){ $("lblRows").insertAdjacentHTML('beforeend', lblRowHtml({}));
+  $("lblRows").querySelectorAll('.l-bucket').forEach(bucketTint); }
 function lblCollect(){ return [...document.querySelectorAll('#lblRows tr')].map(tr=>({
   match:tr.querySelector('.l-match').value.trim(), label:tr.querySelector('.l-label').value.trim(),
   bucket:tr.querySelector('.l-bucket').value, hidden:tr.querySelector('.l-hide').checked })).filter(r=>r.match); }
+// --- Otlobly stage → customer label (Settings) --- //
+function otlStatusSel(v){ const known=CU_STATUSES.some(([s])=>s===v);
+  return (known?CU_STATUSES:[[v||'',"#8d8d8d"]].concat(CU_STATUSES)).map(([s])=>`<option ${s===v?'selected':''}>${poEsc(s)}</option>`).join(""); }
+function otlTint(sel){ const h=CU_COLOR[sel.value]||"#8d8d8d";
+  sel.style.cssText+=`;color:${h};background:${h}14;border:1px solid ${h}55;border-radius:7px;font-weight:700`; }
+function otlRowHtml(r){ r=r||{}; return `<tr>
+  <td><select class="o-status" onchange="otlTint(this)">${otlStatusSel(r.status||CU_STATUSES[0][0])}</select></td>
+  <td><input class="o-label" style="width:100%" value="${poEsc(r.label||'')}" placeholder="استلمتها اطلبلي — أو: في الطريق إلى {name}"></td>
+  <td style="white-space:nowrap"><span class="cu-ring" style="border-color:${BUCKET_HEX[r.bucket||'arrived']||'#8d8d8d'};margin-inline-end:5px;vertical-align:middle"></span><select class="o-bucket" onchange="bucketTint(this);this.previousElementSibling.style.borderColor=BUCKET_HEX[this.value]||'#8d8d8d'">${lblBucketSel(r.bucket||'arrived')}</select></td>
+  <td><button class="iconbtn" title="remove" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
+function otlRender(map){ if(!$("otlRows")) return;
+  $("otlRows").innerHTML=(map||[]).map(otlRowHtml).join("");
+  $("otlRows").querySelectorAll('.o-status').forEach(otlTint);
+  $("otlRows").querySelectorAll('.o-bucket').forEach(bucketTint); }
+function otlAddRow(){ $("otlRows").insertAdjacentHTML('beforeend', otlRowHtml({}));
+  $("otlRows").querySelectorAll('.o-status').forEach(otlTint);
+  $("otlRows").querySelectorAll('.o-bucket').forEach(bucketTint); }
+function otlCollect(){ return [...document.querySelectorAll('#otlRows tr')].map(tr=>({
+  status:tr.querySelector('.o-status').value.trim(), label:tr.querySelector('.o-label').value.trim(),
+  bucket:tr.querySelector('.o-bucket').value })).filter(r=>r.status&&r.label); }
 // --- Meta ad spend rows (Settings → P&L) --- //
 function msRowHtml(m,v){ return `<div class="ms-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
   <input type="month" class="ms-m" value="${poEsc(m)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px">
@@ -2994,6 +3031,7 @@ async function saveSettings(b){
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
     customer_mode:!!$("s_custmode").value,
     tracking_status_map:lblCollect(), tracking_default_label:($("s_deflabel")||{}).value||"In transit",
+    tracking_otlobly_map:otlCollect(),
     card_flags:{ multilogin:!!($("s_f_multilogin")||{}).checked, clickup:!!($("s_f_clickup")||{}).checked,
       screenshot:!!($("s_f_screenshot")||{}).checked, second_currency:!!($("s_f_second_currency")||{}).checked },
     card_labels:{ courier:($("s_courier")||{}).value||"", currency:($("s_cur")||{}).value||"",

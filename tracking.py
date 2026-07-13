@@ -63,11 +63,15 @@ DEFAULT_STATUS_MAP = [
     {"match": "Ministry of Transportation", "label": "قيد التخليص الجمركي", "bucket": "customs"},
     {"match": "Ministry of Communications", "label": "قيد التخليص الجمركي", "bucket": "customs"},
     {"match": "Cleared customs", "label": "تم التخليص الجمركي", "bucket": "cleared"},
-    {"match": "Delivered", "label": "تم التسليم", "bucket": "delivered"},
+    # GAASH "Delivered" / handed to Gerizim ≠ the customer has it — the box is on
+    # its way to OTLOBLY, which re-ships it; only the owner-set Otlobly stage
+    # (DEFAULT_OTLOBLY_MAP below) may ever tell the customer "تم التسليم".
+    {"match": "Delivered", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
+    {"match": "Picked up by Gerizim courier", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     # reliable code fallbacks for stages this account hasn't reached yet
     {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "arrived"},
     {"match": "K2", "label": "تم التخليص الجمركي", "bucket": "cleared"},
-    {"match": "D1", "label": "تم التسليم", "bucket": "delivered"},
+    {"match": "D1", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     # parcelsapp machine statuses (tier-2 source; stamped as the last event's code)
     {"match": "DELIVERED", "label": "تم التسليم", "bucket": "delivered"},
     {"match": "ARRIVED", "label": "وصلت إلى بلدك", "bucket": "arrived"},
@@ -75,6 +79,20 @@ DEFAULT_STATUS_MAP = [
     {"match": "PICKUP", "label": "قيد الشحن", "bucket": "transit"},
 ]
 DEFAULT_CUSTOMER_LABEL = "قيد الشحن"
+
+# Owner-set Otlobly stage (the ClickUp-vocabulary dropdown on each package) →
+# what the CUSTOMER sees. Statuses match CU_STATUSES spellings verbatim (typos
+# included). "{name}" in a label is replaced with the customer's name. Buckets
+# reuse the five carrier buckets so the portal progress bars need no changes
+# (arrived = step 4, delivered completes). Editable from the admin Settings
+# table (customer_tracking.otlobly_map).
+DEFAULT_OTLOBLY_MAP = [
+    {"status": "recieved rd", "label": "استلمتها اطلبلي", "bucket": "arrived"},
+    {"status": "recieved no rd", "label": "استلمتها اطلبلي", "bucket": "arrived"},
+    {"status": "sent rd", "label": "في الطريق إلى {name}", "bucket": "arrived"},
+    {"status": "sent no rd", "label": "في الطريق إلى {name}", "bucket": "arrived"},
+    {"status": "complete", "label": "تم التسليم", "bucket": "delivered"},
+]
 
 # parcelsapp machine statuses → staff label + colour bucket (the CODE stamped on
 # a tier-2 timeline's final event; full words can't collide with GAASH's

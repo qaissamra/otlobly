@@ -61,6 +61,9 @@ def read(config=None):
                                        tracking.DEFAULT_STATUS_MAP),
         "tracking_default_label": cfg.get(config, "customer_tracking.default_label",
                                           tracking.DEFAULT_CUSTOMER_LABEL),
+        # Owner-set Otlobly stage → customer label ("{name}" = the customer's name).
+        "tracking_otlobly_map": cfg.get(config, "customer_tracking.otlobly_map",
+                                        tracking.DEFAULT_OTLOBLY_MAP),
         # White-label the order card per business. Internal/region-specific features
         # default OFF so a fresh tenant gets a clean, generic card. (Roadmap #2.)
         "card_flags": {
@@ -123,6 +126,18 @@ def apply(body, config=None, persist=True):
     if "tracking_default_label" in body:
         cfg.set_path(config, "customer_tracking.default_label",
                      str(body["tracking_default_label"]).strip() or "In transit")
+    if isinstance(body.get("tracking_otlobly_map"), list):
+        rows = []
+        for r in body["tracking_otlobly_map"]:
+            if not isinstance(r, dict):
+                continue
+            status = str(r.get("status", "")).strip()
+            label = str(r.get("label", "")).strip()
+            if not status or not label:
+                continue
+            rows.append({"status": status, "label": label,
+                         "bucket": (str(r.get("bucket", "arrived")).strip() or "arrived")})
+        cfg.set_path(config, "customer_tracking.otlobly_map", rows)
     flags = body.get("card_flags")
     if isinstance(flags, dict):
         for k in ("multilogin", "clickup", "screenshot", "second_currency"):

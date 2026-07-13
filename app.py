@@ -2815,6 +2815,30 @@ def _delivery_window(arrival):
     return (end - timedelta(days=14)).strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
+def _otlobly_stage(pk, pk_items, omap, po):
+    """The owner-set Otlobly stage (the package's ClickUp-vocabulary dropdown) →
+    the customer-facing label that OVERRIDES the carrier timeline. Carriers can
+    only ever get the box to Otlobly; \"تم التسليم\" comes solely from here
+    (the owner marking the package complete). Returns {label, bucket, date} or None."""
+    ots = (pk.get("otlobly_status") or "").strip().lower()
+    if not ots:
+        return None
+    for row in omap or []:
+        if (row.get("status") or "").strip().lower() != ots:
+            continue
+        label = (row.get("label") or "").strip()
+        if not label:
+            return None
+        if "{name}" in label:
+            name = next(((it.get("customer_name") or "").strip()
+                         for it in (pk_items or pk.get("items") or [])
+                         if (it.get("customer_name") or "").strip()), "")
+            label = label.replace("{name}", name or "إليك")
+        return {"label": label, "bucket": (row.get("bucket") or "arrived").strip() or "arrived",
+                "date": (po.get("updated_at") or "")[:10] or None}
+    return None
+
+
 def _shipments_for(pairs, names, oids):
     """[(po, package)] → friendly shipment cards: de-dupe, show ONLY this customer's items,
     one GAASH session for all timelines. Shared by /api/track and the customer dashboard.
@@ -2832,6 +2856,7 @@ def _shipments_for(pairs, names, oids):
     cfgd = cfg.load()
     smap = cfg.get(cfgd, "customer_tracking.status_map", tracking.DEFAULT_STATUS_MAP)
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
+    omap = cfg.get(cfgd, "customer_tracking.otlobly_map", tracking.DEFAULT_OTLOBLY_MAP)
     gwds = [pk.get("tracking_number") for _, pk in uniq if (pk.get("tracking_number") or "").strip()]
     tls = tracking.timelines_with_fallback(gwds) if gwds else {}
     shipments = []
@@ -2854,21 +2879,28 @@ def _shipments_for(pairs, names, oids):
         if not gwd:
             # an arrival date means it's been ordered/shipped → "on the way"; otherwise "preparing"
             label = "في الطريق إلى بلدك" if pk.get("arrival") else "نقوم بتجهيز طلبك"
-            shipments.append({"tracking": otl, "items": items, "events": [],
-                              "current": {"label": label, "bucket": "transit"}, **est})
-            continue
-        tl = tls.get(gwd, {})
-        if tl.get("ok"):
-            ct = tracking.customer_timeline(tl["events"], smap, dlabel)
-            ship = {"tracking": otl, "items": items, "current": ct["current"],
-                    "events": ct["events"], **est}
-            if tl.get("stale"):                   # served from the last-known cache
-                ship.update(stale=True, as_of=tl.get("fetched_at"))
-            shipments.append(ship)
+            ship = {"tracking": otl, "items": items, "events": [],
+                    "current": {"label": label, "bucket": "transit"}, **est}
         else:
-            # every tier failed AND nothing cached → honest generic state
-            shipments.append({"tracking": otl, "items": items, "events": [],
-                              "current": {"label": "قيد الشحن", "bucket": "transit"}, **est})
+            tl = tls.get(gwd, {})
+            if tl.get("ok"):
+                ct = tracking.customer_timeline(tl["events"], smap, dlabel)
+                ship = {"tracking": otl, "items": items, "current": ct["current"],
+                        "events": ct["events"], **est}
+                if tl.get("stale"):               # served from the last-known cache
+                    ship.update(stale=True, as_of=tl.get("fetched_at"))
+            else:
+                # every tier failed AND nothing cached → honest generic state
+                ship = {"tracking": otl, "items": items, "events": [],
+                        "current": {"label": "قيد الشحن", "bucket": "transit"}, **est}
+        # The owner-set Otlobly stage outranks the carriers: hero + one synthetic
+        # timeline event, so "استلمتها اطلبلي / في الطريق إلى {الاسم} / تم التسليم"
+        # come from the owner, never from GAASH/Gerizim.
+        stage = _otlobly_stage(pk, pk_items, omap, po)
+        if stage:
+            ship["current"] = {"label": stage["label"], "bucket": stage["bucket"]}
+            ship["events"] = (ship.get("events") or []) + [stage]
+        shipments.append(ship)
     return shipments
 
 
@@ -3646,6 +3678,38 @@ if db.claim_once("boot:reconcile_v1"):
             _fn()
         except Exception as _e:                  # noqa: BLE001 — never block boot
             app.logger.warning("%s skipped: %s", _label, _e)
+
+
+def _patch_customer_status_map():
+    """2026-07-13: carrier 'Delivered' must read 'في الطريق إلى اطلبلي' for customers —
+    GAASH/Gerizim delivering only means the box reached Otlobly's side, never the
+    customer; \"تم التسليم\" now comes solely from the owner-set Otlobly stage.
+    Patches the SAVED Settings map once (idempotent + re-editable in Settings)."""
+    cfgd = cfg.load()
+    rows = cfg.get(cfgd, "customer_tracking.status_map", None)
+    if not isinstance(rows, list):
+        return
+    changed = False
+    for r in rows:
+        if (r.get("match") or "").strip() in ("Delivered", "D1") \
+                and (r.get("label") or "").strip() == "تم التسليم":
+            r["label"], r["bucket"] = "في الطريق إلى اطلبلي", "arrived"
+            changed = True
+    if not any((r.get("match") or "").strip().lower() == "picked up by gerizim courier"
+               for r in rows):
+        rows.append({"match": "Picked up by Gerizim courier",
+                     "label": "في الطريق إلى اطلبلي", "bucket": "arrived", "hidden": False})
+        changed = True
+    if changed:
+        cfg.set_path(cfgd, "customer_tracking.status_map", rows)
+        cfg.save(cfgd)
+
+
+if db.claim_once("boot:customer_map_v1"):
+    try:
+        _patch_customer_status_map()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("customer status-map patch skipped: %s", _e)
 
 
 if __name__ == "__main__":
