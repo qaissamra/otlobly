@@ -1689,15 +1689,31 @@ function brainLink(l){
 }
 function renderBrain(){
   const d=BRAIN, secs={}; d.sections.forEach(s=>secs[s.key]=s);
-  const nUrgent=(secs.urgent||{}).count||0, nDue=(secs.due||{}).count||0, nForgot=(secs.forgotten||{}).count||0;
-  const r=d.results||{};
+  const nDead=(secs.deadlines||{}).count||0, nUrgent=(secs.urgent||{}).count||0, nDue=(secs.due||{}).count||0, nForgot=(secs.forgotten||{}).count||0;
+  const r=d.results||{}, pl=d.pipeline||{};
   const chip=(txt,alert)=>`<span class="qchip${alert?' alert':''}" style="font-size:12.5px">${txt}</span>`;
   const today=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});
   const strip=`<div class="panel" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <b style="font-size:15px">${today}</b>
-      ${chip(`🔥 ${nUrgent} urgent`,nUrgent>0)}${chip(`⏰ ${nDue} due soon`,false)}${chip(`🧠 ${nForgot} forgotten`,false)}
+      ${chip(`📦 ${pl.past_deadline||0} past deadline`,(pl.past_deadline||0)>0)}${chip(`🔥 ${nUrgent} urgent`,nUrgent>0)}${chip(`⏰ ${nDue} due soon`,false)}${chip(`🧠 ${nForgot} forgotten`,false)}
       <span class="spacer" style="flex:1"></span>
       <span class="muted2" style="font-size:12px">📈 last ${r.window_days||7}d: <b>${r.new_orders||0}</b> new${r.new_orders_value_usd!=null?` (${money(r.new_orders_value_usd)})`:""} · <b>${r.delivered||0}</b> delivered · <b>${r.collected||0}</b> collected${r.collected_usd!=null?` (${money(r.collected_usd)})`:""}</span>
+    </div>`;
+  // The operational funnel — one glance at where every order sits. "Past deadline"
+  // is the alarm (red when >0); its detail is the 📦 section below.
+  const tile=(icon,lab,n,view,alarm)=>{
+    const border=alarm&&n>0?"#ef4444":"var(--line)", col=alarm&&n>0?"#ef4444":"var(--ink)";
+    const nav=view?` onclick="setView('${view}')" style="cursor:pointer"`:"";
+    return `<div class="panel" style="margin:0;padding:11px 13px;border-color:${border}"${nav}>
+      <div style="font-size:24px;font-weight:800;color:${col}">${n||0}</div>
+      <div class="muted2" style="font-size:11.5px">${icon} ${lab}</div></div>`;
+  };
+  const funnel=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px">
+      ${tile("🛒","To order",pl.to_order,"needorder")}
+      ${tile("📦","Ordered",pl.ordered,"orders")}
+      ${tile("🚚","In transit",pl.in_transit,"orders")}
+      ${tile("📍","To collect",pl.to_collect,"orders")}
+      ${tile("⏰","Past deadline",pl.past_deadline,"",true)}
     </div>`;
   const row=it=>`<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px">
       <span style="flex:0 0 auto">${it.icon||"•"}</span>
@@ -1715,12 +1731,12 @@ function renderBrain(){
       <h3 style="margin:0 0 6px;font-size:14.5px;font-weight:800">${s.icon} ${poEsc(s.title)}${s.count?` <span class="muted2" style="font-weight:500;font-size:12px">· ${s.count}</span>`:""}</h3>
       ${body}</div>`;
   };
-  const allClear=(nUrgent+nDue+nForgot)===0
+  const allClear=(nDead+nUrgent+nDue+nForgot)===0
     ? `<div class="panel" style="margin-top:14px;text-align:center;padding:26px"><div style="font-size:30px">🎉</div>
         <b>nothing urgent — all clear</b><div class="muted2" style="font-size:12.5px;margin-top:3px">كل شي تمام · new orders will show up here the moment they need you</div></div>`
     : "";
-  $("brainBox").innerHTML=strip+brainOwnerStrip()+allClear
-    +(allClear?panel(secs.money):panel(secs.urgent)+panel(secs.due)+panel(secs.forgotten)+panel(secs.money));
+  $("brainBox").innerHTML=strip+funnel+brainOwnerStrip()+allClear
+    +(allClear?panel(secs.money):panel(secs.deadlines)+panel(secs.urgent)+panel(secs.due)+panel(secs.forgotten)+panel(secs.money));
   const bp=$("brainPlat"); if(bp && !bp.dataset.done) fillBrainOwnerStrip();
 }
 function brainOwnerStrip(){

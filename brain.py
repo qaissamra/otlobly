@@ -42,6 +42,12 @@ MAX_ITEMS = 8             # per-rule item cap (count still carries the true tota
 OPEN_STATUSES = {"REQUESTED", "QUOTED", "ORDERED", "SHIPPED", "ARRIVED", "DELIVERED"}
 _DONE = ("DELIVERED", "COLLECTED", "CANCELLED")
 
+# Plain-English status for the deadline rows, so a late order reads "in transit"
+# vs "arrived — waiting collection" (the "full understanding of the situation").
+STATUS_LABEL = {"ORDERED": "ordered — awaiting shipment", "SHIPPED": "in transit",
+                "ARRIVED": "arrived — waiting collection", "REQUESTED": "not ordered yet",
+                "QUOTED": "quoted"}
+
 
 def _now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -101,11 +107,14 @@ def build(business_id=None):
     today = date.today()
     orders = db.list_orders()
 
-    urgent, due, forgotten, seen_forgotten = [], [], [], set()
+    urgent, due, forgotten, deadlines, seen_forgotten = [], [], [], [], set()
     # aggregates over one pass
     n_requested = n_unpriced = n_expand = 0
     oldest_requested = None
     arrived_orders = []
+    # operational funnel — a one-glance picture of where every order sits
+    pipe = {"to_order": 0, "ordered": 0, "in_transit": 0, "to_collect": 0,
+            "past_deadline": 0, "due_soon": 0}
     outstanding = open_deposits = collect_now = money.D(0)
     res = {"new_orders": 0, "new_orders_value_usd": money.D(0),
            "delivered": 0, "collected": 0, "collected_usd": money.D(0)}
@@ -134,29 +143,42 @@ def build(business_id=None):
             collect_now += amt - dep
             arrived_orders.append(o)
 
-        # ---- urgent counters ----
+        # ---- urgent counters + operational funnel ----
         if st == "REQUESTED":
             n_requested += 1
+            pipe["to_order"] += 1
             age = _days_since(o.get("created_at"), today)
             if age is not None and (oldest_requested is None or age > oldest_requested):
                 oldest_requested = age
+        elif st == "ORDERED":
+            pipe["ordered"] += 1
+        elif st == "SHIPPED":
+            pipe["in_transit"] += 1
+        if st in ("ARRIVED", "DELIVERED"):
+            pipe["to_collect"] += 1
         if o.get("amount_to_collect_usd") is None and st != "CANCELLED":
             n_unpriced += 1
         if any(it.get("needs_expand") for it in o.get("items") or []):
             n_expand += 1
 
-        # ---- ETAs: overdue → urgent, close → due ----
+        # ---- the deadline (customer-promised date): reached → its own section,
+        #      still-a-few-days-out → "due soon". Warehouse arrival is a softer
+        #      "arriving from Amazon" signal only (below). ----
         if st not in _DONE:
             left = _days_until(o.get("est_delivery_customer"), today)
-            if left is not None and left < 0:
-                urgent.append(_item(oid, "⏰", f"{oid} is {-left}d past its promised ETA",
-                                    f'{name} · promised {o["est_delivery_customer"]}',
-                                    amount_usd=o.get("amount_to_collect_usd"),
-                                    age_days=-left, due=o["est_delivery_customer"],
-                                    severity="urgent", view="orders", arg=oid))
-            elif left is not None and left <= ETA_SOON_D:
-                due.append(_item(oid, "📅", f"{oid} promised to the customer "
-                                            + ("today" if left == 0 else f"in {left}d"),
+            if left is not None and left <= 0:                 # today or past = deadline reached
+                pipe["past_deadline"] += 1
+                late = -left
+                label = ("due today" if late == 0 else f"{late}d late")
+                deadlines.append(_item(
+                    oid, "⏰", f"{oid} · {label}",
+                    f'{name} · {STATUS_LABEL.get(st, st)} · promised {o["est_delivery_customer"]}',
+                    amount_usd=o.get("amount_to_collect_usd"),
+                    age_days=late, due=o["est_delivery_customer"],
+                    severity="urgent", view="orders", arg=oid))
+            elif left is not None and left <= ETA_SOON_D:       # 1..3 days out
+                pipe["due_soon"] += 1
+                due.append(_item(oid, "📅", f"{oid} promised to the customer in {left}d",
                                  name, amount_usd=o.get("amount_to_collect_usd"),
                                  due=o["est_delivery_customer"], severity="soon",
                                  view="orders", arg=oid))
@@ -272,10 +294,12 @@ def build(business_id=None):
               amount_usd=money.to_usd(collect_now), view="orders"),
     ]
 
-    n_urgent, n_due, n_forgotten = len(urgent), len(due), len(forgotten)
+    n_urgent, n_due, n_forgotten, n_dead = len(urgent), len(due), len(forgotten), len(deadlines)
     return {
         "generated_at": _now_iso(),
+        "pipeline": pipe,
         "sections": [
+            _section("deadlines", "Past deadline · تجاوزت الموعد", "📦", _cap(deadlines), n_dead),
             _section("urgent", "Urgent · الآن", "🔥", _cap(urgent), n_urgent),
             _section("due", "Due soon · مواعيد", "⏰",
                      sorted(due, key=lambda i: i["due"] or "9999")[:MAX_ITEMS], n_due),

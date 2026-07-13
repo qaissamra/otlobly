@@ -93,10 +93,11 @@ def main():
     F = order("f", "ARRIVED", created=9, amount=250.0, deposit=50.0,
               amazon_arrival=d_ago(6))                                       # urgent collect + forgotten arrived>5d
     G = order("g", "DELIVERED", created=8, est_delivery_customer=d_ago(3),
-              delivered_at=iso_ago(2))                                       # delivered: past ETA must NOT be overdue; counts in collect_now
+              delivered_at=iso_ago(2))                                       # delivered: past ETA must NOT be past-deadline; counts in collect_now
+    J = order("j", "SHIPPED", created=5, est_delivery_customer=d_ago(0))     # due TODAY → past-deadline (boundary)
     order("h", "COLLECTED", created=2, amount=80.0)                          # results: collected in window
     order("i", "REQUESTED", created=0, amount=None)                          # unpriced counts
-    OTL_IDS = {A, B, C, D, E, F, G}
+    OTL_IDS = {A, B, C, D, E, F, G, J}
     db.upsert_lead({"lead_id": "L1", "source": "messenger", "name": "Lead One",
                     "phone": "970599", "created_time": iso_ago(3), "status": "new"})
 
@@ -109,13 +110,31 @@ def main():
     check("unpriced aggregate fires", "rule:unpriced" in u)
     check("collect aggregate fires with the right amount (ARRIVED 200 + DELIVERED 100)",
           any(i["id"] == "rule:collect" and i["amount_usd"] == 300.0 for i in s1["urgent"]["items"]))
-    check("overdue ETA is urgent (per order)", D in u)
-    check("delivered order with past ETA is NOT overdue", G not in u)
+    check("overdue ETA no longer in urgent (moved to deadlines)", D not in u)
     check("leads rule fires for business 1", "rule:leads" in u)
     check("no quota rule for unlimited business 1",
           not any(i["id"] == "rule:quota" for i in s1["urgent"]["items"]))
 
-    # 2) due rules
+    # 1b) deadlines section (packages past the customer-promised date)
+    dl = ids(s1["deadlines"])
+    check("past-deadline order is in the deadlines section", D in dl)
+    check("due-today order counts as past-deadline (boundary)", J in dl)
+    check("delivered order with past ETA is NOT past-deadline", G not in dl)
+    check("deadlines section is urgent severity", s1["deadlines"]["severity"] == "urgent")
+    check("a deadline row shows the status for context",
+          any("in transit" in (i["detail"] or "") for i in s1["deadlines"]["items"]))
+
+    # 1c) pipeline funnel counts
+    p = d1["pipeline"]
+    check("pipeline has all funnel keys",
+          set(p) == {"to_order", "ordered", "in_transit", "to_collect", "past_deadline", "due_soon"})
+    check("to_order = REQUESTED count", p["to_order"] == 2)          # A + i(unpriced)
+    check("in_transit = SHIPPED count", p["in_transit"] == 2)        # D + J
+    check("to_collect = ARRIVED+DELIVERED", p["to_collect"] == 2)    # F + G
+    check("past_deadline counts D and J only", p["past_deadline"] == 2)
+    check("due_soon counts E only", p["due_soon"] == 1)
+
+    # 2) due rules (amazon-arrival still surfaces; customer ETA in 2d is due)
     dd = ids(s1["due"])
     check("ETA within 3d is due", E in dd)
     check("amazon arrival within 2d is due (same order, purchases link)",
@@ -149,7 +168,7 @@ def main():
     all_ids = [i["id"] for s in d2["sections"] for i in s["items"]]
     check("broker brain has no Otlobly ids", not (set(all_ids) & OTL_IDS))
     check("all sections present for an empty tenant",
-          [s["key"] for s in d2["sections"]] == ["urgent", "due", "forgotten", "money"])
+          [s["key"] for s in d2["sections"]] == ["deadlines", "urgent", "due", "forgotten", "money"])
     check("empty tenant: urgent/due/forgotten all zero",
           all(s["count"] == 0 for s in d2["sections"] if s["key"] != "money"))
 
