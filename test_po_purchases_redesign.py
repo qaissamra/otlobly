@@ -75,6 +75,10 @@ def main():
           'id="poEditModal"' in html and "function poEditOpen(" in html
           and "Amazon order #" in html)
 
+    # 7b) The profile/box name shows on the PO row (needed at a glance).
+    check("PO row shows the profile chip",
+          "p.profile_box||''" in html and "🖥 ${poEsc(p.profile_box)}" in html)
+
     # 8) #28 read-view still intact (grouped rows, item editor, 3-word clip).
     check("customer-grouped item rows survive", 'class="poc-cust' in html and "itemEditOpen(" in html)
     check("3-word name clip survives", "const short3=" in html)

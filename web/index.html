@@ -3443,6 +3443,10 @@ function poCardHtml(p){
   const who=custs.length===1?custs[0]:(custs.length>1?`${custs.length} customers`:(p.ship_to||''));
   const npk=(p.packages||[]).length;
   const total=p.total_usd!=null?` · <b>${money(p.total_usd)}</b>`:'';
+  const boxTerm=L.box_term||'Profile';
+  // The Multilogin profile / account the order sits under — needed at a glance.
+  const profChip=(p.profile_box||'').trim()
+    ? `<span class="mono" title="${poEsc(boxTerm)}" style="flex:0 0 auto;font-size:11px;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px">🖥 ${poEsc(p.profile_box)}</span>` : '';
   // One clean row: chevron · PO# · customer · N items · total · worst-package pill · ⋯
   const menu=popMenu([
     [`✏️ تعديل الطلب · Edit order`, `poEditOpen('${p.po_id}')`],
@@ -3458,6 +3462,7 @@ function poCardHtml(p){
       <b class="po-name" onclick="poToggleCard('${p.po_id}')" style="cursor:pointer">${poEsc(p.po_id)}</b>
       <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(who)||'—'} · ${p.n_items} item${p.n_items===1?'':'s'}${npk>1?` · ${npk} packages`:''}</span>
       <span class="spacer"></span>
+      ${profChip}
       <span class="muted2" style="flex:0 0 auto">${total}</span>
       ${poSummaryPill(p)}
       ${menu}
