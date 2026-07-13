@@ -98,10 +98,17 @@ PARCELSAPP_CODE_FALLBACK = {
 }
 
 
+_SESSION_CACHE = {"at": 0.0, "val": None}   # (api, nonce) reused ~10 min — the
+_SESSION_TTL = 600                          # popup checks GWDs one-by-one and
+                                            # must not re-scrape the page each call
+
 def get_session(retries=4, timeout=12):
     """Scrape a fresh apiUrl + nonce from the live tracking page, with the same
     retry/backoff as gaash-clickup-sync/gaash.py. timeout=12 (not 30) on purpose:
-    worst case ~55s keeps a customer request inside gunicorn's 120s window."""
+    worst case ~55s keeps a customer request inside gunicorn's 120s window.
+    The scraped session is cached for _SESSION_TTL seconds."""
+    if _SESSION_CACHE["val"] and time.time() - _SESSION_CACHE["at"] < _SESSION_TTL:
+        return _SESSION_CACHE["val"]
     html, last = None, None
     for attempt in range(retries):
         try:
@@ -119,7 +126,9 @@ def get_session(retries=4, timeout=12):
     if not non:
         raise RuntimeError("Could not find GAASH nonce (site layout may have changed).")
     api = re.search(r'"apiUrl":"([^"]+)"', html)
-    return (api.group(1).replace("\\/", "/") if api else DEFAULT_API), non.group(1)
+    val = (api.group(1).replace("\\/", "/") if api else DEFAULT_API), non.group(1)
+    _SESSION_CACHE.update(at=time.time(), val=val)
+    return val
 
 
 def clean_tracking(tn):

@@ -49,6 +49,8 @@ FIELD_LABELS = {
     "status": "STATUS",
     "arrival": "ARRIVAL",
     "tracking_number": "TRACKING",
+    "otlobly_status": "OTLOBLY STATUS",
+    "tracking_status": "GAASH STATUS",
     "title": "PRODUCT NAME",
     "asin": "ASIN",
     "customer_name": "CUSTOMER NAME",
@@ -100,8 +102,9 @@ def _short(v):
     return s if len(s) <= 120 else s[:117] + "…"
 
 
-def recent(limit=60, entity=None, business_id=None):
-    """Newest-first list of events, optionally filtered to one entity type.
+def recent(limit=60, entity=None, business_id=None, entity_id=None):
+    """Newest-first list of events, optionally filtered to one entity type and/or
+    one specific entity id (the per-PO Activity feed in the detail drawer).
     `business_id` reads another tenant's feed (Tatabu platform admin only)."""
     af = _activity_file(business_id)
     if not af.exists():
@@ -116,6 +119,8 @@ def recent(limit=60, entity=None, business_id=None):
         except ValueError:
             continue
         if entity and ev.get("entity") != entity:
+            continue
+        if entity_id and ev.get("entity_id") != str(entity_id):
             continue
         out.append(ev)
     out.reverse()
@@ -141,12 +146,19 @@ def platform_recent(businesses, limit=100):
 # --------------------------------------------------------------------------- #
 _PO_FIELDS = ("amazon_order_number", "ship_to", "profile_box", "order_placed",
               "total_usd", "total_aed", "status")
-_PKG_FIELDS = ("arrival", "tracking_number")
+_PKG_FIELDS = ("arrival", "tracking_number", "otlobly_status")
 _ITEM_FIELDS = ("title", "asin", "customer_name", "qty", "status", "notes")
 
 
 def _norm(v):
     return "" if v in (None, "") else str(v)
+
+
+def gaash_text(ts):
+    """Readable one-liner for a tracking_status dict (never the raw JSON)."""
+    if not isinstance(ts, dict) or ts.get("error"):
+        return ""
+    return (ts.get("text") or ts.get("label") or ts.get("bucket") or "").strip()
 
 
 def po_diff(old, new):
@@ -178,6 +190,11 @@ def po_diff(old, new):
             if _norm(op.get(f)) != _norm(pkg.get(f)):
                 events.append({"field": f, "old": op.get(f), "new": pkg.get(f),
                                "detail": pkg_label})
+        # GAASH status is a dict — diff the readable text, never the raw JSON
+        ot, nt = gaash_text(op.get("tracking_status")), gaash_text(pkg.get("tracking_status"))
+        if nt and ot != nt:
+            events.append({"field": "tracking_status", "old": ot or None, "new": nt,
+                           "detail": pkg_label})
         old_items = {it.get("item_id"): it for it in op.get("items", [])}
         for it in pkg.get("items", []):
             oit = old_items.get(it.get("item_id"))

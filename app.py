@@ -1526,49 +1526,71 @@ def api_purchases_refresh_tracking():
     opening the page tops itself up: every package with a GWD number that
     isn't delivered and wasn't checked within the TTL gets one live lookup.
     Unique numbers are fetched once (a GWD can sit on several packages); a
-    package is only rewritten on a successful fetch with real statuses."""
+    package is only rewritten on a successful fetch with real statuses.
+    Body (optional): {"tracking": "<GWD>"} refreshes just that number (the
+    live check-shipping popup calls once per GWD to stream old→new rows);
+    {"force": true} bypasses the TTL (never the delivered skip)."""
+    import activity
     import purchases
     import tracking
     ttl_min = 30
+    b = request.get_json(force=True, silent=True) or {}
+    only = tracking.clean_tracking(b.get("tracking") or "") or None
+    force = bool(b.get("force"))
     pdb = purchases.load()
     cutoff = datetime.now().astimezone() - timedelta(minutes=ttl_min)
     stale = {}
     for po in pdb["purchase_orders"]:
         for pk in po.get("packages") or []:
             tn = tracking.clean_tracking(pk.get("tracking_number") or "")
-            if not tn:
+            if not tn or (only and tn != only):
                 continue
             ts = pk.get("tracking_status") or {}
             if isinstance(ts, dict) and ts.get("bucket") == "delivered":
                 continue
-            try:
-                if datetime.fromisoformat(pk.get("tracking_checked") or "") > cutoff:
-                    continue
-            except (ValueError, TypeError):
-                pass                      # never checked / unparsable → refresh
-            stale.setdefault(tn, []).append(pk)
-    updated = 0
+            if not force:
+                try:
+                    if datetime.fromisoformat(pk.get("tracking_checked") or "") > cutoff:
+                        continue
+                except (ValueError, TypeError):
+                    pass                  # never checked / unparsable → refresh
+            stale.setdefault(tn, []).append((po, pk))
+    updated, changes = 0, []
     if stale:
         try:
             api_url, nonce = tracking.get_session()
         except Exception as e:  # noqa - GAASH down: keep showing stored statuses
-            return jsonify({"ok": False, "updated": 0, "error": str(e)})
-        for i, (tn, pks) in enumerate(stale.items()):
+            return jsonify({"ok": False, "updated": 0, "changes": [], "error": str(e)})
+        for i, (tn, pos_pks) in enumerate(stale.items()):
             if i:
                 time.sleep(tracking.REQUEST_GAP)
             st = tracking.latest_status(tracking.fetch_one(tn, api_url, nonce))
             if not st:
                 continue
             stamp = db.now_iso()
-            for pk in pks:
+            for po, pk in pos_pks:
+                old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
                 pk["tracking_status"] = st
                 pk["tracking_checked"] = stamp
                 updated += 1
+                changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
+                                "tracking": tn,
+                                "old": {"bucket": (old or {}).get("bucket"),
+                                        "text": activity.gaash_text(old)},
+                                "new": {"bucket": st.get("bucket"),
+                                        "text": activity.gaash_text(st)}})
+                # feed the per-PO Activity trail (readable text, GAASH as the actor)
+                ot, nt = activity.gaash_text(old), activity.gaash_text(st)
+                if nt and ot != nt:
+                    header = ("Order # " + po["amazon_order_number"]) if po.get("amazon_order_number") else po.get("po_id", "")
+                    activity.log("set", "purchase", po.get("po_id"), header,
+                                 field="tracking_status", old=ot or None, new=nt,
+                                 detail=f"Package {pk.get('package_no')}", user="GAASH")
     if updated:
         purchases.save(pdb)
         db.audit(auth.actor(), "tracking_refresh", "purchase", "-",
                  f"refreshed GAASH status on {updated} package(s)")
-    return jsonify({"ok": True, "updated": updated,
+    return jsonify({"ok": True, "updated": updated, "changes": changes,
                     "purchase_orders": [purchases.summary(p) for p in pdb["purchase_orders"]]})
 
 
@@ -1666,6 +1688,15 @@ def api_purchase_package_delete():
     activity.log("deleted", "purchase", po["po_id"], _polabel(po),
                  detail=f"deleted Package {pkg.get('package_no')}", user=_user())
     return jsonify({"ok": True})
+
+
+@app.route("/api/serpapi/credits")
+@auth.require("view_orders")
+def api_serpapi_credits():
+    """Remaining SerpApi credits across the rotated keys (5-min cached) — shown
+    on the Estimate-all-costs popup so the owner sees the balance. ?refresh=1
+    busts the cache (used right after a run that spent credits)."""
+    return jsonify(amazon_import.credits_left(0 if request.args.get("refresh") else 300))
 
 
 @app.route("/api/purchase/estimate_cost", methods=["POST"])
@@ -1806,8 +1837,9 @@ def api_trash_empty():
 @auth.require("view_orders")
 def api_activity():
     ent = request.args.get("entity") or None
+    eid = request.args.get("id") or None          # per-entity feed (PO detail drawer)
     lim = int(request.args.get("limit", "60"))
-    return jsonify({"activity": activity.recent(lim, ent)})
+    return jsonify({"activity": activity.recent(lim, ent, entity_id=eid)})
 
 
 @app.route("/api/po_image", methods=["GET", "POST"])

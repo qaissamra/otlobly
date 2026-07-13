@@ -620,7 +620,7 @@
       <span style="color:var(--muted);font-size:12px">click any cell to edit · auto-saves</span>
       <span class="spacer"></span>
       <button onclick="importClickup(this)" id="impCuBtn" title="pull existing Amazon orders from the ClickUp Otloble space">↙ Import from ClickUp</button>
-      <button onclick="poRefreshTracking(this)" class="minibtn" title="re-check every GWD number against GAASH — skips delivered packages and anything checked in the last 30 min">🔎 Check all shipping</button>
+      <button onclick="poCheckAllShipping(this)" class="minibtn" title="re-check every GWD number against GAASH — skips delivered packages and anything checked in the last 30 min">🔎 Check all shipping</button>
       <button onclick="poEstimateAll(this)" class="minibtn" title="estimate Amazon cost for every product that has no estimate yet — already-priced products are skipped (free)">💰 Estimate all costs</button>
       <button onclick="poViewAll(false)" class="minibtn">⊟ Collapse all</button>
       <button onclick="poViewAll(true)" class="minibtn">⊞ Expand all</button>
@@ -983,6 +983,15 @@
   <div class="az-box" style="width:980px;max-width:97vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="podTitle">📦 Order</b><span class="az-x" onclick="closePoDetail()">✕</span></div>
     <div id="podBody" style="padding:14px 16px"></div>
+  </div>
+</div>
+
+<!-- Bulk progress popup: live rows for Check-all-shipping / Estimate-all-costs -->
+<div id="bulkModal" class="az-modal hidden" onclick="if(event.target===this)bulkClose()">
+  <div class="az-box" style="width:640px;max-width:96vw;max-height:86vh;overflow:auto;display:flex;flex-direction:column">
+    <div class="az-head"><b id="bulkTitle">Working…</b><span class="az-x" onclick="bulkClose()">✕</span></div>
+    <div id="bulkBody" style="padding:6px 16px 10px;overflow:auto"></div>
+    <div id="bulkFoot" style="padding:10px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px"></div>
   </div>
 </div>
 
@@ -3142,26 +3151,94 @@ async function poRefreshTracking(btn){   // btn set = user clicked "Check all sh
   if(btn){ btn.disabled=false; btn.innerHTML=old; }
   PO_REFRESHING=false;
 }
+// ── Bulk progress popup: live rows for the check-all / estimate-all runs ──
+function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerHTML=""; $("bulkFoot").innerHTML=""; $("bulkModal").classList.remove("hidden"); }
+function bulkClose(){ $("bulkModal").classList.add("hidden"); }
+function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
+  if(!r){ r=document.createElement("div"); r.id="blk_"+id;
+    r.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap";
+    $("bulkBody").appendChild(r); }
+  r.innerHTML=`<b class="mono" style="flex:0 0 auto">${poEsc(label)}</b>`+
+    (sub?`<span class="muted2" style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(sub)}</span>`:'')+
+    `<span class="spacer"></span>${right||''}`; }
+function bulkFoot(html){ $("bulkFoot").innerHTML=html; }
+// Small status pill for the popup rows (same colours as the row pills).
+function gaashMiniPill(bucket,text){
+  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">none</span>`;
+  if(bucket==="delivered") return tonePill("green","Delivered",text);
+  const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
+  const txt=SHORT[bucket]||text||bucket||"—";
+  return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,text):tonePill("amber",txt,text);
+}
+// ── Check shipping with a LIVE popup: one row per GWD, old status → new status.
+//    onlyGwd = the per-package ⋯ action (force bypasses the 30-min TTL). ──
+async function poCheckAllShipping(btn){ return poRunShippingCheck(btn,null,false); }
+async function poRunShippingCheck(btn,onlyGwd,force){
+  if(!POS){ toast("Still loading…"); return; }
+  const TTL=30*60*1000, now=Date.now();
+  const cand={};                                   // gwd → [{p,pk}]
+  POS.forEach(p=>(p.packages||[]).forEach(pk=>{
+    const tn=(pk.tracking_number||'').trim(); if(!tn) return;
+    if(onlyGwd&&tn!==onlyGwd) return;
+    const ts=pk.tracking_status||{}; if(ts&&ts.bucket==="delivered") return;
+    if(!force){ const chk=pk.tracking_checked?new Date(pk.tracking_checked).getTime():0;
+      if(now-chk<TTL) return; }
+    (cand[tn]=cand[tn]||[]).push({p,pk});
+  }));
+  const gwds=Object.keys(cand);
+  if(!gwds.length){ toast(onlyGwd?"Package already delivered — nothing to check":"Shipping is fresh — nothing to check"); return; }
+  if(btn) btn.disabled=true;
+  bulkOpen("🔎 فحص الشحنات · Checking shipping");
+  const where=g=>cand[g].map(e=>`${e.p.po_id} 📦${e.pk.package_no}`).join(", ");
+  gwds.forEach(g=>bulkRow(g,g,where(g),'<span class="spin"></span>'));
+  bulkFoot(`Checking ${gwds.length} tracking number${gwds.length===1?'':'s'}…`);
+  let changed=0,same=0,failed=0,lastResp=null;
+  for(const g of gwds){
+    let r; try{ r=await post("/api/purchases/refresh_tracking",{tracking:g,force:!!force}); }catch(e){ r=null; }
+    if(!r||!r.ok){ failed++; bulkRow(g,g,where(g),'<span style="color:var(--warn)">check failed</span>'); continue; }
+    lastResp=r;
+    const c=(r.changes||[]).find(x=>x.tracking===g);
+    if(!c){ same++; bulkRow(g,g,where(g),'<span class="muted2">no update</span>'); continue; }
+    const isSame=(c.old&&c.old.text)===(c.new&&c.new.text);
+    if(isSame) same++; else changed++;
+    bulkRow(g,g,where(g),
+      `${gaashMiniPill(c.old&&c.old.bucket,c.old&&c.old.text)} <span class="muted2">→</span> ${gaashMiniPill(c.new&&c.new.bucket,c.new&&c.new.text)}${isSame?' <span class="muted2">(no change)</span>':''}`);
+  }
+  if(lastResp&&lastResp.purchase_orders){ POS=lastResp.purchase_orders; renderPurchases(); }
+  bulkFoot(`<b>${changed}</b> changed · ${same} unchanged${failed?` · <span style="color:var(--warn)">${failed} failed</span>`:''}`);
+  if(btn) btn.disabled=false;
+}
 // One click prices EVERYTHING: loop the POs through the fill-missing-only estimate
 // endpoint (already-attempted products are skipped server-side, so re-runs are free).
+// The popup footer shows the live SerpApi credit balance.
+async function serpCredits(refresh){ try{ const c=await (await fetch("/api/serpapi/credits"+(refresh?"?refresh=1":""))).json(); return c&&c.left!=null?c.left:null; }catch(e){ return null; } }
 async function poEstimateAll(btn){
   if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
-  if(btn){ btn.disabled=true; }
+  if(btn) btn.disabled=true;
+  bulkOpen("💰 تقدير التكاليف · Estimating costs");
+  POS.forEach(p=>bulkRow(p.po_id,p.po_id,poWho(p),'<span class="spin"></span>'));
+  let credits=await serpCredits(false);
+  const creditsTxt=()=>`SerpApi credits left: <b>${credits==null?'—':credits}</b>`;
+  bulkFoot(creditsTxt());
   const sum={past:0,cache:0,fresh:0,unpriced:0}; let failed=0;
   for(let i=0;i<POS.length;i++){
-    if(btn) btn.innerHTML=`<span class="spin"></span> Estimating ${i+1}/${POS.length}…`;
-    let r; try{ r=await post("/api/purchase/estimate_cost",{id:POS[i].po_id}); }catch(e){ r=null; }
-    if(!r||!r.ok){ failed++; continue; }
+    const id=POS[i].po_id;
+    let r; try{ r=await post("/api/purchase/estimate_cost",{id}); }catch(e){ r=null; }
+    if(!r||!r.ok){ failed++; bulkRow(id,id,poWho(POS[i]),'<span style="color:var(--warn)">failed</span>'); continue; }
     if(r.purchase_order) POS[i]=r.purchase_order;
-    const x=r.result||{}; sum.past+=x.from_past||0; sum.cache+=x.from_cache||0;
-    sum.fresh+=x.fresh||0; sum.unpriced+=x.unpriced||0;
+    const x=r.result||{}, reused=(x.from_past||0)+(x.from_cache||0);
+    sum.past+=x.from_past||0; sum.cache+=x.from_cache||0; sum.fresh+=x.fresh||0; sum.unpriced+=x.unpriced||0;
+    const bits=[]; if(reused)bits.push(`${reused} reused`); if(x.fresh)bits.push(`${x.fresh} fetched`); if(x.unpriced)bits.push(`${x.unpriced} unpriced`);
+    bulkRow(id,id,poWho(POS[i]),`<span class="muted2">${bits.length?bits.join(' · '):'already priced'}</span>`);
   }
   renderPurchases();
-  if(btn){ btn.disabled=false; btn.innerHTML='💰 Estimate all costs'; }
   const did=sum.past+sum.cache+sum.fresh;
-  toast(did||sum.unpriced?`Priced ${did} product${did===1?'':'s'} · ${sum.past+sum.cache} reused · ${sum.fresh} fetched${sum.unpriced?` · ${sum.unpriced} unpriced`:''}${failed?` · ${failed} failed`:''}`
-       :"All products already priced — nothing to fetch");
+  credits=await serpCredits(sum.fresh>0);          // re-read balance if we spent credits
+  bulkFoot(`${creditsTxt()} — <b>${did}</b> priced · ${sum.past+sum.cache} reused · ${sum.fresh} fetched${sum.unpriced?` · ${sum.unpriced} unpriced`:''}${failed?` · <span style="color:var(--warn)">${failed} failed</span>`:''}`);
+  if(btn) btn.disabled=false;
 }
+function poWho(p){ const c=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[]).map(it=>(it.customer_name||'').trim())).filter(Boolean))];
+  return c.length===1?c[0]:(c.length?`${c.length} customers`:(p.ship_to||'')); }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
 function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
 function poCollapseAll(on){ PO_COLLAPSED=new Set(); if(on){ POS.forEach(p=>{PO_COLLAPSED.add(poKey(p.po_id)); (p.packages||[]).forEach(pk=>PO_COLLAPSED.add(poKey(p.po_id,pk.package_no)));}); } localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
@@ -3426,6 +3503,11 @@ const TONE={red:"color:#b42318;background:#fef2f2;border-color:#fecaca",
   amber:"color:#b45309;background:#fff7ed;border-color:#fed7aa",
   gray:"color:var(--muted);background:var(--bg2);border-color:var(--line)"};
 function tonePill(tone,txt,tip){ return `<span class="pill" style="${TONE[tone]||TONE.gray};font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+// Pill in an arbitrary hex colour (same recipe as the ClickUp-status dropdown).
+function hexPill(hex,txt,tip){ return `<span class="pill" style="color:${hex};background:${hex}1a;border-color:${hex}55;font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+// GAASH bucket → hex, matched to the owner's ClickUp workflow colours:
+// shipped #4466ff · ariived at destnation #e5484d · waiting verification #f76808 · in clearance #0f9d9f
+const GAASH_HEX={transit:"#4466ff",arrived:"#e5484d",customs:"#f76808",cleared:"#0f9d9f"};
 function agoTxt(iso){ if(!iso) return ''; const m=Math.round((Date.now()-new Date(iso).getTime())/60000);
   if(!isFinite(m)||m<0) return ''; if(m<1) return 'just now'; if(m<60) return `${m}m ago`;
   const h=Math.round(m/60); return h<24?`${h}h ago`:`${Math.round(h/24)}d ago`; }
@@ -3456,7 +3538,8 @@ function pkgGaashPill(pk){
   if(b.bucket==="delivered") return tonePill("green","Delivered",tip);
   // a SHORT stage word keeps the one-line row tidy — the raw GAASH text is in the tooltip
   const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
-  return tonePill("amber", SHORT[b.bucket]||b.text||b.label||"In transit",tip);
+  const txt=SHORT[b.bucket]||b.text||b.label||"In transit";
+  return GAASH_HEX[b.bucket]?hexPill(GAASH_HEX[b.bucket],txt,tip):tonePill("amber",txt,tip);
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
@@ -3872,13 +3955,10 @@ async function poFetch(btn,id,pi,ii){ const p=poFind(id); const it=p.packages[pi
   it.image=d.image||it.image; if(!it.title && d.title) it.title=d.title;
   poSave(p); renderPurchases(); toast(d.cached?"Got it ✓ (no credit used)":"Got it ✓"); }
 async function trackPkg(btn,id,pi){ const p=poFind(id); const pk=p.packages[pi];
-  if(!pk.tracking_number){toast("Add the GWD tracking number first, then click Check shipping");return;}
-  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…';
-  let s; try{ s=await (await fetch("/api/track_gwd?tracking="+encodeURIComponent(pk.tracking_number))).json(); }catch(e){ s={error:"network error"}; }
-  if(s.error){ toast("Shipping: "+s.error); btn.disabled=false; btn.textContent="🔎 Check shipping"; return; }
-  pk.tracking_status=s; pk.tracking_checked=new Date().toISOString(); poSave(p); renderPurchases();
-  const via=s.source==='cache'?` (last known ${(s.fetched_at||'').slice(0,10)})`:(s.source==='parcelsapp'?' (via parcelsapp)':(s.source==='gaash_browser'?' (via browser)':''));
-  toast("Shipping: "+(s.text||s.label||s.code||"updated")+via); }
+  const tn=(pk.tracking_number||'').trim();
+  if(!tn){toast("Add the GWD tracking number first, then click Check shipping");return;}
+  // same live popup as "Check all shipping", limited to this GWD; force = ignore the 30-min TTL
+  return poRunShippingCheck(null,tn,true); }
 function poUpload(btn,id){ const inp=$("poImgInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Uploading…';
   const rd=new FileReader(); rd.onload=async()=>{ const r=await post("/api/po_image",{po_id:id,filename:f.name,data_base64:rd.result});
@@ -3918,6 +3998,8 @@ function podRender(){
         📋 <b>Cmd/Ctrl + V</b> الصق لقطة الشاشة هنا مباشرة — أو انقر للرفع<br>paste a screenshot anywhere in this window, or click to upload</div>`:''}
       <div style="font-weight:800;font-size:13px;margin:14px 0 7px">🛒 المنتجات · Products <span class="pill">${nItems}</span></div>
       ${items||'<div class="muted2">لا طرود بعد · no packages yet</div>'}
+      <div style="font-weight:800;font-size:13px;margin:16px 0 7px">🕓 النشاط · Activity</div>
+      <div id="podActivity" class="muted2" style="font-size:12.5px">Loading…</div>
     </div>
     <div style="flex:1;min-width:230px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:6px 13px;align-self:flex-start">
       ${field('Amazon #', p.amazon_order_number?`<span class="mono">${poEsc(p.amazon_order_number)}</span>`:'')}
@@ -3934,6 +4016,16 @@ function podRender(){
         <button class="po-btn accent" style="width:100%" onclick="clickupPO(this,'${poEsc(p.po_id)}',false)">↗ Send to ClickUp</button>
       </div>
     </div></div>`;
+  podLoadActivity(p.po_id);
+}
+// ClickUp-style per-order history (reuses the home feed's actRow renderer).
+async function podLoadActivity(id){
+  try{ const d=await (await fetch(`/api/activity?entity=purchase&id=${encodeURIComponent(id)}&limit=40`)).json();
+    const el=$("podActivity"); if(!el||PODETAIL!==id) return;   // drawer moved on — don't stomp it
+    const evs=d.activity||[];
+    el.innerHTML=evs.length?evs.map(actRow).join("")
+      :`<div class="empty">لا نشاط بعد · no activity yet for this order</div>`;
+  }catch(e){}
 }
 function podUpload(){
   const inp=$("podImgInput"); inp.value="";

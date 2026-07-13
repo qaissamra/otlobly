@@ -38,6 +38,37 @@ def _keys():
     return [k for k in out if k]
 
 
+_CREDITS_CACHE = {"at": 0.0, "val": None}   # SerpApi account lookups, cached 5 min
+
+
+def credits_left(max_age=300):
+    """Remaining SerpApi searches summed across every rotated key (best-effort:
+    a key whose account call fails contributes None, not an exception). Shown on
+    the staff Estimate-costs popup so the owner can see the credit balance."""
+    if _CREDITS_CACHE["val"] is not None and time.time() - _CREDITS_CACHE["at"] < max_age:
+        return _CREDITS_CACHE["val"]
+    keys, total, per = _keys(), 0, []
+    any_ok = False
+    for k in keys:
+        left = None
+        try:
+            with request.urlopen("https://serpapi.com/account.json?"
+                                 + parse.urlencode({"api_key": k}), timeout=8) as r:
+                d = json.loads(r.read().decode() or "{}")
+            left = d.get("total_searches_left")
+            if left is None:               # older field names, just in case
+                left = d.get("plan_searches_left")
+        except Exception:  # noqa: BLE001 - account API down ≠ estimating broken
+            pass
+        per.append({"tail": ("…" + k[-4:]) if len(k) > 4 else k, "left": left})
+        if left is not None:
+            total += int(left)
+            any_ok = True
+    val = {"left": total if any_ok else None, "keys": per}
+    _CREDITS_CACHE.update(at=time.time(), val=val)
+    return val
+
+
 def _load_cache():
     if CACHE.exists():
         try:
