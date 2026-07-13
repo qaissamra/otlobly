@@ -2132,6 +2132,76 @@ def worker_result():
     return jsonify({"ok": bool(o)})
 
 
+@app.route("/api/worker/packages")
+def worker_packages():
+    """Every PO package that has a tracking number, with the customers waiting
+    on it — read hourly by the Mac's GAASH tracking sync (gaash-clickup-sync)."""
+    if not _worker_ok():
+        abort(401)
+    import purchases
+    orders = {o.get("order_id"): o for o in db.list_orders()}
+    out = []
+    for po in purchases.load()["purchase_orders"]:
+        for pk in po.get("packages") or []:
+            tn = (pk.get("tracking_number") or "").strip()
+            if not tn:
+                continue
+            custs, seen = [], set()
+            for it in pk.get("items") or []:
+                oid = it.get("customer_order_id")
+                if not oid or oid in seen:
+                    continue
+                seen.add(oid)
+                o = orders.get(oid) or {}
+                custs.append({"order_id": oid,
+                              "name": it.get("customer_name") or "",
+                              "amount_to_collect_usd": o.get("amount_to_collect_usd"),
+                              "order_status": o.get("status")})
+            out.append({"po_id": po.get("po_id"),
+                        "package_no": pk.get("package_no"),
+                        "tracking_number": tn,
+                        "customer_tracking": pk.get("customer_tracking"),
+                        "tracking_status": pk.get("tracking_status"),
+                        "tracking_code": pk.get("tracking_code"),
+                        "tracking_time": pk.get("tracking_time"),
+                        "arrival": pk.get("arrival"),
+                        "customers": custs})
+    return jsonify({"packages": out})
+
+
+@app.route("/api/worker/tracking", methods=["POST"])
+def worker_tracking():
+    """The Mac's tracking sync writes live GAASH statuses back onto PO
+    packages. Status fields only — never touches orders, never messages
+    customers. Body: {"updates": [{po_id, package_no, tracking_status,
+    tracking_code, tracking_time}, ...]}."""
+    if not _worker_ok():
+        abort(401)
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    updates = {(u.get("po_id"), u.get("package_no")): u
+               for u in b.get("updates") or [] if u.get("po_id")}
+    if not updates:
+        return jsonify({"ok": True, "updated": 0})
+    pdb = purchases.load()
+    n = 0
+    for po in pdb["purchase_orders"]:
+        for pk in po.get("packages") or []:
+            u = updates.get((po.get("po_id"), pk.get("package_no")))
+            if not u:
+                continue
+            for k in ("tracking_status", "tracking_code", "tracking_time"):
+                if k in u:
+                    pk[k] = u[k]
+            pk["tracking_checked"] = db.now_iso()
+            n += 1
+    if n:
+        purchases.save(pdb)
+        db.audit({"username": "worker"}, "tracking_sync", "purchase", "-",
+                 f"updated GAASH status on {n} package(s)")
+    return jsonify({"ok": True, "updated": n})
+
+
 # --------------------------------------------------------------------------- #
 # Backup — one zip of ALL live data, pulled nightly by backup_pull.py (Mac)
 # --------------------------------------------------------------------------- #
