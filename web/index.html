@@ -395,7 +395,8 @@
   </nav>
   <nav id="sideNav">
     <div class="nav-sec">Main menu</div>
-    <button id="homeBtn" class="on" onclick="setView('orders')"><span class="ic">🏠</span>Orders</button>
+    <button id="brainBtn" class="on" onclick="setView('brain')" title="urgent actions, due dates, forgotten items, this week's results — your command center"><span class="ic">🧠</span>Brain</button>
+    <button id="homeBtn" onclick="setView('orders')"><span class="ic">🏠</span>Orders</button>
     <button id="needBtn" onclick="setView('needorder')" title="orders waiting to be placed on Amazon — includes the price-quote tool"><span class="ic">💡</span>To order</button>
     <button id="cartBtn" onclick="setView('incart')" title="orders you've added to the Amazon cart — profit preview before you buy"><span class="ic">🛒</span>In cart</button>
     <button id="metaLeadsBtn" style="display:none" onclick="setView('metaleads')" title="Messenger + Instagram DMs and lead-form ads"><span class="ic">📣</span>Leads</button>
@@ -821,6 +822,11 @@
     <div class="panel"><div id="teamList"></div></div>
   </div>
 
+  <!-- Brain: the command-center landing — urgent / due / forgotten / money / 7d results -->
+  <div id="brainView" class="hidden">
+    <div id="brainBox"><div class="panel muted2">loading the brain…</div></div>
+  </div>
+
   <!-- Brokers: create & manage Tatabu tenants (Otlobly super-admin only) -->
   <div id="brokersView" class="hidden">
     <div class="toolbar">
@@ -1145,6 +1151,9 @@ async function load(){
   await applyRole();
   if(RESTRICTED){ setView(RESTRICTED.home); }       // limited roles land on their page, never the orders dashboard
   else restorePlatform();                            // owner: re-enter the Tatabu console if they were in it
+  if(!BOOTED){ BOOTED=true;
+    if(!RESTRICTED && !PLATFORM) setView("brain");   // the Brain is the landing page
+  } else if(VIEW==="brain"){ loadBrain(); }          // ↻ Refresh re-fetches the Brain, never yanks the view
   try{                                              // a server blip shouldn't leave the page frozen at "loading…"
     const r = await fetch("/api/report"); if(!r.ok) throw new Error("HTTP "+r.status);
     DATA = await r.json();
@@ -1404,7 +1413,7 @@ function aoCloseForm(){ $("formPanel").classList.add("hidden"); PO_MOUNT="poTree
 
 async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const r=await post("/api/clickup",{});b.disabled=false;toast(r.output||"done");load();}
 
-let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true;
+let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true, BOOTED=false;
 function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
@@ -1417,10 +1426,11 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
+  $("brainView").classList.toggle("hidden",v!=="brain");
   $("ordersView").classList.toggle("hidden",v!=="orders");
   if(v!=="orders" && $("formPanel") && !$("formPanel").classList.contains("hidden")){   // leaving Orders → close the add-order card
     $("formPanel").classList.add("hidden"); if(PO_MOUNT==="aoPoTree"){ PO_MOUNT="poTree"; PO_ONLY=null; } }
@@ -1444,11 +1454,11 @@ function setView(v){
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
-  const VIEW_BTN={orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
+  const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
     brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
     usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn"};
-  const VIEW_TITLES={orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
+  const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
     usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog"};
@@ -1456,6 +1466,7 @@ function setView(v){
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
   document.body.classList.remove("nav-open");        // picking a page closes the mobile drawer
+  if(v==="brain"){ loadBrain(); }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
   if(v==="purchases"){ PO_MOUNT="poTree"; PO_ONLY=null; loadPurchases(); }
@@ -1661,6 +1672,87 @@ async function convertLead(id,btn){ if(!confirm("إنشاء طلب من هذا �
   if(r&&r.ok){ toast("Order "+r.order_id+" created — add products in To order"); loadMetaLeads(); } else toast((r&&r.error)||"failed"); }
 function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
 const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
+// ── Brain: the command-center landing (per-tenant; /api/brain does the thinking) ──
+let BRAIN=null;
+async function loadBrain(){
+  let d; try{ d=await (await fetch("/api/brain")).json(); }catch(e){ d=null; }
+  if(!d||!d.sections){ $("brainBox").innerHTML='<div class="panel" style="color:var(--bad)">Could not load the brain — <a style="cursor:pointer;color:var(--accent)" onclick="loadBrain()">retry</a>.</div>'; return; }
+  BRAIN=d; renderBrain();
+}
+function brainLink(l){
+  // Deep-link only when the target's nav button exists and isn't hidden — this
+  // inherits every role/feature gate (deposits for fulfillment, leads for brokers…).
+  const NAVB={brain:"brainBtn",orders:"homeBtn",needorder:"needBtn",purchases:"poBtn",
+    deposits:"depositsBtn",metaleads:"metaLeadsBtn",settings:"settingsBtn",customers:"custBtn"};
+  const b=$(NAVB[l&&l.view]); if(!b||b.style.display==="none") return "";
+  return `<button class="minibtn" style="margin-inline-start:auto;flex:0 0 auto" onclick="setView('${l.view}')">→</button>`;
+}
+function renderBrain(){
+  const d=BRAIN, secs={}; d.sections.forEach(s=>secs[s.key]=s);
+  const nDead=(secs.deadlines||{}).count||0, nUrgent=(secs.urgent||{}).count||0, nDue=(secs.due||{}).count||0, nForgot=(secs.forgotten||{}).count||0;
+  const r=d.results||{}, pl=d.pipeline||{};
+  const chip=(txt,alert)=>`<span class="qchip${alert?' alert':''}" style="font-size:12.5px">${txt}</span>`;
+  const today=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});
+  const strip=`<div class="panel" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <b style="font-size:15px">${today}</b>
+      ${chip(`📦 ${pl.past_deadline||0} past deadline`,(pl.past_deadline||0)>0)}${chip(`🔥 ${nUrgent} urgent`,nUrgent>0)}${chip(`⏰ ${nDue} due soon`,false)}${chip(`🧠 ${nForgot} forgotten`,false)}
+      <span class="spacer" style="flex:1"></span>
+      <span class="muted2" style="font-size:12px">📈 last ${r.window_days||7}d: <b>${r.new_orders||0}</b> new${r.new_orders_value_usd!=null?` (${money(r.new_orders_value_usd)})`:""} · <b>${r.delivered||0}</b> delivered · <b>${r.collected||0}</b> collected${r.collected_usd!=null?` (${money(r.collected_usd)})`:""}</span>
+    </div>`;
+  // The operational funnel — one glance at where every order sits. "Past deadline"
+  // is the alarm (red when >0); its detail is the 📦 section below.
+  const tile=(icon,lab,n,view,alarm)=>{
+    const border=alarm&&n>0?"#ef4444":"var(--line)", col=alarm&&n>0?"#ef4444":"var(--ink)";
+    const nav=view?` onclick="setView('${view}')" style="cursor:pointer"`:"";
+    return `<div class="panel" style="margin:0;padding:11px 13px;border-color:${border}"${nav}>
+      <div style="font-size:24px;font-weight:800;color:${col}">${n||0}</div>
+      <div class="muted2" style="font-size:11.5px">${icon} ${lab}</div></div>`;
+  };
+  const funnel=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px">
+      ${tile("🛒","To order",pl.to_order,"needorder")}
+      ${tile("📦","Ordered",pl.ordered,"orders")}
+      ${tile("🚚","In transit",pl.in_transit,"orders")}
+      ${tile("📍","To collect",pl.to_collect,"orders")}
+      ${tile("⏰","Past deadline",pl.past_deadline,"",true)}
+    </div>`;
+  const row=it=>`<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px">
+      <span style="flex:0 0 auto">${it.icon||"•"}</span>
+      <span><b>${poEsc(it.title)}</b>${it.detail?` <span class="muted2">· ${poEsc(it.detail)}</span>`:""}</span>
+      ${it.age_days!=null?`<span class="qchip" style="font-size:10.5px;flex:0 0 auto">${it.age_days}d</span>`:""}
+      ${it.due?`<span class="qchip" style="font-size:10.5px;flex:0 0 auto">${it.due}</span>`:""}
+      ${it.amount_usd!=null?`<b style="flex:0 0 auto">${money(it.amount_usd)}</b>`:""}
+      ${brainLink(it.link)}</div>`;
+  const panel=s=>{
+    if(!s) return "";
+    const more=s.count>s.items.length?`<div class="muted2" style="font-size:11.5px;margin-top:6px">+ ${s.count-s.items.length} more…</div>`:"";
+    const body=s.items.length?s.items.map(row).join("")+more
+      :`<div class="muted2" style="font-size:12.5px">nothing here 👌</div>`;
+    return `<div class="panel" style="margin-top:14px${s.severity==='urgent'?';border-color:#fecaca':''}">
+      <h3 style="margin:0 0 6px;font-size:14.5px;font-weight:800">${s.icon} ${poEsc(s.title)}${s.count?` <span class="muted2" style="font-weight:500;font-size:12px">· ${s.count}</span>`:""}</h3>
+      ${body}</div>`;
+  };
+  const allClear=(nDead+nUrgent+nDue+nForgot)===0
+    ? `<div class="panel" style="margin-top:14px;text-align:center;padding:26px"><div style="font-size:30px">🎉</div>
+        <b>nothing urgent — all clear</b><div class="muted2" style="font-size:12.5px;margin-top:3px">كل شي تمام · new orders will show up here the moment they need you</div></div>`
+    : "";
+  $("brainBox").innerHTML=strip+funnel+brainOwnerStrip()+allClear
+    +(allClear?panel(secs.money):panel(secs.deadlines)+panel(secs.urgent)+panel(secs.due)+panel(secs.forgotten)+panel(secs.money));
+  const bp=$("brainPlat"); if(bp && !bp.dataset.done) fillBrainOwnerStrip();
+}
+function brainOwnerStrip(){
+  // Owner-only (business #1, not impersonating): one slim Tatabu line, filled async.
+  return (typeof platAllowed==="function" && platAllowed())
+    ? `<div id="brainPlat" class="panel" style="margin-top:14px;display:none;align-items:center;gap:9px"></div>` : "";
+}
+async function fillBrainOwnerStrip(){
+  const el=$("brainPlat"); if(!el) return; el.dataset.done="1";
+  const d=await loadPlatData(); if(!d||!d.totals) return;
+  el.style.display="flex";
+  el.innerHTML=`<span>🏗</span><b>Tatabu</b>
+    <span class="muted2" style="font-size:12.5px">${d.totals.brokers} broker${d.totals.brokers===1?"":"s"} · ${d.totals.over_quota} over quota · MRR ${money0(d.mrr||0)}</span>
+    <span class="spacer" style="flex:1"></span>
+    <button class="minibtn" onclick="enterPlatform()">open console →</button>`;
+}
 // ── Tatabu platform console — the owner's second world (business #1 admin only) ──
 const PLAT_VIEWS=new Set(["platoverview","brokers","brokerprofile","plans","usage","platactivity"]);
 let PLATFORM=false;
