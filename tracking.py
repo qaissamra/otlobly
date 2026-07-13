@@ -138,20 +138,41 @@ def fetch_one(tn, api_url, nonce, lang="en"):
         return {"_error": str(e)}
 
 
+def staff_status_from_events(events):
+    """Staff label + bucket from a normalized timeline [{code,text,time}, …].
+    Delivery is terminal: ANY delivered event wins (matched by code D1/DELIVERED
+    or the status text), because GAASH timelines can carry blank or out-of-order
+    StatusTime values that break a plain "latest event" pick — a parcel once
+    showed "In transit" on the staff page while GAASH said Delivered."""
+    events = [e for e in (events or []) if e]
+    if not events:
+        return None
+    norm = lambda e: ((e.get("code") or "").strip().upper(),
+                      (e.get("text") or "").strip())
+    delivered = None
+    for e in events:
+        code, text = norm(e)
+        if code in ("D1", "DELIVERED") or text.lower() == "delivered":
+            delivered = e
+    if delivered is not None:
+        code, text = norm(delivered)
+        return {"code": code or None, "text": text or "Delivered",
+                "label": "Delivered", "bucket": "delivered",
+                "time": delivered.get("time")}
+    last = max(events, key=lambda e: e.get("time") or "")
+    code, text = norm(last)
+    label, bucket = CODE_LABEL.get(code, PARCELSAPP_CODE_LABEL.get(code, (text, "transit")))
+    return {"code": code or None, "text": (text or label or "").strip(),
+            "label": label, "bucket": bucket, "time": last.get("time")}
+
+
 def latest_status(data):
     statuses = (data or {}).get("Statuses")
     if not statuses:
         return None
-    last = max(statuses, key=lambda s: s.get("StatusTime") or "")
-    code = last.get("MappedStatusCode")
-    label, bucket = CODE_LABEL.get(code, ((last.get("StatusDescription") or "").strip(), "transit"))
-    return {
-        "code": code,
-        "text": (last.get("StatusDescription") or label or "").strip(),
-        "label": label,
-        "bucket": bucket,
-        "time": last.get("StatusTime"),
-    }
+    return staff_status_from_events([
+        {"code": s.get("MappedStatusCode"), "text": s.get("StatusDescription"),
+         "time": s.get("StatusTime")} for s in statuses])
 
 
 def track(tn, lang="en"):
@@ -479,16 +500,10 @@ def track_with_fallback(tn, lang="en"):
     r = timelines_with_fallback([tn], lang).get(tn) or {}
     if not r.get("ok"):
         return {"error": r.get("error") or "lookup failed"}
-    events = r.get("events") or []
-    if not events:
+    st = staff_status_from_events(r.get("events"))
+    if not st:
         return {"error": "no status yet for this parcel"}
-    last = events[-1]
-    code = (last.get("code") or "").strip()
-    label, bucket = CODE_LABEL.get(
-        code, PARCELSAPP_CODE_LABEL.get(code, ((last.get("text") or "").strip(), "transit")))
-    out = {"code": code or None, "text": (last.get("text") or label or "").strip(),
-           "label": label, "bucket": bucket, "time": last.get("time"),
-           "source": r.get("source"), "fetched_at": r.get("fetched_at")}
+    out = dict(st, source=r.get("source"), fetched_at=r.get("fetched_at"))
     if r.get("stale"):
         out["stale"] = True
     return out

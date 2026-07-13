@@ -1518,6 +1518,60 @@ def api_purchases():
                     "statuses": purchases.ITEM_STATUSES})
 
 
+@app.route("/api/purchases/refresh_tracking", methods=["POST"])
+@auth.require("view_orders")
+def api_purchases_refresh_tracking():
+    """Self-serve GAASH refresh for the staff Purchases page. The hourly Mac
+    sync can die silently (and did — month-old buckets shown as truth), so
+    opening the page tops itself up: every package with a GWD number that
+    isn't delivered and wasn't checked within the TTL gets one live lookup.
+    Unique numbers are fetched once (a GWD can sit on several packages); a
+    package is only rewritten on a successful fetch with real statuses."""
+    import purchases
+    import tracking
+    ttl_min = 30
+    pdb = purchases.load()
+    cutoff = datetime.now().astimezone() - timedelta(minutes=ttl_min)
+    stale = {}
+    for po in pdb["purchase_orders"]:
+        for pk in po.get("packages") or []:
+            tn = tracking.clean_tracking(pk.get("tracking_number") or "")
+            if not tn:
+                continue
+            ts = pk.get("tracking_status") or {}
+            if isinstance(ts, dict) and ts.get("bucket") == "delivered":
+                continue
+            try:
+                if datetime.fromisoformat(pk.get("tracking_checked") or "") > cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass                      # never checked / unparsable → refresh
+            stale.setdefault(tn, []).append(pk)
+    updated = 0
+    if stale:
+        try:
+            api_url, nonce = tracking.get_session()
+        except Exception as e:  # noqa - GAASH down: keep showing stored statuses
+            return jsonify({"ok": False, "updated": 0, "error": str(e)})
+        for i, (tn, pks) in enumerate(stale.items()):
+            if i:
+                time.sleep(tracking.REQUEST_GAP)
+            st = tracking.latest_status(tracking.fetch_one(tn, api_url, nonce))
+            if not st:
+                continue
+            stamp = db.now_iso()
+            for pk in pks:
+                pk["tracking_status"] = st
+                pk["tracking_checked"] = stamp
+                updated += 1
+    if updated:
+        purchases.save(pdb)
+        db.audit(auth.actor(), "tracking_refresh", "purchase", "-",
+                 f"refreshed GAASH status on {updated} package(s)")
+    return jsonify({"ok": True, "updated": updated,
+                    "purchase_orders": [purchases.summary(p) for p in pdb["purchase_orders"]]})
+
+
 @app.route("/api/purchase", methods=["GET", "POST"])
 @login_required
 def api_purchase():

@@ -149,9 +149,9 @@
   .po-actions .thumb-mini{width:28px;height:28px;border-radius:7px;object-fit:cover;cursor:pointer;border:1px solid var(--line)}
   .po-body{padding:4px 12px 12px}
   .pkg{border:1px solid var(--line);border-radius:12px;margin-top:10px;overflow:hidden}
-  /* two-tier package header: title + actions on top, package meta (arrives/tracking/customer#) below */
+  /* one-line package header: 📦N · count · thumbs · GWD · ≈cost — order-status · pill · ⋯ (wraps on narrow) */
   .pkg-head{display:flex;flex-direction:column;font-size:12.5px}
-  .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2)}
+  .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap}
   .pkg-head .pkg-title{font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .pkg-meta{display:flex;align-items:center;gap:7px 18px;flex-wrap:wrap;padding:7px 11px;background:var(--bg2);border-top:1px solid var(--line)}
   .pkg-meta .field{display:inline-flex;align-items:center;gap:6px}
@@ -177,7 +177,6 @@
   .po-tab.on{border-color:var(--ink);color:var(--ink);font-weight:700}
   .po-tab.red.on{border-color:#dc2626;color:#b42318;background:#fef2f2}
   .po-tab.amber.on{border-color:#d97706;color:#b45309;background:#fff7ed}
-  .pkg-statusline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:2px 2px 4px}
   .po-tbl{width:100%;border-collapse:collapse}
   .po-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:7px 8px;font-weight:700}
   .po-tbl td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:middle}
@@ -3122,6 +3121,19 @@ async function loadPurchases(){
     });
   }catch(e){ PO_CUSTORDERS={}; }
   renderPurchases();
+  poRefreshTracking();     // then top up stale GAASH statuses in the background
+}
+// Self-serve GAASH refresh: the hourly Mac sync can die silently (and did — a
+// delivered parcel sat as "In transit" for a month), so opening Purchases asks
+// the server to re-check anything stale. Fire-and-forget; re-render on changes.
+let PO_REFRESHING=false;
+async function poRefreshTracking(){
+  if(PO_REFRESHING) return; PO_REFRESHING=true;
+  try{ const r=await post("/api/purchases/refresh_tracking",{});
+    if(r&&r.ok&&r.updated&&r.purchase_orders){ POS=r.purchase_orders; renderPurchases();
+      toast(`Shipping refreshed · ${r.updated} package${r.updated===1?'':'s'}`); }
+  }catch(e){}
+  PO_REFRESHING=false;
 }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
 function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
@@ -3386,17 +3398,32 @@ const TONE={red:"color:#b42318;background:#fef2f2;border-color:#fecaca",
   green:"color:#15803d;background:#ecfdf5;border-color:#bbf7d0",
   amber:"color:#b45309;background:#fff7ed;border-color:#fed7aa",
   gray:"color:var(--muted);background:var(--bg2);border-color:var(--line)"};
-function tonePill(tone,txt){ return `<span class="pill" style="${TONE[tone]||TONE.gray};font-weight:600">${poEsc(txt)}</span>`; }
+function tonePill(tone,txt,tip){ return `<span class="pill" style="${TONE[tone]||TONE.gray};font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+function agoTxt(iso){ if(!iso) return ''; const m=Math.round((Date.now()-new Date(iso).getTime())/60000);
+  if(!isFinite(m)||m<0) return ''; if(m<1) return 'just now'; if(m<60) return `${m}m ago`;
+  const h=Math.round(m/60); return h<24?`${h}h ago`:`${Math.round(h/24)}d ago`; }
+// Hover detail for the pill — the raw GAASH text + due date + freshness that used
+// to live on the (removed) second line of the package row.
+function pkgTrackTip(pk){
+  const ts=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
+  const bits=[];
+  if(ts) bits.push(ts.text||ts.label||ts.code||'In transit');
+  if(pk&&pk.arrival) bits.push(`due ${fmtDue(pk.arrival)||pk.arrival}`);
+  const chk=agoTxt(pk&&pk.tracking_checked); if(chk) bits.push(`checked ${chk}`);
+  return bits.join(' · ');
+}
 // A package's single urgency pill (status colours only).
 function pkgStatusPill(pk){
-  const st=pkgStatus(pk), n=dueDays(pk&&pk.arrival);
-  if(st==="DELIVERED") return tonePill("green","Delivered");
-  if(n!=null&&n<0) return tonePill("red", n===-1?"1 day late":`${-n} days late`);
-  if(n!=null&&n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`));
+  const st=pkgStatus(pk), n=dueDays(pk&&pk.arrival), tip=pkgTrackTip(pk);
+  if(st==="DELIVERED") return tonePill("green","Delivered",tip);
+  if(n!=null&&n<0) return tonePill("red", n===-1?"1 day late":`${-n} days late`,tip);
+  if(n!=null&&n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`),tip);
   if(n!=null){ const moving=(st==="SHIPPED"||st==="ARRIVED");   // in transit → "<stage> · date"; not shipped yet → "Arrives date"
-    return tonePill("amber", moving?`${STAGE_SHORT[st]} · ${fmtDue(pk.arrival)}`:`Arrives ${fmtDue(pk.arrival)}`); }
+    return tonePill("amber", moving?`${STAGE_SHORT[st]} · ${fmtDue(pk.arrival)}`:`Arrives ${fmtDue(pk.arrival)}`,tip); }
   const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
-  return b?tonePill("amber", (b.text||b.label||"In transit")): tonePill("gray","Awaiting tracking");
+  // no due date: a SHORT stage word keeps the one-line row tidy — the raw GAASH text is in the tooltip
+  const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
+  return b?tonePill("amber", SHORT[b.bucket]||b.text||b.label||"In transit",tip): tonePill("gray","Awaiting tracking",tip);
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
@@ -3476,12 +3503,42 @@ function poCardHtml(p){
     <button class="po-btn" style="margin-top:8px" onclick="poAddPkg('${p.po_id}')">＋ Add package</button>
     <div id="cu_${p.po_id}" style="font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-line"></div></div></div>`;
 }
+// ── The demand-side status on the package row: the customer-order status the owner
+//    manages (auto-flipped to ORDERED when the PO is saved). Shown as the least-
+//    advanced linked order; changing the dropdown updates ALL the package's linked
+//    orders — the same POST /api/status the Orders page uses. ──
+function pkgOrderIds(pk){ const seen=new Set();
+  (pk&&pk.items||[]).forEach(it=>{ const id=(it.customer_order_id||'').trim(); if(id) seen.add(id); });
+  return [...seen]; }
+function pkgOrderSelect(p,pk,pi){
+  if(!DATA||!(DATA.orders||[]).length) return '';
+  const ords=pkgOrderIds(pk).map(id=>DATA.orders.find(o=>o.order_id===id)).filter(Boolean);
+  if(!ords.length) return '';
+  const sts=DATA.statuses||[];
+  const pool=ords.filter(o=>o.status!=="CANCELLED");        // a cancelled order shouldn't mask the rest
+  let cur=(pool[0]||ords[0]).status;
+  (pool.length?pool:ords).forEach(o=>{ const a=sts.indexOf(o.status), b=sts.indexOf(cur);
+    if(a>-1&&(a<b||b<0)) cur=o.status; });                  // least-advanced = the bottleneck
+  const[c,bg]=STATUS_COLOR[cur]||["#555","#eee"];
+  const tip='حالة طلب العميل · customer-order status — changing it updates '+
+    (ords.length===1?`${ords[0].customer||ords[0].order_id}`:`all ${ords.length} linked orders:\n`+
+      ords.map(o=>`${o.customer||o.order_id} — ${o.status}`).join('\n'));
+  return `<select class="statussel" title="${poEsc(tip)}" style="flex:0 0 auto;color:${c};background:${bg};border-color:${c}33"
+    onchange="pkgSetOrderStatus('${p.po_id}',${pi},this.value)" onclick="event.stopPropagation()">`+
+    sts.map(s=>`<option ${s===cur?'selected':''}>${s}</option>`).join("")+`</select>`;
+}
+async function pkgSetOrderStatus(poId,pi,status){
+  const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
+  const ids=pkgOrderIds(pk); if(!ids.length) return;
+  for(const id of ids){ try{ await post("/api/status",{id,status}); }catch(e){} }
+  // update the in-memory orders too (no load() here — it can yank restricted roles off this view)
+  ids.forEach(id=>{ const o=((DATA&&DATA.orders)||[]).find(x=>x.order_id===id); if(o) o.status=status; });
+  toast(`${ids.length===1?ids[0]:ids.length+' orders'} → ${status}`);
+  renderPurchases();
+}
 function poPkgHtml(p,pk,pi){
   const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
-  // Live shipping state → one status line (no editable inputs inline; edit in ⋯ → Edit).
-  const ts=(pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
-  const bucketTxt=ts?poEsc(ts.text||ts.label||ts.code||'In transit'):'📦 Awaiting shipment';
   const gaash=(pk.tracking_number||'').trim();
   const menu=popMenu([
     [`✏️ تعديل الطرد · Edit package`, `pkgEditOpen('${p.po_id}',${pi})`],
@@ -3493,21 +3550,20 @@ function poPkgHtml(p,pk,pi){
     [`🗑 حذف الطرد · Delete package`, `poDelPkg('${p.po_id}',${pi})`, true],
   ]);
   const est=pkgEstTotal(pk);   // estimated package cost = Σ product prices
+  // One line: 📦N · count · thumbs · GWD · ≈cost — order-status dropdown · pill · ⋯
+  // (status + due date live in the pill; the raw detail is its hover tooltip)
   const head=`<div class="pkg-head">
     <div class="pkg-title-row">
       <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
-      <span class="pkg-title">📦 Package ${pk.package_no}</span>
+      <span class="pkg-title">📦${pk.package_no}</span>
       <span class="muted">${pk.items.length} product${pk.items.length===1?'':'s'}</span>
       ${poThumbStrip(pk.items)}
+      <span class="muted">· ${gaash?`<b class="mono" title="GAASH tracking #" style="color:var(--ink)">${poEsc(gaash)}</b>`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+      ${est.priced?`<span class="muted" title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">· ≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced} unpriced)</span>`:''}</span>`:''}
       <span class="spacer"></span>
+      ${pkgOrderSelect(p,pk,pi)}
       ${pkgStatusPill(pk)}
       ${menu}
-    </div>
-    <div class="pkg-statusline">
-      <span>${ts?`🚚 ${bucketTxt}`:bucketTxt}</span>
-      ${pk.arrival?`<span>· due ${fmtDue(pk.arrival)||poEsc(pk.arrival)}</span>`:''}
-      <span>· ${gaash?`GAASH <b class="mono" style="color:var(--ink)">${poEsc(gaash)}</b>`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
-      ${est.priced?`<span title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">· ≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced} unpriced)</span>`:''}</span>`:''}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
   // Read view: items grouped by customer — photo · name · ×qty · exception chip · ✏️.
@@ -3798,7 +3854,7 @@ async function trackPkg(btn,id,pi){ const p=poFind(id); const pk=p.packages[pi];
   btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…';
   let s; try{ s=await (await fetch("/api/track_gwd?tracking="+encodeURIComponent(pk.tracking_number))).json(); }catch(e){ s={error:"network error"}; }
   if(s.error){ toast("Shipping: "+s.error); btn.disabled=false; btn.textContent="🔎 Check shipping"; return; }
-  pk.tracking_status=s; poSave(p); renderPurchases();
+  pk.tracking_status=s; pk.tracking_checked=new Date().toISOString(); poSave(p); renderPurchases();
   const via=s.source==='cache'?` (last known ${(s.fetched_at||'').slice(0,10)})`:(s.source==='parcelsapp'?' (via parcelsapp)':(s.source==='gaash_browser'?' (via browser)':''));
   toast("Shipping: "+(s.text||s.label||s.code||"updated")+via); }
 function poUpload(btn,id){ const inp=$("poImgInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
@@ -3827,7 +3883,7 @@ function podRender(){
         <div class="muted2" style="font-size:11px">${poEsc(it.customer_name||'⚠ غير معيّن')}${it.qty>1?` · ×${it.qty}`:''}${it.tracking_number?` · <span class="mono">${poEsc(it.tracking_number)}</span>`:''}</div></div>
       ${PO_STATUSES.includes(it.status)?`<span class="pill" style="color:${(STATUS_COLOR[it.status]||['#b42318'])[0]};background:${(STATUS_COLOR[it.status]||[0,'#fee2e2'])[1]}">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`:`<span class="pill">${poEsc(pkgStatus(pk))}</span>`}</div>`).join("");
     return `<div style="margin-bottom:10px">
-      <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦 Package ${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
+      <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
       <div style="display:flex;flex-direction:column;gap:5px">${rows||'<div class="muted2" style="font-size:12px">لا منتجات · no products</div>'}</div></div>`;
   }).join("");
   const nItems=(p.packages||[]).reduce((s,pk)=>s+(pk.items||[]).length,0);
