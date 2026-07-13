@@ -174,6 +174,12 @@
   .pop-item.danger{color:var(--bad)}
   /* cards clip to their rounded corners, which would cut the open ⋯ dropdown — lift it while open */
   .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible}
+  /* ClickUp-style status dropdown (macOS ignores <option> colours, so it's a custom pop-menu) */
+  .cu-menu{max-height:320px;overflow:auto;min-width:215px}
+  .cu-search{width:100%;margin:2px 0 5px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:var(--bg2)}
+  .cu-item{display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .cu-item b{flex:1;text-align:start;font-weight:inherit}
+  .cu-ring{width:11px;height:11px;border-radius:50%;border:2px dashed;flex:0 0 auto;display:inline-block}
   .po-filters{display:flex;gap:7px;flex-wrap:wrap;margin:2px 0 12px}
   .po-tab{cursor:pointer;font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted)}
   .po-tab.on{border-color:var(--ink);color:var(--ink);font-weight:700}
@@ -243,7 +249,7 @@
   .warnflag{color:var(--warn);font-weight:700}
   .minibtn{padding:3px 8px;font-size:11.5px;border-radius:7px}
   .row-actions{display:flex;gap:5px;flex-wrap:wrap}
-  select.statussel{padding:3px 6px;font-size:11.5px;border-radius:7px;font-weight:700}
+  .statussel{padding:3px 6px;font-size:11.5px;border-radius:7px;font-weight:700}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .form-grid .full{grid-column:1/3}
   label.fld{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:3px}
@@ -3173,8 +3179,8 @@ function gaashMiniPill(bucket,text){
   return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,text):tonePill("amber",txt,text);
 }
 function gzMiniPill(bucket,text){
-  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">none</span>`;
-  return solidPill(GZ_HEX[bucket]||"#8d8d8d", text||bucket, text);
+  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">🛵 none</span>`;
+  return solidPill(GZ_HEX[bucket]||"#8d8d8d", `🛵 ${text||bucket}`, text);
 }
 // ── Check shipping with a LIVE popup: one row per GWD, old status → new status.
 //    onlyGwd = the per-package ⋯ action (force bypasses the 30-min TTL). ──
@@ -3218,7 +3224,7 @@ async function poRunShippingCheck(btn,onlyGwd,force){
     const isSame=gaSame&&!gzChanged;
     if(isSame) same++; else changed++;
     let html=`${gaashMiniPill(c.old&&c.old.bucket,c.old&&c.old.text)} <span class="muted2">→</span> ${gaashMiniPill(c.new&&c.new.bucket,c.new&&c.new.text)}`;
-    if(gzNewTxt) html+=` <span class="muted2">· GZ:</span> ${gzChanged?`${gzMiniPill(c.gz_old&&c.gz_old.bucket,gzOldTxt)} <span class="muted2">→</span> `:''}${gzMiniPill(c.gz_new.bucket,gzNewTxt)}`;
+    if(gzNewTxt) html+=` <span class="muted2">·</span> ${gzChanged?`${gzMiniPill(c.gz_old&&c.gz_old.bucket,gzOldTxt)} <span class="muted2">→</span> `:''}${gzMiniPill(c.gz_new.bucket,gzNewTxt)}`;
     bulkRow(g,g,where(g), html+(isSame?' <span class="muted2">(no change)</span>':''));
   }
   if(lastResp&&lastResp.purchase_orders){ POS=lastResp.purchase_orders; renderPurchases(); }
@@ -3524,10 +3530,11 @@ function tonePill(tone,txt,tip){ return `<span class="pill" style="${TONE[tone]|
 function hexPill(hex,txt,tip){ return `<span class="pill" style="color:${hex};background:${hex}1a;border-color:${hex}55;font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
 // Solid ClickUp-style chip: full-colour background, white or dark text by luminance
 // (the pastel GASH hexes are unreadable as tinted text-on-light pills).
-function solidPill(hex,txt,tip){ const m=hex.replace('#','');
+function inkFor(hex){ const m=hex.replace('#','');
   const r=parseInt(m.slice(0,2),16),g=parseInt(m.slice(2,4),16),b=parseInt(m.slice(4,6),16);
-  const ink=(0.299*r+0.587*g+0.114*b)>150?'#1f2430':'#fff';
-  return `<span class="pill" style="color:${ink};background:${hex};border-color:${hex};font-weight:700"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+  return (0.299*r+0.587*g+0.114*b)>150?'#1f2430':'#fff'; }
+function solidPill(hex,txt,tip){
+  return `<span class="pill" style="color:${inkFor(hex)};background:${hex};border-color:${hex};font-weight:700"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
 // GAASH bucket → hex fallback for statuses the GASH_STATUS map doesn't know yet.
 const GAASH_HEX={transit:"#4466ff",arrived:"#e5484d",customs:"#f76808",cleared:"#0f9d9f"};
 // GAASH status text/code → the owner's ClickUp "GASH STATUS" values + colours
@@ -3604,7 +3611,8 @@ function gzTip(gz){
 function pkgGerizimPill(pk){
   const gz=(pk&&pk.gerizim_status&&typeof pk.gerizim_status==='object')?pk.gerizim_status:null;
   if(!gz||!(gz.label||gz.status)) return '';
-  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", gz.label||gz.status, gzTip(gz));
+  // 🛵 = the last-mile courier, so Gerizim chips never read as GAASH statuses
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", `🛵 ${gz.label||gz.status}`, gzTip(gz));
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
@@ -3698,14 +3706,28 @@ const CU_STATUSES=[["oredered","#9faec7"],["shipped","#4466ff"],["doc sent to ga
   ["recieved rd","#0ff17e"],["recieved no rd","#1090e0"],["sent no rd","#3e63dd"],
   ["sent rd","#3dcc4e"],["complete","#008844"]];
 const CU_COLOR=Object.fromEntries(CU_STATUSES);
+// ClickUp-look status dropdown: macOS Chrome renders native <select> popups with
+// the system picker (option colours are IGNORED there), so this is a custom
+// .pop-menu — search box + one row per status with its coloured dashed ring.
 function pkgCuSelect(p,pk,pi){
   const cur=pk.otlobly_status||CU_STATUSES[0][0], c=CU_COLOR[cur]||"#8d8d8d";
-  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur]].concat(CU_STATUSES));   // keep a renamed/legacy value visible
-  return `<select class="statussel" title="حالة أوطلبلي — أنت تحددها · Otlobly status (set by you)"
-    style="flex:0 0 auto;max-width:150px;color:${c};background:${c}1a;border-color:${c}55"
-    onchange="poPkgSet('${p.po_id}',${pi},'otlobly_status',this.value);renderPurchases()">`+
-    opts.map(([s])=>`<option ${s===cur?'selected':''}>${poEsc(s)}</option>`).join("")+`</select>`;
+  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur,"#8d8d8d"]].concat(CU_STATUSES));   // keep a renamed/legacy value visible
+  const rows=opts.map(([s,h])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
+      onclick="poPkgSet('${p.po_id}',${pi},'otlobly_status','${poEsc(s)}');renderPurchases()">
+      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(s)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
+    </button>`).join("");
+  return `<span class="pop" style="flex:0 0 auto">
+    <button class="statussel" title="حالة أوطلبلي — أنت تحددها · Otlobly status (set by you)"
+      style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cur)} ▾</button>
+    <div class="pop-menu cu-menu">
+      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+      ${rows}
+    </div></span>`;
 }
+function cuFilter(inp){ const q=(inp.value||'').trim().toLowerCase();
+  [...inp.parentElement.querySelectorAll('.cu-item')].forEach(it=>{
+    it.style.display=!q||it.textContent.toLowerCase().includes(q)?'':'none'; }); }
 function poPkgHtml(p,pk,pi){
   const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
