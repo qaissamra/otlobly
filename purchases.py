@@ -194,6 +194,11 @@ def _norm_item(raw):
         "customer_name": raw.get("customer_name"),
         "matched": bool(raw.get("customer_name")),
         "ambiguous": bool(raw.get("ambiguous")),
+        # Estimated Amazon item COST (raw price, not marked up). Filled on demand by
+        # /api/purchase/estimate_cost; src = past (a prior order/lookup) | cache | serp.
+        "est_cost_usd": raw.get("est_cost_usd"),
+        "est_cost_src": raw.get("est_cost_src"),
+        "est_cost_at": raw.get("est_cost_at"),
     }
 
 
