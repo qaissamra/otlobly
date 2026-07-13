@@ -110,6 +110,8 @@ def main():
           all(s in html for s in ("REFUNDED:[", "OUT_OF_STOCK:[", "RETURNED:[")))
     check("package effective status helper exists", "function pkgStatus(" in html)
     check("rollup now computes over packages", "least-advanced PACKAGE" in html)
+    check("row name clipped to first 3 words (full name stays in title)",
+          "const short3=" in html and "w.slice(0,3).join(' ')" in html and "short3(it.title)" in html)
 
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     return 0 if not fails else 1

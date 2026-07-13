@@ -3414,6 +3414,9 @@ function poPkgHtml(p,pk,pi){
   // in the ✏️ editor; a product's status is its package's unless an exception is set.
   const groups={};
   pk.items.forEach((it,ii)=>{ const kk=(it.customer_name||'').trim()||'—'; (groups[kk]=groups[kk]||[]).push([it,ii]); });
+  // Row label = first 3 words of the product name (Amazon titles are a paragraph);
+  // the full name stays in the hover tooltip and the editor.
+  const short3=s=>{ const w=(s||'').trim().split(/\s+/); return w.length<=3?(s||'').trim():w.slice(0,3).join(' ')+'…'; };
   const exChip=it=>{ if(!PO_STATUSES.includes(it.status)) return '';   // legacy stage values (pre-migration) = inherit, no chip
     const[c,bg]=STATUS_COLOR[it.status]||["#b42318","#fee2e2"];
     return `<span class="pill" style="color:${c};background:${bg};flex:0 0 auto" title="استثناء لهذا المنتج فقط · exception for this product only">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`; };
@@ -3421,7 +3424,7 @@ function poPkgHtml(p,pk,pi){
       <div class="poc-cust${cust==='—'?' nocust':''}">${cust==='—'?'⚠ غير مرتبط بعميل · no customer yet':poEsc(cust)}</div>
       ${arr.map(([it,ii])=>`<div class="poc-row">
         ${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}
-        <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(it.title||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
+        <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(short3(it.title)||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
         <span class="muted2" style="flex:0 0 auto">×${it.qty||1}</span>
         ${exChip(it)}
         <button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج (رابط، ASIN، صورة، ملاحظات…) · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>
