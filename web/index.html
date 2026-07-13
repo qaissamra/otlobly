@@ -159,6 +159,12 @@
   .pkg-meta .field input{border-color:var(--line);background:#fff}
   .pkg-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
   .pkg-body{padding:8px;overflow-x:auto;border-top:1px solid var(--line)}
+  .poc-group{padding:2px 6px}
+  .poc-cust{font-size:11.5px;font-weight:700;color:var(--muted);margin:9px 2px 2px}
+  .poc-cust.nocust{color:#b45309}
+  .poc-row{display:flex;align-items:center;gap:10px;padding:6px 2px;border-top:1px solid var(--line);font-size:13px}
+  .poc-row .thumb{width:44px;height:44px;object-fit:contain;border-radius:8px;background:var(--bg3);flex:0 0 auto}
+  .poc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .po-tbl{width:100%;border-collapse:collapse}
   .po-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:7px 8px;font-weight:700}
   .po-tbl td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:middle}
@@ -1049,6 +1055,14 @@
   </div>
 </div>
 
+<!-- PO item editor: all data-entry for one product (link, ASIN, photo, notes, exceptions) -->
+<div id="itemEditModal" class="az-modal hidden" onclick="if(event.target===this)itemEditClose()">
+  <div class="az-box" style="width:540px;max-width:96vw">
+    <div class="az-head"><b>✏️ تعديل المنتج · Edit product</b><span class="az-x" onclick="itemEditClose()">✕</span></div>
+    <div style="padding:14px 16px" id="ieBody"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 </div></div></div><!-- /.wrap /.main /.app -->
 
@@ -1058,8 +1072,12 @@ const STATUS_COLOR = {
   REQUESTED:["#6b7280","#f3f4f6"], QUOTED:["#0891b2","#e0f2fe"], IN_CART:["#b45309","#fef3c7"],
   ORDERED:["#6366f1","#eef2ff"], SHIPPED:["#0ea5e9","#e0f2fe"],
   ARRIVED:["#d97706","#fff7ed"], DELIVERED:["#ff5a1f","#fff1ea"],
-  COLLECTED:["#16a34a","#ecfdf5"], CANCELLED:["#dc2626","#fef2f2"]
+  COLLECTED:["#16a34a","#ecfdf5"], CANCELLED:["#dc2626","#fef2f2"],
+  REFUNDED:["#b42318","#fee2e2"], OUT_OF_STOCK:["#92400e","#fef3c7"], RETURNED:["#6d28d9","#ede9fe"]
 };
+// PO item exception labels (items otherwise inherit their package's status).
+const EXC_LABEL={CANCELLED:"Cancelled · ملغى",REFUNDED:"Refunded · مسترد",
+  OUT_OF_STOCK:"Out of stock · غير متوفر",RETURNED:"Returned · مرتجع"};
 const $ = id => document.getElementById(id);
 const money = n => "$" + (Number(n||0)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 let MARKUP_PCT=0.10;
@@ -2943,7 +2961,7 @@ async function saveSettings(b){
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; QSETTINGS=r.settings; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
 }
 
-let POS=null, PO_STATUSES=["ORDERED","SHIPPED","ARRIVED","DELIVERED","RETURNED","CANCELLED"];
+let POS=null, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
 let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
 let PO_CUSTNAMES=[], PO_CUSTORDERS={}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -3134,7 +3152,7 @@ function poAutofillFromOrder(p,pi,ii,name){
   const byOid=new Set(), byName=new Set();
   (POS||[]).forEach(po=>(po.packages||[]).forEach(pk=>(pk.items||[]).forEach(x=>{
     if(x===it) return;                                        // the row being filled
-    if(x.status==="CANCELLED"||x.status==="RETURNED") return; // don't block re-ordering
+    if(PO_STATUSES.includes(x.status)) return; // exceptions (cancelled/refunded/OOS/returned) don't block re-ordering
     const a=prodKey(x); if(!a) return;
     if(x.customer_order_id) byOid.add(x.customer_order_id+"|"+a);
     else if(x.customer_name) byName.add(normName(x.customer_name)+"|"+a);
@@ -3265,7 +3283,10 @@ async function genCtk(poId,pkgNo){
   if(r&&r.ok){ const p=poFind(poId); const pk=(p&&p.packages||[]).find(x=>x.package_no===pkgNo); if(pk)pk.customer_tracking=r.customer_tracking; renderPurchases(); toast("Customer tracking #: "+r.customer_tracking); }
   else toast("Couldn't generate: "+((r&&r.error)||"")); }
 function custOptions(sel){ return ['<option value="">⚠ unmatched</option>'].concat(PO_CUSTNAMES.map(n=>`<option ${n===sel?'selected':''}>${poEsc(n)}</option>`)).join(""); }
-function statusOptions(sel){ return PO_STATUSES.map(s=>`<option ${s===sel?'selected':''}>${s}</option>`).join(""); }
+function statusOptions(sel){   // "" = inherit the package status; exceptions only beyond that
+  sel=PO_STATUSES.includes(sel)?sel:'';   // legacy stage values (pre-migration) count as inherit
+  return `<option value="" ${sel?'':'selected'}>— يرث الطرد · inherits package —</option>`
+    +PO_STATUSES.map(s=>`<option value="${s}" ${s===sel?'selected':''}>${EXC_LABEL[s]||s}</option>`).join(""); }
 function boxOptions(sel){ return ['<option value="">—</option>'].concat(PO_BOXES.map(b=>`<option ${b===sel?'selected':''}>${b}</option>`)).join(""); }
 
 function boxDatalist(){   // autocomplete hints: the known boxes + any already used on POs
@@ -3291,15 +3312,22 @@ function poTrkCounts(p){   // products still missing a tracking # (item's own OR
   return {tot,need};
 }
 const PO_STAGE=["ORDERED","SHIPPED","ARRIVED","DELIVERED","COLLECTED"];
-function poRollupStatus(p){   // whole-order status = the least-advanced item (the bottleneck)
-  const items=(p.packages||[]).flatMap(pk=>pk.items||[]);
-  if(!items.length) return null;
-  let minIdx=99, other=null;
-  items.forEach(it=>{ const s=(it.status||'ORDERED').toUpperCase(); const i=PO_STAGE.indexOf(s);
-    if(i<0) other=s; else if(i<minIdx) minIdx=i; });
-  return minIdx<99?PO_STAGE[minIdx]:other;   // all items CANCELLED/RETURNED → show that
+// A package's effective status — what its items inherit (a product is wherever
+// its box is). Live tracking wins; a box with no tracking yet is simply ORDERED.
+function pkgStatus(pk){
+  const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status.bucket:null;
+  if(b==="delivered") return "DELIVERED";
+  if(b==="arrived"||b==="customs"||b==="cleared") return "ARRIVED";
+  if(b==="transit") return "SHIPPED";
+  return "ORDERED";
 }
-function statusSelCss(s){ const[c]=STATUS_COLOR[(s||'').toUpperCase()]||['#555']; return `color:${c};border-color:${c}66;font-weight:600`; }
+function poRollupStatus(p){   // whole-order status = the least-advanced PACKAGE (the bottleneck)
+  const pkgs=p.packages||[];
+  if(!pkgs.length) return null;
+  let minIdx=99;
+  pkgs.forEach(pk=>{ const i=PO_STAGE.indexOf(pkgStatus(pk)); if(i>=0&&i<minIdx) minIdx=i; });
+  return minIdx<99?PO_STAGE[minIdx]:null;
+}
 // Inline product-photo strip for the card / package headers (same look as the To-order row).
 function poThumbStrip(items,max=4){
   items=(items||[]).filter(Boolean); if(!items.length) return '';
@@ -3381,20 +3409,25 @@ function poPkgHtml(p,pk,pi){
       ${pk.tracking_status&&!pk.tracking_status.error?`<span class="trk-badge trk-${pk.tracking_status.bucket||'transit'}" title="${poEsc(pk.tracking_status.time||'')}">🚚 ${poEsc(pk.tracking_status.text||pk.tracking_status.label||pk.tracking_status.code||'')}${pk.tracking_status.source==='parcelsapp'?' · via parcelsapp':''}${pk.tracking_status.source==='gaash_browser'?' · via browser':''}${pk.tracking_status.source==='cache'?` · 🕓 last known ${poEsc((pk.tracking_status.fetched_at||'').slice(0,10))}`:''}</span>`:''}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
-  const rows=pk.items.map((it,ii)=>`<tr>
-    <td>${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}</td>
-    <td class="namec"><input value="${poEsc(it.title)}" placeholder="product name" onchange="poItemSet('${p.po_id}',${pi},${ii},'title',this.value)"></td>
-    <td class="linkc"><input class="linkin" value="${poEsc(it.clean_url)}" placeholder="paste Amazon link →" title="paste the product link — the ASIN fills in automatically" onchange="poItemLink('${p.po_id}',${pi},${ii},this.value)">${it.clean_url?`<a class="linkopen" href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="open this product on Amazon">↗</a>`:''}</td>
-    <td class="asinc"><input value="${poEsc(it.asin)}" placeholder="B0…" onchange="poItemSet('${p.po_id}',${pi},${ii},'asin',this.value.toUpperCase())"><button class="po-btn pofetch" title="pull the photo & name from Amazon" onclick="poFetch(this,'${p.po_id}',${pi},${ii})">⤓ Get photo</button></td>
-    <td><input class="custc${it.customer_name?'':' custc-empty'}" list="poCustList" value="${poEsc(it.customer_name||'')}" placeholder="⚠ ابحث عن عميل · search…" title="اكتب اسم العميل للبحث والاختيار · type to search the customer" onchange="poItemSet('${p.po_id}',${pi},${ii},'customer_name',this.value)"></td>
-    <td class="qtyc"><input type="number" min="1" value="${it.qty||1}" onchange="poItemSet('${p.po_id}',${pi},${ii},'qty',this.value)"></td>
-    <td class="trkc"><input class="mono trk-cell" value="${poEsc(it.tracking_number||pk.tracking_number||'')}" placeholder="${poEsc(courier)}…" title="enter this product's tracking # — it auto-moves to the matching package" onchange="poItemTracking('${p.po_id}',${pi},${ii},this.value)"></td>
-    <td><select style="${statusSelCss(it.status)}" onchange="poItemSet('${p.po_id}',${pi},${ii},'status',this.value)">${statusOptions(it.status)}</select></td>
-    <td><input value="${poEsc(it.notes)}" placeholder="—" style="width:84px" onchange="poItemSet('${p.po_id}',${pi},${ii},'notes',this.value)"></td>
-    <td><button class="iconbtn" title="remove this product" onclick="poDelItem('${p.po_id}',${pi},${ii})">✕</button></td></tr>`).join("");
-  return `<div class="pkg open">${head}<div class="pkg-body"><table class="po-tbl">
-    <thead><tr><th>Photo</th><th>Product name</th><th>Link (auto-fills ASIN)</th><th>ASIN (Amazon code)</th><th>Customer (who ordered it)</th><th>Qty</th><th>Tracking #</th><th>Status</th><th>Notes</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div></div>`;
+  // Read view: items grouped by customer — photo · name · ×qty · exception chip · ✏️.
+  // Everything data-entry (link, ASIN, get-photo, tracking, notes, exceptions) lives
+  // in the ✏️ editor; a product's status is its package's unless an exception is set.
+  const groups={};
+  pk.items.forEach((it,ii)=>{ const kk=(it.customer_name||'').trim()||'—'; (groups[kk]=groups[kk]||[]).push([it,ii]); });
+  const exChip=it=>{ if(!PO_STATUSES.includes(it.status)) return '';   // legacy stage values (pre-migration) = inherit, no chip
+    const[c,bg]=STATUS_COLOR[it.status]||["#b42318","#fee2e2"];
+    return `<span class="pill" style="color:${c};background:${bg};flex:0 0 auto" title="استثناء لهذا المنتج فقط · exception for this product only">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`; };
+  const rows=Object.entries(groups).map(([cust,arr])=>`<div class="poc-group">
+      <div class="poc-cust${cust==='—'?' nocust':''}">${cust==='—'?'⚠ غير مرتبط بعميل · no customer yet':poEsc(cust)}</div>
+      ${arr.map(([it,ii])=>`<div class="poc-row">
+        ${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}
+        <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(it.title||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
+        <span class="muted2" style="flex:0 0 auto">×${it.qty||1}</span>
+        ${exChip(it)}
+        <button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج (رابط، ASIN، صورة، ملاحظات…) · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>
+      </div>`).join("")}
+    </div>`).join("");
+  return `<div class="pkg open">${head}<div class="pkg-body">${rows||'<div class="empty">لا منتجات · no products</div>'}</div></div>`;
 }
 function poAddPkg(id){ const p=poFind(id); p.packages=p.packages||[]; p.packages.push({package_no:p.packages.length+1,arrival:"",tracking_number:"",items:[]}); poSave(p); renderPurchases(); }
 async function poDelPkg(id,pi){ if(!confirm("Delete this package? It moves to Trash — you can restore it."))return;
@@ -3449,9 +3482,55 @@ async function ntfSend(btn){
   btn.disabled=false; btn.textContent=old;
   $("ntfOut").textContent=`${okN} sent${errN?` · ${errN} failed`:''}`;
 }
-function poAddItem(id,pi){ const p=poFind(id); p.packages[pi].items.push({title:"",asin:"",qty:1,status:"ORDERED"}); poSave(p); renderPurchases(); }
+function poAddItem(id,pi){ const p=poFind(id); p.packages[pi].items.push({title:"",asin:"",qty:1,status:""}); poSave(p); renderPurchases();
+  itemEditOpen(id,pi,p.packages[pi].items.length-1); }   // a fresh product goes straight to the editor
 async function poDelItem(id,pi,ii){ const r=await post("/api/purchase/item/delete",{id,pi,ii});
   if(r.ok){ const p=poFind(id); p.packages[pi].items.splice(ii,1); renderPurchases(); toast("Product moved to Trash"); loadHomeActivity(); } }
+// ── Item editor: ALL data entry for one product; the row stays a clean read view ──
+let IE=null;   // {id,pi,ii}
+function itemEditOpen(id,pi,ii){ IE={id,pi,ii}; ieRender(); $("itemEditModal").classList.remove("hidden"); }
+function itemEditClose(){ $("itemEditModal").classList.add("hidden"); IE=null; renderPurchases(); }
+function ieRender(){
+  if(!IE) return;
+  const p=poFind(IE.id), pk=p&&p.packages[IE.pi], it=pk&&pk.items[IE.ii];
+  if(!it){ itemEditClose(); return; }
+  $("ieBody").innerHTML=`
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px">
+      ${it.image?`<img src="${poEsc(it.image)}" style="width:64px;height:64px;border-radius:8px;background:var(--bg3);object-fit:contain;flex:0 0 auto">`:'<div style="width:64px;height:64px;border-radius:8px;background:var(--bg3);flex:0 0 auto"></div>'}
+      <div style="flex:1"><label class="fld">اسم المنتج · Product name</label>
+        <input style="width:100%" value="${poEsc(it.title)}" placeholder="product name" onchange="ieSet('title',this.value)"></div>
+    </div>
+    <label class="fld">رابط أمازون · Link (auto-fills the ASIN)</label>
+    <div style="display:flex;gap:6px"><input style="flex:1" value="${poEsc(it.clean_url)}" placeholder="paste the product link" onchange="ieLink(this.value)">${it.clean_url?`<a class="po-btn" href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="open on Amazon">↗</a>`:''}</div>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px"><label class="fld">ASIN</label>
+        <div style="display:flex;gap:6px"><input class="mono" style="flex:1;min-width:0" value="${poEsc(it.asin)}" placeholder="B0…" onchange="ieSet('asin',this.value.toUpperCase())"><button class="po-btn" title="pull the photo &amp; name from Amazon" onclick="ieFetch(this)">⤓ Get photo</button></div></div>
+      <div style="width:90px"><label class="fld">الكمية · Qty</label><input type="number" min="1" style="width:100%" value="${it.qty||1}" onchange="ieSet('qty',this.value)"></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:170px"><label class="fld">العميل · Customer</label>
+        <input class="custc${it.customer_name?'':' custc-empty'}" list="poCustList" style="width:100%" value="${poEsc(it.customer_name||'')}" placeholder="⚠ ابحث عن عميل · search…" onchange="ieSet('customer_name',this.value)"></div>
+      <div style="flex:1;min-width:170px"><label class="fld">الحالة · Status</label>
+        <select style="width:100%" onchange="ieSet('status',this.value)">${statusOptions(it.status)}</select>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">يرث حالة الطرد تلقائيًا — استثناءات فقط · inherits the package status; exceptions only</div></div>
+    </div>
+    <label class="fld" style="margin-top:10px">تتبع هذا المنتج · Tracking # <span class="muted2" style="font-weight:400">(auto-moves it to the matching package)</span></label>
+    <input class="mono" style="width:100%" value="${poEsc(it.tracking_number||'')}" placeholder="GWD…" onchange="ieTracking(this.value)">
+    <label class="fld" style="margin-top:10px">ملاحظات · Notes</label>
+    <input style="width:100%" value="${poEsc(it.notes)}" placeholder="—" onchange="ieSet('notes',this.value)">
+    <div class="az-actions" style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      <button class="po-btn danger" onclick="ieDelete()">🗑 حذف · Delete</button>
+      <span style="flex:1"></span>
+      <button class="accent" onclick="itemEditClose()">تم · Done</button>
+    </div>`;
+}
+function ieSet(f,v){ if(!IE)return; poItemSet(IE.id,IE.pi,IE.ii,f,v); if(f==='status'||f==='customer_name'||f==='title') ieRender(); }
+async function ieLink(url){ if(!IE)return; await poItemLink(IE.id,IE.pi,IE.ii,url); ieRender(); }
+async function ieFetch(btn){ if(!IE)return; await poFetch(btn,IE.id,IE.pi,IE.ii); ieRender(); }
+function ieTracking(v){ if(!IE)return; const ref=IE; IE=null; $("itemEditModal").classList.add("hidden");
+  poItemTracking(ref.id,ref.pi,ref.ii,v); }   // the item may move to another package → indexes go stale, so close
+async function ieDelete(){ if(!IE)return; const ref=IE; IE=null; $("itemEditModal").classList.add("hidden");
+  await poDelItem(ref.id,ref.pi,ref.ii); }
 async function addPO(){
   let r; try{ r=await post("/api/purchase",{amazon_order_number:"",ship_to:"",packages:[{package_no:1,arrival:"",tracking_number:"",items:[]}]}); }catch(e){ r=null; }
   if(r&&r.ok){
@@ -3504,7 +3583,7 @@ function podRender(){
       ${it.image?`<img src="${poEsc(it.image)}" style="width:38px;height:38px">`:'<div class="noimg" style="width:38px;height:38px"></div>'}
       <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${poEsc(it.title||it.asin||'—')}</div>
         <div class="muted2" style="font-size:11px">${poEsc(it.customer_name||'⚠ غير معيّن')}${it.qty>1?` · ×${it.qty}`:''}${it.tracking_number?` · <span class="mono">${poEsc(it.tracking_number)}</span>`:''}</div></div>
-      <span class="pill">${poEsc(it.status||'ORDERED')}</span></div>`).join("");
+      ${PO_STATUSES.includes(it.status)?`<span class="pill" style="color:${(STATUS_COLOR[it.status]||['#b42318'])[0]};background:${(STATUS_COLOR[it.status]||[0,'#fee2e2'])[1]}">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`:`<span class="pill">${poEsc(pkgStatus(pk))}</span>`}</div>`).join("");
     return `<div style="margin-bottom:10px">
       <div class="muted2" style="font-size:12px;font-weight:700;margin-bottom:5px">📦 Package ${pk.package_no||pi+1}${pk.arrival?` · يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}`:''}${pk.tracking_number?` · <span class="mono">${poEsc(pk.tracking_number)}</span>`:''}${pk.customer_tracking?` · <span class="mono" style="color:var(--accent)">${poEsc(pk.customer_tracking)}</span>`:''}</div>
       <div style="display:flex;flex-direction:column;gap:5px">${rows||'<div class="muted2" style="font-size:12px">لا منتجات · no products</div>'}</div></div>`;

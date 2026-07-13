@@ -24,7 +24,12 @@ from paths import data_path, write_json_atomic
 
 STORE_FILE = data_path("purchases.json")       # business #1 (Otlobly) — unchanged
 IMAGE_DIR = data_path("po_images")
-ITEM_STATUSES = ["ORDERED", "SHIPPED", "ARRIVED", "DELIVERED", "RETURNED", "CANCELLED"]
+# An item lives inside a package, so it INHERITS the package's status; a per-item
+# status exists only for exceptions (a product can't be somewhere its box isn't).
+# "" / missing = inherit. ITEM_STATUSES keeps its name for the /api/purchases
+# contract — it's the list the UI offers in the status picker.
+ITEM_EXCEPTIONS = ["CANCELLED", "REFUNDED", "OUT_OF_STOCK", "RETURNED"]
+ITEM_STATUSES = ITEM_EXCEPTIONS
 
 
 def now_iso():
@@ -179,7 +184,9 @@ def _norm_item(raw):
                                                 (f"https://www.amazon.com/dp/{asin}" if asin else "")),
         "image": raw.get("image") or None,
         "qty": int(raw.get("qty") or 1),
-        "status": raw.get("status") or "ORDERED",
+        # exception-only: legacy stage values (ORDERED/SHIPPED/…) normalize to
+        # "" = inherit the package status; nothing downstream ever read them.
+        "status": raw.get("status") if raw.get("status") in ITEM_EXCEPTIONS else "",
         "tracking_number": (raw.get("tracking_number") or "").strip() or None,
         "tracking_carrier": raw.get("tracking_carrier") or None,
         "notes": (raw.get("notes") or "").strip(),
