@@ -152,7 +152,7 @@
   /* one-line package header: 📦N · count · thumbs · GWD · ≈cost — order-status · pill · ⋯ (wraps on narrow) */
   .pkg-head{display:flex;flex-direction:column;font-size:12.5px}
   .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap}
-  .pkg-head .pkg-title{font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .pkg-meta{display:flex;align-items:center;gap:7px 18px;flex-wrap:wrap;padding:7px 11px;background:var(--bg2);border-top:1px solid var(--line)}
   .pkg-meta .field{display:inline-flex;align-items:center;gap:6px}
   .pkg-meta .field>.lbl{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
@@ -172,6 +172,8 @@
   .pop-item{display:block;width:100%;text-align:start;border:none;background:transparent;padding:8px 11px;border-radius:8px;font-size:13px;color:var(--ink);cursor:pointer}
   .pop-item:hover{background:var(--bg2)}
   .pop-item.danger{color:var(--bad)}
+  /* cards clip to their rounded corners, which would cut the open ⋯ dropdown — lift it while open */
+  .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible}
   .po-filters{display:flex;gap:7px;flex-wrap:wrap;margin:2px 0 12px}
   .po-tab{cursor:pointer;font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted)}
   .po-tab.on{border-color:var(--ink);color:var(--ink);font-weight:700}
@@ -618,6 +620,8 @@
       <span style="color:var(--muted);font-size:12px">click any cell to edit · auto-saves</span>
       <span class="spacer"></span>
       <button onclick="importClickup(this)" id="impCuBtn" title="pull existing Amazon orders from the ClickUp Otloble space">↙ Import from ClickUp</button>
+      <button onclick="poRefreshTracking(this)" class="minibtn" title="re-check every GWD number against GAASH — skips delivered packages and anything checked in the last 30 min">🔎 Check all shipping</button>
+      <button onclick="poEstimateAll(this)" class="minibtn" title="estimate Amazon cost for every product that has no estimate yet — already-priced products are skipped (free)">💰 Estimate all costs</button>
       <button onclick="poViewAll(false)" class="minibtn">⊟ Collapse all</button>
       <button onclick="poViewAll(true)" class="minibtn">⊞ Expand all</button>
       <button onclick="addPO()" class="accent">+ New order</button>
@@ -3127,13 +3131,36 @@ async function loadPurchases(){
 // delivered parcel sat as "In transit" for a month), so opening Purchases asks
 // the server to re-check anything stale. Fire-and-forget; re-render on changes.
 let PO_REFRESHING=false;
-async function poRefreshTracking(){
+async function poRefreshTracking(btn){   // btn set = user clicked "Check all shipping" (report even when idle)
   if(PO_REFRESHING) return; PO_REFRESHING=true;
+  const old=btn&&btn.innerHTML; if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…'; }
   try{ const r=await post("/api/purchases/refresh_tracking",{});
     if(r&&r.ok&&r.updated&&r.purchase_orders){ POS=r.purchase_orders; renderPurchases();
       toast(`Shipping refreshed · ${r.updated} package${r.updated===1?'':'s'}`); }
-  }catch(e){}
+    else if(btn) toast(r&&r.ok?"Shipping is fresh — nothing to check":"Shipping check failed: "+((r&&r.error)||"network"));
+  }catch(e){ if(btn) toast("Shipping check failed"); }
+  if(btn){ btn.disabled=false; btn.innerHTML=old; }
   PO_REFRESHING=false;
+}
+// One click prices EVERYTHING: loop the POs through the fill-missing-only estimate
+// endpoint (already-attempted products are skipped server-side, so re-runs are free).
+async function poEstimateAll(btn){
+  if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
+  if(btn){ btn.disabled=true; }
+  const sum={past:0,cache:0,fresh:0,unpriced:0}; let failed=0;
+  for(let i=0;i<POS.length;i++){
+    if(btn) btn.innerHTML=`<span class="spin"></span> Estimating ${i+1}/${POS.length}…`;
+    let r; try{ r=await post("/api/purchase/estimate_cost",{id:POS[i].po_id}); }catch(e){ r=null; }
+    if(!r||!r.ok){ failed++; continue; }
+    if(r.purchase_order) POS[i]=r.purchase_order;
+    const x=r.result||{}; sum.past+=x.from_past||0; sum.cache+=x.from_cache||0;
+    sum.fresh+=x.fresh||0; sum.unpriced+=x.unpriced||0;
+  }
+  renderPurchases();
+  if(btn){ btn.disabled=false; btn.innerHTML='💰 Estimate all costs'; }
+  const did=sum.past+sum.cache+sum.fresh;
+  toast(did||sum.unpriced?`Priced ${did} product${did===1?'':'s'} · ${sum.past+sum.cache} reused · ${sum.fresh} fetched${sum.unpriced?` · ${sum.unpriced} unpriced`:''}${failed?` · ${failed} failed`:''}`
+       :"All products already priced — nothing to fetch");
 }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
 function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
@@ -3412,18 +3439,24 @@ function pkgTrackTip(pk){
   const chk=agoTxt(pk&&pk.tracking_checked); if(chk) bits.push(`checked ${chk}`);
   return bits.join(' · ');
 }
-// A package's single urgency pill (status colours only).
-function pkgStatusPill(pk){
-  const st=pkgStatus(pk), n=dueDays(pk&&pk.arrival), tip=pkgTrackTip(pk);
-  if(st==="DELIVERED") return tonePill("green","Delivered",tip);
-  if(n!=null&&n<0) return tonePill("red", n===-1?"1 day late":`${-n} days late`,tip);
-  if(n!=null&&n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`),tip);
-  if(n!=null){ const moving=(st==="SHIPPED"||st==="ARRIVED");   // in transit → "<stage> · date"; not shipped yet → "Arrives date"
-    return tonePill("amber", moving?`${STAGE_SHORT[st]} · ${fmtDue(pk.arrival)}`:`Arrives ${fmtDue(pk.arrival)}`,tip); }
+// ── The package row's status strip, one pill per source (a 4th slot is reserved
+//    for Gerizim last-mile tracking): 1) promised DATE · 2) live GAASH · 3) the
+//    owner-set Otlobly status (ClickUp vocabulary), rendered by pkgCuSelect. ──
+function pkgDatePill(pk){
+  if(pkgStatus(pk)==="DELIVERED") return '';          // the GAASH pill already says it
+  const n=dueDays(pk&&pk.arrival); if(n==null) return '';
+  if(n<0)  return tonePill("red", n===-1?"1 day late":`${-n} days late`);
+  if(n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`));
+  return tonePill("amber", `Arrives ${fmtDue(pk.arrival)}`);
+}
+function pkgGaashPill(pk){
+  const tip=pkgTrackTip(pk);
   const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
-  // no due date: a SHORT stage word keeps the one-line row tidy — the raw GAASH text is in the tooltip
+  if(!b) return tonePill("gray","Awaiting tracking",tip);
+  if(b.bucket==="delivered") return tonePill("green","Delivered",tip);
+  // a SHORT stage word keeps the one-line row tidy — the raw GAASH text is in the tooltip
   const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
-  return b?tonePill("amber", SHORT[b.bucket]||b.text||b.label||"In transit",tip): tonePill("gray","Awaiting tracking",tip);
+  return tonePill("amber", SHORT[b.bucket]||b.text||b.label||"In transit",tip);
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
@@ -3503,38 +3536,27 @@ function poCardHtml(p){
     <button class="po-btn" style="margin-top:8px" onclick="poAddPkg('${p.po_id}')">＋ Add package</button>
     <div id="cu_${p.po_id}" style="font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-line"></div></div></div>`;
 }
-// ── The demand-side status on the package row: the customer-order status the owner
-//    manages (auto-flipped to ORDERED when the PO is saved). Shown as the least-
-//    advanced linked order; changing the dropdown updates ALL the package's linked
-//    orders — the same POST /api/status the Orders page uses. ──
-function pkgOrderIds(pk){ const seen=new Set();
-  (pk&&pk.items||[]).forEach(it=>{ const id=(it.customer_order_id||'').trim(); if(id) seen.add(id); });
-  return [...seen]; }
-function pkgOrderSelect(p,pk,pi){
-  if(!DATA||!(DATA.orders||[]).length) return '';
-  const ords=pkgOrderIds(pk).map(id=>DATA.orders.find(o=>o.order_id===id)).filter(Boolean);
-  if(!ords.length) return '';
-  const sts=DATA.statuses||[];
-  const pool=ords.filter(o=>o.status!=="CANCELLED");        // a cancelled order shouldn't mask the rest
-  let cur=(pool[0]||ords[0]).status;
-  (pool.length?pool:ords).forEach(o=>{ const a=sts.indexOf(o.status), b=sts.indexOf(cur);
-    if(a>-1&&(a<b||b<0)) cur=o.status; });                  // least-advanced = the bottleneck
-  const[c,bg]=STATUS_COLOR[cur]||["#555","#eee"];
-  const tip='حالة طلب العميل · customer-order status — changing it updates '+
-    (ords.length===1?`${ords[0].customer||ords[0].order_id}`:`all ${ords.length} linked orders:\n`+
-      ords.map(o=>`${o.customer||o.order_id} — ${o.status}`).join('\n'));
-  return `<select class="statussel" title="${poEsc(tip)}" style="flex:0 0 auto;color:${c};background:${bg};border-color:${c}33"
-    onchange="pkgSetOrderStatus('${p.po_id}',${pi},this.value)" onclick="event.stopPropagation()">`+
-    sts.map(s=>`<option ${s===cur?'selected':''}>${s}</option>`).join("")+`</select>`;
-}
-async function pkgSetOrderStatus(poId,pi,status){
-  const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
-  const ids=pkgOrderIds(pk); if(!ids.length) return;
-  for(const id of ids){ try{ await post("/api/status",{id,status}); }catch(e){} }
-  // update the in-memory orders too (no load() here — it can yank restricted roles off this view)
-  ids.forEach(id=>{ const o=((DATA&&DATA.orders)||[]).find(x=>x.order_id===id); if(o) o.status=status; });
-  toast(`${ids.length===1?ids[0]:ids.length+' orders'} → ${status}`);
-  renderPurchases();
+// ── Pill 3/3 — the Otlobly status: set BY HAND per package, app-only. Vocabulary
+//    and colors copied verbatim from the owner's ClickUp list ("Otloble AMAZON /
+//    Orders", 901523915172) on 2026-07-13 — re-copy if the ClickUp workflow changes. ──
+const CU_STATUSES=[["oredered","#9faec7"],["shipped","#4466ff"],["doc sent to gash","#ab4aba"],
+  ["in clearance","#0f9d9f"],["waiting verification","#f76808"],["refund request","#aa8d80"],
+  ["order number","#f5cf78"],["cancelled","#e5484d"],["not correct address","#e93d82"],
+  ["id request","#d33d44"],["rd request","#0091ff"],["mixed","#6647f0"],["delivered","#a18072"],
+  ["request cancel","#f76808"],["parcel check","#f76808"],["tracking api","#6647f0"],
+  ["undeliverable","#8d8d8d"],["picked up by ger","#f76808"],["ariived at destnation","#e5484d"],
+  ["documents sent","#4466ff"],["rd","#008844"],["delievered rd","#008844"],
+  ["delievered no rd","#d33d44"],["not recieved no rd","#d33d44"],["not recieved rd","#b660e0"],
+  ["recieved rd","#0ff17e"],["recieved no rd","#1090e0"],["sent no rd","#3e63dd"],
+  ["sent rd","#3dcc4e"],["complete","#008844"]];
+const CU_COLOR=Object.fromEntries(CU_STATUSES);
+function pkgCuSelect(p,pk,pi){
+  const cur=pk.otlobly_status||CU_STATUSES[0][0], c=CU_COLOR[cur]||"#8d8d8d";
+  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur]].concat(CU_STATUSES));   // keep a renamed/legacy value visible
+  return `<select class="statussel" title="حالة أوطلبلي — أنت تحددها · Otlobly status (set by you)"
+    style="flex:0 0 auto;max-width:150px;color:${c};background:${c}1a;border-color:${c}55"
+    onchange="poPkgSet('${p.po_id}',${pi},'otlobly_status',this.value);renderPurchases()">`+
+    opts.map(([s])=>`<option ${s===cur?'selected':''}>${poEsc(s)}</option>`).join("")+`</select>`;
 }
 function poPkgHtml(p,pk,pi){
   const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
@@ -3550,19 +3572,19 @@ function poPkgHtml(p,pk,pi){
     [`🗑 حذف الطرد · Delete package`, `poDelPkg('${p.po_id}',${pi})`, true],
   ]);
   const est=pkgEstTotal(pk);   // estimated package cost = Σ product prices
-  // One line: 📦N · count · thumbs · GWD · ≈cost — order-status dropdown · pill · ⋯
-  // (status + due date live in the pill; the raw detail is its hover tooltip)
+  // One line: 📦N · thumbs · GWD · ≈cost — [date pill][GAASH pill][Otlobly status ▾] ⋯
+  // (raw GAASH text + freshness live in the GAASH pill's hover tooltip)
   const head=`<div class="pkg-head">
     <div class="pkg-title-row">
       <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
       <span class="pkg-title">📦${pk.package_no}</span>
-      <span class="muted">${pk.items.length} product${pk.items.length===1?'':'s'}</span>
       ${poThumbStrip(pk.items)}
       <span class="muted">· ${gaash?`<b class="mono" title="GAASH tracking #" style="color:var(--ink)">${poEsc(gaash)}</b>`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
       ${est.priced?`<span class="muted" title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">· ≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced} unpriced)</span>`:''}</span>`:''}
       <span class="spacer"></span>
-      ${pkgOrderSelect(p,pk,pi)}
-      ${pkgStatusPill(pk)}
+      ${pkgDatePill(pk)}
+      ${pkgGaashPill(pk)}
+      ${pkgCuSelect(p,pk,pi)}
       ${menu}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
