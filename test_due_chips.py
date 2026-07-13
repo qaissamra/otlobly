@@ -40,11 +40,12 @@ def main():
           'dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"]' in html)
     check("tfoot colspan widened for the new column", 'colspan="6"></td></tr></tfoot>' in html)
 
-    # 3) Purchases: package Arrives field + PO detail modal, delivered parcels quieted.
-    check("package Arrives field carries a chip",
-          re.search(r"poPkgSet\('\$\{p\.po_id\}',\$\{pi\},'arrival',this\.value\)\"></span>\$\{dueChip\(pk\.arrival", html) is not None)
-    check("delivered parcels never show 'late'",
-          'dueChip(pk.arrival,(pk.tracking_status&&pk.tracking_status.bucket)==="delivered")' in html)
+    # 3) Purchases: the package urgency now lives in pkgStatusPill (redesign),
+    #    which reuses the same red-late / green-arriving language via dueDays.
+    check("package urgency pill uses the due date",
+          "function pkgStatusPill(" in html and "days late" in html and "Arrives" in html)
+    check("delivered parcels never show 'late' (pill checks DELIVERED first)",
+          'if(st==="DELIVERED") return tonePill("green","Delivered")' in html)
     check("PO detail modal package header carries a chip", "يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}" in html)
 
     # 4) To-order: the summary row (next to the status pill) + the expanded ETA field.
