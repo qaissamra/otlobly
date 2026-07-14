@@ -151,7 +151,10 @@
   .pkg{border:1px solid var(--line);border-radius:12px;margin-top:10px;overflow:hidden}
   /* one-line package header: 📦N · count · thumbs · GWD · ≈cost — order-status · pill · ⋯ (wraps on narrow) */
   .pkg-head{display:flex;flex-direction:column;font-size:12.5px}
-  .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap}
+  .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap;cursor:pointer}
+  .pkg-title-row:hover{background:#efede8}
+  .pkg.open .pkg-title-row:hover{background:#ffeadf}
+  #pkgInfoModal .az-box:has(.pop-menu.open){overflow:visible}
   .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .pkg-meta{display:flex;align-items:center;gap:7px 18px;flex-wrap:wrap;padding:7px 11px;background:var(--bg2);border-top:1px solid var(--line)}
   .pkg-meta .field{display:inline-flex;align-items:center;gap:6px}
@@ -805,6 +808,23 @@
       <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save stages</button></div>
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 تنبيهات تيليجرام · Telegram alerts</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">رسائل تلقائية لك: عدّاد <b>موعد غاش النهائي</b> (قبله بـ 7/3/1 أيام + عند تجاوزه) وتنبيه <b>تأخر وصول أمازون</b> (بعده بـ 5/7/8 أيام) — تتوقف عندما تكون حالة اطلبلي ضمن قائمة الإيقاف. Open your bot in Telegram and press <b>START</b>, then use Detect. Env vars <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code> override these fields.</div>
+      <div style="display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center;font-size:12.5px">
+        <label class="fld" style="margin:0">Bot token</label><input id="al_token" style="width:100%" placeholder="123456789:ABC…" autocomplete="off">
+        <label class="fld" style="margin:0">Chat id</label><div style="display:flex;gap:7px;align-items:center"><input id="al_chat" style="width:170px"><button class="minibtn" onclick="alDetect(this)">🔍 Detect chat id</button></div>
+        <label class="fld" style="margin:0">Stop statuses</label><input id="al_stop" style="width:100%" title="فواصل بين الحالات · comma-separated Otlobly statuses that silence the arrival alerts">
+        <label class="fld" style="margin:0">GAASH days</label><div style="display:flex;gap:12px;align-items:center"><input id="al_gd" style="width:110px" placeholder="7,3,1"><label class="fld" style="margin:0">Arrival days</label><input id="al_ad" style="width:110px" placeholder="5,7,8"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+        <button class="minibtn" onclick="alTest(this)">📨 Send test message</button>
+        <button class="minibtn" onclick="alRun(this)">▶ Run alerts now</button>
+        <span class="spacer"></span>
+        <button class="accent" onclick="saveSettings(this)">Save alerts</button>
+      </div>
+      <div id="alOut" class="muted2" style="font-size:12px;margin-top:8px;white-space:pre-line"></div>
+    </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">💬 Customer login (WhatsApp OTP)</h3>
       <div class="muted2" style="font-size:12px;margin-bottom:9px">Customers sign in to the <b>account portal</b> with a one-time code sent to their WhatsApp. Status: <b id="waStatus">…</b>. Send yourself a test code to verify your Meta setup before customers rely on it.</div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
@@ -998,6 +1018,14 @@
   <div class="az-box" style="width:980px;max-width:97vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="podTitle">📦 Order</b><span class="az-x" onclick="closePoDetail()">✕</span></div>
     <div id="podBody" style="padding:14px 16px"></div>
+  </div>
+</div>
+
+<!-- 📦 Package info card: one click on a package row → every detail + action, plain -->
+<div id="pkgInfoModal" class="az-modal hidden" onclick="if(event.target===this)pkgInfoClose()">
+  <div class="az-box" style="width:560px;max-width:96vw;max-height:90vh;overflow:auto">
+    <div class="az-head"><b id="pkgInfoTitle">📦 Package</b><span class="az-x" onclick="pkgInfoClose()">✕</span></div>
+    <div id="pkgInfoBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -2914,6 +2942,13 @@ async function loadSettings(){
   $("s_custmode").value=s.customer_mode?"1":"";
   lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
   otlRender(s.tracking_otlobly_map);
+  const al=s.alerts||{};
+  if($("al_token")) $("al_token").value=al.telegram_token||"";
+  if($("al_chat")) $("al_chat").value=al.telegram_chat||"";
+  if($("al_stop")) $("al_stop").value=(al.stop_statuses||[]).join(", ");
+  if($("al_gd")) $("al_gd").value=(al.gaash_days||[]).join(",");
+  if($("al_ad")) $("al_ad").value=(al.arrival_days||[]).join(",");
+  if(al.env_configured&&$("alOut")) $("alOut").textContent="ℹ TELEGRAM_BOT_TOKEN env var is set on the server — it overrides the fields above.";
   msRender(s.meta_manual||{});                       // monthly Meta ad spend rows
   const cf=s.card_flags||{}, cl=s.card_labels||{};   // white-label / card features
   if($("s_courier")) $("s_courier").value=cl.courier||"";
@@ -3006,6 +3041,19 @@ function otlAddRow(){ $("otlRows").insertAdjacentHTML('beforeend', otlRowHtml({}
 function otlCollect(){ return [...document.querySelectorAll('#otlRows tr')].map(tr=>({
   status:tr.querySelector('.o-status').value.trim(), label:tr.querySelector('.o-label').value.trim(),
   bucket:tr.querySelector('.o-bucket').value })).filter(r=>r.status&&r.label); }
+// --- Telegram alerts (Settings) --- //
+async function alDetect(b){ b.disabled=true; $("alOut").textContent="Looking for your chat…";
+  const r=await post("/api/alerts/telegram_test",{detect:true,token:($("al_token")||{}).value||""});
+  b.disabled=false;
+  if(r&&r.ok&&r.chat_id){ $("al_chat").value=r.chat_id; $("alOut").textContent=`✅ Chat found: ${r.chat_id} — press "Save alerts" then "Send test message".`; }
+  else $("alOut").textContent="⚠ "+((r&&r.error)||"detect failed"); }
+async function alTest(b){ b.disabled=true; $("alOut").textContent="Sending test…";
+  const r=await post("/api/alerts/telegram_test",{}); b.disabled=false;
+  $("alOut").textContent=r&&r.ok?"✅ Sent — check your Telegram.":"⚠ "+((r&&r.error)||"send failed — save the token & chat id first"); }
+async function alRun(b){ b.disabled=true; $("alOut").textContent="Running alert rules…";
+  let r; try{ r=await post("/api/alerts/run",{}); }catch(e){ r=null; } b.disabled=false;
+  if(!r||!r.ok){ $("alOut").textContent="⚠ "+((r&&r.error)||"run failed"); return; }
+  $("alOut").textContent=(r.sent&&r.sent.length)?`✅ Sent ${r.sent.length} alert(s):\n`+r.sent.join("\n—\n"):"Nothing to send right now (all thresholds already alerted or no packages match)."; }
 // --- Meta ad spend rows (Settings → P&L) --- //
 function msRowHtml(m,v){ return `<div class="ms-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
   <input type="month" class="ms-m" value="${poEsc(m)}" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px">
@@ -3032,6 +3080,10 @@ async function saveSettings(b){
     customer_mode:!!$("s_custmode").value,
     tracking_status_map:lblCollect(), tracking_default_label:($("s_deflabel")||{}).value||"In transit",
     tracking_otlobly_map:otlCollect(),
+    alerts:{ telegram_token:($("al_token")||{}).value||"", telegram_chat:($("al_chat")||{}).value||"",
+      stop_statuses:(($("al_stop")||{}).value||"").split(",").map(s=>s.trim()).filter(Boolean),
+      gaash_days:(($("al_gd")||{}).value||"").split(",").map(s=>parseInt(s,10)).filter(n=>n>0),
+      arrival_days:(($("al_ad")||{}).value||"").split(",").map(s=>parseInt(s,10)).filter(n=>n>0) },
     card_flags:{ multilogin:!!($("s_f_multilogin")||{}).checked, clickup:!!($("s_f_clickup")||{}).checked,
       screenshot:!!($("s_f_screenshot")||{}).checked, second_currency:!!($("s_f_second_currency")||{}).checked },
     card_labels:{ courier:($("s_courier")||{}).value||"", currency:($("s_cur")||{}).value||"",
@@ -3534,8 +3586,13 @@ function poTrkCounts(p){   // products still missing a tracking # (item's own OR
 const PO_STAGE=["ORDERED","SHIPPED","ARRIVED","DELIVERED","COLLECTED"];
 // A package's effective status — what its items inherit (a product is wherever
 // its box is). Live tracking wins; a box with no tracking yet is simply ORDERED.
+// Legacy tolerance: the Mac sync historically wrote tracking_status as a bare
+// STRING — normalize to an object so nothing downstream trips on .bucket.
+function tsObj(pk){ const t=pk&&pk.tracking_status; if(!t) return null;
+  if(typeof t==='string') return {text:t};
+  return t.error?null:t; }
 function pkgStatus(pk){
-  const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status.bucket:null;
+  const b=(tsObj(pk)||{}).bucket||null;
   if(b==="delivered") return "DELIVERED";
   if(b==="arrived"||b==="customs"||b==="cleared") return "ARRIVED";
   if(b==="transit") return "SHIPPED";
@@ -3652,7 +3709,7 @@ function agoTxt(iso){ if(!iso) return ''; const m=Math.round((Date.now()-new Dat
 // Hover detail for the pill — the raw GAASH text + due date + freshness that used
 // to live on the (removed) second line of the package row.
 function pkgTrackTip(pk){
-  const ts=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
+  const ts=tsObj(pk);
   const bits=[];
   if(ts) bits.push(ts.text||ts.label||ts.code||'In transit');
   if(pk&&pk.arrival) bits.push(`due ${fmtDue(pk.arrival)||pk.arrival}`);
@@ -3660,7 +3717,22 @@ function pkgTrackTip(pk){
   // quiet confirmation: docs were sent and GAASH hasn't re-asked since
   if(pk&&pk.gaash_docs_at&&!(pk.gaash_cd_at&&new Date(pk.gaash_cd_at)>new Date(pk.gaash_docs_at)))
     bits.push(`docs sent ${pk.gaash_docs_at.slice(0,10)}`);
+  if(pk&&pk.gaash_deadline) bits.push(`GAASH deadline ${pk.gaash_deadline}`);
   return bits.join(' · ');
+}
+// GAASH's lost-forever date (doc-link expiry): ALWAYS visible as a days-left
+// countdown while the parcel is in GAASH's hands (moot after clearance/Gerizim) —
+// quiet while far, solid orange ≤7 days, red ≤3. Clicking opens the info card.
+function pkgDeadlinePill(p,pk,pi){
+  const d=pk&&pk.gaash_deadline; if(!d) return '';
+  const b=(tsObj(pk)||{}).bucket;
+  if(b==='cleared'||b==='delivered'||pk.gerizim_status) return '';
+  const n=dueDays(d); if(n==null) return '';
+  const tip=`آخر يوم عند غاش ${d} — بعده الطرد يضيع · GAASH link expires ${d}; past it the package is lost`;
+  const click=`onclick="event.stopPropagation();pkgInfoOpen('${p.po_id}',${pi})"`;
+  if(n>7) return `<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line);font-weight:700;cursor:pointer" title="${poEsc(tip)}" ${click}>⏳ ${n}d</span>`;
+  const txt=n<0?'⏳ GAASH passed!':(n===0?'⏳ GAASH TODAY':`⏳ GAASH ${n}d left`);
+  return `<span class="pill" style="color:#fff;background:${n<=3?'#e5484d':'#f76808'};border-color:transparent;font-weight:700;cursor:pointer" title="${poEsc(tip)}" ${click}>${poEsc(txt)}</span>`;
 }
 // ── The package row's status strip, one pill per source (a 4th slot is reserved
 //    for Gerizim last-mile tracking): 1) promised DATE · 2) live GAASH · 3) the
@@ -3674,7 +3746,7 @@ function pkgDatePill(pk){
 }
 function pkgGaashPill(pk){
   const tip=pkgTrackTip(pk);
-  const b=(pk&&pk.tracking_status&&!pk.tracking_status.error)?pk.tracking_status:null;
+  const b=tsObj(pk);
   if(!b) return tonePill("gray","Awaiting tracking",tip);
   if(b.bucket==="delivered") return tonePill("green","Delivered",tip);
   const cu=gashLookup(b.text,b.code);              // the owner's ClickUp "GASH STATUS" value + colour
@@ -3817,6 +3889,61 @@ function pkgCuSelect(p,pk,pi){
 function cuFilter(inp){ const q=(inp.value||'').trim().toLowerCase();
   [...inp.parentElement.querySelectorAll('.cu-item')].forEach(it=>{
     it.style.display=!q||it.textContent.toLowerCase().includes(q)?'':'none'; }); }
+// ── Package info card: everything about one package on one simple screen —
+//    the statuses, every date (with the GAASH days-left counter big), and all
+//    the actions as plain buttons instead of tooltips + the ⋯ menu. ──
+function pkgInfoClose(){ $("pkgInfoModal").classList.add("hidden"); }
+function pkgInfoOpen(id,pi){
+  const p=poFind(id), pk=p&&(p.packages||[])[pi]; if(!pk) return;
+  const custs=[...new Set((pk.items||[]).map(it=>(it.customer_name||'').trim()).filter(Boolean))];
+  $("pkgInfoTitle").textContent=`📦 Package ${pk.package_no} · ${p.po_id}`;
+  const f=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span class="muted2">${l}</span><b dir="auto" style="text-align:left;min-width:0">${v||'—'}</b></div>`;
+  const gz=(pk.gerizim_status&&typeof pk.gerizim_status==='object')?pk.gerizim_status:null;
+  const ts=tsObj(pk)||{};
+  const dl=pk.gaash_deadline, dln=dl?dueDays(dl):null;
+  const arrN=pk.arrival?dueDays(pk.arrival):null;
+  const docsWarn=pk.gaash_docs_at&&pk.gaash_cd_at&&new Date(pk.gaash_cd_at)>new Date(pk.gaash_docs_at);
+  const est=pkgEstTotal(pk), gwd=(pk.tracking_number||'').trim();
+  const urgent=dln!=null&&dln<=7;
+  // Amazon-arrival emphasis escalates with lateness: muted future → bold red late
+  // → solid ⚠ badge at ≥7 days late (the owner's "most important" tier).
+  const lateN=arrN!=null?-arrN:null;
+  const arrVal=!pk.arrival?'':(
+    lateN==null?poEsc(pk.arrival):
+    lateN<=0?`${poEsc(pk.arrival)} <span class="muted2">(بعد ${arrN} يوم · in ${arrN}d)</span>`:
+    lateN<7?`<span style="color:#b42318">${poEsc(pk.arrival)}</span> <span style="color:#b42318;font-weight:800">متأخر ${lateN} يوم · ${lateN}d late</span>`:
+    `<span style="color:#b42318">${poEsc(pk.arrival)}</span> ${solidPill('#e5484d',`⚠ متأخر ${lateN} يوم · ${lateN}d LATE`)}`);
+  $("pkgInfoBody").innerHTML=`
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${poThumbStrip(pk.items,6)}
+      ${pkgDatePill(pk)} ${pkgGaashPill(pk)} ${pkgDocsPill(p,pk,pi)} ${pkgGerizimPill(pk)} ${pkgCuSelect(p,pk,pi)}
+    </div>
+    ${dl?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div style="font-weight:800">⏳ موعد غاش النهائي · GAASH deadline</div>
+        <div class="muted2" style="font-size:11.5px">بعده الطرد يضيع نهائياً · past this date the package is lost</div></div>
+      <div style="text-align:center;flex:0 0 auto">
+        <div style="font-size:24px;font-weight:800;color:${urgent?'#b42318':'var(--ink)'}">${dln==null?'—':(dln<0?'فات!':dln)}</div>
+        <div class="muted2" style="font-size:11px">${dln!=null&&dln>=0?'يوم متبقٍ · days left · ':''}${dl}</div></div></div>`:''}
+    ${f('رقم غاش · GAASH tracking', gwd?`<span class="mono">${poEsc(gwd)}</span>`:'')}
+    ${f('رقم الزبون · Customer tracking', pk.customer_tracking?`<span class="mono">${poEsc(pk.customer_tracking)}</span>`:'')}
+    ${f('الزبائن · Customers', poEsc(custs.join('، ')))}
+    ${f('موعد أمازون · Amazon arrival', arrVal)}
+    ${f('حالة غاش · GAASH status', poEsc(ts.text||ts.label||''))}
+    ${f('آخر فحص · Last checked', agoTxt(pk.tracking_checked))}
+    ${gz?f('🛵 جيرزيم · Gerizim', `${poEsc(gz.label||gz.status||'')}${gz.shelf?` · رف ${poEsc(gz.shelf)}`:''}${gz.sms_at?` · SMS ${poEsc(gz.sms_at)}`:''} · ${gz.delivery?'توصيل للبيت':'استلام من النقطة'}`):''}
+    ${f('المستندات · Docs', pk.gaash_docs_at?(docsWarn?`<span style="color:#b42318">⚠ رُفعت ${pk.gaash_docs_at.slice(0,10)} لكن غاش طلبتها مجدداً — أعد الرفع · not received</span>`:`أُرسلت · sent ${pk.gaash_docs_at.slice(0,10)}`):'')}
+    ${f('≈ تقدير التكلفة · Cost est', est.priced?money(est.sum):'')}
+    ${f('المنتجات · Products', (pk.items||[]).length)}
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
+      <button class="po-btn" onclick="pkgInfoClose();trackPkg(null,'${p.po_id}',${pi})">🔎 تتبع الشحنة · Check shipping</button>
+      ${gwd?`<button class="po-btn" onclick="pkgInfoClose();gaashUploadOpen('${p.po_id}',${pi})">🪪 رفع مستندات · Upload docs</button>`:''}
+      <button class="po-btn" onclick="pkgInfoClose();pkgNotifyOpen('${p.po_id}',${pi})">📱 إشعار العملاء · Notify customers</button>
+      <button class="po-btn" onclick="pkgInfoClose();pkgEstimateCost('${p.po_id}',${pi})">💰 تقدير التكلفة · Estimate cost</button>
+      <button class="po-btn" onclick="pkgInfoClose();pkgEditOpen('${p.po_id}',${pi})">✏️ تعديل الطرد · Edit package</button>
+      <button class="po-btn" onclick="pkgInfoClose();poAddItem('${p.po_id}',${pi})">＋ إضافة منتج · Add product</button>
+    </div>`;
+  $("pkgInfoModal").classList.remove("hidden");
+}
 function poPkgHtml(p,pk,pi){
   const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
@@ -3835,8 +3962,9 @@ function poPkgHtml(p,pk,pi){
   // One line: 📦N · thumbs · GWD · ≈cost — [date pill][GAASH pill][Otlobly status ▾] ⋯
   // (raw GAASH text + freshness live in the GAASH pill's hover tooltip)
   const head=`<div class="pkg-head">
-    <div class="pkg-title-row">
-      <span class="caret" onclick="poToggle('${k}')">${collapsed?'▸':'▾'}</span>
+    <div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label'))return;pkgInfoOpen('${p.po_id}',${pi})">
+      <span class="caret" onclick="event.stopPropagation();poToggle('${k}')">${collapsed?'▸':'▾'}</span>
       <span class="pkg-title">📦${pk.package_no}</span>
       ${poThumbStrip(pk.items)}
       <span class="muted">· ${gaash?`<b class="mono" title="GAASH tracking #" style="color:var(--ink)">${poEsc(gaash)}</b>`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
@@ -3844,6 +3972,7 @@ function poPkgHtml(p,pk,pi){
       <span class="spacer"></span>
       ${pkgDatePill(pk)}
       ${pkgGaashPill(pk)}
+      ${pkgDeadlinePill(p,pk,pi)}
       ${pkgDocsPill(p,pk,pi)}
       ${pkgGerizimPill(pk)}
       ${pkgCuSelect(p,pk,pi)}

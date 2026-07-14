@@ -62,6 +62,12 @@ services:
       # ── + email; phone-code activates once the WHATSAPP_* template is approved.  ──
       - key: OTLOBLY_OTP_DEV       # local testing only — leave "0" here
         value: "0"
+      # ── Owner Telegram alerts (GAASH deadline countdown + overdue arrivals).     ──
+      # ── Optional: the owner can paste both into Settings → Telegram alerts too.  ──
+      - key: TELEGRAM_BOT_TOKEN    # @BotFather token for the otlobly alerts bot
+        sync: false
+      - key: TELEGRAM_CHAT_ID      # the owner's chat (Settings → Detect chat id)
+        sync: false
       - key: WHATSAPP_TOKEN        # permanent token for the WhatsApp Business number
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID

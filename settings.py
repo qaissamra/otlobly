@@ -9,8 +9,10 @@ no arbitrary config keys are writable from the UI.
 Shared by dashboard.py (local) and app.py (hosted).
 """
 
+import os
 import re
 
+import alerts as _alerts
 import cfg
 import tracking
 
@@ -64,6 +66,16 @@ def read(config=None):
         # Owner-set Otlobly stage → customer label ("{name}" = the customer's name).
         "tracking_otlobly_map": cfg.get(config, "customer_tracking.otlobly_map",
                                         tracking.DEFAULT_OTLOBLY_MAP),
+        # Telegram owner alerts (env vars win over these; token is a secret —
+        # it lives in env/config on the data disk, never the repo).
+        "alerts": {
+            "telegram_token": cfg.get(config, "alerts.telegram_token", ""),
+            "telegram_chat": cfg.get(config, "alerts.telegram_chat", ""),
+            "env_configured": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+            "stop_statuses": cfg.get(config, "alerts.stop_statuses", _alerts.STOP_DEFAULT),
+            "gaash_days": cfg.get(config, "alerts.gaash_days", _alerts.GAASH_DAYS_DEFAULT),
+            "arrival_days": cfg.get(config, "alerts.arrival_days", _alerts.ARRIVAL_DAYS_DEFAULT),
+        },
         # White-label the order card per business. Internal/region-specific features
         # default OFF so a fresh tenant gets a clean, generic card. (Roadmap #2.)
         "card_flags": {
@@ -138,6 +150,20 @@ def apply(body, config=None, persist=True):
             rows.append({"status": status, "label": label,
                          "bucket": (str(r.get("bucket", "arrived")).strip() or "arrived")})
         cfg.set_path(config, "customer_tracking.otlobly_map", rows)
+    al = body.get("alerts")
+    if isinstance(al, dict):
+        for k in ("telegram_token", "telegram_chat"):
+            if k in al:
+                cfg.set_path(config, f"alerts.{k}", str(al[k] or "").strip())
+        if isinstance(al.get("stop_statuses"), list):
+            cfg.set_path(config, "alerts.stop_statuses",
+                         [str(s).strip().lower() for s in al["stop_statuses"] if str(s).strip()])
+        for k in ("gaash_days", "arrival_days"):
+            if isinstance(al.get(k), list):
+                vals = sorted({int(x) for x in al[k]
+                               if str(x).strip().lstrip("-").isdigit() and int(x) > 0})
+                if vals:
+                    cfg.set_path(config, f"alerts.{k}", vals)
     flags = body.get("card_flags")
     if isinstance(flags, dict):
         for k in ("multilogin", "clickup", "screenshot", "second_currency"):

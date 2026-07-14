@@ -153,6 +153,28 @@ def clean_tracking(tn):
     return "".join(c for c in str(tn) if c.isprintable()).strip()
 
 
+OPS_UPLOAD = "https://ops.gaashwd.com/fileUpload"
+
+
+def ops_deadline(tn, timeout=12):
+    """GAASH's hard deadline for a parcel, scraped from their doc-upload page
+    ("תאריך פקיעת תוקף הקישור : DD/MM/YYYY" — link expiry). A parcel still
+    uncleared past this date is lost for good, so it drives the owner's
+    Telegram countdown alerts. Returns "YYYY-MM-DD" or None."""
+    tn = clean_tracking(tn)
+    if not tn:
+        return None
+    try:
+        req = request.Request(f"{OPS_UPLOAD}?packageId={quote(tn)}&type=6",
+                              headers={"User-Agent": UA})
+        with request.urlopen(req, timeout=timeout) as r:
+            html = r.read().decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - ops page down ≠ tracking broken
+        return None
+    m = re.search(r"תאריך פקיעת תוקף הקישור\s*:\s*(\d{2})/(\d{2})/(\d{4})", html)
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else None
+
+
 def fetch_one(tn, api_url, nonce, lang="en"):
     url = f"{api_url}/parcel-tracking-data?parcel_id={quote(clean_tracking(tn))}&lang={lang}"
     req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})

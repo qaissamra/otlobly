@@ -96,6 +96,8 @@ db.init_db()
 
 import meta_sync
 meta_sync.start()          # background 24/7 Meta ad-spend pull (no-op without API creds)
+import alerts as alerts_mod
+alerts_mod.start()         # owner Telegram alerts (no-op without bot creds)
 
 app = Flask(__name__, template_folder="templates")
 # Behind Render's single proxy hop: trust ONE X-Forwarded-For entry so the rate
@@ -648,6 +650,32 @@ def api_estimate():
     if not items:
         return jsonify({"error": "no items"}), 400
     return jsonify(estimate.estimate_cart(items))
+
+
+@app.route("/api/alerts/run", methods=["POST"])
+@auth.require("admin_actions")
+def api_alerts_run():
+    """Manual Telegram-alert pass (the Settings 'Run now' button + testing)."""
+    import telegram
+    if not telegram.configured():
+        return jsonify({"ok": False, "error": "Telegram not configured — set the bot "
+                                              "token & chat id in Settings first"})
+    return jsonify({"ok": True, "sent": alerts_mod.run_once()})
+
+
+@app.route("/api/alerts/telegram_test", methods=["POST"])
+@auth.require("admin_actions")
+def api_alerts_telegram_test():
+    """{detect:true, token?} → find the owner's chat id (they must press START
+    on the bot first); otherwise send a test message with the saved creds."""
+    import telegram
+    b = request.get_json(force=True, silent=True) or {}
+    if b.get("detect"):
+        cid = telegram.detect_chat_id(b.get("token"))
+        return jsonify({"ok": bool(cid), "chat_id": cid,
+                        "error": None if cid else "no messages yet — open the bot in "
+                                                  "Telegram and press START, then retry"})
+    return jsonify(telegram.send(b.get("text") or "✅ تنبيهات اطلبلي تعمل · Otlobly alerts connected"))
 
 
 @app.route("/api/settings", methods=["GET", "POST"])
@@ -1593,8 +1621,19 @@ def api_purchases_refresh_tracking():
                                 default=None) or None
             gz = gerizim.track(tn)
             gz_new = gz if isinstance(gz, dict) else None
-            if not st and not gz_new:
-                continue                  # both lookups failed / nothing new → no writes
+            # GAASH's lost-forever deadline (doc-link expiry): only meaningful while
+            # the parcel is still in GAASH's hands pre-clearance.
+            eff = (st or {}).get("bucket")
+            if eff is None:
+                ts0 = pos_pks[0][1].get("tracking_status")
+                eff = ts0.get("bucket") if isinstance(ts0, dict) else None
+            has_gz = gz_new is not None or any(isinstance(pk.get("gerizim_status"), dict)
+                                               for _, pk in pos_pks)
+            deadline = None
+            if eff not in ("cleared", "delivered") and not has_gz:
+                deadline = tracking.ops_deadline(tn)
+            if not st and not gz_new and not deadline:
+                continue                  # every lookup failed / nothing new → no writes
             stamp = db.now_iso()
             for po, pk in pos_pks:
                 old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
@@ -1603,6 +1642,8 @@ def api_purchases_refresh_tracking():
                     pk["tracking_status"] = st
                 if cd_at:
                     pk["gaash_cd_at"] = cd_at
+                if deadline:
+                    pk["gaash_deadline"] = deadline
                 if gz_new:
                     pk["gerizim_status"] = gz_new
                 pk["tracking_checked"] = stamp
@@ -2385,6 +2426,7 @@ def worker_tracking():
         return jsonify({"ok": True, "updated": 0})
     pdb = purchases.load()
     n = 0
+    import tracking
     for po in pdb["purchase_orders"]:
         for pk in po.get("packages") or []:
             u = updates.get((po.get("po_id"), pk.get("package_no")))
@@ -2393,6 +2435,15 @@ def worker_tracking():
             for k in ("tracking_status", "tracking_code", "tracking_time"):
                 if k in u:
                     pk[k] = u[k]
+            # The Mac's gaash-clickup-sync posts tracking_status as a BARE STRING
+            # (raw GAASH text) — that has no .bucket, so every pill fell back to
+            # amber "In transit" and re-clobbered the app's granular dict hourly.
+            # Coerce strings into the same shape the app's own refresh writes.
+            ts = pk.get("tracking_status")
+            if isinstance(ts, str):
+                pk["tracking_status"] = tracking.staff_status_from_events(
+                    [{"code": u.get("tracking_code"), "text": ts,
+                      "time": u.get("tracking_time")}]) or {"text": ts, "bucket": "transit"}
             pk["tracking_checked"] = db.now_iso()
             n += 1
     if n:
