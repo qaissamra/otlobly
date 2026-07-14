@@ -3930,7 +3930,7 @@ function pkgInfoOpen(id,pi){
         <div class="muted2" style="font-size:11px">${dln!=null&&dln>=0?'يوم متبقٍ · days left · ':''}${dl}</div></div></div>`:''}
     ${f('رقم غاش · GAASH tracking', gwd?`<span class="mono">${poEsc(gwd)}</span>`:'')}
     ${f('رقم الزبون · Customer tracking', pk.customer_tracking?`<span class="mono">${poEsc(pk.customer_tracking)}</span>`:'')}
-    ${(p.ship_to||'').trim()?f('الاسم الرئيسي · Main name', `<b>${poEsc(p.ship_to.trim())}</b>`):''}
+    ${f('الاسم الرئيسي · Main name', `<input value="${poEsc(p.ship_to||'')}" placeholder="اكتب الاسم · type the name" style="width:170px;text-align:left;border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-weight:700" onclick="event.stopPropagation()" onchange="poSet('${p.po_id}','ship_to',this.value);toast('تم الحفظ · saved')">`)}
     ${f('الزبائن · Customers', poEsc(custs.join('، ')))}
     ${f('موعد أمازون · Amazon arrival', arrVal)}
     ${f('حالة غاش · GAASH status', poEsc(ts.text||ts.label||''))}
@@ -4067,8 +4067,8 @@ function poeRender(){
   $("poeBody").innerHTML=`
     <label class="fld">Amazon order #</label>
     <input class="mono" style="width:100%" value="${poEsc(p.amazon_order_number)}" placeholder="113-…" onchange="poeSet('amazon_order_number',this.value)">
-    <label class="fld" style="margin-top:11px">Ship to · العميل</label>
-    <input style="width:100%" value="${poEsc(p.ship_to)}" placeholder="—" onchange="poeSet('ship_to',this.value)">
+    <label class="fld" style="margin-top:11px">الاسم الرئيسي · Main name</label>
+    <input style="width:100%" value="${poEsc(p.ship_to)}" placeholder="اسم صاحب الطلب · order's main name" onchange="poeSet('ship_to',this.value)">
     <div style="display:flex;gap:12px;margin-top:11px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px"><label class="fld">${poEsc(boxTerm)}</label>
         <input class="pobox mono" list="poBoxList" style="width:100%" value="${poEsc(p.profile_box)}" placeholder="box…" onchange="poeSetBox(this.value)"></div>
