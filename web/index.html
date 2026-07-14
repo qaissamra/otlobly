@@ -3351,7 +3351,8 @@ async function poEstimateAll(btn){
   if(btn) btn.disabled=false;
 }
 function poWho(p){ const c=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[]).map(it=>(it.customer_name||'').trim())).filter(Boolean))];
-  return c.length===1?c[0]:(c.length?`${c.length} customers`:(p.ship_to||'')); }
+  const m=(p.ship_to||'').trim();
+  return c.length===1?c[0]:(c.length>1?(m?`${m} · ${c.length} customers`:`${c.length} customers`):(m||'')); }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
 function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
 function poCollapseAll(on){ PO_COLLAPSED=new Set(); if(on){ POS.forEach(p=>{PO_COLLAPSED.add(poKey(p.po_id)); (p.packages||[]).forEach(pk=>PO_COLLAPSED.add(poKey(p.po_id,pk.package_no)));}); } localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
@@ -3816,7 +3817,10 @@ function poCardHtml(p){
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
   const cur=L.currency||'USD';
   const custs=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[]).map(it=>(it.customer_name||'').trim())).filter(Boolean))];
-  const who=custs.length===1?custs[0]:(custs.length>1?`${custs.length} customers`:(p.ship_to||''));
+  // The order's MAIN name (ship_to) leads even on multi-customer orders — it used
+  // to vanish behind "N customers" once a package held more than one customer.
+  const mainName=(p.ship_to||'').trim();
+  const who=custs.length===1?custs[0]:(custs.length>1?(mainName?`${mainName} · ${custs.length} customers`:`${custs.length} customers`):(mainName||''));
   const npk=(p.packages||[]).length;
   const total=p.total_usd!=null?` · <b>${money(p.total_usd)}</b>`:'';
   const boxTerm=L.box_term||'Profile';
@@ -3926,6 +3930,7 @@ function pkgInfoOpen(id,pi){
         <div class="muted2" style="font-size:11px">${dln!=null&&dln>=0?'يوم متبقٍ · days left · ':''}${dl}</div></div></div>`:''}
     ${f('رقم غاش · GAASH tracking', gwd?`<span class="mono">${poEsc(gwd)}</span>`:'')}
     ${f('رقم الزبون · Customer tracking', pk.customer_tracking?`<span class="mono">${poEsc(pk.customer_tracking)}</span>`:'')}
+    ${(p.ship_to||'').trim()?f('الاسم الرئيسي · Main name', `<b>${poEsc(p.ship_to.trim())}</b>`):''}
     ${f('الزبائن · Customers', poEsc(custs.join('، ')))}
     ${f('موعد أمازون · Amazon arrival', arrVal)}
     ${f('حالة غاش · GAASH status', poEsc(ts.text||ts.label||''))}
@@ -4311,7 +4316,7 @@ function podRender(){
     </div>
     <div style="flex:1;min-width:230px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:6px 13px;align-self:flex-start">
       ${field('Amazon #', p.amazon_order_number?`<span class="mono">${poEsc(p.amazon_order_number)}</span>`:'')}
-      ${field('Ship to', poEsc(p.ship_to||''))}
+      ${field('الاسم الرئيسي · Main name', poEsc(p.ship_to||''))}
       ${field('Profile / box', p.profile_box?`<span class="mono">${poEsc(p.profile_box)}</span>`:'')}
       ${field('Total $', p.total_usd!=null&&p.total_usd!==''?money(p.total_usd):'')}
       ${field('Total AED', p.total_aed||'')}
