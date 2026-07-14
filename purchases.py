@@ -324,6 +324,9 @@ def _norm_packages(packages):
             "gerizim_status": p.get("gerizim_status"),       # last-mile (postgerizim.com) status
             "tracking_checked": p.get("tracking_checked"),   # last live GAASH lookup (refresh TTL)
             "otlobly_status": p.get("otlobly_status"),       # owner-set status (ClickUp vocabulary)
+            "gaash_docs_at": p.get("gaash_docs_at"),         # owner opened the GAASH doc-upload page
+            "gaash_docs_types": p.get("gaash_docs_types"),   # which doc types were picked
+            "gaash_cd_at": p.get("gaash_cd_at"),             # GAASH's latest "docs required" event
             "track_notified": p.get("track_notified") or {},   # {order_id: iso} — customer-notify stamps
             "items": [_norm_item(it) for it in p.get("items", [])],
         })

@@ -3598,6 +3598,54 @@ function gashLookup(text,code){
   for(const[m,label,hex] of GASH_STATUS) if(c&&m===c) return {label,hex};
   return null;
 }
+// GAASH's ops fileUpload document types (ops.gaashwd.com/fileUpload?packageId=GWD…&type=N,
+// each type adds one upload slot). Decoded from their page; common ones first.
+const GAASH_DOCS=[[6,"هوية · ID card"],[8,"جواز سفر · Passport"],
+  [7,"إقرار استخدام البضاعة · Goods-use declaration"],[1,"فاتورة · Invoice"],
+  [2,"توكيل لمعهد المواصفات · Standards POA"],[3,"إقرار زبون للمواصفات · Standards declaration"],
+  [4,"إضافة زبون للمواصفات · Standards add-customer"],[5,"موافقة وزارة الزراعة · Agriculture approval"],
+  [9,"مواصفات فنية · Technical spec"],[10,"موافقة مستحضرات تجميل · Cosmetics approval"]];
+function gaashUploadUrl(){ const gwd=$("bulkBody").dataset.gwd||'';
+  return `https://ops.gaashwd.com/fileUpload?packageId=${encodeURIComponent(gwd)}`+
+    [...document.querySelectorAll('.gud:checked')].map(c=>`&type=${c.value}`).join(''); }
+function gaashUploadSync(){ const el=$("gudLink"); if(el){ const u=gaashUploadUrl(); el.textContent=u; el.href=u; } }
+function gaashUploadOpen(id,pi){
+  const p=poFind(id), pk=p&&p.packages[pi], gwd=((pk&&pk.tracking_number)||'').trim();
+  if(!gwd){ toast("Add the GWD tracking number first"); return; }
+  bulkOpen("🪪 رفع مستندات لغاش · Upload docs to GAASH");
+  $("bulkBody").dataset.gwd=gwd;
+  $("bulkBody").innerHTML=`<div class="muted2" style="font-size:12px;margin:4px 0 8px">
+      اختر المستندات التي طلبتها غاش لـ <b class="mono">${poEsc(gwd)}</b> — كل نوع يضيف خانة رفع في صفحتهم · pick the documents GAASH asked for; each adds an upload slot on their page</div>`+
+    GAASH_DOCS.map(([t,l])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer">
+      <input type="checkbox" class="gud" value="${t}" ${t===6?'checked':''} onchange="gaashUploadSync()"> ${l}
+      <span class="muted2 mono" style="margin-inline-start:auto;font-size:10.5px">type ${t}</span></label>`).join('');
+  $("bulkFoot").innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">
+    <a id="gudLink" target="_blank" rel="noopener" class="mono" style="font-size:11px;word-break:break-all;color:var(--muted)"></a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="accent" onclick="gaashUploadGo('${id}',${pi},false)">⤴ فتح صفحة الرفع · Open upload page</button>
+      <button class="minibtn" onclick="gaashUploadGo('${id}',${pi},true)">📋 نسخ الرابط · Copy link</button>
+    </div></div>`;
+  gaashUploadSync();
+}
+// Open/copy AND stamp the attempt: GAASH gives no upload receipt, but it RE-ASKS
+// (a new CD event) while docs are missing — a CD newer than this stamp means the
+// upload never registered, which pkgDocsPill turns into a red warning.
+function gaashUploadGo(id,pi,copy){
+  const url=gaashUploadUrl(), p=poFind(id), pk=p&&p.packages[pi];
+  if(pk){ pk.gaash_docs_at=new Date().toISOString();
+    pk.gaash_docs_types=[...document.querySelectorAll('.gud:checked')].map(c=>+c.value);
+    poSave(p); }
+  if(copy){ navigator.clipboard.writeText(url); toast("Link copied ✓"); }
+  else window.open(url,'_blank','noopener');
+  renderPurchases();
+}
+function pkgDocsPill(p,pk,pi){
+  const up=pk&&pk.gaash_docs_at, cd=pk&&pk.gaash_cd_at;
+  if(!up||!cd||!(new Date(cd)>new Date(up))) return '';
+  const tip=`رفعت المستندات ${up.slice(0,10)} لكن غاش طلبتها مجدداً ${cd.slice(0,10)} — أعد الرفع · uploaded ${up.slice(0,10)} but GAASH asked again ${cd.slice(0,10)} — re-upload`;
+  return `<span class="pill" style="color:#fff;background:#e5484d;border-color:#e5484d;font-weight:700;cursor:pointer" title="${poEsc(tip)}"
+    onclick="event.stopPropagation();gaashUploadOpen('${p.po_id}',${pi})">⚠ الوثائق لم تُستلم · docs not received</span>`;
+}
 function agoTxt(iso){ if(!iso) return ''; const m=Math.round((Date.now()-new Date(iso).getTime())/60000);
   if(!isFinite(m)||m<0) return ''; if(m<1) return 'just now'; if(m<60) return `${m}m ago`;
   const h=Math.round(m/60); return h<24?`${h}h ago`:`${Math.round(h/24)}d ago`; }
@@ -3609,6 +3657,9 @@ function pkgTrackTip(pk){
   if(ts) bits.push(ts.text||ts.label||ts.code||'In transit');
   if(pk&&pk.arrival) bits.push(`due ${fmtDue(pk.arrival)||pk.arrival}`);
   const chk=agoTxt(pk&&pk.tracking_checked); if(chk) bits.push(`checked ${chk}`);
+  // quiet confirmation: docs were sent and GAASH hasn't re-asked since
+  if(pk&&pk.gaash_docs_at&&!(pk.gaash_cd_at&&new Date(pk.gaash_cd_at)>new Date(pk.gaash_docs_at)))
+    bits.push(`docs sent ${pk.gaash_docs_at.slice(0,10)}`);
   return bits.join(' · ');
 }
 // ── The package row's status strip, one pill per source (a 4th slot is reserved
@@ -3774,6 +3825,7 @@ function poPkgHtml(p,pk,pi){
     [`✏️ تعديل الطرد · Edit package`, `pkgEditOpen('${p.po_id}',${pi})`],
     [`📱 إشعار العملاء · Notify customers`, `pkgNotifyOpen('${p.po_id}',${pi})`],
     [`🔎 تتبع الشحنة · Check shipping`, `trackPkg(this,'${p.po_id}',${pi})`],
+    gaash?[`🪪 رفع مستندات لغاش · Upload docs to GAASH`, `gaashUploadOpen('${p.po_id}',${pi})`]:null,
     (F.multilogin&&p.profile_box)?[`🤖 Get tracking (auto)`, `azTrackFetch(this,'${p.po_id}',${pi})`]:null,
     [`💰 تقدير التكلفة · Estimate cost`, `pkgEstimateCost('${p.po_id}',${pi})`],
     [`＋ إضافة منتج · Add product`, `poAddItem('${p.po_id}',${pi})`],
@@ -3792,6 +3844,7 @@ function poPkgHtml(p,pk,pi){
       <span class="spacer"></span>
       ${pkgDatePill(pk)}
       ${pkgGaashPill(pk)}
+      ${pkgDocsPill(p,pk,pi)}
       ${pkgGerizimPill(pk)}
       ${pkgCuSelect(p,pk,pi)}
       ${menu}

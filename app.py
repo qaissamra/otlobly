@@ -1573,7 +1573,7 @@ def api_purchases_refresh_tracking():
             need_gaash = any(not (isinstance(pk.get("tracking_status"), dict)
                                   and pk["tracking_status"].get("bucket") == "delivered")
                              for _, pk in pos_pks)
-            st = None
+            st, cd_at = None, None
             if need_gaash:
                 if session is None:
                     try:
@@ -1581,7 +1581,16 @@ def api_purchases_refresh_tracking():
                     except Exception as e:  # noqa - GAASH down: keep Gerizim going
                         session = e
                 if not isinstance(session, Exception):
-                    st = tracking.latest_status(tracking.fetch_one(tn, *session))
+                    data = tracking.fetch_one(tn, *session)
+                    st = tracking.latest_status(data)
+                    # latest "docs required" event — GAASH re-emits CD while docs are
+                    # missing, so a CD newer than the owner's upload stamp means the
+                    # upload never registered (the row shows a red warning chip).
+                    cd_at = max((s.get("StatusTime") or ""
+                                 for s in (data or {}).get("Statuses") or []
+                                 if (s.get("MappedStatusCode") or "").strip().upper() == "CD"
+                                 or (s.get("StatusDescription") or "").strip().lower() == "required customer id"),
+                                default=None) or None
             gz = gerizim.track(tn)
             gz_new = gz if isinstance(gz, dict) else None
             if not st and not gz_new:
@@ -1592,6 +1601,8 @@ def api_purchases_refresh_tracking():
                 gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
                 if st:
                     pk["tracking_status"] = st
+                if cd_at:
+                    pk["gaash_cd_at"] = cd_at
                 if gz_new:
                     pk["gerizim_status"] = gz_new
                 pk["tracking_checked"] = stamp

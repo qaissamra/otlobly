@@ -52,6 +52,7 @@ FIELD_LABELS = {
     "otlobly_status": "OTLOBLY STATUS",
     "tracking_status": "GAASH STATUS",
     "gerizim_status": "GERIZIM STATUS",
+    "gaash_docs_at": "DOCS UPLOADED",
     "title": "PRODUCT NAME",
     "asin": "ASIN",
     "customer_name": "CUSTOMER NAME",
@@ -147,7 +148,7 @@ def platform_recent(businesses, limit=100):
 # --------------------------------------------------------------------------- #
 _PO_FIELDS = ("amazon_order_number", "ship_to", "profile_box", "order_placed",
               "total_usd", "total_aed", "status")
-_PKG_FIELDS = ("arrival", "tracking_number", "otlobly_status")
+_PKG_FIELDS = ("arrival", "tracking_number", "otlobly_status", "gaash_docs_at")
 _ITEM_FIELDS = ("title", "asin", "customer_name", "qty", "status", "notes")
 
 
