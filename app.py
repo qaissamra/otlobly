@@ -1570,9 +1570,13 @@ def api_purchases_refresh_tracking():
     only = tracking.clean_tracking(b.get("tracking") or "") or None
     force = bool(b.get("force"))
     pdb = purchases.load()
-    cutoff = datetime.now().astimezone() - timedelta(minutes=ttl_min)
-    old_gaash_cut = (datetime.now().astimezone() - timedelta(days=30)).isoformat()
-    stale = {}
+    now = datetime.now().astimezone()
+    cutoff = now - timedelta(minutes=ttl_min)
+    dl_cutoff = now - timedelta(days=14)          # the GAASH deadline is near-fixed: fetch
+    old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
+    dl_cap = 10                                   # bound the first-load deadline backfill
+    # work[gwd] = list of (po, pk, need_track, need_dl)
+    work = {}
     for po in pdb["purchase_orders"]:
         for pk in po.get("packages") or []:
             tn = tracking.clean_tracking(pk.get("tracking_number") or "")
@@ -1585,24 +1589,36 @@ def api_purchases_refresh_tracking():
             gaash_done = isinstance(ts, dict) and ts.get("bucket") == "delivered"
             if gaash_done and not gz and (ts.get("time") or "") < old_gaash_cut:
                 continue                  # ancient GAASH-delivered parcel Gerizim never saw
-            if not force:
+            need_track = force
+            if not need_track:
                 try:
-                    if datetime.fromisoformat(pk.get("tracking_checked") or "") > cutoff:
-                        continue
+                    need_track = datetime.fromisoformat(pk.get("tracking_checked") or "") <= cutoff
                 except (ValueError, TypeError):
-                    pass                  # never checked / unparsable → refresh
-            stale.setdefault(tn, []).append((po, pk))
-    updated, changes = 0, []
-    if stale:
+                    need_track = True     # never checked / unparsable → refresh
+            # The deadline scrape rides its OWN cadence, not the 30-min tracking TTL
+            # (the Mac sync keeps tracking_checked fresh, which used to starve it).
+            # `gz` is `... or {}`, so test truthiness — an empty {} means "no Gerizim".
+            eligible = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
+                and not gz
+            need_dl = False
+            if eligible:
+                try:
+                    need_dl = force or not pk.get("gaash_deadline") \
+                        or datetime.fromisoformat(pk.get("gaash_deadline_checked") or "") <= dl_cutoff
+                except (ValueError, TypeError):
+                    need_dl = True        # never scraped → fetch once
+            if need_track or need_dl:
+                work.setdefault(tn, []).append((po, pk, need_track, need_dl))
+    updated, changes, dl_done = 0, [], 0
+    if work:
         session = None                    # scraped lazily: gerizim-only rounds skip it
-        for i, (tn, pos_pks) in enumerate(stale.items()):
+        for i, (tn, rows) in enumerate(work.items()):
             if i:
                 time.sleep(tracking.REQUEST_GAP)
-            need_gaash = any(not (isinstance(pk.get("tracking_status"), dict)
-                                  and pk["tracking_status"].get("bucket") == "delivered")
-                             for _, pk in pos_pks)
+            want_track = any(nt for _, _, nt, _ in rows)      # a tracking refresh is due
+            want_dl = any(nd for _, _, _, nd in rows) and dl_done < dl_cap
             st, cd_at = None, None
-            if need_gaash:
+            if want_track:
                 if session is None:
                     try:
                         session = tracking.get_session()
@@ -1619,34 +1635,33 @@ def api_purchases_refresh_tracking():
                                  if (s.get("MappedStatusCode") or "").strip().upper() == "CD"
                                  or (s.get("StatusDescription") or "").strip().lower() == "required customer id"),
                                 default=None) or None
-            gz = gerizim.track(tn)
+            gz = gerizim.track(tn) if want_track else None
             gz_new = gz if isinstance(gz, dict) else None
-            # GAASH's lost-forever deadline (doc-link expiry): only meaningful while
-            # the parcel is still in GAASH's hands pre-clearance.
-            eff = (st or {}).get("bucket")
-            if eff is None:
-                ts0 = pos_pks[0][1].get("tracking_status")
-                eff = ts0.get("bucket") if isinstance(ts0, dict) else None
-            has_gz = gz_new is not None or any(isinstance(pk.get("gerizim_status"), dict)
-                                               for _, pk in pos_pks)
-            deadline = None
-            if eff not in ("cleared", "delivered") and not has_gz:
+            # GAASH's lost-forever deadline (doc-link expiry) — own cadence, fetched
+            # once then re-checked every ~2 weeks; never re-hammered per page load.
+            deadline, dl_stamp = None, None
+            if want_dl:
+                dl_done += 1
+                dl_stamp = db.now_iso()   # stamp the attempt even if it returns None
                 deadline = tracking.ops_deadline(tn)
-            if not st and not gz_new and not deadline:
+            if not st and not gz_new and not deadline and not dl_stamp:
                 continue                  # every lookup failed / nothing new → no writes
             stamp = db.now_iso()
-            for po, pk in pos_pks:
+            for po, pk, nt, nd in rows:
                 old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
                 gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
                 if st:
                     pk["tracking_status"] = st
                 if cd_at:
                     pk["gaash_cd_at"] = cd_at
-                if deadline:
-                    pk["gaash_deadline"] = deadline
                 if gz_new:
                     pk["gerizim_status"] = gz_new
-                pk["tracking_checked"] = stamp
+                if nd and dl_stamp:
+                    pk["gaash_deadline_checked"] = dl_stamp
+                    if deadline:
+                        pk["gaash_deadline"] = deadline
+                if nt:
+                    pk["tracking_checked"] = stamp
                 updated += 1
                 cur = st or old
                 changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
