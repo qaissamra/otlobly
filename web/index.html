@@ -3236,16 +3236,21 @@ async function loadPurchases(){
 // delivered parcel sat as "In transit" for a month), so opening Purchases asks
 // the server to re-check anything stale. Fire-and-forget; re-render on changes.
 let PO_REFRESHING=false;
-async function poRefreshTracking(btn){   // btn set = user clicked "Check all shipping" (report even when idle)
+// Each call refreshes a BATCH of packages (the server bounds it so the request
+// finishes before gunicorn's 120s timeout — doing all ~13 at once used to time
+// out and persist nothing). Keep calling while the server reports work remaining,
+// re-rendering each round so colored statuses + ⏳ deadlines fill in progressively.
+async function poRefreshTracking(){
   if(PO_REFRESHING) return; PO_REFRESHING=true;
-  const old=btn&&btn.innerHTML; if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Checking…'; }
-  try{ const r=await post("/api/purchases/refresh_tracking",{});
-    if(r&&r.ok&&r.updated&&r.purchase_orders){ POS=r.purchase_orders; renderPurchases();
-      toast(`Shipping refreshed · ${r.updated} package${r.updated===1?'':'s'}`); }
-    else if(btn) toast(r&&r.ok?"Shipping is fresh — nothing to check":"Shipping check failed: "+((r&&r.error)||"network"));
-  }catch(e){ if(btn) toast("Shipping check failed"); }
-  if(btn){ btn.disabled=false; btn.innerHTML=old; }
-  PO_REFRESHING=false;
+  try{
+    for(let i=0;i<12;i++){
+      let r; try{ r=await post("/api/purchases/refresh_tracking",{}); }catch(e){ break; }
+      if(!r||!r.ok) break;
+      if(r.updated&&r.purchase_orders){ POS=r.purchase_orders; renderPurchases(); }
+      if(!r.remaining) break;                  // nothing left to process
+      await new Promise(res=>setTimeout(res,900));
+    }
+  }finally{ PO_REFRESHING=false; }
 }
 // ── Bulk progress popup: live rows for the check-all / estimate-all runs ──
 function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerHTML=""; $("bulkFoot").innerHTML=""; $("bulkModal").classList.remove("hidden"); }

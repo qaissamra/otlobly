@@ -1609,10 +1609,18 @@ def api_purchases_refresh_tracking():
                     need_dl = True        # never scraped → fetch once
             if need_track or need_dl:
                 work.setdefault(tn, []).append((po, pk, need_track, need_dl))
+    # Each GWD costs ~10s of live scraping; doing all ~13 in one request blows past
+    # gunicorn's 120s timeout, which kills the request before the final save so
+    # NOTHING persists. Process a bounded batch, save after each, and report how
+    # many remain so the client re-calls until done.
+    BATCH = 5
+    all_gwds = list(work.items())
+    batch = all_gwds[:BATCH]
+    remaining = len(all_gwds) - len(batch)
     updated, changes, dl_done = 0, [], 0
-    if work:
+    if batch:
         session = None                    # scraped lazily: gerizim-only rounds skip it
-        for i, (tn, rows) in enumerate(work.items()):
+        for i, (tn, rows) in enumerate(batch):
             if i:
                 time.sleep(tracking.REQUEST_GAP)
             want_track = any(nt for _, _, nt, _ in rows)      # a tracking refresh is due
@@ -1686,11 +1694,12 @@ def api_purchases_refresh_tracking():
                     activity.log("set", "purchase", po.get("po_id"), header,
                                  field="gerizim_status", old=got or None, new=gnt,
                                  detail=f"Package {pk.get('package_no')}", user="Gerizim")
+            # Persist after EACH GWD so a timeout mid-batch never loses finished work.
+            purchases.save(pdb)
     if updated:
-        purchases.save(pdb)
         db.audit(auth.actor(), "tracking_refresh", "purchase", "-",
                  f"refreshed GAASH status on {updated} package(s)")
-    return jsonify({"ok": True, "updated": updated, "changes": changes,
+    return jsonify({"ok": True, "updated": updated, "remaining": remaining, "changes": changes,
                     "purchase_orders": [purchases.summary(p) for p in pdb["purchase_orders"]]})
 
 

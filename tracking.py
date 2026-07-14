@@ -156,7 +156,7 @@ def clean_tracking(tn):
 OPS_UPLOAD = "https://ops.gaashwd.com/fileUpload"
 
 
-def ops_deadline(tn, timeout=12):
+def ops_deadline(tn, timeout=8):
     """GAASH's hard deadline for a parcel, scraped from their doc-upload page
     ("תאריך פקיעת תוקף הקישור : DD/MM/YYYY" — link expiry). A parcel still
     uncleared past this date is lost for good, so it drives the owner's
