@@ -3330,29 +3330,39 @@ async function poRunShippingCheck(btn,onlyGwd,force){
 // endpoint (already-attempted products are skipped server-side, so re-runs are free).
 // The popup footer shows the live SerpApi credit balance.
 async function serpCredits(refresh){ try{ const c=await (await fetch("/api/serpapi/credits"+(refresh?"?refresh=1":""))).json(); return c&&c.left!=null?c.left:null; }catch(e){ return null; } }
+function pkgWho(pk){ return [...new Set((pk&&pk.items||[]).map(it=>(it.customer_name||'').trim()).filter(Boolean))].join('، '); }
 async function poEstimateAll(btn){
   if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
+  // one job per PACKAGE so prices appear package-by-package, live
+  const jobs=[];
+  POS.forEach((p,ci)=>(p.packages||[]).forEach((pk,pi)=>jobs.push({ci,po_id:p.po_id,pi,no:pk.package_no})));
+  if(!jobs.length){ toast("No packages to price"); return; }
   if(btn) btn.disabled=true;
   bulkOpen("💰 تقدير التكاليف · Estimating costs");
-  POS.forEach(p=>bulkRow(p.po_id,p.po_id,poWho(p),'<span class="spin"></span>'));
+  const key=j=>`${j.po_id}_${j.pi}`, lbl=j=>`${j.po_id} 📦${j.no}`;
+  jobs.forEach(j=>bulkRow(key(j),lbl(j),pkgWho(POS[j.ci].packages[j.pi]),'<span class="spin"></span>'));
   let credits=await serpCredits(false);
   const creditsTxt=()=>`SerpApi credits left: <b>${credits==null?'—':credits}</b>`;
   bulkFoot(creditsTxt());
   const sum={past:0,cache:0,fresh:0,unpriced:0}; let failed=0;
-  for(let i=0;i<POS.length;i++){
-    const id=POS[i].po_id;
-    let r; try{ r=await post("/api/purchase/estimate_cost",{id}); }catch(e){ r=null; }
-    if(!r||!r.ok){ failed++; bulkRow(id,id,poWho(POS[i]),'<span style="color:var(--warn)">failed</span>'); continue; }
-    if(r.purchase_order) POS[i]=r.purchase_order;
-    const x=r.result||{}, reused=(x.from_past||0)+(x.from_cache||0);
+  for(const j of jobs){
+    let r; try{ r=await post("/api/purchase/estimate_cost",{id:j.po_id,pi:j.pi}); }catch(e){ r={ok:false,error:String(e&&e.message||e)}; }
+    if(!r||!r.ok){ failed++;
+      bulkRow(key(j),lbl(j),pkgWho(POS[j.ci].packages[j.pi]),`<span style="color:var(--warn)">⚠ ${poEsc((r&&r.error)||'failed')}</span>`);
+      continue; }
+    if(r.purchase_order) POS[j.ci]=r.purchase_order;
+    const pk=POS[j.ci].packages[j.pi], x=r.result||{};
     sum.past+=x.from_past||0; sum.cache+=x.from_cache||0; sum.fresh+=x.fresh||0; sum.unpriced+=x.unpriced||0;
-    const bits=[]; if(reused)bits.push(`${reused} reused`); if(x.fresh)bits.push(`${x.fresh} fetched`); if(x.unpriced)bits.push(`${x.unpriced} unpriced`);
-    bulkRow(id,id,poWho(POS[i]),`<span class="muted2">${bits.length?bits.join(' · '):'already priced'}</span>`);
+    if(x.fresh&&credits!=null){ credits-=x.fresh; bulkFoot(creditsTxt()); }   // live credit movement
+    const est=pkgEstTotal(pk);
+    const notes=[]; if(x.fresh)notes.push(`${x.fresh} fetched`); if(x.unpriced)notes.push(`<span style="color:var(--warn)">${x.unpriced} unpriced</span>`);
+    const price=est.priced?`<b style="color:var(--ink)">≈ ${money(est.sum)}</b>`:'<span class="muted2">no price</span>';
+    bulkRow(key(j),lbl(j),pkgWho(pk),`${price}${notes.length?` <span class="muted2">(${notes.join(' · ')})</span>`:''}`);
   }
   renderPurchases();
   const did=sum.past+sum.cache+sum.fresh;
-  credits=await serpCredits(sum.fresh>0);          // re-read balance if we spent credits
-  bulkFoot(`${creditsTxt()} — <b>${did}</b> priced · ${sum.past+sum.cache} reused · ${sum.fresh} fetched${sum.unpriced?` · ${sum.unpriced} unpriced`:''}${failed?` · <span style="color:var(--warn)">${failed} failed</span>`:''}`);
+  credits=await serpCredits(sum.fresh>0);          // reconcile the real balance at the end
+  bulkFoot(`${creditsTxt()} — priced <b>${did}</b> · ${sum.fresh} fetched${sum.unpriced?` · <span style="color:var(--warn)">${sum.unpriced} unpriced</span>`:''}${failed?` · <span style="color:var(--warn)">${failed} failed</span>`:''}`);
   if(btn) btn.disabled=false;
 }
 function poWho(p){ const c=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[]).map(it=>(it.customer_name||'').trim())).filter(Boolean))];
