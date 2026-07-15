@@ -808,19 +808,46 @@ def _row_tracking(row):
     return str(tn or "").strip()
 
 
-# ── GASH STATUS ← live Gerizim stage ────────────────────────────────────────
+# ── GASH STATUS ← live tracking stage ───────────────────────────────────────
 # Owner's rule: the ClickUp task STATUS is his to change manually — automation
-# may only touch the GASH STATUS dropdown, mirroring the parcel's Gerizim
-# stage. Mapping is by option NAME and only to options that EXIST on the
-# working list (add a missing one in ClickUp UI, then Discover); first
-# candidate that exists wins, so adding "تم التسليم" upgrades the mapping.
+# may only touch the GASH STATUS dropdown, mirroring the parcel's live stage
+# (Gerizim last-mile when present, else the GAASH leg). Mapping is by option
+# NAME and only to options that EXIST on the working list (add a missing one
+# in ClickUp UI, then Discover); first candidate that exists wins, so adding
+# "تم التسليم" upgrades the delivered mapping.
 GASH_FIELD = "gash status"
-GASH_BUCKET_OPTIONS = {
+GERIZIM_BUCKET_OPTIONS = {
     "office":    ["Picked up by Gerizim"],
     "sms":       ["تم الارسال", "SMS SENT — AWAITING PICKUP", "SMS SENT"],
     "pickup":    ["جاهز للاستلام", "READY FOR PICKUP"],
     "out":       ["جاهز للاستلام", "OUT FOR DELIVERY"],
     "delivered": ["تم التسليم", "GERZIM DELIVERED"],
+}
+GAASH_BUCKET_OPTIONS = {
+    "transit":   ["STILL NOT ARRIVED"],
+    "arrived":   ["ARIIVED Destination"],
+    "cleared":   ["CLEARED GASH"],
+    "delivered": ["BRACHA DELIVERED"],
+    # "customs" maps only when the live text asks for the customer ID (below)
+}
+# Forward-only guard: a live feed that lags a manual entry (GAASH still says
+# "arrived" after he already handled the ID request) must never move the
+# field BACKWARD. Keys are strip/casefold; unknown current values are treated
+# as rank None (replaceable — same as empty).
+GASH_STAGE_RANK = {
+    "still not arrived": 0,
+    "ariived destination": 1,
+    "customer id": 2,
+    "documents sent": 2,
+    "sent but still diidn't clear": 2,
+    "moc - palestinian authority": 3,
+    "cleared gash": 4,
+    "bracha delivered": 5,
+    "picked up by gerizim": 6,
+    "تم الارسال": 7, "sms sent — awaiting pickup": 7, "sms sent": 7,
+    "جاهز للاستلام": 7, "ready for pickup": 7, "out for delivery": 7,
+    "gerzim delivered": 8,
+    "تم التسليم": 8,
 }
 
 
@@ -832,16 +859,40 @@ def _gash_field_def(config=None):
     return None, None
 
 
-def _gash_option_for(bucket, fdef):
+def _gash_option_for(candidates, fdef):
     """First candidate option that exists on the list, in ClickUp's exact
     spelling — None if the stage has no matching option (skip, never guess)."""
     opts = {str(o.get("name") or "").strip().casefold(): o.get("name")
             for o in (fdef.get("options") or [])}
-    for cand in GASH_BUCKET_OPTIONS.get(bucket or "", []):
+    for cand in candidates or []:
         hit = opts.get(cand.strip().casefold())
         if hit:
             return hit
     return None
+
+
+def _gash_rank(name):
+    return GASH_STAGE_RANK.get(str(name or "").strip().casefold())
+
+
+def _gash_target(row, fdef):
+    """The GASH STATUS option this row SHOULD carry per live tracking —
+    Gerizim stage first (last mile = later leg), else the GAASH stage."""
+    d = row["data"]
+    gz = d.get("gerizim_status") or {}
+    if isinstance(gz, dict) and gz.get("bucket"):
+        hit = _gash_option_for(GERIZIM_BUCKET_OPTIONS.get(gz["bucket"], []), fdef)
+        if hit:
+            return hit
+    ts = d.get("tracking_status") or {}
+    if not isinstance(ts, dict) or not ts.get("bucket"):
+        return None
+    if ts["bucket"] == "customs":
+        txt = str(ts.get("text") or "")
+        cands = [" customer ID"] if "customer id" in txt.lower() else []
+    else:
+        cands = GAASH_BUCKET_OPTIONS.get(ts["bucket"], [])
+    return _gash_option_for(cands, fdef)
 
 
 def _queue_gash_status(row, fkey, target):
@@ -883,10 +934,11 @@ def _queue_gash_status(row, fkey, target):
 
 
 def apply_gash_status(only=None, config=None):
-    """Mirror each tracked row's Gerizim stage into the GASH STATUS dropdown.
-    Idempotent (writes only differences); `only` scopes to one GWD. Runs over
-    ALL stored enrichment, so already-delivered parcels (which the network
-    loop skips) still get their field caught up. Returns #rows queued."""
+    """Mirror each tracked row's live stage (Gerizim, else GAASH) into the
+    GASH STATUS dropdown. Idempotent (writes only differences), FORWARD-ONLY
+    (never downgrades a manual entry that's ahead of a lagging feed); `only`
+    scopes to one GWD. Runs over ALL stored enrichment, so already-delivered
+    parcels (which the network loop skips) still catch up. Returns #queued."""
     config = config or cfg.load()
     fkey, fdef = _gash_field_def(config)
     if not fdef:
@@ -900,10 +952,17 @@ def apply_gash_status(only=None, config=None):
     for row in rows:
         if only and tracking.clean_tracking(_row_tracking(row)) != only:
             continue
-        gz = row["data"].get("gerizim_status") or {}
-        bucket = gz.get("bucket") if isinstance(gz, dict) else None
-        target = _gash_option_for(bucket, fdef)
-        if target and _queue_gash_status(row, fkey, target):
+        target = _gash_target(row, fdef)
+        if not target:
+            continue
+        cur = next((v for k, v in (row["data"].get("fields") or {}).items()
+                    if k.strip().lower() == GASH_FIELD), None)
+        cur_rank, tgt_rank = _gash_rank(cur), _gash_rank(target)
+        # >= (not >) so a same-stage upgrade (GERZIM DELIVERED → تم التسليم)
+        # still applies; equal VALUES are dropped inside _queue_gash_status.
+        if cur_rank is not None and (tgt_rank is None or tgt_rank < cur_rank):
+            continue
+        if _queue_gash_status(row, fkey, target):
             queued += 1
     if queued:
         kick()

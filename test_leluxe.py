@@ -50,10 +50,14 @@ SCHEMA = {
         "Tracking Number": {"id": "f-trk", "type": "short_text", "options": []},
         "ASIN": {"id": "f-asin", "type": "short_text", "options": []},
         "gash date": {"id": "f-gd", "type": "date", "options": []},
-        # like live: GERZIM DELIVERED exists, تم التسليم / SMS options do NOT (yet)
+        # like live: GERZIM DELIVERED / GAASH-leg options exist; تم التسليم, SMS
+        # and STILL NOT ARRIVED do NOT (unmapped stages must be skipped)
         "GASH STATUS": {"id": "f-gs", "type": "drop_down",
                         "options": [{"id": "opt-gzd", "name": "GERZIM DELIVERED", "orderindex": 6, "color": "#b6b6ff"},
-                                    {"id": "opt-pug", "name": "Picked up by Gerizim", "orderindex": 8, "color": "#edadc8"}]},
+                                    {"id": "opt-pug", "name": "Picked up by Gerizim", "orderindex": 8, "color": "#edadc8"},
+                                    {"id": "opt-arr", "name": "ARIIVED Destination", "orderindex": 1, "color": "#04A9F4"},
+                                    {"id": "opt-cid", "name": " customer ID", "orderindex": 7, "color": "#f76808"},
+                                    {"id": "opt-clr", "name": "CLEARED GASH", "orderindex": 3, "color": "#1bbc9c"}]},
         "ADDRESS ISSUE": {"id": "f-ai", "type": "checkbox", "options": []},
         "Quantity": {"id": "f-ql", "type": "labels",
                      "options": [{"id": "lab-1", "name": "Correct amount", "orderindex": 1, "color": None}]},
@@ -506,6 +510,46 @@ def gash_status_sync():
         plant({"bucket": "sms", "label": "SMS sent — awaiting pickup", "status": "sms"})
         check("bucket without an existing option is skipped",
               leluxe.apply_gash_status() == 0)
+
+        # ── GAASH leg (no Gerizim data yet) + the forward-only guard ──
+        row2, _ = leluxe.save_row({"kind": "order", "name": "Order # gz-2",
+                                   "status": "order number",
+                                   "fields": {"Tracking Number": "GWD10"}})
+        leluxe.run_push_pass()
+        def plant2(d2):
+            with db.connect() as c:
+                r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                              (row2["id"],)).fetchone()
+                d = json.loads(r["data_json"]); d.update(d2)
+                c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                          (json.dumps(d, ensure_ascii=False), row2["id"]))
+        # live GAASH "Required customer ID" → the " customer ID" option
+        # (leading space — written in ClickUp's exact spelling)
+        plant2({"tracking_status": {"bucket": "customs", "text": "Required customer ID"}})
+        n = leluxe.apply_gash_status()
+        r6 = leluxe.get_row(row2["id"])
+        check("GAASH customs/customer-ID maps to the exact option",
+              n == 1 and r6["data"]["fields"].get("GASH STATUS") == " customer ID")
+        leluxe.run_push_pass()
+        # live cleared (rank above customer ID) → moves FORWARD
+        plant2({"tracking_status": {"bucket": "cleared", "text": "Cleared customs"}})
+        n = leluxe.apply_gash_status()
+        r7 = leluxe.get_row(row2["id"])
+        check("stale field catches up when the parcel clears (his MOC bug)",
+              n == 1 and r7["data"]["fields"].get("GASH STATUS") == "CLEARED GASH")
+        leluxe.run_push_pass()
+        # a LAGGING feed (arrived < cleared) must never move the field backward
+        plant2({"tracking_status": {"bucket": "arrived",
+                                    "text": "Arrived at destination country"}})
+        check("forward-only: lagging GAASH stage never downgrades the field",
+              leluxe.apply_gash_status() == 0)
+        # Gerizim data outranks the GAASH leg once the parcel reaches last-mile
+        plant2({"gerizim_status": {"bucket": "office", "label": "At Gerizim office",
+                                   "status": "office"}})
+        n = leluxe.apply_gash_status()
+        r8 = leluxe.get_row(row2["id"])
+        check("Gerizim stage wins over the GAASH leg",
+              n == 1 and r8["data"]["fields"].get("GASH STATUS") == "Picked up by Gerizim")
     finally:
         leluxe._http = real
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
