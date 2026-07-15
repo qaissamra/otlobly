@@ -2280,10 +2280,12 @@ function lxFSelAll(i,el){
 // board view mode: "orders" (grouped cards) | "products" (ClickUp's "as separate tasks")
 let LX_VIEW=localStorage.getItem("lx_view")||"orders";
 let LX_DASH_UNIT=localStorage.getItem("lx_dash_unit")||"products";
+let LX_DASH_METRIC=localStorage.getItem("lx_dash_metric")||"count";
 function lxSetView(v){ LX_VIEW=v; try{ localStorage.setItem("lx_view",v); }catch(e){} renderLeluxe(); }
 function lxViewToggle(){ lxSetView(LX_VIEW==="products"?"orders":"products"); }
 function lxDashToggle(){ lxSetView(LX_VIEW==="dashboard"?"orders":"dashboard"); }
 function lxDashUnit(u){ LX_DASH_UNIT=u; try{ localStorage.setItem("lx_dash_unit",u); }catch(e){} renderLeluxe(); }
+function lxDashMetric(m){ LX_DASH_METRIC=m; try{ localStorage.setItem("lx_dash_metric",m); }catch(e){} renderLeluxe(); }
 // shared filtered set — Orders view and the Dashboard aggregate the SAME orders,
 // so the two always agree (the `__status` filter follows the products, as on the board)
 function lxFilteredOrders(){
@@ -2443,6 +2445,10 @@ function renderLeluxe(){
 function lxTally(arr){ const m=new Map();
   arr.forEach(v=>{ const k=(v==null?"":String(v)); m.set(k,(m.get(k)||0)+1); });
   return [...m.entries()].map(([k,n])=>({k,n})).sort((a,b)=>b.n-a.n); }
+// like lxTally but sums a weight per [key,weight] pair (₪ value in value mode, 1 for counts)
+function lxTallyW(pairs){ const m=new Map();
+  pairs.forEach(([k,w])=>{ const key=(k==null?"":String(k)); m.set(key,(m.get(key)||0)+(Number(w)||0)); });
+  return [...m.entries()].map(([k,n])=>({k,n})).sort((a,b)=>b.n-a.n); }
 function lxOrderStatusVal(o){ const its=lxItemsOf(o), u=[...new Set(its.map(i=>i.status).filter(Boolean))];
   return its.length?(u.length===1?u[0]:"mixed"):(o.status||""); }
 function lxStatusColor(s){ const o=((LX.schema&&LX.schema.statuses)||[]).find(x=>x.status===s); return (o&&o.color)||"#98a2b3"; }
@@ -2469,6 +2475,9 @@ function lxRenderDashboard(orders){
   $("lxCount").textContent=`${orders.length} orders · ${items.length} products`+(filtered?" · filtered":"");
   $("lxEmpty").style.display="none";
   const money=n=>`₪${Math.round(n).toLocaleString()}`;
+  const isVal=LX_DASH_METRIC==="value";              // Count ⇄ ₪ Value breakdown toggle
+  const amtOf=r=>{ const v=Number(lxF(r,"total amount")); return isNaN(v)?0:v; };
+  const wOf=r=>isVal?amtOf(r):1;                      // weight = ₪ in value mode, else 1 (count)
   const totalVal=orders.reduce((a,o)=>{ const v=Number(lxF(o,"total amount")); return a+(isNaN(v)?0:v); },0);
   const avg=orders.length?totalVal/orders.length:0;
   const stages=orders.map(lxStageOf);
@@ -2484,19 +2493,27 @@ function lxRenderDashboard(orders){
     if(o.due_date&&!lxIsDone(o)){ const n=dueDays(lxMs(o.due_date)); if(n!=null&&n<0) late++; }
   });
   const unit=LX_DASH_UNIT;
-  const statusVals=unit==="orders"?orders.map(lxOrderStatusVal):items.map(i=>i.status||"");
+  // Each breakdown weighs rows by ₪ (value mode) or by 1 (count mode); the per-list
+  // total is Σ weights, so count mode reproduces the old .length totals exactly.
+  const statusPairs=unit==="orders"?orders.map(o=>[lxOrderStatusVal(o),wOf(o)]):items.map(i=>[i.status||"",wOf(i)]);
+  const statusTot=statusPairs.reduce((a,p)=>a+p[1],0);
   const stOrder=((LX.schema&&LX.schema.statuses)||[]).map(x=>x.status);
-  const byStatus=lxTally(statusVals).sort((a,b)=>{ const ai=stOrder.indexOf(a.k),bi=stOrder.indexOf(b.k);
+  const byStatus=lxTallyW(statusPairs).sort((a,b)=>{ const ai=stOrder.indexOf(a.k),bi=stOrder.indexOf(b.k);
     return ((ai<0?9e9:ai)-(bi<0?9e9:bi))||(b.n-a.n); });
-  const byStage=lxTally(stages.map(s=>s.label)), stageColor={}; stages.forEach(s=>stageColor[s.label]=s.color);
-  const byRd=lxTally(items.map(i=>lxF(i,"rd status")||""));
+  const stagePairs=stages.map((s,i)=>[s.label,wOf(orders[i])]);   // stages[] aligns with orders[]
+  const stageTot=stagePairs.reduce((a,p)=>a+p[1],0);
+  const byStage=lxTallyW(stagePairs), stageColor={}; stages.forEach(s=>stageColor[s.label]=s.color);
+  const rdPairs=items.map(i=>[lxF(i,"rd status")||"",wOf(i)]);
+  const rdTot=rdPairs.reduce((a,p)=>a+p[1],0);
+  const byRd=lxTallyW(rdPairs);
   const card=(l,v,cls)=>`<div class="card"><div class="n ${cls||""}">${v}</div><div class="l">${poEsc(l)}</div></div>`;
-  const bar=(label,n,total,color,onclick)=>{ const pct=total?Math.round(100*n/total):0;
-    return `<div class="lx-bar"${onclick?` onclick="${onclick}"`:""} title="${poEsc(label)} — ${n} (${pct}%)">
+  const bar=(label,n,total,color,onclick)=>{ const pct=total?Math.round(100*n/total):0, disp=isVal?money(n):n;
+    return `<div class="lx-bar"${onclick?` onclick="${onclick}"`:""} title="${poEsc(label)} — ${disp} (${pct}%)">
       <span class="lx-bar-l"><span class="dot" style="background:${color||"#98a2b3"}"></span>${poEsc(label||"(none)")}</span>
       <span class="track"><span class="fill" style="width:${pct}%;background:${color||"#98a2b3"}"></span></span>
-      <span class="lx-bar-n">${n} · ${pct}%</span></div>`; };
+      <span class="lx-bar-n">${disp} · ${pct}%</span></div>`; };
   const seg=(u,lbl)=>`<button class="minibtn${LX_DASH_UNIT===u?" accent":""}" onclick="lxDashUnit('${u}')">${lbl}</button>`;
+  const mseg=(m,lbl)=>`<button class="minibtn${LX_DASH_METRIC===m?" accent":""}" onclick="lxDashMetric('${m}')">${lbl}</button>`;
   $("lxRows").innerHTML=`
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       <span class="lx-sec" style="margin:0">counts &amp; value</span><span class="spacer" style="flex:1"></span>
@@ -2516,14 +2533,19 @@ function lxRenderDashboard(orders){
       ${card("GAASH overdue",overdue,overdue?"neg":"")}${card("GAASH due ≤7d",dueSoon,dueSoon?"neg":"")}
       ${card("₪ at risk",money(atRisk),atRisk?"neg":"")}${card("Late (past due)",late,late?"neg":"")}
     </div>
+    <div style="display:flex;align-items:center;gap:6px;margin:14px 0 2px">
+      <span class="lx-sec" style="margin:0">status breakdown</span>
+      <span style="flex:1"></span>
+      <span class="muted2" style="font-size:11px">show</span>${mseg("count","Count")}${mseg("value","₪ Value")}
+    </div>
     <div class="pnl-2col" style="align-items:start">
       <div><div class="lx-sec">${unit==="orders"?"order status":"product status"}</div>
-        ${byStatus.length?byStatus.map(x=>bar(x.k,x.n,statusVals.length,lxStatusColor(x.k),unit==="products"&&x.k?`lxDashFilter('__status','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+        ${byStatus.length?byStatus.map(x=>bar(x.k,x.n,statusTot,lxStatusColor(x.k),unit==="products"&&x.k?`lxDashFilter('__status','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
       </div>
       <div><div class="lx-sec">delivery stage</div>
-        ${byStage.length?byStage.map(x=>bar(x.k,x.n,stages.length,stageColor[x.k])).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+        ${byStage.length?byStage.map(x=>bar(x.k,x.n,stageTot,stageColor[x.k])).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
         <div class="lx-sec">RD status</div>
-        ${byRd.length?byRd.map(x=>bar(x.k,x.n,items.length,lxOptColor("rd status",x.k),x.k?`lxDashFilter('RD STATUS','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+        ${byRd.length?byRd.map(x=>bar(x.k,x.n,rdTot,lxOptColor("rd status",x.k),x.k?`lxDashFilter('RD STATUS','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
       </div>
     </div>`;
 }
