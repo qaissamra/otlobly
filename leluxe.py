@@ -415,6 +415,7 @@ def save_row(payload, config=None):
                 return None, "row not found"
             d = _row(r)["data"]
             d.update({"description": desc, "tags": tags, "fields": fields})
+            d.pop("pending_fields", None)   # a real edit → full push takes over
             if kind == "package":
                 d["tracking_number"] = tn or None
             # always → dirty; if the pusher had this row claimed, _finish() only
@@ -451,6 +452,7 @@ def set_status(row_id, status, config=None):
                       (status, db.now_iso(), row_id)).rowcount
     if not n:
         return None, "row not found"
+    _clear_pending(row_id)      # a real edit → the full push takes over
     kick()
     return get_row(row_id), None
 
@@ -806,6 +808,108 @@ def _row_tracking(row):
     return str(tn or "").strip()
 
 
+# ── GASH STATUS ← live Gerizim stage ────────────────────────────────────────
+# Owner's rule: the ClickUp task STATUS is his to change manually — automation
+# may only touch the GASH STATUS dropdown, mirroring the parcel's Gerizim
+# stage. Mapping is by option NAME and only to options that EXIST on the
+# working list (add a missing one in ClickUp UI, then Discover); first
+# candidate that exists wins, so adding "تم التسليم" upgrades the mapping.
+GASH_FIELD = "gash status"
+GASH_BUCKET_OPTIONS = {
+    "office":    ["Picked up by Gerizim"],
+    "sms":       ["تم الارسال", "SMS SENT — AWAITING PICKUP", "SMS SENT"],
+    "pickup":    ["جاهز للاستلام", "READY FOR PICKUP"],
+    "out":       ["جاهز للاستلام", "OUT FOR DELIVERY"],
+    "delivered": ["تم التسليم", "GERZIM DELIVERED"],
+}
+
+
+def _gash_field_def(config=None):
+    """The working list's GASH STATUS dropdown (exact key + def), case-blind."""
+    for k, v in (schema(config).get("fields") or {}).items():
+        if k.strip().lower() == GASH_FIELD and v.get("type") == "drop_down":
+            return k, v
+    return None, None
+
+
+def _gash_option_for(bucket, fdef):
+    """First candidate option that exists on the list, in ClickUp's exact
+    spelling — None if the stage has no matching option (skip, never guess)."""
+    opts = {str(o.get("name") or "").strip().casefold(): o.get("name")
+            for o in (fdef.get("options") or [])}
+    for cand in GASH_BUCKET_OPTIONS.get(bucket or "", []):
+        hit = opts.get(cand.strip().casefold())
+        if hit:
+            return hit
+    return None
+
+
+def _queue_gash_status(row, fkey, target):
+    """Set fields[GASH STATUS]=target and queue a FIELD-ONLY push. Returns True
+    when a change was queued (False = already up to date / row gone)."""
+    with db.connect() as c:
+        r = c.execute("SELECT sync_state, data_json FROM leluxe_orders "
+                      "WHERE id=? AND deleted=0", (row["id"],)).fetchone()
+        if not r:
+            return False
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        fields = d.setdefault("fields", {})
+        key = next((k for k in fields if k.strip().lower() == GASH_FIELD), fkey)
+        if str(fields.get(key) or "").strip() == target:
+            return False
+        fields[key] = target
+        # Only a clean row gets the field-only marker; a real edit in flight
+        # (dirty/pushing/error) keeps its FULL push, which now carries the field.
+        if r["sync_state"] == "synced" or d.get("pending_fields"):
+            pf = set(d.get("pending_fields") or [])
+            pf.add(key)
+            d["pending_fields"] = sorted(pf)
+        c.execute("""UPDATE leluxe_orders SET data_json=?, updated_at=?,
+                     sync_state='dirty', sync_error=NULL, sync_attempts=0
+                     WHERE id=?""",
+                  (json.dumps(d, ensure_ascii=False), db.now_iso(), row["id"]))
+    try:
+        import activity
+        activity.log("set", "leluxe", row["id"],
+                     row.get("name") or f"#{row['id']}",
+                     detail=f"gash status → {target} (from Gerizim) "
+                            f"→ syncing to ClickUp")
+    except Exception:  # noqa: BLE001 — logging must never block the sync
+        pass
+    return True
+
+
+def apply_gash_status(only=None, config=None):
+    """Mirror each tracked row's Gerizim stage into the GASH STATUS dropdown.
+    Idempotent (writes only differences); `only` scopes to one GWD. Runs over
+    ALL stored enrichment, so already-delivered parcels (which the network
+    loop skips) still get their field caught up. Returns #rows queued."""
+    config = config or cfg.load()
+    fkey, fdef = _gash_field_def(config)
+    if not fdef:
+        return 0
+    import tracking
+    only = tracking.clean_tracking(only or "") or None
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    queued = 0
+    for row in rows:
+        if only and tracking.clean_tracking(_row_tracking(row)) != only:
+            continue
+        gz = row["data"].get("gerizim_status") or {}
+        bucket = gz.get("bucket") if isinstance(gz, dict) else None
+        target = _gash_option_for(bucket, fdef)
+        if target and _queue_gash_status(row, fkey, target):
+            queued += 1
+    if queued:
+        kick()
+    return queued
+
+
 def refresh_tracking(batch=5, only=None, force=False, config=None):
     import tracking
     import gerizim
@@ -889,7 +993,10 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                 c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                           (json.dumps(d, ensure_ascii=False), row_id))
         time.sleep(_pace())
-    return {"checked": len(todo), "remaining": max(0, len(work) - len(todo))}
+    # after storing fresh Gerizim stages, mirror them into the GASH STATUS field
+    applied = apply_gash_status(only=only, config=config)
+    return {"checked": len(todo), "remaining": max(0, len(work) - len(todo)),
+            "gash_applied": applied}
 
 
 # --------------------------------------------------------------------------- #
@@ -1019,6 +1126,30 @@ def _finish(row_id, pushed, images, error=None, attempts=0):
                       (json.dumps(d, ensure_ascii=False), row_id))
 
 
+def _clear_pending(row_id, names=None):
+    """Drop (some of) a row's field-only push markers, merged into the CURRENT
+    data_json so a marker queued mid-push survives. names=None clears all."""
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (row_id,)).fetchone()
+        if not r:
+            return
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        if "pending_fields" not in d:
+            return
+        left = [] if names is None else \
+            [f for f in d.get("pending_fields") or [] if f not in names]
+        if left:
+            d["pending_fields"] = left
+        else:
+            d.pop("pending_fields", None)
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), row_id))
+
+
 def push_one(row, config=None):
     """Mirror one claimed row to ClickUp. Returns (ok, error)."""
     config = config or cfg.load()
@@ -1035,6 +1166,38 @@ def push_one(row, config=None):
     is_child = row["kind"] not in TOP_KINDS
     if is_child and not _parent_task_id(row):
         return False, "parent not pushed yet"
+
+    # ── field-only sync (queued by the tracking mirror): touch ONLY those
+    # custom fields. The core PUT (name/STATUS/due/description), tags and
+    # attachments are all skipped, so a status Qais set manually in ClickUp
+    # can never be reverted by a stale local mirror.
+    pending = [f for f in (d.get("pending_fields") or [])
+               if f in (d.get("fields") or {})]
+    if tid and pending:
+        pushed_fields = dict(pushed.get("fields") or {})
+        for fname in pending:
+            val = d["fields"][fname]
+            fdef = fields_def.get(fname)
+            if not fdef:
+                continue               # field not on the working list — skip
+            ok, enc = encode_value(fdef, val)
+            if not ok:
+                continue               # option missing here — syncs later
+            st, resp = _http(f"{CLICKUP_API}/task/{tid}/field/{fdef['id']}",
+                             "POST", {"value": enc})
+            if st != 200:
+                errors.append(f"{fname}: set failed ({st})")
+                continue
+            pushed_fields[fname] = val
+            time.sleep(_pace())
+        pushed["fields"] = pushed_fields
+        if errors:                     # keep the marker → retry stays field-only
+            _finish(row["id"], pushed, None, error="; ".join(errors),
+                    attempts=row.get("sync_attempts", 0) + 1)
+            return False, "; ".join(errors)
+        _clear_pending(row["id"], pending)
+        _finish(row["id"], pushed, None)
+        return True, None
 
     # only send a status the working list actually defines — otherwise ClickUp
     # 400s the whole create. On a true AZ (2) duplicate every status exists; a
@@ -1152,6 +1315,7 @@ def push_one(row, config=None):
         _finish(row["id"], pushed, images,
                 error="; ".join(errors), attempts=row.get("sync_attempts", 0) + 1)
         return False, "; ".join(errors)
+    _clear_pending(row["id"])          # a successful FULL push covers everything
     _finish(row["id"], pushed, images)
     return True, None
 

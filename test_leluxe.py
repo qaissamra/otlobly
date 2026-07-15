@@ -50,6 +50,10 @@ SCHEMA = {
         "Tracking Number": {"id": "f-trk", "type": "short_text", "options": []},
         "ASIN": {"id": "f-asin", "type": "short_text", "options": []},
         "gash date": {"id": "f-gd", "type": "date", "options": []},
+        # like live: GERZIM DELIVERED exists, تم التسليم / SMS options do NOT (yet)
+        "GASH STATUS": {"id": "f-gs", "type": "drop_down",
+                        "options": [{"id": "opt-gzd", "name": "GERZIM DELIVERED", "orderindex": 6, "color": "#b6b6ff"},
+                                    {"id": "opt-pug", "name": "Picked up by Gerizim", "orderindex": 8, "color": "#edadc8"}]},
         "ADDRESS ISSUE": {"id": "f-ai", "type": "checkbox", "options": []},
         "Quantity": {"id": "f-ql", "type": "labels",
                      "options": [{"id": "lab-1", "name": "Correct amount", "orderindex": 1, "color": None}]},
@@ -425,6 +429,88 @@ def flat_tracking_enrichment():
           o2["sync_state"] == "synced" and it2["sync_state"] == "synced")
 
 
+def gash_status_sync():
+    """apply_gash_status mirrors the Gerizim bucket into the GASH STATUS field
+    via a FIELD-ONLY push: the option must exist on the list, equal values are
+    no-ops, the push sends NO core PUT (a status set manually in ClickUp can
+    never be reverted), and a real edit clears the marker (full push resumes)."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    CALLS.clear()
+    row, _ = leluxe.save_row({"kind": "order", "name": "Order # gz-1",
+                              "status": "order number",
+                              "fields": {"Tracking Number": "GWD9"}})
+    real = leluxe._http
+    leluxe._http = fake_http
+    os.environ["LELUXE_PUSH_DISABLED"] = "0"
+    try:
+        leluxe.run_push_pass()                     # initial create → synced
+        def plant(gz):                             # what refresh_tracking stores
+            with db.connect() as c:
+                r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                              (row["id"],)).fetchone()
+                d = json.loads(r["data_json"]); d["gerizim_status"] = gz
+                c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                          (json.dumps(d, ensure_ascii=False), row["id"]))
+        plant({"bucket": "delivered", "label": "GERZIM DELIVERED", "status": "delivered"})
+        n = leluxe.apply_gash_status()
+        r2 = leluxe.get_row(row["id"])
+        check("delivered bucket queues the existing option", n == 1
+              and r2["data"]["fields"].get("GASH STATUS") == "GERZIM DELIVERED"
+              and r2["data"].get("pending_fields") == ["GASH STATUS"]
+              and r2["sync_state"] == "dirty")
+        check("task status column untouched", r2["status"] == "order number")
+        n_before = len(CALLS)
+        leluxe.run_push_pass()
+        sent = CALLS[n_before:]
+        check("field-only push: one field call, NO core PUT",
+              len(sent) == 1 and sent[0][0] == "POST" and "/field/f-gs" in sent[0][1]
+              and sent[0][2] == {"value": "opt-gzd"})
+        r3 = leluxe.get_row(row["id"])
+        check("marker cleared + synced after field-only push",
+              r3["sync_state"] == "synced" and "pending_fields" not in r3["data"])
+        check("idempotent: same stage queues nothing", leluxe.apply_gash_status() == 0)
+        # once تم التسليم exists (added in ClickUp UI → Discover), it's preferred
+        config = cfg.load()
+        config["leluxe"]["schema"]["fields"]["GASH STATUS"]["options"].append(
+            {"id": "opt-tam", "name": "تم التسليم", "orderindex": 10, "color": "#2ecd6f"})
+        cfg.save(config)
+        n = leluxe.apply_gash_status()
+        r4 = leluxe.get_row(row["id"])
+        check("تم التسليم preferred once its option exists",
+              n == 1 and r4["data"]["fields"].get("GASH STATUS") == "تم التسليم")
+        # a REAL edit clears the marker → the normal full push takes over
+        row2, _ = leluxe.save_row({"id": row["id"], "kind": "order",
+                                   "name": "Order # gz-1", "status": "sent rd",
+                                   "fields": {"Tracking Number": "GWD9",
+                                              "GASH STATUS": "تم التسليم"}})
+        check("real edit clears the pending marker",
+              "pending_fields" not in row2["data"])
+        n_before = len(CALLS)
+        leluxe.run_push_pass()
+        puts = [x for x in CALLS[n_before:] if x[0] == "PUT"]
+        check("full push resumes after a real edit (core PUT sent)",
+              len(puts) == 1 and puts[0][2].get("status") == "sent rd")
+        # set_status also clears the marker
+        with db.connect() as c:
+            r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                          (row["id"],)).fetchone()
+            d = json.loads(r["data_json"]); d["pending_fields"] = ["GASH STATUS"]
+            c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), row["id"]))
+        r5, err = leluxe.set_status(row["id"], "order number")
+        check("set_status clears the pending marker",
+              not err and "pending_fields" not in r5["data"])
+        leluxe.run_push_pass()                     # drain → synced for the next check
+        # a stage whose option is missing on the list is skipped, never guessed
+        plant({"bucket": "sms", "label": "SMS sent — awaiting pickup", "status": "sms"})
+        check("bucket without an existing option is skipped",
+              leluxe.apply_gash_status() == 0)
+    finally:
+        leluxe._http = real
+        os.environ["LELUXE_PUSH_DISABLED"] = "1"
+
+
 def endpoints_gated():
     import app as appmod
     import auth
@@ -463,6 +549,7 @@ def main():
     print("3-tier push:");       push_3tier()
     print("status-only change:"); status_only_change()
     print("flat tracking:");     flat_tracking_enrichment()
+    print("gash status sync:");  gash_status_sync()
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
     print("endpoint gates:");    endpoints_gated()

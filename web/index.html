@@ -374,6 +374,21 @@
   /* Leluxe: ClickUp-style copy button — appears on row hover */
   .lx-copy{opacity:0;transition:opacity .12s;border:none;background:transparent;cursor:pointer;font-size:12px;padding:0 2px;flex:0 0 auto}
   .lx-hash{opacity:.45;margin-inline-end:2px}
+  /* Leluxe ClickUp-style columns: the order card's right-side chips share one
+     fixed grid, and a sticky label row above the list names each column. */
+  .lx-cols{display:grid;grid-template-columns:104px 56px 98px 112px 80px 124px 50px 78px 28px;gap:6px;align-items:center;flex:0 0 auto}
+  .lx-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lx-colhead{position:sticky;top:70px;z-index:20;display:flex;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .lx-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* column view needs one line per order: keep the grid on the row and let the
+     left meta text ellipsize instead of wrapping the grid to a second line */
+  @media(min-width:1521px){
+    #lxRows>.po-card>.po-head>.po-title{flex-wrap:nowrap}
+    #lxRows>.po-card>.po-head>.po-title>.muted2,
+    #lxRows>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  }
+  @media(max-width:1520px){.lx-colhead{display:none}.lx-cols{display:contents}}
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   .lx-copy:hover{opacity:1 !important}
   .po-thumbs img,.po-thumbs .noimg{width:32px;height:32px;flex:0 0 auto;object-fit:contain;border-radius:7px;background:var(--bg3);border:1px solid var(--line)}
@@ -1030,9 +1045,11 @@
       <span class="spacer"></span>
       <input type="date" id="lxMigrateSince" title="migrate AZ (2) orders created on/after this date" style="font-size:12px;padding:3px 6px">
       <button class="minibtn" id="lxMigrateBtn" onclick="lxMigrate(this)" title="copy recent orders from the real AZ (2) into this working list as Order → Package → product (AZ (2) is only read)">⬇ Migrate from AZ (2)</button>
-      <button class="minibtn" id="lxTrackBtn" onclick="lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every package tracking number">🚚 Refresh tracking</button>
+      <button class="minibtn" id="lxTrackBtn" onclick="lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every package tracking number — also mirrors the Gerizim stage into the GASH STATUS field (task statuses are never touched)">🚚 Refresh tracking</button>
+      <button class="minibtn" id="lxImgBtn" onclick="lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet (nothing is written to ClickUp)">🖼 Fetch images</button>
       <button class="minibtn" id="lxPullBtn" onclick="lxImport(this)" title="fetch ClickUp-side changes into this page (your unsent edits are kept)">↙ Pull</button>
       <button class="minibtn" id="lxDiscoverBtn" onclick="lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover</button>
+      <button class="minibtn" id="lxActivityBtn" onclick="lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity</button>
       <button class="accent" id="lxNewBtn" onclick="lxOpenEditor('order',null,null)">＋ New order</button>
       <button class="minibtn" onclick="loadLeluxe()">↻ Refresh</button>
     </div>
@@ -1197,6 +1214,14 @@
   <div class="az-box" style="width:520px;max-width:96vw">
     <div class="az-head"><b>✏️ تعديل الطلب · Edit order</b><span class="az-x" onclick="poEditClose()">✕</span></div>
     <div style="padding:14px 16px" id="poeBody"></div>
+  </div>
+</div>
+
+<!-- Leluxe activity log: every change synced to ClickUp -->
+<div id="lxActivityModal" class="az-modal hidden" onclick="if(event.target===this)lxActivityClose()">
+  <div class="az-box" style="width:620px;max-width:96vw;max-height:88vh;overflow:auto">
+    <div class="az-head"><b>🕑 Leluxe activity — changes synced to ClickUp</b><span class="az-x" onclick="lxActivityClose()">✕</span></div>
+    <div style="padding:12px 16px" id="lxActivityBody"></div>
   </div>
 </div>
 
@@ -2238,7 +2263,11 @@ function renderLeluxe(){
   const has=orders.length||orphans.length;
   $("lxEmpty").style.display=has?"none":"block";
   $("lxEmpty").textContent=(LX.orders||[]).length?"No orders match the filter.":"No orders yet — ＋ New order, or ⬇ Migrate from AZ (2).";
-  $("lxRows").innerHTML=orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
+  // ClickUp-style column labels — same fixed grid as each card's right side
+  const colHead=orders.length?`<div class="lx-colhead"><span class="lbl" style="flex:1">order</span>
+    <span class="lx-cols">${["status","total","tracking","gaash status","deadline","gerizim","created","due date",""]
+      .map(l=>`<span class="lbl">${l}</span>`).join("")}</span></div>`:"";
+  $("lxRows").innerHTML=colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
 }
 function lxCardHtml(o){
   const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];
@@ -2249,9 +2278,18 @@ function lxCardHtml(o){
   const tn=tr?((tr.data&&tr.data.tracking_number)||lxF(tr,"tracking number")||""):"";
   const gashDate=lxF(o,"gash date")||(tr&&lxF(tr,"gash date"));
   const delivered=tr&&lxGzDone(tr);   // last-mile delivered → drop the countdown chips
-  // single-product order → show the PRODUCT's real status (the order's own status is
-  // always the useless "order number"); multi-product keeps the order-level pill.
-  const single=nItems===1?lxItemsOf(o)[0]:null;
+  // Header status is DISPLAY-ONLY (never edits the order task, never bulk): show the
+  // products' shared status when they all agree, else "mixed"; 0-product → order status.
+  const its=lxItemsOf(o), uStatus=[...new Set(its.map(i=>i.status).filter(Boolean))];
+  const headStatus=its.length?(uStatus.length===1
+      ?lxStatusPill(uStatus[0])
+      :`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses — expand to see each">mixed</span>`)
+    :lxStatusPill(o.status);
+  // header tracking: shared GWD if all products agree, else "multiple"/"no tracking"
+  const uTn=[...new Set(its.map(i=>String(lxF(i,"tracking number")||(i.data&&i.data.tracking_number)||"").trim()).filter(Boolean))];
+  const headTn=uTn.length===1?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(uTn[0])}</span>`
+    :uTn.length>1?`<span class="muted2" style="font-size:10.5px;opacity:.7" title="products have different tracking numbers">📦 multiple tracking</span>`
+    :`<span class="muted2" style="font-size:10.5px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`;
   const head=`<div class="po-head"><div class="po-title" onclick="lxToggle(${o.id})" style="cursor:pointer">
       <span class="caret">${open?"▾":"▸"}</span>
       ${lxDot(o)}
@@ -2260,16 +2298,17 @@ function lxCardHtml(o){
       <span class="muted2" style="font-size:11.5px">${acct?poEsc(acct)+" · ":""}${nItems} product${nItems===1?"":"s"} · ${pkgs.length} pkg</span>
       ${lxThumbs(lxItemsOf(o))}
       <span class="spacer" style="flex:1"></span>
-      ${lxStatusSelect(single||o)}
-      ${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}
-      ${tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(tn)}</span>`:`<span class="muted2" style="font-size:10.5px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`}
-      ${tr?lxGashPill(tr):""}
-      ${tr?lxGerizimPill(tr):""}
-      ${tr?lxDeadlinePill(tr):""}
-      ${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}
-      ${o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:""}
-      ${delivered?"":lxDueChip(o.due_date,lxIsDone(o))}
-      <button class="minibtn" title="edit order" onclick="event.stopPropagation();lxOpenEditor('order',${o.id},null)">✏️</button>
+      <span class="lx-cols">
+        <span class="lxc">${headStatus}</span>
+        <span class="lxc">${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}</span>
+        <span class="lxc">${headTn}</span>
+        <span class="lxc">${tr?lxGashPill(tr):""}</span>
+        <span class="lxc">${tr?lxDeadlinePill(tr):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}</span>
+        <span class="lxc">${tr?lxGerizimPill(tr):""}</span>
+        <span class="lxc">${o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:""}</span>
+        <span class="lxc">${delivered?"":lxDueChip(o.due_date,lxIsDone(o))}</span>
+        <span class="lxc"><button class="minibtn" title="edit order" onclick="event.stopPropagation();lxOpenEditor('order',${o.id},null)">✏️</button></span>
+      </span>
     </div></div>`;
   if(!open) return `<div class="po-card" id="lxo${o.id}">${head}</div>`;
   const vgroups=lxVisualPkgs(o);
@@ -2373,6 +2412,7 @@ function lxGzDone(row){ return !!(row&&row.data&&row.data.gerizim_status&&row.da
 function lxItemRow(it,parentO,opts){
   opts=opts||{};
   const img=lxAmz(it), qty=lxF(it,"quantity ordered");
+  const tn=String(lxF(it,"tracking number")||(it.data&&it.data.tracking_number)||"").trim();
   return `<div class="poc-row">
     ${lxThumb(img,44)}
     <div class="poc-name" style="flex:1;min-width:180px;display:flex;align-items:center;gap:4px">
@@ -2383,6 +2423,7 @@ function lxItemRow(it,parentO,opts){
     ${lxDot(it)}
     ${lxStatusSelect(it)}
     ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
+    ${opts.inPkg?"":(tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}
     ${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}
     ${lxCfPill("rd status",lxF(it,"rd status"))}
     ${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}
@@ -2547,11 +2588,21 @@ async function lxMigrate(btn){
 }
 async function lxRefreshTracking(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🚚 Live GAASH tracking…";
-  let rem=1,tc=0;
+  let rem=1,tc=0,ga=0;
   while(rem>0){ let tr; try{ tr=await post("/api/leluxe/refresh_tracking",{}); }catch(e){ break; }
-    if(!tr.ok) break; tc+=tr.checked; rem=tr.remaining;
+    if(!tr.ok) break; tc+=tr.checked; rem=tr.remaining; ga+=tr.gash_applied||0;
     pr.textContent=`🚚 GAASH tracking… ${tc} checked${rem?`, ~${rem} to go`:""}`; if(tr.checked===0&&rem>0) break; }
-  pr.textContent=`✅ Tracking updated (${tc} package${tc===1?"":"s"}).`; btn.disabled=false; loadLeluxe();
+  pr.textContent=`✅ Tracking updated (${tc} package${tc===1?"":"s"}${ga?` · ${ga} GASH STATUS field${ga===1?"":"s"} synced to the Gerizim stage`:""}).`;
+  btn.disabled=false; loadLeluxe(); if(ga) lxPollStart();
+}
+async function lxFetchImages(btn){
+  btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🖼 Fetching Amazon photos…";
+  let rem=1,done=0;
+  while(rem>0){ let r; try{ r=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
+    if(!r.ok) break; done+=r.done; rem=r.remaining;
+    pr.textContent=`🖼 Amazon photos… ${done} fetched${rem?`, ~${rem} to go`:""}`; if(r.done===0&&rem>0) break; }
+  pr.textContent=`✅ Photos done (${done} fetched — cached locally, nothing written to ClickUp).`;
+  btn.disabled=false; loadLeluxe();
 }
 async function lxImgUpload(input){
   if(!LX_EDIT||!LX_EDIT.id) return;
@@ -2572,6 +2623,22 @@ async function lxDelete(id){
   if(LX_EDIT&&LX_EDIT.id===id) lxEditClose();
   toast("Hidden locally ✓ (still in ClickUp)");
   loadLeluxe();
+}
+function lxActivityClose(){ $("lxActivityModal").classList.add("hidden"); }
+async function lxActivityOpen(){
+  $("lxActivityModal").classList.remove("hidden");
+  const body=$("lxActivityBody"); body.innerHTML=`<div class="muted2" style="font-size:12.5px">Loading…</div>`;
+  let d; try{ d=await (await fetch("/api/activity?entity=leluxe&limit=100")).json(); }catch(e){ d={activity:[]}; }
+  // "changes pushed to ClickUp" — drop pure reads (Pull / Discover are not changes)
+  const evs=(d.activity||[]).filter(e=>{
+    const eid=String(e.entity_id||""), det=String(e.detail||"");
+    return eid!=="pull" && !/^discovered |^pulled /.test(det);
+  });
+  const synced=(LX&&LX.sync&&LX.sync.synced)||0;
+  body.innerHTML=`<div class="muted2" style="font-size:12px;margin-bottom:10px">
+      <b>${evs.length}</b> change${evs.length===1?"":"s"} logged · <b>${synced}</b> task${synced===1?"":"s"} currently in sync with ClickUp
+      <span style="opacity:.7"> · list ${poEsc((LX&&LX.list_id)||"")}</span></div>
+    <div class="actfeed">${evs.length?evs.map(actRow).join(""):`<div class="muted2" style="font-size:12.5px;padding:10px">No Leluxe changes logged yet.</div>`}</div>`;
 }
 // ---- Deposits / payments ledger (عربون) ------------------------------------ //
 let DEP=null, DEP_RATE=3.7, DEP_CUSTMAP={};
