@@ -175,8 +175,10 @@
   .pop-item{display:block;width:100%;text-align:start;border:none;background:transparent;padding:8px 11px;border-radius:8px;font-size:13px;color:var(--ink);cursor:pointer}
   .pop-item:hover{background:var(--bg2)}
   .pop-item.danger{color:var(--bad)}
-  /* cards clip to their rounded corners, which would cut the open ⋯ dropdown — lift it while open */
-  .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible}
+  /* cards clip to their rounded corners, which would cut the open ⋯ dropdown — lift it
+     above siblings (position+z-index) AND stop clipping while a menu is open */
+  .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible;position:relative;z-index:40}
+  .pkg-body:has(.pop-menu.open),.po-body:has(.pop-menu.open){overflow:visible}
   /* ClickUp-style status dropdown (macOS ignores <option> colours, so it's a custom pop-menu) */
   .cu-menu{max-height:320px;overflow:auto;min-width:215px}
   .cu-search{width:100%;margin:2px 0 5px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:var(--bg2)}
@@ -2260,7 +2262,7 @@ function lxCardHtml(o){
       <span class="spacer" style="flex:1"></span>
       ${lxStatusSelect(single||o)}
       ${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}
-      ${tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(tn)}</span>`:""}
+      ${tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(tn)}</span>`:`<span class="muted2" style="font-size:10.5px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`}
       ${tr?lxGashPill(tr):""}
       ${tr?lxGerizimPill(tr):""}
       ${tr?lxDeadlinePill(tr):""}
@@ -2307,7 +2309,7 @@ function lxVPkgHtml(o,g){
     const it=g.items[0], qty=lxF(it,"quantity ordered");
     return `<div class="pkg open"><div class="pkg-head"><div class="pkg-title-row">
       ${lxThumb(lxAmz(it),44)}
-      ${g.tn?`<b class="pkg-title" style="font-size:12.5px">📦 ${poEsc(g.tn)}</b>`:""}
+      ${g.tn?`<b class="pkg-title" style="font-size:12.5px">📦 ${poEsc(g.tn)}</b>`:`<span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`}
       <div class="poc-name" style="flex:1;min-width:160px;display:flex;align-items:center;gap:4px">
         <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
         <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
