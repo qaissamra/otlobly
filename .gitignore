@@ -14,6 +14,7 @@ customer_ids/
 meta_spend.json
 purchases.json
 po_images/
+leluxe_images/
 trash.json
 activity.jsonl
 customers.json
@@ -22,6 +23,8 @@ drafts.json
 *.db-journal
 sync.log
 backup.log
+leluxe_migrate.log
+leluxe_cleanup.log
 otlobly-backup-*.zip
 .DS_Store
 .claude/settings.local.json

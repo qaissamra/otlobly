@@ -15,7 +15,7 @@ import db
 
 # Otlobly-internal tools. Default for a broker tenant = OFF (hidden); business #1
 # always gets them. Keys map to nav buttons + backend endpoints.
-OTLOBLY_ONLY = ("clickup", "multilogin", "catalog", "leads", "gaash")
+OTLOBLY_ONLY = ("clickup", "multilogin", "catalog", "leads", "gaash", "leluxe")
 
 # Plan-linked features: default ON only for the listed tiers, still overridable
 # per business via its `features` config (grant/revoke manually).

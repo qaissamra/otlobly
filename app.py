@@ -98,6 +98,8 @@ import meta_sync
 meta_sync.start()          # background 24/7 Meta ad-spend pull (no-op without API creds)
 import alerts as alerts_mod
 alerts_mod.start()         # owner Telegram alerts (no-op without bot creds)
+import leluxe as leluxe_mod
+leluxe_mod.start()         # Leluxe → ClickUp mirror pusher (no-op until configured)
 
 app = Flask(__name__, template_folder="templates")
 # Behind Render's single proxy hop: trust ONE X-Forwarded-For entry so the rate
@@ -2086,6 +2088,237 @@ def api_clickup():
 
 
 # --------------------------------------------------------------------------- #
+# Leluxe — Amazon-bulk side business, mirrored live to the ClickUp 'AZ (2)'
+# list (leluxe.py). Admin-only + Otlobly-only: the page carries VISA labels,
+# buyer accounts and ID info.
+# --------------------------------------------------------------------------- #
+@app.route("/api/leluxe/discover", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_discover():
+    b = request.get_json(force=True, silent=True) or {}
+    config = cfg.load()
+    lid = str(b.get("list_id") or "").strip() or leluxe_mod.list_id(config)
+    if not lid:
+        return jsonify({"ok": False, "error": "Pass the ClickUp list id once."}), 400
+    if not os.environ.get("CLICKUP_API_TOKEN"):
+        return jsonify({"ok": False, "error": "CLICKUP_API_TOKEN is not set."}), 400
+    sch, err = leluxe_mod.discover(lid)
+    if err:
+        return jsonify({"ok": False, "error": err}), 502
+    cfg.set_path(config, "leluxe.list_id", lid)
+    cfg.set_path(config, "leluxe.schema", sch)
+    cfg.save(config)
+    activity.log("set", "leluxe", lid, "Leluxe",
+                 detail=f"discovered list {lid}: {len(sch['statuses'])} statuses, "
+                        f"{len(sch['fields'])} fields", user=_user())
+    return jsonify({"ok": True, "list_id": lid,
+                    "statuses": len(sch["statuses"]), "fields": len(sch["fields"])})
+
+
+@app.route("/api/leluxe/orders")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_orders():
+    config = cfg.load()
+    orders, orphans = leluxe_mod.list_tree()
+    return jsonify({"ok": True, "orders": orders, "orphans": orphans,
+                    "schema": leluxe_mod.schema(config),
+                    "list_id": leluxe_mod.list_id(config),
+                    "source_list_id": leluxe_mod.source_list_id(config),
+                    "token": bool(os.environ.get("CLICKUP_API_TOKEN")),
+                    "ready": leluxe_mod.ready(config),
+                    "push_disabled": leluxe_mod.push_disabled(),
+                    "sync": leluxe_mod.sync_counts()})
+
+
+@app.route("/api/leluxe/import", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_import():
+    """Batched importer AND the Pull button. phase 'tasks' = one paged fetch +
+    upsert of the whole list (~1 request / 100 tasks); phase 'images' = localize
+    a few tasks' attachments per call — the client loops while remaining > 0
+    (same pattern as the PO tracking refresh, to stay under the 120s timeout)."""
+    b = request.get_json(force=True, silent=True) or {}
+    phase = b.get("phase") or "tasks"
+    if phase == "tasks":
+        flag = db.get_setting("leluxe:import_running") or 0
+        try:
+            flag = float(flag)
+        except (TypeError, ValueError):
+            flag = 0
+        if time.time() - flag < 120:
+            return jsonify({"ok": False, "error": "an import is already running"}), 409
+        db.set_setting("leluxe:import_running", time.time())
+        try:
+            res = leluxe_mod.pull_tasks()
+        finally:
+            db.set_setting("leluxe:import_running", 0)
+        if res.get("error"):
+            return jsonify({"ok": False, **res}), 502
+        activity.log("set", "leluxe", "pull", "Leluxe",
+                     detail=f"pulled {res['tasks']} ClickUp tasks "
+                            f"(+{res['created']} new, {res['updated']} updated, "
+                            f"{res['skipped_dirty']} kept local)", user=_user())
+        return jsonify({"ok": True, **res})
+    if phase == "images":
+        res = leluxe_mod.localize_images(batch=min(int(b.get("batch") or 8), 25))
+        return jsonify({"ok": True, **res})
+    return jsonify({"ok": False, "error": "bad phase"}), 400
+
+
+@app.route("/api/leluxe/migrate", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_migrate():
+    """Copy recent AZ (2) orders into the working list as a 3-tier tree. AZ (2)
+    is READ-ONLY (GET only). phase 'scan' builds order→package(by tracking)→item
+    rows created on/after `since`; 'images'/'tracking' batched-backfill the new
+    rows (client loops while remaining > 0), same shape as the PO refresh loop."""
+    b = request.get_json(force=True, silent=True) or {}
+    phase = b.get("phase") or "scan"
+    if phase == "scan":
+        since = (b.get("since") or "").strip()
+        if not since:
+            return jsonify({"ok": False, "error": "since date required"}), 400
+        flag = db.get_setting("leluxe:import_running") or 0
+        try:
+            flag = float(flag)
+        except (TypeError, ValueError):
+            flag = 0
+        if time.time() - flag < 120:
+            return jsonify({"ok": False, "error": "a migration/import is already running"}), 409
+        db.set_setting("leluxe:import_running", time.time())
+        try:
+            res = leluxe_mod.migrate_from_source(since, limit=int(b.get("limit") or 20))
+        finally:
+            db.set_setting("leluxe:import_running", 0)
+        if res.get("error"):
+            return jsonify({"ok": False, **res}), 502
+        activity.log("set", "leluxe", "migrate", "Leluxe",
+                     detail=f"migrated {res['orders']} orders / {res['packages']} packages "
+                            f"/ {res['items']} items from AZ (2) since {since}", user=_user())
+        return jsonify({"ok": True, **res})
+    if phase == "images":
+        return jsonify({"ok": True, **leluxe_mod.fetch_item_images(
+            batch=min(int(b.get("batch") or 6), 20))})
+    if phase == "tracking":
+        return jsonify({"ok": True, **leluxe_mod.refresh_tracking(
+            batch=min(int(b.get("batch") or 5), 10))})
+    return jsonify({"ok": False, "error": "bad phase"}), 400
+
+
+@app.route("/api/leluxe/refresh_tracking", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_refresh_tracking():
+    b = request.get_json(force=True, silent=True) or {}
+    res = leluxe_mod.refresh_tracking(batch=min(int(b.get("batch") or 5), 10),
+                                      only=b.get("tracking"), force=bool(b.get("force")))
+    return jsonify({"ok": True, **res})
+
+
+@app.route("/api/leluxe/item_image", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_item_image():
+    b = request.get_json(force=True, silent=True) or {}
+    img = leluxe_mod.fetch_item_image(b.get("id"), force=bool(b.get("force")))
+    return jsonify({"ok": True, "image": img})
+
+
+@app.route("/api/leluxe/order", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_order():
+    b = request.get_json(force=True, silent=True) or {}
+    row, err = leluxe_mod.save_row(b)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    activity.log("saved", "leluxe", row["id"], row["name"] or f"#{row['id']}",
+                 detail="leluxe order saved → syncing to ClickUp", user=_user())
+    return jsonify({"ok": True, "row": row})
+
+
+@app.route("/api/leluxe/status", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_status():
+    """Inline status change from the board (no editor card) — status-only save."""
+    b = request.get_json(force=True, silent=True) or {}
+    row, err = leluxe_mod.set_status(b.get("id"), b.get("status"))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    activity.log("set", "leluxe", row["id"], row["name"] or f"#{row['id']}",
+                 detail=f"status → {row['status']} (board) → syncing to ClickUp",
+                 user=_user())
+    return jsonify({"ok": True, "row": row})
+
+
+@app.route("/api/leluxe/order/delete", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_order_delete():
+    b = request.get_json(force=True, silent=True) or {}
+    row = leluxe_mod.get_row(b.get("id"))
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    leluxe_mod.soft_delete(row["id"])
+    activity.log("deleted", "leluxe", row["id"], row["name"] or f"#{row['id']}",
+                 detail="hidden locally (the ClickUp task is untouched)", user=_user())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/leluxe/image", methods=["GET", "POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_image():
+    import base64
+    if request.method == "GET":
+        fn = request.args.get("file", "")
+        p = leluxe_mod.IMAGE_DIR / fn
+        if fn and "/" not in fn and p.exists():
+            return send_file(p)
+        abort(404)
+    b = request.get_json(force=True, silent=True) or {}
+    row = leluxe_mod.get_row(b.get("id"))
+    if not row:
+        return jsonify({"ok": False, "error": "row not found"}), 404
+    data = b.get("data_base64", "")
+    if data.strip().startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    ext = (b.get("filename", "img.png").rsplit(".", 1)[-1] or "png")[:5]
+    leluxe_mod.IMAGE_DIR.mkdir(exist_ok=True)
+    fn = f"lx{row['id']}-{uuid.uuid4().hex[:8]}.{ext}"
+    try:
+        (leluxe_mod.IMAGE_DIR / fn).write_bytes(base64.b64decode(data))
+    except Exception as e:  # noqa
+        return jsonify({"ok": False, "error": str(e)})
+    leluxe_mod.add_image(row["id"], fn)
+    activity.log("uploaded", "leluxe", row["id"], row["name"] or f"#{row['id']}",
+                 detail="uploaded an image → syncing to ClickUp", user=_user())
+    return jsonify({"ok": True, "file": fn,
+                    "images": (leluxe_mod.get_row(row["id"])["data"].get("images") or [])})
+
+
+@app.route("/api/leluxe/push_status")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_push_status():
+    return jsonify({"ok": True, "push_disabled": leluxe_mod.push_disabled(),
+                    **leluxe_mod.sync_counts()})
+
+
+@app.route("/api/leluxe/push", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_push():
+    n = leluxe_mod.retry_errors()
+    return jsonify({"ok": True, "retried": n})
+
+
+# --------------------------------------------------------------------------- #
 # Platform admin: brokers — Otlobly's super-admin provisions Tatabu tenants.
 # --------------------------------------------------------------------------- #
 def _platform_admin():
@@ -2484,7 +2717,7 @@ def worker_tracking():
 # the app MUST be added here too, or they won't be in backups.
 BACKUP_FILES = ("customers.json", "purchases.json", "trash.json", "orders.json",
                 "activity.jsonl", "config.json", "tracking_cache.json")
-BACKUP_DIRS = ("customer_ids", "po_images")
+BACKUP_DIRS = ("customer_ids", "po_images", "leluxe_images")
 
 
 def _backup_ok():

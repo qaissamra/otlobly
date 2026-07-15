@@ -133,5 +133,14 @@
       "landing_why": true,
       "_note": "Public-website section visibility (true = shown), editable from the staff Settings page. Whitelist lives in settings.PUBLIC_SECTIONS."
     }
+  },
+  "leluxe": {
+    "_note": "Leluxe (Amazon-bulk side business). list_id = the WORKING list (a duplicate of AZ (2)) the page reads/writes; source_list_id = the real AZ (2), READ-ONLY, used only as the migration source. Both filled + schema discovered from the page (POST /api/leluxe/discover).",
+    "list_id": "",
+    "source_list_id": "901520351506",
+    "schema": {
+      "statuses": [],
+      "fields": {}
+    }
   }
 }

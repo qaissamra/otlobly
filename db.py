@@ -144,6 +144,28 @@ CREATE TABLE IF NOT EXISTS usage_counters (
   count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (business_id, resource, period)
 );
+CREATE TABLE IF NOT EXISTS leluxe_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  clickup_task_id TEXT UNIQUE,          -- NULL until the first successful push
+  parent_task_id TEXT,                  -- ClickUp parent task id (items only)
+  parent_local_id INTEGER,              -- local FK, works before the parent is pushed
+  kind TEXT NOT NULL DEFAULT 'parent',  -- parent | item
+  name TEXT,
+  status TEXT,                          -- one of the ClickUp list's status strings
+  due_date TEXT,                        -- ms-epoch string, ClickUp-native
+  date_created TEXT,
+  updated_at TEXT,
+  sync_state TEXT NOT NULL DEFAULT 'synced',  -- synced | dirty | pushing | error
+  sync_error TEXT,
+  sync_claimed_at TEXT,                 -- pushing-claim stamp (stale-claim recovery)
+  sync_attempts INTEGER NOT NULL DEFAULT 0,
+  img_scanned INTEGER NOT NULL DEFAULT 0, -- 1 = attachments already localized (import cursor)
+  deleted INTEGER NOT NULL DEFAULT 0,
+  data_json TEXT NOT NULL DEFAULT '{}'  -- description, tags, fields, images, pushed snapshot
+);
+CREATE INDEX IF NOT EXISTS ix_leluxe_parent ON leluxe_orders(parent_task_id);
+CREATE INDEX IF NOT EXISTS ix_leluxe_plocal ON leluxe_orders(parent_local_id);
+CREATE INDEX IF NOT EXISTS ix_leluxe_sync ON leluxe_orders(sync_state);
 """
 
 
