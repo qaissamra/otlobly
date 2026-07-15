@@ -1066,11 +1066,45 @@ def _item_asin(row):
     return str(f.get("ASIN") or f.get("ASIN DROP DOWN") or "").strip()
 
 
-def fetch_item_image(row_id, config=None, force=False):
+def set_item_asin(row_id, asin):
+    """Write a just-typed ASIN into the item's 'ASIN' text field and mark the
+    row dirty (so it also syncs to ClickUp — the ASIN is genuinely missing
+    there). Returns the row or None. Called by the editor's fetch-by-ASIN flow."""
+    asin = str(asin or "").strip()
+    if not asin:
+        return get_row(row_id)
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=? AND deleted=0",
+                      (row_id,)).fetchone()
+        if not r:
+            return None
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        f = d.setdefault("fields", {})
+        key = next((k for k in f if k.strip().lower() == "asin"), "ASIN")
+        if str(f.get(key) or "").strip() == asin:
+            return get_row(row_id)          # unchanged — no dirty
+        f[key] = asin
+        d.pop("pending_fields", None)       # a real edit → full push takes over
+        c.execute("""UPDATE leluxe_orders SET data_json=?, updated_at=?,
+                     sync_state='dirty', sync_error=NULL, sync_attempts=0
+                     WHERE id=?""",
+                  (json.dumps(d, ensure_ascii=False), db.now_iso(), row_id))
+    kick()
+    return get_row(row_id)
+
+
+def fetch_item_image(row_id, config=None, force=False, asin=None):
     """Fetch + cache the Amazon photo for one item by its ASIN. Returns the
-    image URL (or None). Skips if already cached for the same ASIN."""
+    image URL (or None). Skips if already cached for the same ASIN. When `asin`
+    is given, it's saved to the item first (editor's one-click add-ASIN flow)."""
     import amazon_import
     config = config or cfg.load()
+    if asin:
+        set_item_asin(row_id, asin)
+        force = True                        # a new/edited ASIN → always refetch
     row = get_row(row_id)
     if not row or row["kind"] != "item":
         return None

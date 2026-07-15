@@ -380,29 +380,35 @@
      a viewport media query can't account for the 285px sidebar). Fallback =
      today's flowing chips; ≥940px of board → compact grid; ≥1060px → roomy. */
   #lxRows{container-type:inline-size;container-name:lxboard}
-  .lx-cols{display:contents}
-  .lx-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lx-colhead{display:none;position:sticky;top:70px;z-index:20;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
-  .lx-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-cols,.lx-pcols{display:contents}
+  .lx-cols .lxc,.lx-pcols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lx-colhead,.lx-pcolhead{display:none;position:sticky;top:70px;z-index:20;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .lx-colhead .lbl,.lx-pcolhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* product rows sit inside .pkg-body (8px) + .poc-row (2px); shift the header's
+     right inset to 11px so its grid right edge lines up with the rows' */
+  .lx-pcolhead{padding-inline-end:11px}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl{position:relative;padding-inline-end:8px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   @container lxboard (min-width:940px){
-    .lx-cols{display:grid;grid-template-columns:var(--lxgrid,86px 54px 96px 112px 66px 118px 48px 60px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .lx-colhead{display:flex}
+    .lx-cols{display:grid;grid-template-columns:var(--lxgrid,86px 54px 96px 150px 66px 48px 60px 26px);gap:5px;align-items:center;flex:0 0 auto}
+    .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,70px 96px 34px 100px 118px 90px 56px 26px);gap:5px;align-items:center;flex:0 0 auto}
+    .lx-colhead,.lx-pcolhead{display:flex}
     /* one line per order: the left name/meta ellipsize instead of wrapping the grid */
     #lxRows>.po-card>.po-head>.po-title{flex-wrap:nowrap}
     #lxRows>.po-card>.po-head>.po-title>.muted2,
     #lxRows>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lx-prow{flex-wrap:nowrap}
   }
   @container lxboard (min-width:1060px){
-    .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 112px 80px 124px 50px 78px 28px);gap:6px}
+    .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 160px 80px 50px 78px 28px);gap:6px}
+    .lx-pcols{grid-template-columns:var(--lxpgrid,84px 104px 40px 104px 128px 100px 78px 28px);gap:6px}
   }
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   .lx-copy:hover{opacity:1 !important}
@@ -1759,7 +1765,7 @@ let LX=null, LX_OPEN=new Set(), LX_POLL=null, LX_EDIT=null, LX_FIDS=[];
 // "All ClickUp fields"). Everything is available on every task (list-level fields).
 const LX_PIN_ORDER=["name","name on packagee","visa","who paid","total amount","brand","card type","az id ver"];
 const LX_PIN_PKG=["tracking number","gash status","gash date","date sent","opened box"];
-const LX_PIN_ITEM=["quantity ordered","asin","total amount","rd status","wallet/watch","brand","states"];
+const LX_PIN_ITEM=["quantity ordered","total amount","rd status","wallet/watch","brand","states"];
 const LX_PINS={order:LX_PIN_ORDER,parent:LX_PIN_ORDER,package:LX_PIN_PKG,item:LX_PIN_ITEM};
 async function loadLeluxe(){
   let d; try{ d=await (await fetch("/api/leluxe/orders")).json(); }catch(e){ d=null; }
@@ -1964,6 +1970,14 @@ function lxGerizimPill(row){
   if(!gz||!(gz.label||gz.status)) return "";
   return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", `🛵 ${gz.label||gz.status}`, gzTip(gz));
 }
+// merged GAASH+Gerizim status: a parcel is only at Gerizim AFTER GAASH hands it
+// off (sequential, never both), so show the furthest leg — Gerizim if present,
+// else the live GAASH pill. One column.
+function lxMergedStatusPill(row){
+  if(!row) return "";
+  const gz=row.data&&row.data.gerizim_status;
+  return (gz&&typeof gz==="object"&&(gz.label||gz.status))?lxGerizimPill(row):lxGashPill(row);
+}
 // the group's "tracked row": the order itself, else the first package/item that
 // carries a tracking number or live enrichment (flat mirror keeps it on items)
 function lxTrackedRow(o){
@@ -1986,8 +2000,19 @@ function lxThumb(url,size){ size=size||44;
   return url?`<img src="${poEsc(url)}" loading="lazy" style="width:${size}px;height:${size}px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff;flex:0 0 auto">`
     :`<span style="width:${size}px;height:${size}px;border-radius:6px;border:1px dashed var(--line);background:var(--bg2);display:inline-block;flex:0 0 auto"></span>`;
 }
-function lxThumbs(items){ const u=items.map(lxAmz).filter(Boolean).slice(0,4);
-  return u.length?`<span class="po-thumbs">${u.map(x=>`<img src="${poEsc(x)}">`).join("")}</span>`:""; }
+// one slot PER product — its photo, or an empty box (= product exists but no
+// ASIN yet). Click a box to open that product's editor and add an ASIN. The
+// boxes replace the old "N products" count, so counting boxes = counting items.
+function lxThumbs(items){
+  items=items||[]; if(!items.length) return "";
+  const max=8, shown=items.slice(0,max), extra=items.length-shown.length;
+  const cell=it=>{ const img=lxAmz(it);
+    const inner=img?`<img src="${poEsc(img)}" style="width:26px;height:26px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff">`
+      :`<span style="width:26px;height:26px;border-radius:6px;border:1px dashed var(--line);background:var(--bg2);display:inline-block"></span>`;
+    return `<span title="${img?poEsc(lxShort3(it.name)):"no image — click to add an ASIN"}" style="cursor:pointer;display:inline-flex;flex:0 0 auto" onclick="event.stopPropagation();lxOpenEditor('item',${it.id},null)">${inner}</span>`;
+  };
+  return `<span class="po-thumbs">${shown.map(cell).join("")}${extra>0?`<span class="more">+${extra}</span>`:""}</span>`;
+}
 function lxFind(id){
   for(const o of (LX.orders||[])){ if(o.id===id) return o;
     for(const it of (o.items||[])) if(it.id===id) return it;
@@ -2031,9 +2056,10 @@ function lxSortVal(o,key){
     case "tracking": {
       const u=[...new Set(its.map(i=>String(lxF(i,"tracking number")||(i.data&&i.data.tracking_number)||"").trim()).filter(Boolean))];
       return (u[0]||"").toLowerCase(); }
-    case "gash": { const ts=d.tracking_status||{}; return String(ts.text||ts.label||ts.bucket||"").toLowerCase(); }
+    case "gash": {             // merged: sort by the furthest leg's label
+      const gz=d.gerizim_status||{}, ts=d.tracking_status||{};
+      return String((gz.label||gz.status)||ts.text||ts.label||ts.bucket||"").toLowerCase(); }
     case "deadline": { const t=Date.parse(d.gaash_deadline||""); return isNaN(t)?0:t; }
-    case "gerizim": { const gz=d.gerizim_status||{}; return String(gz.label||gz.status||"").toLowerCase(); }
     case "created": return Number(o.date_created)||0;
     case "due": return Number(o.due_date)||0;
   }
@@ -2041,27 +2067,40 @@ function lxSortVal(o,key){
 }
 function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"▲ ":"▼ "):""; }
 // ── column widths: drag a header edge (persisted); double-click resets all ──
-let LX_COLW=null;
-try{ LX_COLW=JSON.parse(localStorage.getItem("lx_colw")||"null"); }catch(e){ LX_COLW=null; }
+// Two tables share the machinery: ""=orders header (.lx-colhead), "p"=products
+// header (.lx-pcolhead). Both write CSS vars on #lxRows (a common ancestor).
+const LX_TABLES={
+  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols"},
+  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols"},
+};
+function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
+function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
 function lxColwApply(){
   const rows=$("lxRows"); if(!rows) return;
-  if(Array.isArray(LX_COLW)&&LX_COLW.length===9) rows.style.setProperty("--lxgrid",LX_COLW.map(w=>w+"px").join(" "));
-  else rows.style.removeProperty("--lxgrid");
+  for(const tbl in LX_TABLES){
+    const t=LX_TABLES[tbl], head=document.querySelector(t.head);
+    const arr=lxColwGet(tbl);
+    // only apply when the saved width count matches the live column count —
+    // so a stale array from an older layout (e.g. the pre-merge 9-wide) is dropped
+    if(head&&Array.isArray(arr)&&arr.length===head.children.length)
+      rows.style.setProperty(t.varn, arr.map(w=>w+"px").join(" "));
+    else rows.style.removeProperty(t.varn);
+  }
 }
-function lxColwSave(){ try{ LX_COLW?localStorage.setItem("lx_colw",JSON.stringify(LX_COLW)):localStorage.removeItem("lx_colw"); }catch(e){} }
-function lxRszDown(ev,i){
+function lxRszDown(ev,i,tbl){
   ev.preventDefault(); ev.stopPropagation();
-  const h=document.querySelector(".lx-colhead .lx-cols"); if(!h) return;
+  tbl=tbl||""; const t=LX_TABLES[tbl], h=document.querySelector(t.head); if(!h) return;
   const cur=getComputedStyle(h).gridTemplateColumns.split(" ").map(x=>Math.round(parseFloat(x))||30);
-  if(cur.length!==9) return;
-  const startX=ev.clientX, startW=cur[i], handle=ev.target;
+  if(cur.length!==h.children.length) return;
+  const startX=ev.clientX, startW=cur[i], handle=ev.target, rows=$("lxRows");
   handle.classList.add("dragging");
-  const move=e=>{ cur[i]=Math.max(30,Math.round(startW+e.clientX-startX)); LX_COLW=cur.slice(); lxColwApply(); };
+  const move=e=>{ cur[i]=Math.max(30,Math.round(startW+e.clientX-startX));
+    rows.style.setProperty(t.varn, cur.map(w=>w+"px").join(" ")); };
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
-    handle.classList.remove("dragging"); lxColwSave(); };
+    handle.classList.remove("dragging"); lxColwSet(tbl,cur.slice()); };
   window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
 }
-function lxRszReset(ev){ ev.preventDefault(); ev.stopPropagation(); LX_COLW=null; lxColwSave(); lxColwApply(); toast("Column widths reset to default"); }
+function lxRszReset(ev,tbl){ ev.preventDefault(); ev.stopPropagation(); lxColwSet(tbl||"",null); lxColwApply(); toast("Column widths reset to default"); }
 // field registry: built-ins + every discovered ClickUp custom field (type-driven)
 function lxFields(){
   const out=[{key:"__status",label:"Status",type:"status"},
@@ -2299,8 +2338,15 @@ function renderLeluxe(){
     $("lxEmpty").style.display=shown.length?"none":"block";
     $("lxEmpty").textContent="No products match the filter.";
     if(!shown.length){ $("lxRows").innerHTML=""; return; }
+    // product-view column header — same resizable machinery as the orders header
+    // (table id "p"). Left: image spacer + PRODUCT; then the fixed product grid.
+    const PHCOLS=["order","status","qty","tracking","gaash status","rd status","due",""];
+    const prsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'p')" ondblclick="lxRszReset(event,'p')"></span>`;
+    const pcolHead=`<div class="lx-pcolhead"><span class="lbl" style="width:32px;flex:0 0 auto"></span><span class="lbl" style="flex:1">product</span>
+      <span class="lx-pcols">${PHCOLS.map((l,i)=>`<span class="lbl">${l}${prsz(i)}</span>`).join("")}</span></div>`;
     if(!gfdef){
-      $("lxRows").innerHTML=`<div class="pkg open"><div class="pkg-body">${shown.map(([it,o])=>lxItemRow(it,o)).join("")}</div></div>`;
+      $("lxRows").innerHTML=pcolHead+`<div class="pkg open"><div class="pkg-body">${shown.map(([it,o])=>lxItemRow(it,o,{cols:true})).join("")}</div></div>`;
+      lxColwApply();
       return;
     }
     // group into sections by the chosen field
@@ -2314,14 +2360,15 @@ function renderLeluxe(){
       else c=String(a).localeCompare(String(b),undefined,{numeric:true});
       return LX_GROUP_DIR==="asc"?c:-c;
     });
-    $("lxRows").innerHTML=keys.map(v=>{
+    $("lxRows").innerHTML=pcolHead+keys.map(v=>{
       const gk=`g:${LX_GROUP}:${v}`, collapsed=LX_PCOL.has(gk), rows=groups.get(v);
       return `<div class="pkg${collapsed?"":" open"}"><div class="pkg-head"><div class="pkg-title-row" onclick="lxGroupToggle('${poEsc(gk)}')" style="cursor:pointer">
           <span class="caret">${collapsed?"▸":"▾"}</span>
           ${lxGroupChip(gfdef,v)}
           <span class="muted2" style="font-size:11px">${rows.length} product${rows.length===1?"":"s"}</span>
-        </div></div>${collapsed?"":`<div class="pkg-body">${rows.map(([it,o])=>lxItemRow(it,o)).join("")}</div>`}</div>`;
+        </div></div>${collapsed?"":`<div class="pkg-body">${rows.map(([it,o])=>lxItemRow(it,o,{cols:true})).join("")}</div>`}</div>`;
     }).join("");
+    lxColwApply();
     return;
   }
   // group semantics: EACH filter must be satisfied by at least one row of the
@@ -2353,7 +2400,7 @@ function renderLeluxe(){
   // ClickUp-style column labels — same fixed grid as each card's right side;
   // click a label to sort by that column
   const HCOLS=[["status","status"],["total","total"],["tracking","tracking"],["gash","gaash status"],
-               ["deadline","gaash deadline"],["gerizim","gerizim"],["created","created"],["due","due date"],["",""]];
+               ["deadline","gaash deadline"],["created","created"],["due","due date"],["",""]];
   const rsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i})" ondblclick="lxRszReset(event)"></span>`;
   const hl=(key,label,i,style)=>`<span class="${key?"lbl lx-sort":"lbl"}"${style?` style="${style}"`:""}${key?` title="sort by ${label}" onclick="lxSortClick('${key}')"`:""}>${key?lxSortArrow(key)+label:""}${i!=null?rsz(i):""}</span>`;
   const colHead=orders.length?`<div class="lx-colhead">${hl("name","order",null,"flex:1")}
@@ -2387,16 +2434,15 @@ function lxCardHtml(o){
       ${lxDot(o)}
       <b class="po-name" style="font-family:ui-monospace,Menlo,monospace" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
       ${lxCopyBtn(o.name)}
-      <span class="muted2" style="font-size:11.5px">${acct?poEsc(acct)+" · ":""}${nItems} product${nItems===1?"":"s"} · ${pkgs.length} pkg</span>
+      ${acct?`<span class="muted2" style="font-size:11.5px">${poEsc(acct)}</span>`:""}
       ${lxThumbs(lxItemsOf(o))}
       <span class="spacer" style="flex:1"></span>
       <span class="lx-cols">
         <span class="lxc">${headStatus}</span>
         <span class="lxc">${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}</span>
         <span class="lxc">${headTn}</span>
-        <span class="lxc">${tr?lxGashPill(tr):""}</span>
+        <span class="lxc">${lxMergedStatusPill(tr)}</span>
         <span class="lxc">${tr?lxDeadlinePill(tr,true):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}</span>
-        <span class="lxc">${tr?lxGerizimPill(tr):""}</span>
         <span class="lxc">${o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:""}</span>
         <span class="lxc">${delivered?"":lxDueChip(o.due_date,lxIsDone(o))}</span>
         <span class="lxc"><button class="minibtn" title="edit order" onclick="event.stopPropagation();lxOpenEditor('order',${o.id},null)">✏️</button></span>
@@ -2505,6 +2551,29 @@ function lxItemRow(it,parentO,opts){
   opts=opts||{};
   const img=lxAmz(it), qty=lxF(it,"quantity ordered");
   const tn=String(lxF(it,"tracking number")||(it.data&&it.data.tracking_number)||"").trim();
+  const nameCell=`<div class="poc-name" style="flex:1;min-width:140px;display:flex;align-items:center;gap:4px">
+      <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
+      <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
+    </div>`;
+  // split "Products" view: same fixed-column, resizable grid as the orders header
+  if(opts.cols){
+    const tnCell=tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`
+      :`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 —</span>`;
+    return `<div class="poc-row lx-prow">
+      ${lxThumb(img,32)}
+      ${nameCell}
+      <span class="lx-pcols">
+        <span class="lxc">${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}</span>
+        <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
+        <span class="lxc">${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}</span>
+        <span class="lxc">${tnCell}</span>
+        <span class="lxc">${lxCfPill("gash status",lxF(it,"gash status"))}</span>
+        <span class="lxc">${lxCfPill("rd status",lxF(it,"rd status"))}</span>
+        <span class="lxc">${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
+        <span class="lxc"><button class="minibtn" title="edit product" onclick="event.stopPropagation();lxOpenEditor('item',${it.id},null)">✏️</button></span>
+      </span>
+    </div>`;
+  }
   return `<div class="poc-row">
     ${lxThumb(img,44)}
     <div class="poc-name" style="flex:1;min-width:180px;display:flex;align-items:center;gap:4px">
@@ -2576,12 +2645,14 @@ function lxEditorHtml(row){
       ${lxDot(row)} ${row.sync_state==="synced"?"synced to ClickUp":row.sync_state==="error"?("sync failed: "+poEsc(row.sync_error||"")):"waiting to sync"}
       ${row.clickup_task_id?` · <a href="https://app.clickup.com/t/${poEsc(row.clickup_task_id)}" target="_blank" rel="noopener">open in ClickUp ↗</a>`:""}</div>`:"";
   const editAsin=kind==="item"?String((f["ASIN"]!==undefined?f["ASIN"]:(f["ASIN DROP DOWN"]||""))||"").trim():"";
-  const amzBlock=kind==="item"?`<div style="margin-top:10px"><label class="fld">Amazon photo (fetched by ASIN)</label>
-      <div style="display:flex;align-items:center;gap:10px">
-        ${d.image?`<img src="${poEsc(d.image)}" style="width:60px;height:60px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff">`:`<span class="muted2" style="font-size:11.5px">no image yet</span>`}
-        ${LX_EDIT.id?`<button class="minibtn" onclick="lxItemImage(this)">${d.image?"↻ refetch":"🔎 fetch from Amazon"}</button>`:`<span class="muted2" style="font-size:11px">save first, then fetch</span>`}
-        ${editAsin?`<a href="https://www.amazon.com/dp/${encodeURIComponent(editAsin)}" target="_blank" rel="noopener" style="font-size:12px">${poEsc(editAsin)} — open on Amazon ↗</a>`:""}
-      </div></div>`:"";
+  const amzBlock=kind==="item"?`<div style="margin-top:10px"><label class="fld">Amazon photo — paste the ASIN, then fetch</label>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${d.image?`<img src="${poEsc(d.image)}" style="width:60px;height:60px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff">`:`<span style="width:60px;height:60px;border-radius:8px;border:1px dashed var(--line);background:var(--bg2);display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);text-align:center">no image</span>`}
+        <input id="lx_asin_quick" value="${poEsc(editAsin)}" placeholder="ASIN e.g. B0XXXXXXXX" style="width:160px"${LX_EDIT.id?"":" disabled"}>
+        ${LX_EDIT.id?`<button class="minibtn" onclick="lxItemImage(this)">🔎 Fetch image from ASIN</button>`:`<span class="muted2" style="font-size:11px">save the product first, then fetch</span>`}
+        ${editAsin?`<a href="https://www.amazon.com/dp/${encodeURIComponent(editAsin)}" target="_blank" rel="noopener" style="font-size:12px">open on Amazon ↗</a>`:""}
+      </div>
+      <div class="muted2" style="font-size:10.5px;margin-top:3px">The ASIN is saved to the product (and synced to ClickUp) when you fetch.</div></div>`:"";
   return `${syncNote}
     <div class="form-grid">
       <div class="full"><label class="fld">${nameLabel}</label>
@@ -2652,12 +2723,14 @@ async function lxSave(btn){
 }
 async function lxItemImage(btn){
   if(!LX_EDIT||!LX_EDIT.id) return;
-  const rid=LX_EDIT.id, o=btn.textContent; btn.disabled=true; btn.textContent="⏳ fetching…";
-  let r; try{ r=await post("/api/leluxe/item_image",{id:rid,force:true}); }catch(e){ r={}; }
+  const rid=LX_EDIT.id, asin=(($("lx_asin_quick")||{}).value||"").trim();
+  if(!asin){ toast("Enter an ASIN first"); return; }
+  btn.disabled=true; btn.textContent="⏳ fetching…";
+  let r; try{ r=await post("/api/leluxe/item_image",{id:rid,force:true,asin}); }catch(e){ r={}; }
   btn.disabled=false;
   await loadLeluxe();
   if(LX_EDIT&&LX_EDIT.id===rid) $("lxEditBody").innerHTML=lxEditorHtml(lxFind(rid));
-  toast(r&&r.ok&&r.image?"Amazon photo fetched ✓":"No image found (check the ASIN / SerpAPI credits)");
+  toast(r&&r.ok&&r.image?"Amazon photo fetched ✓ — ASIN saved":"No image found for that ASIN (check it / SerpAPI credits)");
 }
 async function lxMigrate(btn){
   let since=$("lxMigrateSince").value;

@@ -2224,7 +2224,8 @@ def api_leluxe_refresh_tracking():
 @auth.require_feature("leluxe")
 def api_leluxe_item_image():
     b = request.get_json(force=True, silent=True) or {}
-    img = leluxe_mod.fetch_item_image(b.get("id"), force=bool(b.get("force")))
+    img = leluxe_mod.fetch_item_image(b.get("id"), force=bool(b.get("force")),
+                                      asin=(b.get("asin") or None))
     return jsonify({"ok": True, "image": img})
 
 

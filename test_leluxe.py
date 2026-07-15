@@ -353,6 +353,17 @@ def image_cache():
         check("image fetched + cached by ASIN", img1 == "http://img/x.png"
               and leluxe.get_row(it["id"])["data"].get("image") == "http://img/x.png")
         check("second fetch uses cache (no refetch)", img2 == "http://img/x.png" and calls["n"] == 1)
+        # editor's one-click flow: pass a NEW ASIN → it's written to the item
+        # (marks dirty so it also syncs to ClickUp) and the image is refetched
+        it2, _ = leluxe.save_row({"kind": "item", "name": "no-asin item",
+                                  "parent_local_id": order["id"]})
+        with db.connect() as c:                 # pretend it already synced
+            c.execute("UPDATE leluxe_orders SET sync_state='synced' WHERE id=?", (it2["id"],))
+        img3 = leluxe.fetch_item_image(it2["id"], asin="B0NEW")
+        r3 = leluxe.get_row(it2["id"])
+        check("fetch with a new ASIN writes the field + dirties for ClickUp",
+              img3 == "http://img/x.png" and r3["data"]["fields"].get("ASIN") == "B0NEW"
+              and r3["sync_state"] == "dirty")
     finally:
         amazon_import.import_product = real
 
