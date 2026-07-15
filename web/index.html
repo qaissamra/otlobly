@@ -1965,10 +1965,16 @@ function lxGashPill(pk){
   return `<span class="pill" style="background:${c}1a;color:${c};border:1px solid ${c}55;font-size:10px" title="live GAASH status">${poEsc(String(txt).slice(0,26))||"GAASH"}</span>`;
 }
 // Gerizim last-mile status (postgerizim.com) — the exact Purchases pill
+// Gerizim leg → the parcel app's own Arabic wording + small icon (Leluxe only;
+// the Purchases page keeps its English pill). Mapped off `bucket`, so stored
+// rows read Arabic immediately without a re-fetch.
+const GZ_AR={office:["📦","في مكتب جرزيم"],sms:["📩","تم إرسال SMS"],
+  pickup:["🏬","جاهز للاستلام"],out:["🛵","خارج للتوصيل"],delivered:["✅","تم التسليم"]};
 function lxGerizimPill(row){
   const gz=(row.data&&row.data.gerizim_status&&typeof row.data.gerizim_status==="object")?row.data.gerizim_status:null;
   if(!gz||!(gz.label||gz.status)) return "";
-  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", `🛵 ${gz.label||gz.status}`, gzTip(gz));
+  const ar=GZ_AR[gz.bucket], txt=ar?`${ar[0]} ${ar[1]}`:`🛵 ${gz.label||gz.status}`;
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, gzTip(gz));
 }
 // merged GAASH+Gerizim status: a parcel is only at Gerizim AFTER GAASH hands it
 // off (sequential, never both), so show the furthest leg — Gerizim if present,

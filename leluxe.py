@@ -817,10 +817,12 @@ def _row_tracking(row):
 # "تم التسليم" upgrades the delivered mapping.
 GASH_FIELD = "gash status"
 GERIZIM_BUCKET_OPTIONS = {
-    "office":    ["Picked up by Gerizim"],
-    "sms":       ["تم الارسال", "SMS SENT — AWAITING PICKUP", "SMS SENT"],
+    # Arabic first (mirrors the parcel app); English kept as a fallback so the
+    # sync keeps working until Qais renames/adds the Arabic options in ClickUp.
+    "office":    ["في مكتب جرزيم", "Picked up by Gerizim"],
+    "sms":       ["تم إرسال SMS", "تم الارسال", "SMS SENT — AWAITING PICKUP", "SMS SENT"],
     "pickup":    ["جاهز للاستلام", "READY FOR PICKUP"],
-    "out":       ["جاهز للاستلام", "OUT FOR DELIVERY"],
+    "out":       ["خارج للتوصيل", "OUT FOR DELIVERY"],
     "delivered": ["تم التسليم", "GERZIM DELIVERED"],
 }
 GAASH_BUCKET_OPTIONS = {
@@ -843,9 +845,9 @@ GASH_STAGE_RANK = {
     "moc - palestinian authority": 3,
     "cleared gash": 4,
     "bracha delivered": 5,
-    "picked up by gerizim": 6,
-    "تم الارسال": 7, "sms sent — awaiting pickup": 7, "sms sent": 7,
-    "جاهز للاستلام": 7, "ready for pickup": 7, "out for delivery": 7,
+    "picked up by gerizim": 6, "في مكتب جرزيم": 6,
+    "تم الارسال": 7, "تم إرسال sms": 7, "sms sent — awaiting pickup": 7, "sms sent": 7,
+    "جاهز للاستلام": 7, "ready for pickup": 7, "خارج للتوصيل": 7, "out for delivery": 7,
     "gerzim delivered": 8,
     "تم التسليم": 8,
 }

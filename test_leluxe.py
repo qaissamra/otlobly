@@ -494,6 +494,18 @@ def gash_status_sync():
         r4 = leluxe.get_row(row["id"])
         check("تم التسليم preferred once its option exists",
               n == 1 and r4["data"]["fields"].get("GASH STATUS") == "تم التسليم")
+        # round 5: Arabic-first candidate ordering — office falls back to English
+        # until "في مكتب جرزيم" is added, then prefers the Arabic
+        _, fdefA = leluxe._gash_field_def(cfg.load())
+        check("office falls back to English before its Arabic option exists",
+              leluxe._gash_option_for(leluxe.GERIZIM_BUCKET_OPTIONS["office"], fdefA) == "Picked up by Gerizim")
+        cA = cfg.load()
+        cA["leluxe"]["schema"]["fields"]["GASH STATUS"]["options"].append(
+            {"id": "opt-mkt", "name": "في مكتب جرزيم", "orderindex": 11, "color": "#8d8d8d"})
+        cfg.save(cA)
+        _, fdefB = leluxe._gash_field_def(cfg.load())
+        check("office prefers the Arabic option once added",
+              leluxe._gash_option_for(leluxe.GERIZIM_BUCKET_OPTIONS["office"], fdefB) == "في مكتب جرزيم")
         # a REAL edit clears the marker → the normal full push takes over
         row2, _ = leluxe.save_row({"id": row["id"], "kind": "order",
                                    "name": "Order # gz-1", "status": "sent rd",
@@ -559,8 +571,8 @@ def gash_status_sync():
                                    "status": "office"}})
         n = leluxe.apply_gash_status()
         r8 = leluxe.get_row(row2["id"])
-        check("Gerizim stage wins over the GAASH leg",
-              n == 1 and r8["data"]["fields"].get("GASH STATUS") == "Picked up by Gerizim")
+        check("Gerizim stage wins over the GAASH leg (Arabic office option)",
+              n == 1 and r8["data"]["fields"].get("GASH STATUS") == "في مكتب جرزيم")
     finally:
         leluxe._http = real
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
