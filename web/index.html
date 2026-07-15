@@ -376,19 +376,28 @@
   .lx-hash{opacity:.45;margin-inline-end:2px}
   /* Leluxe ClickUp-style columns: the order card's right-side chips share one
      fixed grid, and a sticky label row above the list names each column. */
-  .lx-cols{display:grid;grid-template-columns:104px 56px 98px 112px 80px 124px 50px 78px 28px;gap:6px;align-items:center;flex:0 0 auto}
+  /* ClickUp-style columns, sized by the BOARD's real width (container query —
+     a viewport media query can't account for the 285px sidebar). Fallback =
+     today's flowing chips; ≥940px of board → compact grid; ≥1060px → roomy. */
+  #lxRows{container-type:inline-size;container-name:lxboard}
+  .lx-cols{display:contents}
   .lx-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
   .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lx-colhead{position:sticky;top:70px;z-index:20;display:flex;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .lx-colhead{display:none;position:sticky;top:70px;z-index:20;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
   .lx-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* column view needs one line per order: keep the grid on the row and let the
-     left meta text ellipsize instead of wrapping the grid to a second line */
-  @media(min-width:1521px){
+  .lx-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover{color:var(--ink)}
+  @container lxboard (min-width:940px){
+    .lx-cols{display:grid;grid-template-columns:86px 54px 96px 112px 66px 118px 48px 60px 26px;gap:5px;align-items:center;flex:0 0 auto}
+    .lx-colhead{display:flex}
+    /* one line per order: the left name/meta ellipsize instead of wrapping the grid */
     #lxRows>.po-card>.po-head>.po-title{flex-wrap:nowrap}
     #lxRows>.po-card>.po-head>.po-title>.muted2,
     #lxRows>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   }
-  @media(max-width:1520px){.lx-colhead{display:none}.lx-cols{display:contents}}
+  @container lxboard (min-width:1060px){
+    .lx-cols{grid-template-columns:104px 56px 98px 112px 80px 124px 50px 78px 28px;gap:6px}
+  }
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   .lx-copy:hover{opacity:1 !important}
   .po-thumbs img,.po-thumbs .noimg{width:32px;height:32px;flex:0 0 auto;object-fit:contain;border-radius:7px;background:var(--bg3);border:1px solid var(--line)}
@@ -1987,6 +1996,42 @@ function lxItemsOf(o){ return [...(o.items||[]), ...((o.packages||[]).flatMap(p=
 let LX_FILTERS=[];
 try{ LX_FILTERS=JSON.parse(localStorage.getItem("lx_filters")||"[]")||[]; }catch(e){ LX_FILTERS=[]; }
 function lxFSave(){ try{ localStorage.setItem("lx_filters",JSON.stringify(LX_FILTERS)); }catch(e){} }
+// ── column sorting (ClickUp-style: click a header label; date columns start
+// newest-first, text/number start ascending; 3rd click clears) ──
+let LX_SORT=null;
+try{ LX_SORT=JSON.parse(localStorage.getItem("lx_sort")||"null"); }catch(e){ LX_SORT=null; }
+const LX_SORT_DESC_FIRST=new Set(["created","due","deadline"]);
+function lxSortClick(key){
+  const first=LX_SORT_DESC_FIRST.has(key)?-1:1;
+  if(LX_SORT&&LX_SORT.key===key) LX_SORT=(LX_SORT.dir===first)?{key,dir:-first}:null;
+  else LX_SORT={key,dir:first};
+  try{ localStorage.setItem("lx_sort",JSON.stringify(LX_SORT)); }catch(e){}
+  renderLeluxe();
+}
+function lxSortVal(o,key){
+  const its=lxItemsOf(o), tr=lxTrackedRow(o);
+  const d=(tr&&tr.data)||{};
+  switch(key){
+    case "name": return (o.name||"").toLowerCase();
+    case "status": {           // rank by the list's status order, like ClickUp
+      const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
+      const s=its.length?(u.length===1?u[0]:null):o.status;   // null = "mixed"
+      if(!s) return 1e9-1;                                    // mixed near the end
+      const ix=((LX.schema&&LX.schema.statuses)||[]).findIndex(x=>x.status===s);
+      return ix<0?1e9:ix; }
+    case "total": { const a=lxF(o,"total amount"); const n=Number(a); return a==null||isNaN(n)?-Infinity:n; }
+    case "tracking": {
+      const u=[...new Set(its.map(i=>String(lxF(i,"tracking number")||(i.data&&i.data.tracking_number)||"").trim()).filter(Boolean))];
+      return (u[0]||"").toLowerCase(); }
+    case "gash": { const ts=d.tracking_status||{}; return String(ts.text||ts.label||ts.bucket||"").toLowerCase(); }
+    case "deadline": { const t=Date.parse(d.gaash_deadline||""); return isNaN(t)?0:t; }
+    case "gerizim": { const gz=d.gerizim_status||{}; return String(gz.label||gz.status||"").toLowerCase(); }
+    case "created": return Number(o.date_created)||0;
+    case "due": return Number(o.due_date)||0;
+  }
+  return "";
+}
+function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"▲ ":"▼ "):""; }
 // field registry: built-ins + every discovered ClickUp custom field (type-driven)
 function lxFields(){
   const out=[{key:"__status",label:"Status",type:"status"},
@@ -2252,21 +2297,36 @@ function renderLeluxe(){
   // group semantics: EACH filter must be satisfied by at least one row of the
   // order's group (order/packages/items) — NAME lives on the order while RD/status
   // live on items, so requiring one row to match everything would find nothing.
-  const gmatch=rows=>active.every(f=>rows.some(r=>lxFMatch(r,f)));
+  // …EXCEPT the STATUS filter, which follows the PRODUCTS (what the header pill
+  // shows): an order/package task's own status (the useless "order number", or a
+  // package subtask left on "rd") must not drag an order into a status filter
+  // its products don't satisfy.
+  const gmatch=(o,rows)=>active.every(f=>{
+    const pool=(f.field==="__status"&&lxItemsOf(o).length)?lxItemsOf(o):rows;
+    return pool.some(r=>lxFMatch(r,f));
+  });
   const orders=(LX.orders||[]).filter(o=>{
     const rows=[o,...(o.packages||[]),...lxItemsOf(o)];
-    return rows.some(match)&&(!active.length||gmatch(rows));
+    return rows.some(match)&&(!active.length||gmatch(o,rows));
   });
-  const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch([r])));
+  const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch(r,[r])));
   const totalItems=(LX.orders||[]).reduce((a,o)=>a+lxItemsOf(o).length,0);
   $("lxCount").textContent=(LX.orders||[]).length?`${(LX.orders||[]).length} orders · ${totalItems} products`+((q||active.length)?` · ${orders.length} shown`:""):"";
   const has=orders.length||orphans.length;
   $("lxEmpty").style.display=has?"none":"block";
   $("lxEmpty").textContent=(LX.orders||[]).length?"No orders match the filter.":"No orders yet — ＋ New order, or ⬇ Migrate from AZ (2).";
-  // ClickUp-style column labels — same fixed grid as each card's right side
-  const colHead=orders.length?`<div class="lx-colhead"><span class="lbl" style="flex:1">order</span>
-    <span class="lx-cols">${["status","total","tracking","gaash status","deadline","gerizim","created","due date",""]
-      .map(l=>`<span class="lbl">${l}</span>`).join("")}</span></div>`:"";
+  if(LX_SORT){
+    const {key,dir}=LX_SORT;
+    orders.sort((a,b)=>{ const va=lxSortVal(a,key), vb=lxSortVal(b,key);
+      return (typeof va==="string"?va.localeCompare(vb,undefined,{numeric:true}):va-vb)*dir; });
+  }
+  // ClickUp-style column labels — same fixed grid as each card's right side;
+  // click a label to sort by that column
+  const HCOLS=[["status","status"],["total","total"],["tracking","tracking"],["gash","gaash status"],
+               ["deadline","deadline"],["gerizim","gerizim"],["created","created"],["due","due date"],["",""]];
+  const hl=(key,label,style)=>key?`<span class="lbl lx-sort"${style?` style="${style}"`:""} title="sort by ${label}" onclick="lxSortClick('${key}')">${lxSortArrow(key)}${label}</span>`:`<span class="lbl"></span>`;
+  const colHead=orders.length?`<div class="lx-colhead">${hl("name","order","flex:1")}
+    <span class="lx-cols">${HCOLS.map(([k,l])=>hl(k,l)).join("")}</span></div>`:"";
   $("lxRows").innerHTML=colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
 }
 function lxCardHtml(o){
