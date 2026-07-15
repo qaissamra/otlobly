@@ -410,6 +410,17 @@
     .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 160px 80px 50px 78px 28px);gap:6px}
     .lx-pcols{grid-template-columns:var(--lxpgrid,84px 104px 40px 104px 128px 100px 78px 28px);gap:6px}
   }
+  /* Leluxe dashboard: KPI card grid + horizontal breakdown bars */
+  .lx-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:2px}
+  .lx-sec{color:var(--muted);font-size:11px;font-weight:800;margin:15px 0 8px;text-transform:uppercase;letter-spacing:.05em}
+  .lx-bar{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0}
+  .lx-bar .lx-bar-l{flex:0 0 42%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .lx-bar .lx-bar-l .dot{width:9px;height:9px;border-radius:99px;flex:0 0 auto}
+  .lx-bar .track{flex:1;height:9px;border-radius:99px;background:var(--bg3);overflow:hidden}
+  .lx-bar .track .fill{display:block;height:100%;border-radius:99px;min-width:2px}
+  .lx-bar .lx-bar-n{flex:0 0 auto;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11px}
+  .lx-bar[onclick]:hover .lx-bar-l{color:var(--ink);font-weight:700}
+  @media(max-width:820px){.pnl-2col{grid-template-columns:1fr}}
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   .lx-copy:hover{opacity:1 !important}
   .po-thumbs img,.po-thumbs .noimg{width:32px;height:32px;flex:0 0 auto;object-fit:contain;border-radius:7px;background:var(--bg3);border:1px solid var(--line)}
@@ -1082,6 +1093,7 @@
         <span class="muted2" id="lxCount" style="font-size:12px"></span>
         <span class="spacer"></span>
         <button class="minibtn" id="lxViewBtn" onclick="lxViewToggle()" title="switch between grouped orders and a flat products list (like ClickUp's subtasks: expand / collapse / as separate tasks)">⫶ Products</button>
+        <button class="minibtn" id="lxDashBtn" onclick="lxDashToggle()" title="a live KPI dashboard — the numbers follow the filter you set below">📊 Dashboard</button>
         <span id="lxSeparate"></span>
         <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
         <button class="minibtn" onclick="lxExpandAll(false)" title="collapse all orders">⊟</button>
@@ -2267,10 +2279,28 @@ function lxFSelAll(i,el){
 }
 // board view mode: "orders" (grouped cards) | "products" (ClickUp's "as separate tasks")
 let LX_VIEW=localStorage.getItem("lx_view")||"orders";
-function lxViewToggle(){
-  LX_VIEW=LX_VIEW==="orders"?"products":"orders";
-  try{ localStorage.setItem("lx_view",LX_VIEW); }catch(e){}
-  renderLeluxe();
+let LX_DASH_UNIT=localStorage.getItem("lx_dash_unit")||"products";
+function lxSetView(v){ LX_VIEW=v; try{ localStorage.setItem("lx_view",v); }catch(e){} renderLeluxe(); }
+function lxViewToggle(){ lxSetView(LX_VIEW==="products"?"orders":"products"); }
+function lxDashToggle(){ lxSetView(LX_VIEW==="dashboard"?"orders":"dashboard"); }
+function lxDashUnit(u){ LX_DASH_UNIT=u; try{ localStorage.setItem("lx_dash_unit",u); }catch(e){} renderLeluxe(); }
+// shared filtered set — Orders view and the Dashboard aggregate the SAME orders,
+// so the two always agree (the `__status` filter follows the products, as on the board)
+function lxFilteredOrders(){
+  const q=($("lxSearch").value||"").trim().toLowerCase();
+  const match=r=>!q||[r.name,lxF(r,"tracking number"),lxF(r,"asin"),lxF(r,"visa"),lxF(r,"name"),lxF(r,"exact name")]
+    .some(v=>v&&String(v).toLowerCase().includes(q));
+  const active=lxFActive();
+  const gmatch=(o,rows)=>active.every(f=>{
+    const pool=(f.field==="__status"&&lxItemsOf(o).length)?lxItemsOf(o):rows;
+    return pool.some(r=>lxFMatch(r,f));
+  });
+  const orders=(LX.orders||[]).filter(o=>{
+    const rows=[o,...(o.packages||[]),...lxItemsOf(o)];
+    return rows.some(match)&&(!active.length||gmatch(o,rows));
+  });
+  const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch(r,[r])));
+  return {orders,orphans};
 }
 function lxExpandAll(open){
   LX_OPEN.clear();
@@ -2328,7 +2358,9 @@ function renderLeluxe(){
     .some(v=>v&&String(v).toLowerCase().includes(q));
   const active=lxFActive();
   const vb=$("lxViewBtn"); if(vb) vb.textContent=LX_VIEW==="products"?"▤ Orders":"⫶ Products";
+  const db=$("lxDashBtn"); if(db){ db.textContent=LX_VIEW==="dashboard"?"▤ Board":"📊 Dashboard"; db.classList.toggle("accent",LX_VIEW==="dashboard"); }
   lxRenderSeparate();
+  if(LX_VIEW==="dashboard"){ lxRenderDashboard(lxFilteredOrders().orders); return; }
   if(LX_VIEW==="products"){
     // split view: every product standalone; a row matches if the product OR its
     // parent order satisfies each filter (NAME/VISA live on the order).
@@ -2384,15 +2416,7 @@ function renderLeluxe(){
   // shows): an order/package task's own status (the useless "order number", or a
   // package subtask left on "rd") must not drag an order into a status filter
   // its products don't satisfy.
-  const gmatch=(o,rows)=>active.every(f=>{
-    const pool=(f.field==="__status"&&lxItemsOf(o).length)?lxItemsOf(o):rows;
-    return pool.some(r=>lxFMatch(r,f));
-  });
-  const orders=(LX.orders||[]).filter(o=>{
-    const rows=[o,...(o.packages||[]),...lxItemsOf(o)];
-    return rows.some(match)&&(!active.length||gmatch(o,rows));
-  });
-  const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch(r,[r])));
+  const {orders,orphans}=lxFilteredOrders();
   const totalItems=(LX.orders||[]).reduce((a,o)=>a+lxItemsOf(o).length,0);
   $("lxCount").textContent=(LX.orders||[]).length?`${(LX.orders||[]).length} orders · ${totalItems} products`+((q||active.length)?` · ${orders.length} shown`:""):"";
   const has=orders.length||orphans.length;
@@ -2413,6 +2437,95 @@ function renderLeluxe(){
     <span class="lx-cols">${HCOLS.map(([k,l],i)=>hl(k,l,i)).join("")}</span></div>`:"";
   $("lxRows").innerHTML=colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
   lxColwApply();
+}
+// ── Dashboard view: live KPIs over the FILTERED orders (recomputes on every
+// filter change since renderLeluxe re-runs). Pure client-side, no backend. ──
+function lxTally(arr){ const m=new Map();
+  arr.forEach(v=>{ const k=(v==null?"":String(v)); m.set(k,(m.get(k)||0)+1); });
+  return [...m.entries()].map(([k,n])=>({k,n})).sort((a,b)=>b.n-a.n); }
+function lxOrderStatusVal(o){ const its=lxItemsOf(o), u=[...new Set(its.map(i=>i.status).filter(Boolean))];
+  return its.length?(u.length===1?u[0]:"mixed"):(o.status||""); }
+function lxStatusColor(s){ const o=((LX.schema&&LX.schema.statuses)||[]).find(x=>x.status===s); return (o&&o.color)||"#98a2b3"; }
+function lxOptColor(fieldLower,val){ const fs=(LX.schema&&LX.schema.fields)||{};
+  for(const k in fs){ if(k.trim().toLowerCase()===fieldLower){ const o=(fs[k].options||[]).find(o=>o.name===val); return (o&&o.color)||"#98a2b3"; } }
+  return "#98a2b3"; }
+// furthest tracking leg per order → {key,label,color,delivered}
+function lxStageOf(o){
+  const tr=lxTrackedRow(o), d=(tr&&tr.data)||{}, gz=d.gerizim_status;
+  if(gz&&gz.bucket){ const ar=GZ_AR[gz.bucket];
+    return {key:gz.bucket, label:ar?`${ar[0]} ${ar[1]}`:`🛵 ${gz.label||gz.status}`, color:GZ_HEX[gz.bucket]||"#8d8d8d", delivered:gz.bucket==="delivered"}; }
+  const ts=d.tracking_status;
+  if(ts&&ts.bucket) return {key:ts.bucket, label:String(ts.text||ts.label||ts.bucket), color:GAASH_HEX[ts.bucket]||"#6b7280", delivered:ts.bucket==="delivered"};
+  return {key:"none", label:"no tracking", color:"#cbd0d8", delivered:false};
+}
+function lxDashFilter(field,val){ if(field==null) return;
+  LX_FILTERS=LX_FILTERS.filter(f=>f.field!==field);
+  LX_FILTERS.push({field,op:"is",val:[val]}); lxFSave(); lxRenderFilters(); renderLeluxe();
+}
+function lxRenderDashboard(orders){
+  orders=orders||[];
+  const items=orders.flatMap(o=>lxItemsOf(o));
+  const filtered=lxFActive().length||($("lxSearch").value||"").trim();
+  $("lxCount").textContent=`${orders.length} orders · ${items.length} products`+(filtered?" · filtered":"");
+  $("lxEmpty").style.display="none";
+  const money=n=>`₪${Math.round(n).toLocaleString()}`;
+  const totalVal=orders.reduce((a,o)=>{ const v=Number(lxF(o,"total amount")); return a+(isNaN(v)?0:v); },0);
+  const avg=orders.length?totalVal/orders.length:0;
+  const stages=orders.map(lxStageOf);
+  const delivered=stages.filter(s=>s.delivered).length;
+  const awaiting=stages.filter(s=>!s.delivered&&["office","sms","pickup","out"].includes(s.key)).length;
+  const customs=stages.filter(s=>s.key==="customs").length;
+  const transit=stages.filter(s=>["transit","arrived"].includes(s.key)).length;
+  const pctD=orders.length?Math.round(100*delivered/orders.length):0;
+  let overdue=0,dueSoon=0,atRisk=0,late=0;
+  orders.forEach(o=>{ const tr=lxTrackedRow(o), d=(tr&&tr.data)||{}, b=(d.tracking_status||{}).bucket, val=Number(lxF(o,"total amount"))||0;
+    if(d.gaash_deadline&&b!=="delivered"&&b!=="cleared"&&!d.gerizim_status){ const n=dueDays(d.gaash_deadline);
+      if(n!=null){ if(n<0){overdue++;atRisk+=val;} else if(n<=7){dueSoon++;atRisk+=val;} } }
+    if(o.due_date&&!lxIsDone(o)){ const n=dueDays(lxMs(o.due_date)); if(n!=null&&n<0) late++; }
+  });
+  const unit=LX_DASH_UNIT;
+  const statusVals=unit==="orders"?orders.map(lxOrderStatusVal):items.map(i=>i.status||"");
+  const stOrder=((LX.schema&&LX.schema.statuses)||[]).map(x=>x.status);
+  const byStatus=lxTally(statusVals).sort((a,b)=>{ const ai=stOrder.indexOf(a.k),bi=stOrder.indexOf(b.k);
+    return ((ai<0?9e9:ai)-(bi<0?9e9:bi))||(b.n-a.n); });
+  const byStage=lxTally(stages.map(s=>s.label)), stageColor={}; stages.forEach(s=>stageColor[s.label]=s.color);
+  const byRd=lxTally(items.map(i=>lxF(i,"rd status")||""));
+  const card=(l,v,cls)=>`<div class="card"><div class="n ${cls||""}">${v}</div><div class="l">${poEsc(l)}</div></div>`;
+  const bar=(label,n,total,color,onclick)=>{ const pct=total?Math.round(100*n/total):0;
+    return `<div class="lx-bar"${onclick?` onclick="${onclick}"`:""} title="${poEsc(label)} — ${n} (${pct}%)">
+      <span class="lx-bar-l"><span class="dot" style="background:${color||"#98a2b3"}"></span>${poEsc(label||"(none)")}</span>
+      <span class="track"><span class="fill" style="width:${pct}%;background:${color||"#98a2b3"}"></span></span>
+      <span class="lx-bar-n">${n} · ${pct}%</span></div>`; };
+  const seg=(u,lbl)=>`<button class="minibtn${LX_DASH_UNIT===u?" accent":""}" onclick="lxDashUnit('${u}')">${lbl}</button>`;
+  $("lxRows").innerHTML=`
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <span class="lx-sec" style="margin:0">counts &amp; value</span><span class="spacer" style="flex:1"></span>
+      <span class="muted2" style="font-size:11px">breakdown by</span>${seg("products","Products")}${seg("orders","Orders")}
+    </div>
+    <div class="lx-dash">
+      ${card("Orders",orders.length)}${card("Products",items.length)}
+      ${card("Total value",money(totalVal),"money")}${card("Avg order",money(avg),"money")}
+    </div>
+    <div class="lx-sec">delivery progress</div>
+    <div class="lx-dash">
+      ${card("Delivered ✅",`${delivered} · ${pctD}%`,"good")}${card("Awaiting pickup",awaiting)}
+      ${card("In customs / ID",customs,customs?"neg":"")}${card("In transit",transit)}
+    </div>
+    <div class="lx-sec">deadline &amp; late risk</div>
+    <div class="lx-dash">
+      ${card("GAASH overdue",overdue,overdue?"neg":"")}${card("GAASH due ≤7d",dueSoon,dueSoon?"neg":"")}
+      ${card("₪ at risk",money(atRisk),atRisk?"neg":"")}${card("Late (past due)",late,late?"neg":"")}
+    </div>
+    <div class="pnl-2col" style="align-items:start">
+      <div><div class="lx-sec">${unit==="orders"?"order status":"product status"}</div>
+        ${byStatus.length?byStatus.map(x=>bar(x.k,x.n,statusVals.length,lxStatusColor(x.k),unit==="products"&&x.k?`lxDashFilter('__status','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+      </div>
+      <div><div class="lx-sec">delivery stage</div>
+        ${byStage.length?byStage.map(x=>bar(x.k,x.n,stages.length,stageColor[x.k])).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+        <div class="lx-sec">RD status</div>
+        ${byRd.length?byRd.map(x=>bar(x.k,x.n,items.length,lxOptColor("rd status",x.k),x.k?`lxDashFilter('RD STATUS','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
+      </div>
+    </div>`;
 }
 function lxCardHtml(o){
   const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];
