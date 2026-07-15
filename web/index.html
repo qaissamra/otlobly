@@ -179,6 +179,10 @@
      above siblings (position+z-index) AND stop clipping while a menu is open */
   .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible;position:relative;z-index:40}
   .pkg-body:has(.pop-menu.open),.po-body:has(.pop-menu.open){overflow:visible}
+  /* the fixed-width Products/Orders grid cells clip too (.lxc has overflow:hidden, and
+     .lxc>span ellipsis-clips the .pop wrapper) — let the open status dropdown escape */
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop{overflow:visible}
   /* ClickUp-style status dropdown (macOS ignores <option> colours, so it's a custom pop-menu) */
   .cu-menu{max-height:320px;overflow:auto;min-width:215px}
   .cu-search{width:100%;margin:2px 0 5px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:var(--bg2)}
