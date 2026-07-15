@@ -371,6 +371,7 @@
   .po-thumbs{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
   /* Leluxe: ClickUp-style copy button — appears on row hover */
   .lx-copy{opacity:0;transition:opacity .12s;border:none;background:transparent;cursor:pointer;font-size:12px;padding:0 2px;flex:0 0 auto}
+  .lx-hash{opacity:.45;margin-inline-end:2px}
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   .lx-copy:hover{opacity:1 !important}
   .po-thumbs img,.po-thumbs .noimg{width:32px;height:32px;flex:0 0 auto;object-fit:contain;border-radius:7px;background:var(--bg3);border:1px solid var(--line)}
@@ -1041,6 +1042,7 @@
         <span class="muted2" id="lxCount" style="font-size:12px"></span>
         <span class="spacer"></span>
         <button class="minibtn" id="lxViewBtn" onclick="lxViewToggle()" title="switch between grouped orders and a flat products list (like ClickUp's subtasks: expand / collapse / as separate tasks)">⫶ Products</button>
+        <span id="lxSeparate"></span>
         <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
         <button class="minibtn" onclick="lxExpandAll(false)" title="collapse all orders">⊟</button>
         <input id="lxSearch" placeholder="search order #, product, tracking, VISA…" oninput="renderLeluxe()" style="width:240px;padding:4px 8px;font-size:12px">
@@ -1243,7 +1245,11 @@ async function applyRole(){
   if(ME) return;
   ME={local:true};                       // default: local no-auth dashboard → show all
   try{ const r=await fetch("/api/me"); if(r.ok){const j=await r.json(); if(j&&j.perms) ME=j;} }catch(e){}
-  if(ME.local) return;                    // local dashboard (8788): no logins, show everything
+  if(ME.local){                           // local dashboard (8788): no logins, show everything —
+    // including the otlobly-only buttons that default to display:none
+    ["leluxeBtn","metaLeadsBtn"].forEach(id=>{const el=$(id); if(el) el.style.display="";});
+    return;
+  }
   const p=ME.perms;
   CAN_EDIT = p.includes("edit_order");
   CAN_ADMIN = p.includes("admin_actions");
@@ -1874,7 +1880,8 @@ function lxOrderNum(name){ const m=String(name||"").match(/\d[\d-]{8,}\d/); retu
 function lxShortName(name){
   const n=lxOrderNum(name); if(!n) return poEsc(name);
   const digits=n.replace(/\D/g,"");
-  return poEsc(String(name).replace(n,"…"+digits.slice(-5)));
+  // drop the "Order #"/"#" words — just a muted # + the last 5 digits
+  return `<span class="lx-hash">#</span>${poEsc("…"+digits.slice(-5))}`;
 }
 function lxCopyBtn(name){
   const n=lxOrderNum(name); if(!n) return "";
@@ -2129,6 +2136,44 @@ function lxJumpOrder(id){
   const el=document.getElementById("lxo"+id);
   if(el){ el.scrollIntoView({block:"start"}); window.scrollBy(0,-120); }
 }
+// ---- Separate by (ClickUp "Group by"): split the products view into sections ---- //
+let LX_GROUP=localStorage.getItem("lx_group")||"";
+let LX_GROUP_DIR=localStorage.getItem("lx_group_dir")||"asc";
+function lxGroupSet(key){
+  LX_GROUP=key||"";
+  try{ localStorage.setItem("lx_group",LX_GROUP); }catch(e){}
+  if(LX_GROUP&&LX_VIEW!=="products"){ LX_VIEW="products"; try{ localStorage.setItem("lx_view","products"); }catch(e){} }
+  renderLeluxe();
+}
+function lxGroupDir(){ LX_GROUP_DIR=LX_GROUP_DIR==="asc"?"desc":"asc";
+  try{ localStorage.setItem("lx_group_dir",LX_GROUP_DIR); }catch(e){} renderLeluxe(); }
+function lxGroupToggle(k){ LX_PCOL.has(k)?LX_PCOL.delete(k):LX_PCOL.add(k); renderLeluxe(); }
+function lxGroupLabel(){ const f=lxFdef(LX_GROUP); return f?f.label:"None"; }
+function lxRenderSeparate(){
+  const box=$("lxSeparate"); if(!box) return;
+  if(LX_VIEW!=="products"){ box.innerHTML=""; return; }
+  const rows=[{key:"",label:"None"}].concat(lxFields())
+    .map(f=>`<button class="pop-item cu-item" onclick="lxGroupSet('${poEsc(f.key)}');this.closest('.pop-menu').classList.remove('open')"><b>${poEsc(f.label)}</b>${f.key===LX_GROUP?'<span style="color:var(--accent)">✓</span>':''}</button>`).join("");
+  box.innerHTML=`<span class="pop">
+      <button class="minibtn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}" title="split the products into sections by a field (like ClickUp's Group by)">⑃ Separate by: ${poEsc(lxGroupLabel())} ▾</button>
+      <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0">
+        <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">${rows}
+      </div></span>
+    ${LX_GROUP?`<button class="minibtn" onclick="lxGroupDir()" title="sort sections ${LX_GROUP_DIR==="asc"?"ascending":"descending"}">${LX_GROUP_DIR==="asc"?"↑":"↓"}</button>`:""}`;
+}
+// the group value for a product pair — product's own value, else its order's
+function lxPairVal(it,o,fdef){
+  let v=lxFVal(it,fdef);
+  if((v==null||v===""||(Array.isArray(v)&&!v.length))&&o) v=lxFVal(o,fdef);
+  return (v==null||v==="")?"":(Array.isArray(v)?v.join(", "):String(v));
+}
+function lxGroupChip(fdef,val){
+  if(!val) return `<b class="pkg-title" style="color:var(--muted)">(none)</b>`;
+  if(fdef.type==="status") return lxStatusPill(val);
+  if(lxFOptioned(fdef.type)) return lxCfPill(fdef.label.toLowerCase(),val);
+  if(fdef.type==="date"){ const c=lxDueChip(val,false); return c||`<b class="pkg-title">${poEsc(val)}</b>`; }
+  return `<b class="pkg-title" style="font-size:12.5px">${poEsc(val)}</b>`;
+}
 function renderLeluxe(){
   if(!LX) return;
   const q=($("lxSearch").value||"").trim().toLowerCase();
@@ -2136,6 +2181,7 @@ function renderLeluxe(){
     .some(v=>v&&String(v).toLowerCase().includes(q));
   const active=lxFActive();
   const vb=$("lxViewBtn"); if(vb) vb.textContent=LX_VIEW==="products"?"▤ Orders":"⫶ Products";
+  lxRenderSeparate();
   if(LX_VIEW==="products"){
     // split view: every product standalone; a row matches if the product OR its
     // parent order satisfies each filter (NAME/VISA live on the order).
@@ -2146,10 +2192,34 @@ function renderLeluxe(){
       const pair=o?[it,o]:[it];
       return pair.some(match)&&(!active.length||active.every(f=>pair.some(r=>lxFMatch(r,f))));
     });
-    $("lxCount").textContent=`${prods.length} products`+((q||active.length)?` · ${shown.length} shown`:"");
+    const gfdef=LX_GROUP?lxFdef(LX_GROUP):null;
+    $("lxCount").textContent=`${prods.length} products`+((q||active.length)?` · ${shown.length} shown`:"")+(gfdef?` · grouped by ${gfdef.label}`:"");
     $("lxEmpty").style.display=shown.length?"none":"block";
     $("lxEmpty").textContent="No products match the filter.";
-    $("lxRows").innerHTML=shown.length?`<div class="pkg open"><div class="pkg-body">${shown.map(([it,o])=>lxItemRow(it,o)).join("")}</div></div>`:"";
+    if(!shown.length){ $("lxRows").innerHTML=""; return; }
+    if(!gfdef){
+      $("lxRows").innerHTML=`<div class="pkg open"><div class="pkg-body">${shown.map(([it,o])=>lxItemRow(it,o)).join("")}</div></div>`;
+      return;
+    }
+    // group into sections by the chosen field
+    const groups=new Map();
+    shown.forEach(([it,o])=>{ const v=lxPairVal(it,o,gfdef); if(!groups.has(v)) groups.set(v,[]); groups.get(v).push([it,o]); });
+    const optOrder=lxFOptioned(gfdef.type)?lxFOptions(gfdef).map(x=>x.name):null;
+    const keys=[...groups.keys()].sort((a,b)=>{
+      if(!a) return 1; if(!b) return -1;                       // (none) always last
+      let c; if(optOrder){ c=optOrder.indexOf(a)-optOrder.indexOf(b); }
+      else if(gfdef.type==="date"){ c=(Number(a)||0)-(Number(b)||0); }
+      else c=String(a).localeCompare(String(b),undefined,{numeric:true});
+      return LX_GROUP_DIR==="asc"?c:-c;
+    });
+    $("lxRows").innerHTML=keys.map(v=>{
+      const gk=`g:${LX_GROUP}:${v}`, collapsed=LX_PCOL.has(gk), rows=groups.get(v);
+      return `<div class="pkg${collapsed?"":" open"}"><div class="pkg-head"><div class="pkg-title-row" onclick="lxGroupToggle('${poEsc(gk)}')" style="cursor:pointer">
+          <span class="caret">${collapsed?"▸":"▾"}</span>
+          ${lxGroupChip(gfdef,v)}
+          <span class="muted2" style="font-size:11px">${rows.length} product${rows.length===1?"":"s"}</span>
+        </div></div>${collapsed?"":`<div class="pkg-body">${rows.map(([it,o])=>lxItemRow(it,o)).join("")}</div>`}</div>`;
+    }).join("");
     return;
   }
   // group semantics: EACH filter must be satisfied by at least one row of the
@@ -2171,11 +2241,15 @@ function renderLeluxe(){
 function lxCardHtml(o){
   const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];
   const nItems=pkgs.reduce((a,p)=>a+(p.items||[]).length,0)+loose.length;
-  const acct=lxF(o,"name"), amt=lxF(o,"total amount"), visa=lxF(o,"visa");
+  const acct=lxF(o,"name"), amt=lxF(o,"total amount");
   // Purchases-style tracking strip: GWD + live GASH + 🛵 Gerizim + ⏳ deadline + gash date
   const tr=lxTrackedRow(o);
   const tn=tr?((tr.data&&tr.data.tracking_number)||lxF(tr,"tracking number")||""):"";
   const gashDate=lxF(o,"gash date")||(tr&&lxF(tr,"gash date"));
+  const delivered=tr&&lxGzDone(tr);   // last-mile delivered → drop the countdown chips
+  // single-product order → show the PRODUCT's real status (the order's own status is
+  // always the useless "order number"); multi-product keeps the order-level pill.
+  const single=nItems===1?lxItemsOf(o)[0]:null;
   const head=`<div class="po-head"><div class="po-title" onclick="lxToggle(${o.id})" style="cursor:pointer">
       <span class="caret">${open?"▾":"▸"}</span>
       ${lxDot(o)}
@@ -2184,16 +2258,15 @@ function lxCardHtml(o){
       <span class="muted2" style="font-size:11.5px">${acct?poEsc(acct)+" · ":""}${nItems} product${nItems===1?"":"s"} · ${pkgs.length} pkg</span>
       ${lxThumbs(lxItemsOf(o))}
       <span class="spacer" style="flex:1"></span>
-      ${lxStatusSelect(o)}
+      ${lxStatusSelect(single||o)}
       ${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}
-      ${visa?`<span class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px" title="VISA">${poEsc(visa)}</span>`:""}
       ${tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(tn)}</span>`:""}
       ${tr?lxGashPill(tr):""}
       ${tr?lxGerizimPill(tr):""}
       ${tr?lxDeadlinePill(tr):""}
-      ${gashDate?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}
+      ${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}
       ${o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:""}
-      ${lxDueChip(o.due_date,lxIsDone(o))}
+      ${delivered?"":lxDueChip(o.due_date,lxIsDone(o))}
       <button class="minibtn" title="edit order" onclick="event.stopPropagation();lxOpenEditor('order',${o.id},null)">✏️</button>
     </div></div>`;
   if(!open) return `<div class="po-card" id="lxo${o.id}">${head}</div>`;
@@ -2247,8 +2320,8 @@ function lxVPkgHtml(o,g){
       ${lxDeadlinePill(en)}
       ${lxCfPill("gash status",gashStatus)}
       ${lxCfPill("rd status",lxF(it,"rd status"))}
-      ${gashDate?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}
-      ${lxDueChip(it.due_date,lxIsDone(it))}
+      ${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}
+      ${lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it))}
       <button class="minibtn" onclick="lxOpenEditor('item',${it.id},null)">✏️</button>
     </div></div></div>`;
   }
@@ -2262,8 +2335,7 @@ function lxVPkgHtml(o,g){
       ${lxGerizimPill(en)}
       ${lxDeadlinePill(en)}
       ${lxCfPill("gash status",gashStatus)}
-      ${gashDate?`<span title="gash date">${lxDueChip(gashDate,
-        ((en.data||{}).tracking_status||{}).bucket==="delivered"||(((en.data||{}).gerizim_status||{}).bucket==="delivered"))}</span>`:""}
+      ${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">${g.items.map(it=>lxItemRow(it,null,{inPkg:true})).join("")}</div>`;
   return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
@@ -2294,10 +2366,11 @@ function lxPkgHtml(o,pk){
 // first-3-words clip, like the Purchases rows (Amazon titles are a paragraph)
 function lxShort3(s){ const w=(s||"").trim().split(/\s+/); return w.length<=3?(s||"").trim():w.slice(0,3).join(" ")+"…"; }
 function lxCopyTitle(btn){ const t=btn.dataset.t||""; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copied ✓ "+lxShort3(t))).catch(()=>toast(t)); }
+// once the last-mile courier delivered, all the countdowns/dates are moot
+function lxGzDone(row){ return !!(row&&row.data&&row.data.gerizim_status&&row.data.gerizim_status.bucket==="delivered"); }
 function lxItemRow(it,parentO,opts){
   opts=opts||{};
   const img=lxAmz(it), qty=lxF(it,"quantity ordered");
-  const gashDate=lxF(it,"gash date");
   return `<div class="poc-row">
     ${lxThumb(img,44)}
     <div class="poc-name" style="flex:1;min-width:180px;display:flex;align-items:center;gap:4px">
@@ -2310,8 +2383,7 @@ function lxItemRow(it,parentO,opts){
     ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
     ${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}
     ${lxCfPill("rd status",lxF(it,"rd status"))}
-    ${gashDate&&!opts.inPkg?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}
-    ${lxDueChip(it.due_date,lxIsDone(it))}
+    ${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}
     <button class="minibtn" onclick="lxOpenEditor('item',${it.id},null)">✏️</button>
   </div>`;
 }
