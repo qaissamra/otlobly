@@ -166,6 +166,14 @@ CREATE TABLE IF NOT EXISTS leluxe_orders (
 CREATE INDEX IF NOT EXISTS ix_leluxe_parent ON leluxe_orders(parent_task_id);
 CREATE INDEX IF NOT EXISTS ix_leluxe_plocal ON leluxe_orders(parent_local_id);
 CREATE INDEX IF NOT EXISTS ix_leluxe_sync ON leluxe_orders(sync_state);
+CREATE TABLE IF NOT EXISTS gerizim_registrations (
+  tracking      TEXT PRIMARY KEY,            -- GWD number registered on postgerizim
+  registered_at TEXT,                        -- when the local tool submitted it
+  ok            INTEGER NOT NULL DEFAULT 1,  -- 0 = submitted but Gerizim flagged an issue
+  business_id   INTEGER NOT NULL DEFAULT 1,  -- single-tenant owner-ops; kept for consistency
+  updated_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_gerizim_reg_biz ON gerizim_registrations(business_id);
 """
 
 
@@ -828,6 +836,47 @@ def delete_payment(pid):
                   (pid, current_business()))
 
 
+# --------------------------------------------------------------------------- #
+# Gerizim registrations — "this GWD parcel was registered on postgerizim".
+# The truth lives in the owner's local GAASH tool; his browser mirrors that
+# tool's done[] set here so the sign shows everywhere (Faisal / live / phone),
+# not just on the Mac. Keyed by GWD; ok=0 means Gerizim flagged the submission.
+# --------------------------------------------------------------------------- #
+def list_gerizim_registered():
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT tracking, registered_at, ok FROM gerizim_registrations "
+            "WHERE business_id=? ORDER BY registered_at DESC", (current_business(),))]
+
+
+def sync_gerizim_registered(rows):
+    """Authoritative full sync of the registered-GWD set for this business:
+    delete rows no longer present, upsert the posted ones. `rows` is a list of
+    {tracking, registered_at, ok}. Callers guard against empty/partial pushes so
+    this never wipes the store from a failed load."""
+    biz = current_business()
+    keep = [str(r.get("tracking") or "").strip() for r in rows]
+    keep = [t for t in keep if t]
+    with connect() as c:
+        if keep:
+            ph = ",".join("?" * len(keep))
+            c.execute(f"DELETE FROM gerizim_registrations WHERE business_id=? "
+                      f"AND tracking NOT IN ({ph})", (biz, *keep))
+        else:
+            c.execute("DELETE FROM gerizim_registrations WHERE business_id=?", (biz,))
+        for r in rows:
+            t = str(r.get("tracking") or "").strip()
+            if not t:
+                continue
+            c.execute("""INSERT INTO gerizim_registrations
+                 (tracking, registered_at, ok, business_id, updated_at)
+                 VALUES (?,?,?,?,?)
+                 ON CONFLICT(tracking) DO UPDATE SET
+                   registered_at=excluded.registered_at, ok=excluded.ok,
+                   business_id=excluded.business_id, updated_at=excluded.updated_at""",
+                (t, r.get("registered_at"), 1 if r.get("ok", 1) else 0, biz, now_iso()))
+
+
 def set_payment_order(pid, order_code):
     """Attach a customer-level deposit to an order after the fact (self-heal)."""
     with connect() as c:
@@ -851,7 +900,7 @@ if __name__ == "__main__":
     elif "--stats" in sys.argv:
         with connect() as c:
             for t in ("businesses", "users", "customers", "orders", "order_items",
-                      "audit_log", "meta_leads", "payments"):
+                      "audit_log", "meta_leads", "payments", "gerizim_registrations"):
                 n = c.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
                 print(f"  {t:12} {n}")
     else:

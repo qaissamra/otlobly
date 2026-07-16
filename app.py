@@ -1548,6 +1548,24 @@ def api_purchases():
                     "statuses": purchases.ITEM_STATUSES})
 
 
+# Gerizim registrations — durable "this GWD was registered at Gerizim" set.
+# Read by every grid so the sign shows everywhere (all staff have view_orders);
+# written only by the owner's browser, which mirrors the local GAASH tool's
+# done[] set here (the tool itself is unreachable off his Mac).
+@app.route("/api/gerizim/registered")
+@auth.require("view_orders")
+def api_gerizim_registered():
+    return jsonify(registered=db.list_gerizim_registered())
+
+
+@app.route("/api/gerizim/registered", methods=["POST"])
+@auth.require("admin_actions")
+def api_gerizim_registered_post():
+    rows = (request.get_json(force=True, silent=True) or {}).get("records") or []
+    db.sync_gerizim_registered(rows)
+    return jsonify(ok=True, count=len(rows))
+
+
 @app.route("/api/purchases/refresh_tracking", methods=["POST"])
 @auth.require("view_orders")
 def api_purchases_refresh_tracking():
