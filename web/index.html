@@ -154,7 +154,7 @@
   .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap;cursor:pointer}
   .pkg-title-row:hover{background:#efede8}
   .pkg.open .pkg-title-row:hover{background:#ffeadf}
-  #pkgInfoModal .az-box:has(.pop-menu.open){overflow:visible}
+  #pkgInfoModal .az-box:has(.pop-menu.open),#lxInfoModal .az-box:has(.pop-menu.open){overflow:visible}
   .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .pkg-meta{display:flex;align-items:center;gap:7px 18px;flex-wrap:wrap;padding:7px 11px;background:var(--bg2);border-top:1px solid var(--line)}
   .pkg-meta .field{display:inline-flex;align-items:center;gap:6px}
@@ -1262,6 +1262,16 @@
   </div>
 </div>
 
+<!-- Leluxe read-friendly info popup (Purchases pkgInfoModal look): KV rows + the
+     ClickUp checkout screenshot rendered BIG + the everyday action buttons.
+     Sits BEFORE the editor modal so ✏️-from-popup paints the editor on top. -->
+<div id="lxInfoModal" class="az-modal hidden" onclick="if(event.target===this)lxInfoClose()">
+  <div class="az-box" style="width:640px;max-width:96vw;max-height:92vh;overflow:auto">
+    <div class="az-head"><b id="lxInfoTitle">⌚ Order</b><span class="az-x" onclick="lxInfoClose()">✕</span></div>
+    <div id="lxInfoBody" style="padding:12px 16px"></div>
+  </div>
+</div>
+
 <!-- Leluxe order/item editor — form is rendered from the discovered ClickUp schema -->
 <div id="lxEditModal" class="az-modal hidden" onclick="if(event.target===this)lxEditClose()">
   <div class="az-box" style="width:780px;max-width:96vw;max-height:92vh;overflow:auto">
@@ -1934,6 +1944,8 @@ async function lxSetStatus(id,status){
   const row=lxFind(id);
   if(row){ row.status=status; row.sync_state="dirty"; }
   renderLeluxe();                                   // optimistic
+  // keep the info popup live when the status was changed from inside it
+  if(LX_INFO&&!$("lxInfoModal").classList.contains("hidden")) lxInfoOpen(LX_INFO.kind,LX_INFO.id);
   let r; try{ r=await post("/api/leluxe/status",{id,status}); }catch(e){ r={}; }
   if(!r.ok){ toast(r.error||"Couldn't change the status"); loadLeluxe(); return; }
   toast(`Status → ${status} · syncing to ClickUp ↗`);
@@ -2574,8 +2586,9 @@ function lxCardHtml(o){
   const headTn=uTn.length===1?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(uTn[0])}</span>${lxCopyRawBtn(uTn[0])}`
     :uTn.length>1?`<span class="muted2" style="font-size:10.5px;opacity:.7" title="products have different tracking numbers">📦 multiple tracking</span>`
     :`<span class="muted2" style="font-size:10.5px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`;
-  const head=`<div class="po-head"><div class="po-title" onclick="lxToggle(${o.id})" style="cursor:pointer">
-      <span class="caret">${open?"▾":"▸"}</span>
+  const head=`<div class="po-head"><div class="po-title" title="انقر لعرض كل التفاصيل · click for full order details"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('order',${o.id})" style="cursor:pointer">
+      <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
       ${lxDot(o)}
       <b class="po-name" style="font-family:ui-monospace,Menlo,monospace" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
       ${lxCopyBtn(o.name)}
@@ -2629,7 +2642,8 @@ function lxVPkgHtml(o,g){
   if(g.items.length===1){
     // one product in the package → merge into a single combined row (no duplicate pills)
     const it=g.items[0], qty=lxF(it,"quantity ordered");
-    return `<div class="pkg open"><div class="pkg-head"><div class="pkg-title-row">
+    return `<div class="pkg open"><div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full product details"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
       ${lxThumb(lxAmz(it),44)}
       ${g.tn?`<b class="pkg-title" style="font-size:12.5px">📦 ${poEsc(g.tn)}</b>${lxCopyRawBtn(g.tn)}`:`<span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`}
       <div class="poc-name" style="flex:1;min-width:160px;display:flex;align-items:center;gap:4px">
@@ -2667,8 +2681,9 @@ function lxVPkgHtml(o,g){
 function lxPkgHtml(o,pk){
   const collapsed=LX_PCOL.has(pk.id), items=pk.items||[];
   const tn=(pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"";
-  const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="lxPkgToggle(${pk.id})" style="cursor:pointer">
-      <span class="caret">${collapsed?"▸":"▾"}</span>
+  const head=`<div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('package',${pk.id})" style="cursor:pointer">
+      <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
       ${lxDot(pk)}
       <b class="pkg-title">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
       <span class="muted2" style="font-size:11px">${items.length} product${items.length===1?"":"s"}</span>
@@ -2704,7 +2719,8 @@ function lxItemRow(it,parentO,opts){
   if(opts.cols){
     const tnCell=tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`
       :`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 —</span>`;
-    return `<div class="poc-row lx-prow">
+    return `<div class="poc-row lx-prow" title="انقر لعرض كل التفاصيل · click for full product details"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
       ${lxThumb(img,32)}
       ${nameCell}
       <span class="lx-pcols">
@@ -2719,7 +2735,8 @@ function lxItemRow(it,parentO,opts){
       </span>
     </div>`;
   }
-  return `<div class="poc-row">
+  return `<div class="poc-row" title="انقر لعرض كل التفاصيل · click for full product details"
+    onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
     ${lxThumb(img,44)}
     <div class="poc-name" style="flex:1;min-width:180px;display:flex;align-items:center;gap:4px">
       <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
@@ -2737,7 +2754,8 @@ function lxItemRow(it,parentO,opts){
   </div>`;
 }
 function lxOrphanRow(r){
-  return `<div class="po-card"><div class="po-head"><div class="po-title">
+  return `<div class="po-card"><div class="po-head"><div class="po-title" style="cursor:pointer"
+      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('${poEsc(r.kind)}',${r.id})">
       ${lxDot(r)}
       <b class="po-name" title="${poEsc(r.name)}">${lxShortName(r.name)}</b>
       ${lxCopyBtn(r.name)}
@@ -2757,6 +2775,147 @@ function lxOpenEditor(kind,rowId,parentLocalId){
   $("lxEditModal").classList.remove("hidden");
 }
 function lxEditClose(){ $("lxEditModal").classList.add("hidden"); LX_EDIT=null; }
+// ── Read-friendly info popup (the Purchases pkgInfo look) on all 3 tiers.
+// Click any order card / package row / product row to open it; the ClickUp
+// checkout screenshot renders BIG at the bottom — inherited from the main
+// order when the row has none of its own (screenshots live on the order task).
+let LX_INFO=null;
+function lxInfoClose(){ $("lxInfoModal").classList.add("hidden"); LX_INFO=null; }
+function lxFindPath(id){
+  for(const o of (LX.orders||[])){
+    if(o.id===id) return {row:o,pkg:null,order:o};
+    for(const it of (o.items||[])) if(it.id===id) return {row:it,pkg:null,order:o};
+    for(const pk of (o.packages||[])){
+      if(pk.id===id) return {row:pk,pkg:pk,order:o};
+      for(const it of (pk.items||[])) if(it.id===id) return {row:it,pkg:pk,order:o};
+    }
+  }
+  for(const r of (LX.orphans||[])) if(r.id===id) return {row:r,pkg:null,order:null};
+  return null;
+}
+// image sources for ONE row: data.images (localized ClickUp attachments) ∪ the
+// ![](…) embeds still sitting in the description markdown (same regex as the
+// backend's _IMG_MD) — deduped so a localized attachment isn't shown twice
+const LX_IMG_MD=/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
+function lxRowImgs(row){
+  const d=(row&&row.data)||{}, out=[], seen=new Set();
+  (d.images||[]).forEach(i=>{ const src=lxImgSrc(i); if(!src) return;
+    if(i.url) seen.add(i.url);
+    if(!seen.has(src)){ seen.add(src); out.push(src); } });
+  for(const m of String(d.description||"").matchAll(LX_IMG_MD)){
+    if(!seen.has(m[1])){ seen.add(m[1]); out.push(m[1]); } }
+  return out;
+}
+// single-GWD live refresh (the bulk 🚚 endpoint already accepts {tracking,force})
+async function lxCheckShipping(gwd){
+  toast(`🔎 checking ${gwd}…`);
+  let r; try{ r=await post("/api/leluxe/refresh_tracking",{tracking:gwd,force:true}); }catch(e){ r={}; }
+  if(r&&r.error){ toast(r.error); return; }
+  toast(`✓ ${gwd} refreshed`);
+  loadLeluxe();
+}
+function lxInfoOpen(kind,id){
+  const path=lxFindPath(id); if(!path) return;
+  const {row,pkg,order}=path, d=row.data||{};
+  let k=row.kind==="parent"?"order":(row.kind||kind); if(k!=="package"&&k!=="item") k="order";
+  // tracked row for the live pills: the row itself when enriched, else the group's
+  const tr=(d.tracking_status||d.gerizim_status||d.gaash_deadline)?row:(order?lxTrackedRow(order):row);
+  const trd=(tr&&tr.data)||{};
+  const tn=String(d.tracking_number||lxF(row,"tracking number")||trd.tracking_number||(tr&&lxF(tr,"tracking number"))||"").trim();
+  const f=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span class="muted2" style="flex:0 0 auto">${l}</span><b dir="auto" style="text-align:left;min-width:0;overflow-wrap:anywhere">${v||'—'}</b></div>`;
+  const mono=t=>t?`<span class="mono">${poEsc(t)}</span>${lxCopyRawBtn(t)}`:'';
+  const icon={order:"⌚",package:"📦",item:"🛍"}[k], label={order:"طلب · Order",package:"طرد · Package",item:"منتج · Product"}[k];
+  LX_INFO={kind,id};
+  $("lxInfoTitle").textContent=`${icon} ${label.split("· ")[1]} · ${(row.name||"").slice(0,48)}`;
+  const its=k==="order"?lxItemsOf(order||row):(k==="package"?(row.items||[]):[row]);
+  // top strip — plain (non-click) thumbs; order status is display-only like the card header
+  const thumbs=its.map(it=>lxThumb(lxAmz(it),34)).join("");
+  let statusBit;
+  if(k==="order"){ const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
+    statusBit=its.length?(u.length===1?lxStatusPill(u[0]):`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses">mixed</span>`):lxStatusPill(row.status);
+  } else statusBit=lxStatusSelect(row);
+  const gz=(trd.gerizim_status&&typeof trd.gerizim_status==="object")?trd.gerizim_status:null;
+  const ts=trd.tracking_status||{};
+  const dl=trd.gaash_deadline, gzDone=lxGzDone(tr), dlMoot=gzDone||ts.bucket==="delivered"||ts.bucket==="cleared";
+  const dln=dl&&!dlMoot?dueDays(dl):null, urgent=dln!=null&&dln<=7;
+  const gashStatus=lxF(row,"gash status")||its.map(i=>lxF(i,"gash status")).find(Boolean);
+  const gashDate=lxF(row,"gash date")||its.map(i=>lxF(i,"gash date")).find(Boolean);
+  const amt=lxF(row,"total amount");
+  // KV rows per tier
+  let rows="";
+  if(k==="order"){
+    const onum=lxOrderNum(row.name)||row.name;
+    rows=f('رقم الطلب · Order #',mono(onum))
+      +f('الحساب · Account',poEsc(lxF(row,"name")||""))
+      +f('المبلغ الإجمالي · Total amount',amt!=null?`₪${Number(amt).toLocaleString()}`:'')
+      +f('الماركة · Brand',poEsc(lxF(row,"brand")||""))
+      +f('فيزا · VISA',poEsc(lxF(row,"visa")||""))
+      +f('من دفع · Who paid',poEsc(lxF(row,"who paid")||""))
+      +f('رقم غاش · GAASH tracking',mono(tn))
+      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('التتبع الحي · Live tracking',ts.text||ts.label?`${poEsc(ts.text||ts.label)}${trd.tracking_checked?` <span class="muted2">· ${agoTxt(trd.tracking_checked)}</span>`:''}`:'')
+      +(gz?f('🛵 جيرزيم · Gerizim',`${poEsc((GZ_AR[gz.bucket]||[]).join(" ")||gz.label||gz.status||"")}${gz.shelf?` · رف ${poEsc(gz.shelf)}`:''}${gz.sms_at?` · SMS ${poEsc(gz.sms_at)}`:''}`):'')
+      +f('تاريخ غاش · GASH date',gashDate?lxMs(gashDate):'')
+      +f('أُنشئ · Created',row.date_created?lxDate(row.date_created):'')
+      +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'')
+      +f('المحتوى · Contents',`${(order&&order.packages||[]).length||0} 📦 · ${its.length} product${its.length===1?"":"s"}`);
+  } else if(k==="package"){
+    rows=f('الطرد · Package',poEsc(row.name||""))
+      +(order?f('الطلب · Order',`<button class="minibtn" style="cursor:pointer" onclick="lxInfoOpen('order',${order.id})">${lxShortName(order.name)}</button>`):'')
+      +f('رقم غاش · GAASH tracking',mono(tn))
+      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('التتبع الحي · Live tracking',ts.text||ts.label?`${poEsc(ts.text||ts.label)}${trd.tracking_checked?` <span class="muted2">· ${agoTxt(trd.tracking_checked)}</span>`:''}`:'')
+      +f('تاريخ غاش · GASH date',gashDate?lxMs(gashDate):'')
+      +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'')
+      +f('المنتجات · Products',(row.items||[]).length);
+  } else {
+    rows=f('المنتج · Product',`<span style="font-weight:600">${poEsc(row.name||"")}</span>`)
+      +(order?f('الطلب · Order',`<button class="minibtn" style="cursor:pointer" onclick="lxInfoOpen('order',${order.id})">${lxShortName(order.name)}</button>`):'')
+      +f('الكمية · Qty',lxF(row,"quantity ordered")!=null?`×${poEsc(lxF(row,"quantity ordered"))}`:'')
+      +f('المبلغ · Amount',amt!=null?`₪${Number(amt).toLocaleString()}`:'')
+      +f('حالة الاسترداد · RD status',lxF(row,"rd status")?lxCfPill("rd status",lxF(row,"rd status")):'')
+      +f('الماركة · Brand',poEsc(lxF(row,"brand")||""))
+      +f('الحالة · States',poEsc(lxF(row,"states")||""))
+      +f('رقم غاش · GAASH tracking',mono(tn))
+      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('التتبع الحي · Live tracking',ts.text||ts.label?`${poEsc(ts.text||ts.label)}${trd.tracking_checked?` <span class="muted2">· ${agoTxt(trd.tracking_checked)}</span>`:''}`:'')
+      +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'');
+  }
+  // the ClickUp checkout screenshot — BIG; inherit pkg → order when the row has none
+  let imgs=lxRowImgs(row), inh="";
+  if(!imgs.length&&pkg&&pkg!==row){ imgs=lxRowImgs(pkg); inh=imgs.length?"pkg":""; }
+  if(!imgs.length&&order&&order!==row){ imgs=lxRowImgs(order); inh=imgs.length?"order":""; }
+  const imgSec=imgs.length?`<div style="margin-top:12px">
+      <div class="muted2" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🖼 لقطة كليك أب · ClickUp screenshot${inh?` <span style="font-weight:600;text-transform:none;letter-spacing:0">— من الطلب الرئيسي · from the main order</span>`:""}</div>
+      ${imgs.map(u=>`<img src="${poEsc(u)}" loading="lazy" title="انقر للفتح بالحجم الكامل · click to open full size" style="width:100%;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:zoom-in;display:block;margin-bottom:8px" onclick="window.open('${poEsc(u)}','_blank','noopener')">`).join("")}
+    </div>`:"";
+  const descTxt=String(d.description||"").replace(LX_IMG_MD,"").trim();
+  const descSec=descTxt?`<div class="muted2" style="font-size:12px;white-space:pre-wrap;margin-top:10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 11px" dir="auto">${poEsc(descTxt)}</div>`:"";
+  const addBtns=k==="order"
+    ?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('package',null,${row.id})">＋ إضافة طرد · Add package</button>
+      <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`
+    :k==="package"?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`:"";
+  $("lxInfoBody").innerHTML=`
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${thumbs}${statusBit}${lxMergedStatusPill(tr)}${tr&&!dlMoot?lxDeadlinePill(tr):""}
+    </div>
+    ${dl&&!dlMoot?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div style="font-weight:800">⏳ موعد غاش النهائي · GAASH deadline</div>
+        <div class="muted2" style="font-size:11.5px">بعده الطرد يضيع نهائياً · past this date the package is lost</div></div>
+      <div style="text-align:center;flex:0 0 auto">
+        <div style="font-size:24px;font-weight:800;color:${urgent?'#b42318':'var(--ink)'}">${dln==null?'—':(dln<0?'فات!':dln)}</div>
+        <div class="muted2" style="font-size:11px">${dln!=null&&dln>=0?'يوم متبقٍ · days left · ':''}${poEsc(dl)}</div></div></div>`:''}
+    ${rows}
+    ${descSec}
+    ${imgSec}
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
+      ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckShipping('${poEsc(tn)}')">🔎 تتبع الشحنة · Check shipping</button>`:""}
+      ${tn?`<button class="po-btn" onclick="lxInfoClose();gaashUploadOpenGwd('${poEsc(tn)}')">🪪 رفع مستندات · Upload docs</button>`:""}
+      <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>
+      ${addBtns}
+    </div>`;
+  $("lxInfoModal").classList.remove("hidden");
+}
 function lxFieldInput(fname,fdef,val){
   const id="lxf_"+LX_FIDS.length; LX_FIDS.push(fname);
   const t=fdef.type;
@@ -4982,9 +5141,13 @@ function gaashUploadUrl(){ const gwd=$("bulkBody").dataset.gwd||'';
   return `https://ops.gaashwd.com/fileUpload?packageId=${encodeURIComponent(gwd)}`+
     [...document.querySelectorAll('.gud:checked')].map(c=>`&type=${c.value}`).join(''); }
 function gaashUploadSync(){ const el=$("gudLink"); if(el){ const u=gaashUploadUrl(); el.textContent=u; el.href=u; } }
-function gaashUploadOpen(id,pi){
-  const p=poFind(id), pk=p&&p.packages[pi], gwd=((pk&&pk.tracking_number)||'').trim();
+// GWD-first core — any page can use it (Leluxe rows only have a GWD). stampCb
+// (optional) runs on open/copy; the Purchases wrapper uses it to stamp the attempt.
+let GUD_STAMP=null;
+function gaashUploadOpenGwd(gwd,stampCb){
+  gwd=(gwd||'').trim();
   if(!gwd){ toast("Add the GWD tracking number first"); return; }
+  GUD_STAMP=stampCb||null;
   bulkOpen("🪪 رفع مستندات لغاش · Upload docs to GAASH");
   $("bulkBody").dataset.gwd=gwd;
   $("bulkBody").innerHTML=`<div class="muted2" style="font-size:12px;margin:4px 0 8px">
@@ -4995,22 +5158,28 @@ function gaashUploadOpen(id,pi){
   $("bulkFoot").innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">
     <a id="gudLink" target="_blank" rel="noopener" class="mono" style="font-size:11px;word-break:break-all;color:var(--muted)"></a>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="accent" onclick="gaashUploadGo('${id}',${pi},false)">⤴ فتح صفحة الرفع · Open upload page</button>
-      <button class="minibtn" onclick="gaashUploadGo('${id}',${pi},true)">📋 نسخ الرابط · Copy link</button>
+      <button class="accent" onclick="gaashUploadGo(false)">⤴ فتح صفحة الرفع · Open upload page</button>
+      <button class="minibtn" onclick="gaashUploadGo(true)">📋 نسخ الرابط · Copy link</button>
     </div></div>`;
   gaashUploadSync();
 }
-// Open/copy AND stamp the attempt: GAASH gives no upload receipt, but it RE-ASKS
-// (a new CD event) while docs are missing — a CD newer than this stamp means the
-// upload never registered, which pkgDocsPill turns into a red warning.
-function gaashUploadGo(id,pi,copy){
-  const url=gaashUploadUrl(), p=poFind(id), pk=p&&p.packages[pi];
-  if(pk){ pk.gaash_docs_at=new Date().toISOString();
-    pk.gaash_docs_types=[...document.querySelectorAll('.gud:checked')].map(c=>+c.value);
-    poSave(p); }
+// Purchases wrapper — keeps the docs-attempt stamp: GAASH gives no upload receipt,
+// but it RE-ASKS (a new CD event) while docs are missing — a CD newer than this
+// stamp means the upload never registered, which pkgDocsPill turns into a red warning.
+function gaashUploadOpen(id,pi){
+  const p=poFind(id), pk=p&&p.packages[pi];
+  gaashUploadOpenGwd((pk&&pk.tracking_number)||'', ()=>{
+    const p2=poFind(id), pk2=p2&&p2.packages[pi];
+    if(pk2){ pk2.gaash_docs_at=new Date().toISOString();
+      pk2.gaash_docs_types=[...document.querySelectorAll('.gud:checked')].map(c=>+c.value);
+      poSave(p2); renderPurchases(); }
+  });
+}
+function gaashUploadGo(copy){
+  const url=gaashUploadUrl();
+  if(GUD_STAMP) GUD_STAMP();
   if(copy){ navigator.clipboard.writeText(url); toast("Link copied ✓"); }
   else window.open(url,'_blank','noopener');
-  renderPurchases();
 }
 function pkgDocsPill(p,pk,pi){
   const up=pk&&pk.gaash_docs_at, cd=pk&&pk.gaash_cd_at;
