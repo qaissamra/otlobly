@@ -183,6 +183,9 @@
      .lxc>span ellipsis-clips the .pop wrapper) — let the open status dropdown escape */
   .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
   .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop{overflow:visible}
+  /* Products view: consecutive rows of the SAME order read as one block —
+     soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
+  .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
   /* ClickUp-style status dropdown (macOS ignores <option> colours, so it's a custom pop-menu) */
   .cu-menu{max-height:320px;overflow:auto;min-width:215px}
   .cu-search{width:100%;margin:2px 0 5px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:var(--bg2)}
@@ -402,7 +405,7 @@
   .pkg-title-row:hover .lx-copy{opacity:.7}
   @container lxboard (min-width:940px){
     .lx-cols{display:grid;grid-template-columns:var(--lxgrid,86px 54px 96px 150px 66px 48px 60px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,70px 96px 34px 100px 118px 90px 56px 26px);gap:5px;align-items:center;flex:0 0 auto}
+    .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,70px 44px 96px 34px 100px 118px 90px 56px 26px);gap:5px;align-items:center;flex:0 0 auto}
     .lx-colhead,.lx-pcolhead{display:flex}
     /* one line per order: the left name/meta ellipsize instead of wrapping the grid */
     #lxRows>.po-card>.po-head>.po-title{flex-wrap:nowrap}
@@ -412,7 +415,7 @@
   }
   @container lxboard (min-width:1060px){
     .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 160px 80px 50px 78px 28px);gap:6px}
-    .lx-pcols{grid-template-columns:var(--lxpgrid,84px 104px 40px 104px 128px 100px 78px 28px);gap:6px}
+    .lx-pcols{grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px}
   }
   /* Leluxe dashboard: KPI card grid + horizontal breakdown bars */
   .lx-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:2px}
@@ -2396,12 +2399,22 @@ function renderLeluxe(){
     if(!shown.length){ $("lxRows").innerHTML=""; return; }
     // product-view column header — same resizable machinery as the orders header
     // (table id "p"). Left: image spacer + PRODUCT; then the fixed product grid.
-    const PHCOLS=["order","status","qty","tracking","gaash status","rd status","due",""];
+    const PHCOLS=["order","profile","status","qty","tracking","gaash status","rd status","due",""];
     const prsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'p')" ondblclick="lxRszReset(event,'p')"></span>`;
     const pcolHead=`<div class="lx-pcolhead"><span class="lbl" style="width:32px;flex:0 0 auto"></span><span class="lbl" style="flex:1">product</span>
       <span class="lx-pcols">${PHCOLS.map((l,i)=>`<span class="lbl">${l}${prsz(i)}</span>`).join("")}</span></div>`;
+    // rows with same-order ties: consecutive rows sharing a parent order render
+    // as one visual run — pill+×N on the first, └ marker + stripe on the rest
+    const prodRows=pairs=>pairs.map(([it,o],i)=>{
+      const oid=o?o.id:null, pid=i>0&&pairs[i-1][1]?pairs[i-1][1].id:null, nid=i<pairs.length-1&&pairs[i+1][1]?pairs[i+1][1].id:null;
+      const prev=oid!=null&&oid===pid, next=oid!=null&&oid===nid;
+      let tie="", tieN=0;
+      if(prev||next){ tie=prev?(next?"mid":"end"):"start";
+        if(tie==="start"){ tieN=1; for(let j=i+1;j<pairs.length&&pairs[j][1]&&pairs[j][1].id===oid;j++) tieN++; } }
+      return lxItemRow(it,o,{cols:true,tie,tieN});
+    }).join("");
     if(!gfdef){
-      $("lxRows").innerHTML=pcolHead+`<div class="pkg open"><div class="pkg-body">${shown.map(([it,o])=>lxItemRow(it,o,{cols:true})).join("")}</div></div>`;
+      $("lxRows").innerHTML=pcolHead+`<div class="pkg open"><div class="pkg-body">${prodRows(shown)}</div></div>`;
       lxColwApply();
       return;
     }
@@ -2422,7 +2435,7 @@ function renderLeluxe(){
           <span class="caret">${collapsed?"▸":"▾"}</span>
           ${lxGroupChip(gfdef,v)}
           <span class="muted2" style="font-size:11px">${rows.length} product${rows.length===1?"":"s"}</span>
-        </div></div>${collapsed?"":`<div class="pkg-body">${rows.map(([it,o])=>lxItemRow(it,o,{cols:true})).join("")}</div>`}</div>`;
+        </div></div>${collapsed?"":`<div class="pkg-body">${prodRows(rows)}</div>`}</div>`;
     }).join("");
     lxColwApply();
     return;
@@ -2719,12 +2732,22 @@ function lxItemRow(it,parentO,opts){
   if(opts.cols){
     const tnCell=tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`
       :`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 —</span>`;
-    return `<div class="poc-row lx-prow" title="انقر لعرض كل التفاصيل · click for full product details"
+    // same-order run: tie=start|mid|end (adjacent rows sharing one order) — the
+    // run's first row keeps the order pill (+×N), the rest show a └ same marker
+    const tie=opts.tie||"";
+    const orderCell=parentO
+      ?(tie==="mid"||tie==="end"
+        ?`<span class="muted2" style="font-size:10px;cursor:pointer;white-space:nowrap" title="نفس طلب السطر أعلاه · same order as the row above — ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">└ نفس الطلب</span>`
+        :`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>${opts.tieN>1?`<span class="muted2" style="font-size:9.5px" title="${opts.tieN} products in this order">×${opts.tieN}</span>`:""}`)
+      :"";
+    const profile=lxF(it,"name")||(parentO&&lxF(parentO,"name"))||"";
+    return `<div class="poc-row lx-prow${tie?" lx-tied":""}" title="انقر لعرض كل التفاصيل · click for full product details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
       ${lxThumb(img,32)}
       ${nameCell}
       <span class="lx-pcols">
-        <span class="lxc">${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}</span>
+        <span class="lxc">${orderCell}</span>
+        <span class="lxc">${profile?`<b style="font-size:11px" title="profile / account (NAME)">${poEsc(profile)}</b>`:""}</span>
         <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
         <span class="lxc">${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}</span>
         <span class="lxc">${tnCell}</span>
@@ -2849,8 +2872,6 @@ function lxInfoOpen(kind,id){
       +f('الحساب · Account',poEsc(lxF(row,"name")||""))
       +f('المبلغ الإجمالي · Total amount',amt!=null?`₪${Number(amt).toLocaleString()}`:'')
       +f('الماركة · Brand',poEsc(lxF(row,"brand")||""))
-      +f('فيزا · VISA',poEsc(lxF(row,"visa")||""))
-      +f('من دفع · Who paid',poEsc(lxF(row,"who paid")||""))
       +f('رقم غاش · GAASH tracking',mono(tn))
       +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
       +f('التتبع الحي · Live tracking',ts.text||ts.label?`${poEsc(ts.text||ts.label)}${trd.tracking_checked?` <span class="muted2">· ${agoTxt(trd.tracking_checked)}</span>`:''}`:'')
