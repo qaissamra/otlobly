@@ -693,6 +693,7 @@
       <button onclick="importClickup(this)" id="impCuBtn" title="pull existing Amazon orders from the ClickUp Otloble space">↙ Import from ClickUp</button>
       <button onclick="poCheckAllShipping(this)" class="minibtn" title="re-check every GWD number against GAASH — skips delivered packages and anything checked in the last 30 min">🔎 Check all shipping</button>
       <button onclick="poEstimateAll(this)" class="minibtn" title="estimate Amazon cost for every product that has no estimate yet — already-priced products are skipped (free)">💰 Estimate all costs</button>
+      <button onclick="gzBulkOpen()" class="minibtn" title="سجّل عدة طرود في جيرزيم دفعة واحدة · register many parcels at Gerizim at once">📮 Register at Gerizim</button>
       <button onclick="poViewAll(false)" class="minibtn">⊟ Collapse all</button>
       <button onclick="poViewAll(true)" class="minibtn">⊞ Expand all</button>
       <button onclick="addPO()" class="accent">+ New order</button>
@@ -1089,6 +1090,7 @@
       <button class="minibtn" id="lxPullBtn" onclick="lxImport(this)" title="fetch ClickUp-side changes into this page (your unsent edits are kept)">↙ Pull</button>
       <button class="minibtn" id="lxDiscoverBtn" onclick="lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover</button>
       <button class="minibtn" id="lxActivityBtn" onclick="lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity</button>
+      <button class="minibtn" onclick="gzBulkOpen()" title="سجّل عدة طرود في جيرزيم دفعة واحدة · register many parcels at Gerizim at once">📮 Register at Gerizim</button>
       <button class="accent" id="lxNewBtn" onclick="lxOpenEditor('order',null,null)">＋ New order</button>
       <button class="minibtn" onclick="loadLeluxe()">↻ Refresh</button>
     </div>
@@ -1127,6 +1129,14 @@
   <div class="az-box" style="width:560px;max-width:96vw;max-height:90vh;overflow:auto">
     <div class="az-head"><b id="pkgInfoTitle">📦 Package</b><span class="az-x" onclick="pkgInfoClose()">✕</span></div>
     <div id="pkgInfoBody" style="padding:12px 16px"></div>
+  </div>
+</div>
+
+<!-- Bulk Register-at-Gerizim: the whole pending list, select-all + status filters -->
+<div id="gzBulkModal" class="az-modal hidden" onclick="if(event.target===this)gzBulkClose()">
+  <div class="az-box" style="width:720px;max-width:96vw;max-height:90vh;overflow:auto;display:flex;flex-direction:column">
+    <div class="az-head"><b>🚚 تسجيل في جيرزيم · Register at Gerizim</b><span class="az-x" onclick="gzBulkClose()">✕</span></div>
+    <div id="gzBulkBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -5286,7 +5296,10 @@ let GZMINI={
   busy:null,                            // {gwds:[...], startedAt} while registering
   results:null,                         // gwd -> {ok, confirm|error, mode} of the last run
   opts:{dry:false, capture:true, watch:false},
-  editSettings:false, sel:{}            // sel: gwd -> explicit checkbox override
+  editSettings:false, sel:{},           // sel: gwd -> explicit checkbox override
+  bulk:false,                           // bulk mode: render the whole pending list, not one order's gwds
+  click:new Set(JSON.parse(localStorage.getItem("gz_click")||"[]")),  // active ClickUp-status filters
+  bulkShowDone:false                    // expand the collapsed Done section in bulk mode
 };
 async function gzFetch(path,body,timeoutMs){
   const ctl=timeoutMs?new AbortController():null;
@@ -5358,7 +5371,8 @@ function gzCuChip(r){
   const c=r.clickup_status_color||"#8a8a8a";
   return `<span class="pill" style="background:${poEsc(c)}22;color:${poEsc(c)};border:1px solid ${poEsc(c)}55;font-weight:700">${poEsc(r.clickup_status)}</span>`;
 }
-function gzRowHtml(gwd){
+function gzRowHtml(gwd,opts){
+  const noCheck=opts&&opts.noCheck;
   const info=gzGwdInfo(gwd);
   const inFlight=!!GZMINI.busy&&GZMINI.busy.gwds.includes(gwd);
   const src=info.rec||info.pend||{};
@@ -5385,9 +5399,11 @@ function gzRowHtml(gwd){
   const meta=[nm?`<span dir="auto">${poEsc(nm.slice(0,60))}</span>`:"",(src.amount!=null&&src.amount!=="")?`<b>${poEsc(src.amount)}</b>`:""].filter(Boolean).join(" · ");
   return `<div style="border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:7px;background:${info.state==="done"?"#f3faf5":"var(--bg2)"}">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+      ${noCheck
+        ? `<span class="mono" style="font-weight:800">${poEsc(gwd)}</span>`
+        : `<label style="display:flex;align-items:center;gap:7px;cursor:pointer">
         <input type="checkbox" ${gzChecked(gwd)?"checked":""} ${GZMINI.busy?"disabled":""} onchange="gzSel('${poEsc(gwd)}',this.checked)">
-        <span class="mono" style="font-weight:800">${poEsc(gwd)}</span></label>
+        <span class="mono" style="font-weight:800">${poEsc(gwd)}</span></label>`}
       ${gzCuChip(src)}
       ${meta?`<span class="muted2" style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meta}</span>`:""}
     </div>
@@ -5403,8 +5419,8 @@ function gzSetInput(k,lbl,v){
 function gzPageHtml(){
   const h=GZMINI.host, d=GZMINI.data;
   const head=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <button class="po-btn" onclick="${h.backJs}">← رجوع · Back</button>
-    <b style="font-size:14px">🚚 تسجيل في جيرزيم · Register at Gerizim</b>
+    ${GZMINI.bulk?"":`<button class="po-btn" onclick="${h.backJs}">← رجوع · Back</button>`}
+    <b style="font-size:14px">🚚 تسجيل في جيرزيم · Register at Gerizim${GZMINI.bulk?" — كل الطرود · all parcels":""}</b>
     <a href="${poEsc(GZMINI.base)}/gerizim" target="_blank" rel="noopener" class="muted2" style="margin-inline-start:auto;font-size:11.5px">الأداة الكاملة ↗ · full tool</a></div>`;
   if(!d){
     if(GZMINI.loading) return head+`<div class="empty"><span class="spin"></span> جارٍ الاتصال بأداة غاش · connecting to the GAASH tool…</div>`;
@@ -5430,8 +5446,27 @@ function gzPageHtml(){
     :`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--bg2);flex-wrap:wrap">
       <span>👤</span><b dir="auto">${poEsc(s.full_name||"")}</b><span class="muted2">·</span><span class="mono">${poEsc(s.phone||"")}</span><span class="muted2">·</span><span dir="auto">${poEsc(s.city||"")}${s.town&&s.town!==s.city?` / ${poEsc(s.town)}`:""}</span>
       <button class="minibtn" style="margin-inline-start:auto" onclick="gzToggleSettings()">✎ تعديل · edit</button></div>`;
-  const rows=h.gwds.map(gzRowHtml).join("");
-  const o=GZMINI.opts, busy=GZMINI.busy, nSel=h.gwds.filter(gzChecked).length;
+  const cand=gzCandidateGwds();
+  const o=GZMINI.opts, busy=GZMINI.busy, nSel=cand.filter(gzChecked).length;
+  let rows;
+  if(GZMINI.bulk){
+    const pend=gzBulkPending(), done=gzBulkDone();
+    const allOn=pend.length>0&&pend.every(p=>gzChecked(p.tracking));
+    const pendHead=`<div style="display:flex;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;cursor:pointer">
+        <input type="checkbox" ${allOn?"checked":""} ${busy?"disabled":""} onchange="gzBulkSelectAll(this.checked)">
+        تحديد الكل · select all</label>
+      <span class="muted2" style="font-size:12px">⏳ بانتظار التسجيل · pending (${pend.length})</span></div>`;
+    const pendRows=pend.length
+      ?pend.map(p=>gzRowHtml(p.tracking)).join("")
+      :`<div class="muted2" style="font-size:12px;padding:8px 2px">لا طرود بانتظار التسجيل${GZMINI.click.size?" بهذا الفلتر":""} · nothing pending${GZMINI.click.size?" for this filter":""}</div>`;
+    const doneSec=done.length?`<div style="margin-top:12px">
+      <button class="minibtn" onclick="gzBulkToggleDone()">${GZMINI.bulkShowDone?"▾":"▸"} ✓ ${done.length} مسجّلة · registered</button>
+      ${GZMINI.bulkShowDone?`<div style="margin-top:8px">${done.map(r=>gzRowHtml(r.tracking,{noCheck:true})).join("")}</div>`:""}</div>`:"";
+    rows=`<div style="margin-top:6px">${gzBulkChips()+pendHead+pendRows+doneSec}</div>`;
+  } else {
+    rows=`<div style="margin-top:10px">${h.gwds.map(g=>gzRowHtml(g)).join("")}</div>`;
+  }
   const opt=(k,lbl,hint)=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="${poEsc(hint)}">
     <input type="checkbox" ${o[k]?"checked":""} ${busy?"disabled":""} onchange="gzOpt('${k}',this.checked)"> ${lbl}</label>`;
   const optsRow=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 8px">
@@ -5455,7 +5490,7 @@ function gzPageHtml(){
     resSec=`<div style="margin-top:10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)">
       <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">آخر تشغيل · last run</div>${items}</div>`;
   }
-  return head+settingsSec+`<div style="margin-top:10px">${rows}</div>`+optsRow+actions+busySec+resSec;
+  return head+settingsSec+rows+optsRow+actions+busySec+resSec;
 }
 function gzRender(){
   const h=GZMINI.host; if(!h) return;
@@ -5466,7 +5501,46 @@ function gzOpen(bodyId,gwds,backJs){
   const same=GZMINI.host&&GZMINI.host.gwds.join(",")===gwds.join(",");
   GZMINI.host={bodyId,gwds,backJs};
   if(!GZMINI.busy&&!same){ GZMINI.sel={}; GZMINI.results=null; GZMINI.editSettings=false; }
+  GZMINI.bulk=false;                         // an order popup is never the bulk panel
   gzRender(); gzLoad();                      // stale-while-revalidate
+}
+// ── Bulk panel: the whole pending-at-Gerizim list in one modal (mini of the full tool) ──
+function gzBulkOpen(){
+  GZMINI.bulk=true;
+  GZMINI.host={bodyId:"gzBulkBody",gwds:[],backJs:"gzBulkClose()"};   // gwds unused in bulk mode
+  if(!GZMINI.busy){ GZMINI.sel={}; GZMINI.results=null; GZMINI.editSettings=false; }
+  $("gzBulkModal").classList.remove("hidden");
+  gzRender(); gzLoad();                       // stale-while-revalidate; gzLoad→gzMirror also refreshes grid badges
+}
+function gzBulkClose(){ $("gzBulkModal").classList.add("hidden"); GZMINI.bulk=false; }
+function gzBulkPending(){
+  const a=(GZMINI.data&&GZMINI.data.parcels)||[];
+  return GZMINI.click.size?a.filter(p=>GZMINI.click.has(p.clickup_status||"")):a;
+}
+function gzBulkDone(){
+  const a=(GZMINI.data&&GZMINI.data.done)||[];
+  return GZMINI.click.size?a.filter(p=>GZMINI.click.has(p.clickup_status||"")):a;
+}
+function gzBulkSelectAll(on){ gzBulkPending().forEach(p=>{ GZMINI.sel[p.tracking]=on; }); gzRender(); }
+function gzBulkToggleClick(s){ GZMINI.click.has(s)?GZMINI.click.delete(s):GZMINI.click.add(s);
+  localStorage.setItem("gz_click",JSON.stringify([...GZMINI.click])); gzRender(); }
+function gzBulkClearClick(){ GZMINI.click.clear(); localStorage.setItem("gz_click","[]"); gzRender(); }
+function gzBulkToggleDone(){ GZMINI.bulkShowDone=!GZMINI.bulkShowDone; gzRender(); }
+// Which GWDs register/mark-done act on: the filtered pending list in bulk, else the order's gwds.
+function gzCandidateGwds(){ return GZMINI.bulk?gzBulkPending().map(p=>p.tracking):GZMINI.host.gwds; }
+// ClickUp-status filter chips (mirrors the full tool's buildClickChips).
+function gzBulkChips(){
+  const counts=new Map();
+  (((GZMINI.data&&GZMINI.data.parcels)||[]).concat((GZMINI.data&&GZMINI.data.done)||[]))
+    .forEach(p=>{ const s=p.clickup_status||""; if(s) counts.set(s,(counts.get(s)||0)+1); });
+  [...GZMINI.click].forEach(s=>{ if(!counts.has(s)) GZMINI.click.delete(s); });   // drop vanished
+  if(!counts.size) return "";
+  const chip=(s)=>{ const on=GZMINI.click.has(s);
+    return `<button class="minibtn" onclick="gzBulkToggleClick('${poEsc(s)}')" style="${on?'background:#0a7d33;color:#fff;border-color:#0a7d33':''}">${poEsc(s)} (${counts.get(s)})</button>`; };
+  const chips=[...counts.keys()].sort().map(chip);
+  if(GZMINI.click.size) chips.push(`<button class="minibtn" onclick="gzBulkClearClick()">✕ مسح · clear</button>`);
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0">
+    <span class="muted2" style="font-size:11.5px">ClickUp:</span>${chips.join("")}</div>`;
 }
 async function gzSaveSettings(){
   const val=k=>{ const el=document.getElementById("gzS_"+k); return el?el.value.trim():""; };
@@ -5478,7 +5552,7 @@ async function gzSaveSettings(){
 }
 async function gzRegister(){
   if(GZMINI.busy||!GZMINI.host) return;      // single-flight (the tool is sequential anyway)
-  const gwds=GZMINI.host.gwds.filter(gzChecked);
+  const gwds=gzCandidateGwds().filter(gzChecked);
   if(!gwds.length){ toast("اختر طرداً أولاً · select a parcel first"); return; }
   const o=GZMINI.opts;
   if(!o.dry&&!confirm(`Register ${gwds.length} parcel(s) on postgerizim.com for real?\n\nChrome will fill + submit the form for each${o.watch?' (visible)':''}.`)) return;
@@ -5495,7 +5569,7 @@ async function gzRegister(){
 }
 async function gzMarkDone(){
   if(GZMINI.busy||!GZMINI.host) return;
-  const gwds=GZMINI.host.gwds.filter(gzChecked);
+  const gwds=gzCandidateGwds().filter(gzChecked);
   if(!gwds.length){ toast("اختر طرداً أولاً · select a parcel first"); return; }
   if(!confirm(`Move ${gwds.length} parcel(s) to Done as already-registered (no re-submit)?`)) return;
   try{ await gzFetch("/gerizim/mark_done",{tracking:gwds}); toast("✓ تم · marked as done"); }
