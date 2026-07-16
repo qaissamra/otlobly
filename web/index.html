@@ -2804,6 +2804,17 @@ function lxEditClose(){ $("lxEditModal").classList.add("hidden"); LX_EDIT=null; 
 // order when the row has none of its own (screenshots live on the order task).
 let LX_INFO=null;
 function lxInfoClose(){ $("lxInfoModal").classList.add("hidden"); LX_INFO=null; }
+function lxGzOpen(){ if(!LX_INFO) return; LX_INFO.page="gz"; lxInfoOpen(LX_INFO.kind,LX_INFO.id); }
+function lxGzBack(){ if(!LX_INFO) return; LX_INFO.page=null; lxInfoOpen(LX_INFO.kind,LX_INFO.id); }
+// every distinct GWD under a row — an order popup registers all its packages
+function lxGzGwds(k,row,order,tn){
+  const out=new Set(); if(tn) out.add(tn);
+  if(k==="order"){
+    const tnOf=r=>String(((r&&r.data)||{}).tracking_number||(r&&lxF(r,"tracking number"))||"").trim();
+    (((order||row).packages)||[]).forEach(pk=>{ const t=tnOf(pk); if(t) out.add(t); });
+  }
+  return [...out];
+}
 function lxFindPath(id){
   for(const o of (LX.orders||[])){
     if(o.id===id) return {row:o,pkg:null,order:o};
@@ -2848,8 +2859,18 @@ function lxInfoOpen(kind,id){
   const f=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span class="muted2" style="flex:0 0 auto">${l}</span><b dir="auto" style="text-align:left;min-width:0;overflow-wrap:anywhere">${v||'—'}</b></div>`;
   const mono=t=>t?`<span class="mono">${poEsc(t)}</span>${lxCopyRawBtn(t)}`:'';
   const icon={order:"⌚",package:"📦",item:"🛍"}[k], label={order:"طلب · Order",package:"طرد · Package",item:"منتج · Product"}[k];
-  LX_INFO={kind,id};
+  // page 2 of the popup: the Register-at-Gerizim mini tool — keep it across the
+  // re-open hook (lxSetStatus re-invokes us on background renders)
+  const keepGz=LX_INFO&&LX_INFO.kind===kind&&LX_INFO.id===id&&LX_INFO.page==="gz";
+  const gzGwds=lxGzGwds(k,row,order,tn);
+  LX_INFO={kind,id,page:(keepGz&&gzGwds.length)?"gz":null};
   $("lxInfoTitle").textContent=`${icon} ${label.split("· ")[1]} · ${(row.name||"").slice(0,48)}`;
+  if(LX_INFO.page==="gz"){
+    $("lxInfoBody").innerHTML='<div id="lxGzBody"></div>';
+    gzOpen("lxGzBody",gzGwds,"lxGzBack()");
+    $("lxInfoModal").classList.remove("hidden");
+    return;
+  }
   const its=k==="order"?lxItemsOf(order||row):(k==="package"?(row.items||[]):[row]);
   // top strip — plain (non-click) thumbs; order status is display-only like the card header
   const thumbs=its.map(it=>lxThumb(lxAmz(it),34)).join("");
@@ -2932,6 +2953,7 @@ function lxInfoOpen(kind,id){
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
       ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckShipping('${poEsc(tn)}')">🔎 تتبع الشحنة · Check shipping</button>`:""}
       ${tn?`<button class="po-btn" onclick="lxInfoClose();gaashUploadOpenGwd('${poEsc(tn)}')">🪪 رفع مستندات · Upload docs</button>`:""}
+      ${gzGwds.length?`<button class="po-btn" onclick="lxGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:""}
       <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>
       ${addBtns}
     </div>`;
@@ -5202,6 +5224,232 @@ function gaashUploadGo(copy){
   if(copy){ navigator.clipboard.writeText(url); toast("Link copied ✓"); }
   else window.open(url,'_blank','noopener');
 }
+// ── 🚚 Register-at-Gerizim mini tool — page 2 of the info popups ─────────────
+// GWD-first core both popups share (same idea as gaashUploadOpenGwd, but it
+// renders INTO the host popup's body instead of a separate modal). It drives
+// the gaash-clickup-sync dashboard on the owner's Mac (127.0.0.1:8787, CORS
+// enabled there): Selenium on that machine fills postgerizim's expected-package
+// form, so this works only where that tool runs. All state lives here — the
+// host popups re-render on background refreshes and must repaint faithfully.
+let GZMINI={
+  base: localStorage.getItem("gzBase")||"http://127.0.0.1:8787",
+  data:null, err:null, loading:false,   // last /gerizim.json + fetch state
+  host:null,                            // {bodyId, gwds:[...], backJs}
+  busy:null,                            // {gwds:[...], startedAt} while registering
+  results:null,                         // gwd -> {ok, confirm|error, mode} of the last run
+  opts:{dry:false, capture:true, watch:false},
+  editSettings:false, sel:{}            // sel: gwd -> explicit checkbox override
+};
+async function gzFetch(path,body,timeoutMs){
+  const ctl=timeoutMs?new AbortController():null;
+  const tid=ctl?setTimeout(()=>ctl.abort(),timeoutMs):null;
+  let r;
+  try{
+    r=await fetch(GZMINI.base+path,Object.assign(
+      {mode:"cors",targetAddressSpace:"loopback"},   // opt-in for Chrome's local-network rules
+      ctl?{signal:ctl.signal}:{},
+      body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}));
+  }catch(e){ throw {kind:(ctl&&ctl.signal.aborted)?"timeout":"network",e}; }
+  finally{ if(tid)clearTimeout(tid); }
+  if(!r.ok) throw {kind:"http",status:r.status};
+  return r.json();
+}
+async function gzProbe(){                 // find the live dashboard port 8787..8798, cache it
+  const bases=[GZMINI.base,...Array.from({length:12},(_,i)=>`http://127.0.0.1:${8787+i}`)]
+    .filter((b,i,a)=>a.indexOf(b)===i);
+  for(const b of bases){
+    try{ GZMINI.base=b; const d=await gzFetch("/gerizim.json?_="+Date.now(),undefined,1500);
+      localStorage.setItem("gzBase",b); return d; }catch(e){}
+  }
+  throw {kind:"network"};
+}
+async function gzLoad(){
+  if(GZMINI.loading) return;
+  GZMINI.loading=true; gzRender();
+  try{ GZMINI.data=await gzProbe(); GZMINI.err=null; }
+  catch(e){ GZMINI.err=e; }
+  GZMINI.loading=false; gzRender();
+}
+// history for ONE gwd out of the tool's pending/done lists; a GWD absent from
+// both is simply not at Gerizim yet — pre-registering it is valid
+function gzGwdInfo(gwd){
+  const d=GZMINI.data||{};
+  const rec=(d.done||[]).find(r=>r.tracking===gwd);
+  if(rec) return {state:"done",rec};
+  const p=(d.parcels||[]).find(r=>r.tracking===gwd);
+  if(p) return p.last_error?{state:"failed",pend:p}:{state:"pending",pend:p};
+  return {state:"new"};
+}
+function gzChecked(gwd){ const s=GZMINI.sel[gwd]; return s!==undefined?s:gzGwdInfo(gwd).state!=="done"; }
+function gzSel(gwd,on){ GZMINI.sel[gwd]=on; gzRender(); }
+function gzOpt(k,on){ GZMINI.opts[k]=on; }
+function gzToggleSettings(){ GZMINI.editSettings=!GZMINI.editSettings; gzRender(); }
+function gzShotImg(gwd,kind,bust){
+  const src=`${GZMINI.base}/gerizim/shot?gwd=${encodeURIComponent(gwd)}&kind=${kind}&t=${encodeURIComponent(String(bust||""))}`;
+  return `<img src="${poEsc(src)}" loading="lazy" style="height:56px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:zoom-in" onerror="this.style.display='none'" onclick="window.open('${poEsc(src)}','_blank','noopener')" title="لقطة الإثبات — انقر للتكبير · proof screenshot, click to open">`;
+}
+function gzCuChip(r){
+  if(!r||!r.clickup_status) return "";
+  const c=r.clickup_status_color||"#8a8a8a";
+  return `<span class="pill" style="background:${poEsc(c)}22;color:${poEsc(c)};border:1px solid ${poEsc(c)}55;font-weight:700">${poEsc(r.clickup_status)}</span>`;
+}
+function gzRowHtml(gwd){
+  const info=gzGwdInfo(gwd);
+  const inFlight=!!GZMINI.busy&&GZMINI.busy.gwds.includes(gwd);
+  const src=info.rec||info.pend||{};
+  let state,thumb="",extra="";
+  if(inFlight){ state=`<span class="spin"></span> <b>جارٍ التسجيل عبر كروم · registering via Chrome…</b>`; }
+  else if(info.state==="done"){
+    const r=info.rec;
+    state=`<span style="color:#0a7d33;font-weight:800">✓ مسجل · registered</span> <span class="muted2">${agoTxt(r.registered_at)||poEsc(String(r.registered_at||"").slice(0,10))}</span>`
+      +(r.ok===false?` <span style="color:#b42318;font-weight:700">؟ تحقق · check</span>`:"")
+      +(r.confirm?` — <span dir="auto">${poEsc(r.confirm)}</span>`:"")
+      +(r.verdict?` <span title="حكمك · your verdict">${r.verdict==="good"?"👍":"👎"}</span>`:"");
+    if(r.has_shot) thumb=gzShotImg(gwd,"filled",r.registered_at);
+    extra=`<button class="minibtn" onclick="gzGood('${poEsc(gwd)}')" title="التسجيل سليم وواضح · good / clear">👍 سليم · good</button>
+      <button class="minibtn" onclick="gzRetry('${poEsc(gwd)}')" title="احذف السجل وأعده للانتظار · remove the record, back to pending">👎 إعادة · retry</button>`;
+  } else if(info.state==="failed"){
+    state=`<span style="color:#b42318;font-weight:800">✕ فشل · failed</span> — <span dir="auto">${poEsc(info.pend.last_error||"")}</span>`;
+    if(info.pend.fail_shot) thumb=gzShotImg(gwd,"result",info.pend.status_time||"fail");
+  } else if(info.state==="pending"){
+    state=`<span style="color:#a15c07;font-weight:800">⏳ وصل جيرزيم — بانتظار التسجيل · at Gerizim, awaiting registration</span>`;
+  } else if(GZMINI.data){
+    state=`<span class="muted2">＋ ليس عند جيرزيم بعد — التسجيل المسبق ممكن · not at Gerizim yet, pre-registering is fine</span>`;
+  } else state=`<span class="muted2">…</span>`;
+  const nm=(src.name&&src.name!==gwd)?String(src.name):"";
+  const meta=[nm?`<span dir="auto">${poEsc(nm.slice(0,60))}</span>`:"",(src.amount!=null&&src.amount!=="")?`<b>${poEsc(src.amount)}</b>`:""].filter(Boolean).join(" · ");
+  return `<div style="border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:7px;background:${info.state==="done"?"#f3faf5":"var(--bg2)"}">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+        <input type="checkbox" ${gzChecked(gwd)?"checked":""} ${GZMINI.busy?"disabled":""} onchange="gzSel('${poEsc(gwd)}',this.checked)">
+        <span class="mono" style="font-weight:800">${poEsc(gwd)}</span></label>
+      ${gzCuChip(src)}
+      ${meta?`<span class="muted2" style="font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meta}</span>`:""}
+    </div>
+    <div style="font-size:12px;margin-top:5px">${state}</div>
+    ${thumb?`<div style="margin-top:6px;display:flex;gap:6px">${thumb}</div>`:""}
+    ${extra?`<div style="display:flex;gap:6px;margin-top:6px">${extra}</div>`:""}
+  </div>`;
+}
+function gzSetInput(k,lbl,v){
+  return `<label class="muted2" style="display:flex;flex-direction:column;gap:3px;font-size:10.5px;font-weight:700">${lbl}
+    <input id="gzS_${k}" value="${poEsc(v||"")}" dir="auto" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12.5px;font-weight:600;color:var(--ink)"></label>`;
+}
+function gzPageHtml(){
+  const h=GZMINI.host, d=GZMINI.data;
+  const head=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button class="po-btn" onclick="${h.backJs}">← رجوع · Back</button>
+    <b style="font-size:14px">🚚 تسجيل في جيرزيم · Register at Gerizim</b>
+    <a href="${poEsc(GZMINI.base)}/gerizim" target="_blank" rel="noopener" class="muted2" style="margin-inline-start:auto;font-size:11.5px">الأداة الكاملة ↗ · full tool</a></div>`;
+  if(!d){
+    if(GZMINI.loading) return head+`<div class="empty"><span class="spin"></span> جارٍ الاتصال بأداة غاش · connecting to the GAASH tool…</div>`;
+    return head+`<div style="border:1px solid var(--line);background:var(--bg2);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-weight:800;margin-bottom:4px">⚠ أداة غاش غير متاحة · GAASH tool not reachable</div>
+      <div class="muted2" style="font-size:12px;margin-bottom:10px">on 127.0.0.1:8787 — is the Mac dashboard running?<br>يعمل فقط على جهاز الماك الرئيسي (كروم) · works only on the owner's Mac (Chrome)</div>
+      <button class="po-btn" onclick="gzLoad()">↻ إعادة المحاولة · Retry</button></div>`;
+  }
+  const s=d.settings||{};
+  const settingsSec=GZMINI.editSettings
+    ?`<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg2)">
+      <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">📮 معلومات التوصيل · delivery info (same for every parcel)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${gzSetInput("full_name","الاسم الكامل · full name",s.full_name)}
+        ${gzSetInput("phone","الهاتف · phone",s.phone)}
+        ${gzSetInput("city","المدينة · city",s.city)}
+        ${gzSetInput("town","البلدة · town",s.town)}
+        <div style="grid-column:1/-1">${gzSetInput("address","العنوان · address",s.address)}</div>
+      </div>
+      <div style="display:flex;gap:7px;margin-top:8px">
+        <button class="po-btn accent" onclick="gzSaveSettings()">💾 حفظ · Save</button>
+        <button class="po-btn" onclick="gzToggleSettings()">إلغاء · Cancel</button></div></div>`
+    :`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--bg2);flex-wrap:wrap">
+      <span>👤</span><b dir="auto">${poEsc(s.full_name||"")}</b><span class="muted2">·</span><span class="mono">${poEsc(s.phone||"")}</span><span class="muted2">·</span><span dir="auto">${poEsc(s.city||"")}${s.town&&s.town!==s.city?` / ${poEsc(s.town)}`:""}</span>
+      <button class="minibtn" style="margin-inline-start:auto" onclick="gzToggleSettings()">✎ تعديل · edit</button></div>`;
+  const rows=h.gwds.map(gzRowHtml).join("");
+  const o=GZMINI.opts, busy=GZMINI.busy, nSel=h.gwds.filter(gzChecked).length;
+  const opt=(k,lbl,hint)=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="${poEsc(hint)}">
+    <input type="checkbox" ${o[k]?"checked":""} ${busy?"disabled":""} onchange="gzOpt('${k}',this.checked)"> ${lbl}</label>`;
+  const optsRow=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 8px">
+    ${opt("dry","dry-run","تجربة بدون إرسال — لا يُرسل شيء · preview only, submits nothing")}
+    ${opt("capture","📸 لقطة إثبات · proof shot","تصوير النموذج قبل الإرسال · screenshot the filled form before submit")}
+    ${opt("watch","👁 شاهد المتصفح · watch","إظهار نافذة كروم أثناء التعبئة · show the Chrome window while it fills")}</div>`;
+  const actions=`<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+    <button class="po-btn accent" ${busy||!nSel?"disabled":""} onclick="gzRegister()">🚚 تسجيل المحدد · Register selected${nSel?` (${nSel})`:""}</button>
+    <button class="po-btn" ${busy||!nSel?"disabled":""} onclick="gzMarkDone()" title="اعتبرها مسجلة بدون إرسال · record as already-registered, no submit">✓ تم يدوياً · Mark as done</button></div>`;
+  const busySec=busy?`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);font-size:12.5px">
+    <span class="spin"></span> جارٍ التسجيل · registering ${busy.gwds.length} parcel(s)… ~30s each — started ${agoTxt(busy.startedAt)||"just now"}<br>
+    <span class="muted2">آمن الرجوع أو الإغلاق — التسجيل يكمل بالخلفية · safe to go back or close, it keeps running</span></div>`:"";
+  let resSec="";
+  if(GZMINI.results){
+    const items=Object.entries(GZMINI.results).map(([g,x])=>{
+      const t=x.mode==="dry-run"?`👁 معاينة — لم يُرسل شيء · preview, nothing submitted`
+        :x.ok?`<span style="color:#0a7d33;font-weight:700">✓ <span dir="auto">${poEsc(x.confirm||"registered")}</span></span>`
+        :`<span style="color:#b42318;font-weight:700">✕ <span dir="auto">${poEsc(x.error||"failed")}</span></span>`;
+      return `<div style="padding:4px 0;font-size:12px"><span class="mono">${poEsc(g)}</span> — ${t}</div>`;
+    }).join("");
+    resSec=`<div style="margin-top:10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)">
+      <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">آخر تشغيل · last run</div>${items}</div>`;
+  }
+  return head+settingsSec+`<div style="margin-top:10px">${rows}</div>`+optsRow+actions+busySec+resSec;
+}
+function gzRender(){
+  const h=GZMINI.host; if(!h) return;
+  const el=document.getElementById(h.bodyId);
+  if(el) el.innerHTML=gzPageHtml();          // no-op when the popup is closed/replaced
+}
+function gzOpen(bodyId,gwds,backJs){
+  const same=GZMINI.host&&GZMINI.host.gwds.join(",")===gwds.join(",");
+  GZMINI.host={bodyId,gwds,backJs};
+  if(!GZMINI.busy&&!same){ GZMINI.sel={}; GZMINI.results=null; GZMINI.editSettings=false; }
+  gzRender(); gzLoad();                      // stale-while-revalidate
+}
+async function gzSaveSettings(){
+  const val=k=>{ const el=document.getElementById("gzS_"+k); return el?el.value.trim():""; };
+  const body={full_name:val("full_name"),phone:val("phone"),city:val("city"),town:val("town"),address:val("address")};
+  try{ const r=await gzFetch("/gerizim/settings",body);
+    if(GZMINI.data) GZMINI.data.settings=(r&&r.settings)||body;
+    GZMINI.editSettings=false; gzRender(); toast("💾 تم الحفظ · delivery info saved");
+  }catch(e){ toast("⚠ لم يُحفظ · save failed — is the GAASH tool running?"); }
+}
+async function gzRegister(){
+  if(GZMINI.busy||!GZMINI.host) return;      // single-flight (the tool is sequential anyway)
+  const gwds=GZMINI.host.gwds.filter(gzChecked);
+  if(!gwds.length){ toast("اختر طرداً أولاً · select a parcel first"); return; }
+  const o=GZMINI.opts;
+  if(!o.dry&&!confirm(`Register ${gwds.length} parcel(s) on postgerizim.com for real?\n\nChrome will fill + submit the form for each${o.watch?' (visible)':''}.`)) return;
+  GZMINI.busy={gwds,startedAt:new Date().toISOString()}; GZMINI.results=null; gzRender();
+  let r=null,err=null;
+  try{ r=await gzFetch("/gerizim/register",{tracking:gwds,dry_run:!!o.dry,capture:!!o.capture,watch:!!o.watch}); }
+  catch(e){ err=e; }
+  GZMINI.busy=null;
+  if(err){ toast("⚠ فشل الاتصال · register call failed — is the GAASH tool still running?"); gzRender(); gzLoad(); return; }
+  GZMINI.results={}; (r.results||[]).forEach(x=>{ GZMINI.results[x.tracking]=x; });
+  const n=(r.results||[]).length, ok=(r.results||[]).filter(x=>x.ok).length;
+  toast(r.dry_run?`👁 معاينة ${ok}/${n} — لم يُرسل شيء · preview OK, nothing submitted`:`✅ سُجل ${ok}/${n} · registered`);
+  await gzLoad();
+}
+async function gzMarkDone(){
+  if(GZMINI.busy||!GZMINI.host) return;
+  const gwds=GZMINI.host.gwds.filter(gzChecked);
+  if(!gwds.length){ toast("اختر طرداً أولاً · select a parcel first"); return; }
+  if(!confirm(`Move ${gwds.length} parcel(s) to Done as already-registered (no re-submit)?`)) return;
+  try{ await gzFetch("/gerizim/mark_done",{tracking:gwds}); toast("✓ تم · marked as done"); }
+  catch(e){ toast("⚠ فشل · mark-done failed"); }
+  gzLoad();
+}
+async function gzGood(gwd){
+  const cur=gzGwdInfo(gwd);
+  const nv=(cur.rec&&cur.rec.verdict==="good")?null:"good";   // toggle
+  try{ await gzFetch("/gerizim/verdict",{gwd:gwd,verdict:nv}); }
+  catch(e){ toast("⚠ فشل · failed"); }
+  gzLoad();
+}
+async function gzRetry(gwd){
+  if(!confirm(`Mark ${gwd} not good and send it back to Pending to re-register?\n\nIts record + proof are removed so you can register it again.`)) return;
+  try{ await gzFetch("/gerizim/retry",{gwd:gwd}); toast("↺ أُعيد للانتظار · back to pending"); }
+  catch(e){ toast("⚠ فشل · failed"); }
+  gzLoad();
+}
 function pkgDocsPill(p,pk,pi){
   const up=pk&&pk.gaash_docs_at, cd=pk&&pk.gaash_cd_at;
   if(!up||!cd||!(new Date(cd)>new Date(up))) return '';
@@ -5401,7 +5649,10 @@ function cuFilter(inp){ const q=(inp.value||'').trim().toLowerCase();
 // ── Package info card: everything about one package on one simple screen —
 //    the statuses, every date (with the GAASH days-left counter big), and all
 //    the actions as plain buttons instead of tooltips + the ⋯ menu. ──
-function pkgInfoClose(){ $("pkgInfoModal").classList.add("hidden"); }
+let PKG_INFO=null;   // {id,pi,page} — page "gz" = the Register-at-Gerizim view
+function pkgInfoClose(){ $("pkgInfoModal").classList.add("hidden"); PKG_INFO=null; }
+function pkgGzOpen(){ if(!PKG_INFO) return; PKG_INFO.page="gz"; pkgInfoOpen(PKG_INFO.id,PKG_INFO.pi); }
+function pkgGzBack(){ if(!PKG_INFO) return; PKG_INFO.page=null; pkgInfoOpen(PKG_INFO.id,PKG_INFO.pi); }
 function pkgInfoOpen(id,pi){
   const p=poFind(id), pk=p&&(p.packages||[])[pi]; if(!pk) return;
   const custs=[...new Set((pk.items||[]).map(it=>(it.customer_name||'').trim()).filter(Boolean))];
@@ -5413,6 +5664,15 @@ function pkgInfoOpen(id,pi){
   const arrN=pk.arrival?dueDays(pk.arrival):null;
   const docsWarn=pk.gaash_docs_at&&pk.gaash_cd_at&&new Date(pk.gaash_cd_at)>new Date(pk.gaash_docs_at);
   const est=pkgEstTotal(pk), gwd=(pk.tracking_number||'').trim();
+  // page 2 of the popup: the Register-at-Gerizim mini tool (kept across re-opens)
+  const keepGz=PKG_INFO&&PKG_INFO.id===id&&PKG_INFO.pi===pi&&PKG_INFO.page==="gz";
+  PKG_INFO={id,pi,page:(keepGz&&gwd)?"gz":null};
+  if(PKG_INFO.page==="gz"){
+    $("pkgInfoBody").innerHTML='<div id="pkgGzBody"></div>';
+    gzOpen("pkgGzBody",[gwd],"pkgGzBack()");
+    $("pkgInfoModal").classList.remove("hidden");
+    return;
+  }
   const urgent=dln!=null&&dln<=7;
   // Amazon-arrival emphasis escalates with lateness: muted future → bold red late
   // → solid ⚠ badge at ≥7 days late (the owner's "most important" tier).
@@ -5447,6 +5707,7 @@ function pkgInfoOpen(id,pi){
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
       <button class="po-btn" onclick="pkgInfoClose();trackPkg(null,'${p.po_id}',${pi})">🔎 تتبع الشحنة · Check shipping</button>
       ${gwd?`<button class="po-btn" onclick="pkgInfoClose();gaashUploadOpen('${p.po_id}',${pi})">🪪 رفع مستندات · Upload docs</button>`:''}
+      ${gwd?`<button class="po-btn" onclick="pkgGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:''}
       <button class="po-btn" onclick="pkgInfoClose();pkgNotifyOpen('${p.po_id}',${pi})">📱 إشعار العملاء · Notify customers</button>
       <button class="po-btn" onclick="pkgInfoClose();pkgEstimateCost('${p.po_id}',${pi})">💰 تقدير التكلفة · Estimate cost</button>
       <button class="po-btn" onclick="pkgInfoClose();pkgEditOpen('${p.po_id}',${pi})">✏️ تعديل الطرد · Edit package</button>
