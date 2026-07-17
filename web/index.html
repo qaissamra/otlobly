@@ -3224,7 +3224,16 @@ async function lxItemImage(btn){
   if(LX_EDIT&&LX_EDIT.id===rid) $("lxEditBody").innerHTML=lxEditorHtml(lxFind(rid));
   toast(r&&r.ok&&r.image?"Amazon photo fetched ✓ — ASIN saved":"No image found for that ASIN (check it / SerpAPI credits)");
 }
-function lxMigrateAsk(btn){   // Tools-menu entry: ask the since-date, then run the normal migrate
+let LX_MIG_SRC="";   // AZ (2) source list id captured by lxMigrateAsk for lxMigrate's scan POST
+function lxMigrateAsk(btn){   // Tools-menu entry: ask the source list (once) + since-date, then migrate
+  let src=(LX&&LX.source_list_id)||"";
+  if(!src){   // never set on this deployment yet — ask once, defaulting to the real AZ (2)
+    src=prompt("رقم قائمة AZ (2) الأصلية — يُنسخ منها فقط ولا تُعدَّل أبداً\nAZ (2) SOURCE list id — copied FROM (read-only), never changed","901520351506");
+    if(src===null) return;
+    src=src.trim();
+    if(!src){ toast("Need the AZ (2) list id"); return; }
+  }
+  LX_MIG_SRC=src;
   const d=prompt("Migrate AZ (2) orders created on/after (YYYY-MM-DD)\nفارغ = آخر ٧ أيام · empty = last 7 days",$("lxMigrateSince").value||"");
   if(d===null) return;
   $("lxMigrateSince").value=d.trim();
@@ -3235,7 +3244,7 @@ async function lxMigrate(btn){
   if(!since){ since=new Date(Date.now()-7*864e5).toISOString().slice(0,10); $("lxMigrateSince").value=since; }
   if(!confirm(`Copy AZ (2) orders created on/after ${since} into this working list?\n\nAZ (2) is only READ — never changed.`)) return;
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="⏳ Reading AZ (2)…";
-  let r; try{ r=await post("/api/leluxe/migrate",{phase:"scan",since,limit:25}); }catch(e){ r={}; }
+  let r; try{ r=await post("/api/leluxe/migrate",{phase:"scan",since,limit:25,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
   if(!r.ok){ pr.textContent="❌ "+(r.error||"migration failed"); btn.disabled=false; return; }
   const head=`${r.orders} orders · ${r.packages} packages · ${r.items} products${r.skipped?` (${r.skipped} already here)`:""}`;
   let done=0,rem=1;

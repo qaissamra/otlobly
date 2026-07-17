@@ -2200,6 +2200,13 @@ def api_leluxe_migrate():
         since = (b.get("since") or "").strip()
         if not since:
             return jsonify({"ok": False, "error": "since date required"}), 400
+        # one-time: persist the read-only AZ (2) source list id when the client
+        # supplies it (it has no other setter — Discover only sets the working list)
+        src = str(b.get("source_list_id") or "").strip()
+        if src:
+            _c = cfg.load()
+            cfg.set_path(_c, "leluxe.source_list_id", src)
+            cfg.save(_c)
         flag = db.get_setting("leluxe:import_running") or 0
         try:
             flag = float(flag)
