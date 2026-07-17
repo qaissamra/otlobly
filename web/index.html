@@ -2273,11 +2273,11 @@ function lxFilterRow(f,i){
       </div></span>`;
   }
   else if(t==="number"||t==="currency")
-    valCtl=`<input type="number" step="any" value="${f.val!=null?poEsc(f.val):""}" onchange="lxFSet(${i},'val',this.value)" style="width:110px;font-size:12px">`;
+    valCtl=`<input type="number" step="any" value="${f.val!=null?poEsc(f.val):""}" onchange="lxFSetVal(${i},this.value)" style="width:110px;font-size:12px">`;
   else if(t==="date")
-    valCtl=`<input type="date" value="${poEsc(f.val||"")}" onchange="lxFSet(${i},'val',this.value)" style="font-size:12px">`;
+    valCtl=`<input type="date" value="${poEsc(f.val||"")}" onchange="lxFSetVal(${i},this.value)" style="font-size:12px">`;
   else
-    valCtl=`<input value="${poEsc(f.val||"")}" placeholder="text…" onchange="lxFSet(${i},'val',this.value)" style="width:150px;font-size:12px">`;
+    valCtl=`<input value="${poEsc(f.val||"")}" placeholder="text…" oninput="lxFSetVal(${i},this.value)" style="width:150px;font-size:12px">`;
   return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
     <span class="muted2" style="font-size:11px;width:42px;text-align:end">${i===0?"Where":"AND"}</span>
     ${fieldSel} ${opSel} ${valCtl}
@@ -2294,6 +2294,10 @@ function lxFSet(i,k,v){
   if(k==="op"&&(v==="is set"||v==="not set")) LX_FILTERS[i].val=null;
   lxFSave(); lxRenderFilters(); renderLeluxe();
 }
+// value edits must NOT rebuild the filter box — that steals focus from the
+// input mid-typing (a native date field commits "0002" the moment it's valid,
+// so the year could never be finished). Just save + re-render the list.
+function lxFSetVal(i,v){ if(!LX_FILTERS[i]) return; LX_FILTERS[i].val=v; lxFSave(); renderLeluxe(); }
 function lxFDel(i){ LX_FILTERS.splice(i,1); lxFSave(); lxRenderFilters(); renderLeluxe(); }
 // value toggles keep the menu open (like ClickUp) — update the button label in place
 function lxFToggleVal(i,k,cb){
