@@ -6022,8 +6022,10 @@ function gzTip(gz){
 function pkgGerizimPill(pk){
   const gz=(pk&&pk.gerizim_status&&typeof pk.gerizim_status==='object')?pk.gerizim_status:null;
   if(!gz||!(gz.label||gz.status)) return '';
-  // 🛵 = the last-mile courier, so Gerizim chips never read as GAASH statuses
-  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", `🛵 ${gz.label||gz.status}`, gzTip(gz));
+  // same Arabic stage vocabulary as Leluxe (GZ_AR); the carrier's raw English
+  // label stays in the hover tip (gzTip leads with it)
+  const ar=GZ_AR[gz.bucket], txt=ar?`${ar[0]} ${ar[1]}`:`🛵 ${gz.label||gz.status}`;
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, gzTip(gz));
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
