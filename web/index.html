@@ -412,6 +412,12 @@
     #lxRows>.po-card>.po-head>.po-title>.muted2,
     #lxRows>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lx-prow{flex-wrap:nowrap}
+    /* expanded-order sub-rows join the same column grid: cancel the extra nesting
+       insets (po-body 12 + pkg border 1 + row pads) so each sub-row's .lx-cols
+       right edge lands on the header's 15px — order row = 1(card)+14(po-title) */
+    #lxRows .po-body .pkg-title-row{flex-wrap:nowrap;padding-inline-end:1px}
+    #lxRows .po-body .pkg-body{padding-inline-end:0}
+    #lxRows .po-body .poc-row{flex-wrap:nowrap;padding-inline-end:1px}
   }
   @container lxboard (min-width:1060px){
     .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 160px 80px 50px 78px 28px);gap:6px}
@@ -711,6 +717,8 @@
       <a class="dismiss" onclick="document.getElementById('poHelp').style.display='none'">✕ hide</a>
     </div>
     <div class="po-filters" id="poFilters"></div>
+    <!-- ClickUp-style filter builder: field · operator · values, rows AND-ed -->
+    <div id="poFilterBuilder" style="margin:2px 0 10px"></div>
     <div id="poTree"></div>
   </div>
 
@@ -2723,24 +2731,24 @@ function lxVPkgHtml(o,g){
         <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
         <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
       </div>
-      ${lxDot(it)}
-      ${lxStatusSelect(it)}
       ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-      ${gzBadge(g.tn)}
-      ${lxGashPill(en)}
-      ${lxGerizimPill(en)}
-      ${lxDeadlinePill(en)}
-      ${lxCfPill("gash status",gashStatus)}
       ${lxCfPill("rd status",lxF(it,"rd status"))}
-      ${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}
-      ${lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it))}
-      ${popMenu([
-        [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
-        [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
-        g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-        g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
-        [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
-      ])}
+      <span class="lx-cols">
+        <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc">${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}</span>
+        <span class="lxc">${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}</span>
+        <span class="lxc"></span>
+        <span class="lxc">${lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
+        <span class="lxc">${popMenu([
+          [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
+          [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
+          g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
+          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
+          [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
+        ])}</span>
+      </span>
     </div></div></div>`;
   }
   const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;lxVPkgToggle('${poEsc(key)}')" style="cursor:pointer">
@@ -2748,19 +2756,22 @@ function lxVPkgHtml(o,g){
       <b class="pkg-title">📦 ${g.tn?poEsc(g.tn):"no tracking"}</b>${g.tn?lxCopyRawBtn(g.tn):""}
       <span class="muted2" style="font-size:11px">${g.items.length} product${g.items.length===1?"":"s"}</span>
       ${lxThumbs(g.items)}
-      <span class="spacer" style="flex:1"></span>
-      ${gzBadge(g.tn)}
-      ${lxGashPill(en)}
-      ${lxGerizimPill(en)}
-      ${lxDeadlinePill(en)}
-      ${lxCfPill("gash status",gashStatus)}
-      ${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}
       ${g.tn?"":`<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
-      ${popMenu([
-        [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
-        g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-        g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
-      ])}
+      <span class="spacer" style="flex:1"></span>
+      <span class="lx-cols">
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc">${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}</span>
+        <span class="lxc">${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}</span>
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc">${popMenu([
+          [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
+          g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
+          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
+        ])}</span>
+      </span>
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">${g.items.map(it=>lxItemRow(it,null,{inPkg:true})).join("")}</div>`;
   return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
@@ -2776,21 +2787,24 @@ function lxPkgHtml(o,pk){
       <span class="muted2" style="font-size:11px">${items.length} product${items.length===1?"":"s"}</span>
       ${lxThumbs(items)}
       <span class="spacer" style="flex:1"></span>
-      ${gzBadge(tn)}
-      ${lxGashPill(pk)}
-      ${lxGerizimPill(pk)}
-      ${lxDeadlinePill(pk)}
-      ${lxCfPill("gash status",lxF(pk,"gash status"))}
-      ${lxDueChip(lxF(pk,"gash date"),false)}
-      ${popMenu([
-        [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
-        [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
-        tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-        tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
-        tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
-        [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
-        [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
-      ])}
+      <span class="lx-cols">
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc">${gzBadge(tn)}${lxMergedStatusPill(pk)||lxCfPill("gash status",lxF(pk,"gash status"))}</span>
+        <span class="lxc">${lxDeadlinePill(pk)}${lxDueChip(lxF(pk,"gash date"),false)}</span>
+        <span class="lxc"></span>
+        <span class="lxc"></span>
+        <span class="lxc">${popMenu([
+          [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
+          [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
+          tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
+          tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
+          tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
+          [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
+          [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
+        ])}</span>
+      </span>
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">
     ${items.map(it=>lxItemRow(it)).join("")||`<div class="muted2" style="padding:6px 10px;font-size:12px">no products yet</div>`}
@@ -2856,14 +2870,18 @@ function lxItemRow(it,parentO,opts){
       <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
     </div>
     ${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}
-    ${lxDot(it)}
-    ${lxStatusSelect(it)}
     ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-    ${opts.inPkg?"":(tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}
-    ${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}
     ${lxCfPill("rd status",lxF(it,"rd status"))}
-    ${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}
-    ${itMenu}
+    <span class="lx-cols">
+      <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
+      <span class="lxc"></span>
+      <span class="lxc">${opts.inPkg?"":(tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}</span>
+      <span class="lxc">${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}</span>
+      <span class="lxc"></span>
+      <span class="lxc"></span>
+      <span class="lxc">${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
+      <span class="lxc">${itMenu}</span>
+    </span>
   </div>`;
 }
 function lxOrphanRow(r){
@@ -5285,6 +5303,163 @@ const PO_FILTERS={
   soon:{lab:"Arriving this week",tone:"amber",test:p=>!(p.packages||[]).some(pkgLate)&&(p.packages||[]).some(pkgArrivingSoon)},
   notrk:{lab:"No tracking",test:p=>(p.packages||[]).some(pkgNoTracking)},
 };
+// ── ClickUp-style filter builder (mirror of the Leluxe one): Where field·op·values,
+// rows AND-ed; a PO passes a filter if ANY of its packages/products matches it.
+// Reuses lxOps/lxFOptioned/lxFValLabel/cuFilter/popToggle + the .cu-* CSS.
+let PO_FLT=[];
+try{ PO_FLT=JSON.parse(localStorage.getItem("po_filters")||"[]")||[]; }catch(e){ PO_FLT=[]; }
+function poFSave(){ try{ localStorage.setItem("po_filters",JSON.stringify(PO_FLT)); }catch(e){} }
+function poFActive(){ return PO_FLT.filter(f=>f.field&&f.op); }
+// arrival dates arrive as YYYY-MM-DD or D/M/YYYY — normalize for date compare
+function poISO(s){ s=String(s||"").trim(); if(!s) return "";
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m) return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  return ""; }
+const PO_GAASH_BUCKETS=[["transit","IN TRANSIT","#4466ff"],["arrived","ARRIVED","#e5484d"],
+  ["customs","CUSTOMS","#f76808"],["cleared","CLEARED GASH","#0f9d9f"],["delivered","DELIVERED","#0a7d33"]];
+function poFields(){
+  const pkgs=p=>p.packages||[], items=p=>pkgs(p).flatMap(pk=>pk.items||[]);
+  const gzL=b=>GZ_AR[b]?`${GZ_AR[b][0]} ${GZ_AR[b][1]}`:String(b||"");
+  const gaashL=b=>{ const e=PO_GAASH_BUCKETS.find(x=>x[0]===b); return e?e[1]:String(b||""); };
+  const boxes=[...new Set([...(PO_BOXES||[]),...(POS||[]).map(p=>(p.profile_box||"").trim()).filter(Boolean)])].sort();
+  return [
+    {key:"gaash",label:"GAASH status",type:"status",
+      options:PO_GAASH_BUCKETS.map(([b,l,c])=>({name:l,color:c})),
+      vals:p=>pkgs(p).map(pk=>{ const t=tsObj(pk); return t&&t.bucket?gaashL(t.bucket):null; })},
+    {key:"gerizim",label:"جيرزيم · Gerizim",type:"status",
+      options:Object.keys(GZ_AR).map(b=>({name:gzL(b),color:GZ_HEX[b]||"#8d8d8d"})),
+      vals:p=>pkgs(p).map(pk=>(pk.gerizim_status&&pk.gerizim_status.bucket)?gzL(pk.gerizim_status.bucket):null)},
+    {key:"gzreg",label:"مسجّل في جيرزيم · Registered at Gerizim",type:"checkbox",
+      vals:p=>pkgs(p).map(pk=>GZ_REG.has(String(pk.tracking_number||"").trim())||null)},
+    {key:"otlobly",label:"Otlobly status",type:"status",
+      options:CU_STATUSES.map(([n,c])=>({name:n,color:c})),
+      vals:p=>pkgs(p).map(pk=>pk.otlobly_status||null)},
+    {key:"exception",label:"Product exception",type:"status",
+      options:PO_STATUSES.map(s=>({name:s,color:(STATUS_COLOR[s]||["#b42318"])[0]})),
+      vals:p=>items(p).map(it=>it.status||null)},
+    {key:"customer",label:"Customer",type:"text",
+      vals:p=>[p.ship_to,...items(p).map(it=>it.customer_name)]},
+    {key:"box",label:"Profile · B##",type:"drop_down",
+      options:boxes.map(b=>({name:b,color:"#6b7488"})),
+      vals:p=>[p.profile_box]},
+    {key:"gwd",label:"Tracking number",type:"text",
+      vals:p=>pkgs(p).map(pk=>pk.tracking_number)},
+    {key:"arrival",label:"Arrival date",type:"date",
+      vals:p=>pkgs(p).map(pk=>poISO(pk.arrival))},
+    {key:"late",label:"Late (days)",type:"number",
+      vals:p=>pkgs(p).map(pk=>{ const d=pk.arrival?dueDays(pk.arrival):null; return d==null?null:(d<0?-d:0); })},
+    {key:"amount",label:"Amount (USD)",type:"currency",vals:p=>[p.total_usd]},
+  ];
+}
+function poFdef(key){ return poFields().find(f=>f.key===key); }
+// same op semantics as lxFMatch, applied over the PO's pooled values
+function poFMatch(p,f){
+  const fd=poFdef(f.field); if(!fd) return true;
+  const vals=(fd.vals(p)||[]).filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="");
+  if(f.op==="is set") return vals.length>0;
+  if(f.op==="not set") return vals.length===0;
+  if(f.op==="is"||f.op==="is not"){
+    const sel=(f.val||[]).map(String); if(!sel.length) return true;
+    const hit=vals.map(String).some(v=>sel.includes(v));
+    return f.op==="is"?hit:!hit;
+  }
+  const q=String(f.val==null?"":f.val).trim(); if(!q) return true;
+  if(f.op==="contains"||f.op==="not contains"){
+    const hit=vals.some(v=>String(v).toLowerCase().includes(q.toLowerCase()));
+    return f.op==="contains"?hit:!hit;
+  }
+  if(fd.type==="number"||fd.type==="currency"){
+    const n=parseFloat(q); if(isNaN(n)) return true;
+    if(f.op==="=") return vals.some(v=>parseFloat(v)===n);
+    if(f.op==="≥") return vals.some(v=>parseFloat(v)>=n);
+    if(f.op==="≤") return vals.some(v=>parseFloat(v)<=n);
+  }
+  if(fd.type==="date"){
+    const ts=Date.parse(q); if(isNaN(ts)) return true;
+    if(f.op==="after")  return vals.some(v=>{ const x=Date.parse(v); return !isNaN(x)&&x>=ts; });
+    if(f.op==="before") return vals.some(v=>{ const x=Date.parse(v); return !isNaN(x)&&x<=ts+86399999; });
+  }
+  return true;
+}
+function poRenderFilters(){
+  const box=$("poFilterBuilder"); if(!box) return;
+  box.innerHTML=PO_FLT.map((f,i)=>poFilterRow(f,i)).join("")
+    +`<div style="display:flex;gap:8px;align-items:center;margin-top:${PO_FLT.length?6:0}px">
+       <button class="minibtn" onclick="PO_FLT.push({field:null,op:null,val:null});poRenderFilters()">＋ Add filter</button>
+       ${poFActive().length?`<button class="minibtn" style="color:var(--bad)" onclick="PO_FLT=[];poFSave();poRenderFilters();renderPurchases()">Clear all</button>`:""}
+     </div>`;
+}
+function poFilterRow(f,i){
+  const fdef=poFdef(f.field), t=fdef&&fdef.type;
+  const fieldSel=`<span class="pop">
+    <button class="po-btn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}">${fdef?poEsc(fdef.label):"Select filter"} ▾</button>
+    <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0">
+      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+      ${poFields().map((fd,j)=>`<button class="pop-item cu-item" onclick="poFSetField(${i},${j})"><b>${poEsc(fd.label)}</b></button>`).join("")}
+    </div></span>`;
+  if(!fdef) return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${fieldSel}
+    <button class="minibtn" title="remove filter" onclick="poFDel(${i})">🗑</button></div>`;
+  const opSel=`<select onchange="poFSet(${i},'op',this.value)" style="font-size:12px">${lxOps(t)
+    .map(o=>`<option${o===f.op?" selected":""}>${o}</option>`).join("")}</select>`;
+  let valCtl="";
+  if(f.op==="is set"||f.op==="not set") valCtl="";
+  else if(lxFOptioned(t)){
+    const opts=fdef.options||[], sel=f.val||[];
+    valCtl=`<span class="pop">
+      <button class="po-btn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}">${lxFValLabel(sel)} ▾</button>
+      <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0" onclick="event.stopPropagation()">
+        <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)">
+        <button class="pop-item" style="color:var(--accent);font-weight:700" onclick="poFSelAll(${i},this)">Select all</button>
+        ${opts.map((o,k)=>`<label class="pop-item cu-item" style="cursor:pointer">
+            <span class="cu-ring" style="border-color:${o.color||'#8d8d8d'}"></span><b>${poEsc(o.name)}</b>
+            <input type="checkbox"${sel.includes(o.name)?" checked":""} onchange="poFToggleVal(${i},${k},this)">
+          </label>`).join("")}
+      </div></span>`;
+  }
+  else if(t==="number"||t==="currency")
+    valCtl=`<input type="number" step="any" value="${f.val!=null?poEsc(f.val):""}" onchange="poFSetVal(${i},this.value)" style="width:110px;font-size:12px">`;
+  else if(t==="date")
+    valCtl=`<input type="date" value="${poEsc(f.val||"")}" onchange="poFSetVal(${i},this.value)" style="font-size:12px">`;
+  else
+    valCtl=`<input value="${poEsc(f.val||"")}" placeholder="text…" oninput="poFSetVal(${i},this.value)" style="width:150px;font-size:12px">`;
+  return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+    <span class="muted2" style="font-size:11px;width:42px;text-align:end">${i===0?"Where":"AND"}</span>
+    ${fieldSel} ${opSel} ${valCtl}
+    <button class="minibtn" title="remove filter" onclick="poFDel(${i})">🗑</button>
+  </div>`;
+}
+function poFSetField(i,j){
+  const fd=poFields()[j]; if(!fd) return;
+  PO_FLT[i]={field:fd.key,op:lxOps(fd.type)[0],val:lxFOptioned(fd.type)?[]:""};
+  poFSave(); poRenderFilters(); renderPurchases();
+}
+function poFSet(i,k,v){
+  PO_FLT[i][k]=v;
+  if(k==="op"&&(v==="is set"||v==="not set")) PO_FLT[i].val=null;
+  poFSave(); poRenderFilters(); renderPurchases();
+}
+// value edits must NOT rebuild the builder — rebuilding steals focus mid-typing
+function poFSetVal(i,v){ if(!PO_FLT[i]) return; PO_FLT[i].val=v; poFSave(); renderPurchases(); }
+function poFDel(i){ PO_FLT.splice(i,1); poFSave(); poRenderFilters(); renderPurchases(); }
+function poFToggleVal(i,k,cb){
+  const fdef=poFdef(PO_FLT[i].field), name=((fdef&&fdef.options||[])[k]||{}).name;
+  if(name==null) return;
+  let sel=PO_FLT[i].val||[];
+  const ix=sel.indexOf(name); ix>=0?sel.splice(ix,1):sel.push(name);
+  PO_FLT[i].val=sel; poFSave(); renderPurchases();
+  const btn=cb.closest(".pop").querySelector("button.po-btn");
+  if(btn) btn.innerHTML=lxFValLabel(sel)+" ▾";
+}
+function poFSelAll(i,el){
+  const fdef=poFdef(PO_FLT[i].field), all=(fdef&&fdef.options||[]).map(o=>o.name);
+  const cur=PO_FLT[i].val||[];
+  PO_FLT[i].val=(cur.length===all.length)?[]:all.slice();
+  poFSave(); renderPurchases();
+  const on=PO_FLT[i].val.length>0;
+  [...el.closest(".pop-menu").querySelectorAll("input[type=checkbox]")].forEach(c=>c.checked=on);
+  const btn=el.closest(".pop").querySelector("button.po-btn");
+  if(btn) btn.innerHTML=lxFValLabel(PO_FLT[i].val)+" ▾";
+}
 function renderPurchases(){
   if(!POS) return;
   const mount=$(PO_MOUNT); if(!mount) return;
@@ -5296,6 +5471,9 @@ function renderPurchases(){
     ftab.innerHTML=["all","late","soon","notrk"].map(k=>{ const f=PO_FILTERS[k], n=POS.filter(f.test).length;
       return `<span class="po-tab ${f.tone||''} ${PO_FILTER===k?'on':''}" onclick="PO_FILTER='${k}';renderPurchases()">${f.lab} · ${n}</span>`; }).join("");
     list=list.filter(PO_FILTERS[PO_FILTER].test);
+    if(!$("poFilterBuilder").innerHTML) poRenderFilters();   // first paint (kept across list re-renders)
+    const act=poFActive();
+    if(act.length) list=list.filter(p=>act.every(f=>poFMatch(p,f)));
   }
   if(!list.length){ mount.innerHTML=`<div class="panel" style="color:var(--muted)">${inAddCard?'':'No orders match this filter.'}${inAddCard?'No purchase orders yet.':''}</div>`; return; }
   mount.innerHTML=boxDatalist()+custDatalist()+list.map(poCardHtml).join("");
