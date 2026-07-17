@@ -1114,7 +1114,7 @@
         <span id="lxSeparate"></span>
         <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
         <button class="minibtn" onclick="lxExpandAll(false)" title="collapse all orders">⊟</button>
-        <input id="lxSearch" placeholder="search order #, product, tracking, VISA…" oninput="renderLeluxe()" style="width:240px;padding:4px 8px;font-size:12px">
+        <input id="lxSearch" placeholder="search order #, product, tracking, VISA…" oninput="LX_ONLY=null;renderLeluxe()" style="width:240px;padding:4px 8px;font-size:12px">
       </div>
       <!-- ClickUp-style filter builder: field · operator · values, rows AND-ed -->
       <div id="lxFilters" style="margin-bottom:10px"></div>
@@ -2317,6 +2317,7 @@ function lxFSelAll(i,el){
 }
 // board view mode: "orders" (grouped cards) | "products" (ClickUp's "as separate tasks")
 let LX_VIEW=localStorage.getItem("lx_view")||"orders";
+let LX_ONLY=null, LX_LAST_MIGRATED=[];   // restrict the grid to just-migrated order ids
 let LX_DASH_UNIT=localStorage.getItem("lx_dash_unit")||"products";
 let LX_DASH_METRIC=localStorage.getItem("lx_dash_metric")||"count";
 function lxSetView(v){ LX_VIEW=v; try{ localStorage.setItem("lx_view",v); }catch(e){} renderLeluxe(); }
@@ -2335,7 +2336,7 @@ function lxFilteredOrders(){
   });
   const orders=(LX.orders||[]).filter(o=>{
     const rows=[o,...(o.packages||[]),...lxItemsOf(o)];
-    return rows.some(match)&&(!active.length||gmatch(o,rows));
+    return (!LX_ONLY||LX_ONLY.has(o.id))&&rows.some(match)&&(!active.length||gmatch(o,rows));
   });
   const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch(r,[r])));
   return {orders,orphans};
@@ -2350,6 +2351,18 @@ function lxJumpOrder(id){
   LX_OPEN.add(id); renderLeluxe();
   const el=document.getElementById("lxo"+id);
   if(el){ el.scrollIntoView({block:"start"}); window.scrollBy(0,-120); }
+}
+// Show ONLY the orders from the last Migrate run — expand + scroll + flash the first
+function lxViewMigrated(){
+  if(!LX_LAST_MIGRATED.length) return;
+  LX_ONLY=new Set(LX_LAST_MIGRATED);
+  const s=$("lxSearch"); if(s) s.value="";                 // a stale search must not hide them
+  LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
+  LX_LAST_MIGRATED.forEach(id=>LX_OPEN.add(id));            // expand each new order
+  renderLeluxe();
+  const el=document.getElementById("lxo"+LX_LAST_MIGRATED[0]);
+  if(el){ el.scrollIntoView({behavior:"smooth",block:"center"});
+    el.style.outline="2px solid var(--accent)"; setTimeout(()=>{ el.style.outline=""; },1600); }
 }
 // ---- Separate by (ClickUp "Group by"): split the products view into sections ---- //
 let LX_GROUP=localStorage.getItem("lx_group")||"";
@@ -2483,7 +2496,8 @@ function renderLeluxe(){
   const hl=(key,label,i,style)=>`<span class="${key?"lbl lx-sort":"lbl"}"${style?` style="${style}"`:""}${key?` title="sort by ${label}" onclick="lxSortClick('${key}')"`:""}>${key?lxSortArrow(key)+label:""}${i!=null?rsz(i):""}</span>`;
   const colHead=orders.length?`<div class="lx-colhead">${hl("name","order",null,"flex:1")}
     <span class="lx-cols">${HCOLS.map(([k,l],i)=>hl(k,l,i)).join("")}</span></div>`:"";
-  $("lxRows").innerHTML=colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
+  const onlyBanner=LX_ONLY?`<div class="panel" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">👁 <b>Showing ${LX_ONLY.size} just-migrated order${LX_ONLY.size===1?"":"s"}</b><span class="spacer" style="flex:1"></span><button class="minibtn" onclick="LX_ONLY=null;renderLeluxe()">✕ show all</button></div>`:"";
+  $("lxRows").innerHTML=onlyBanner+colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
   lxColwApply();
 }
 // ── Dashboard view: live KPIs over the FILTERED orders (recomputes on every
@@ -3246,6 +3260,7 @@ async function lxMigrate(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="⏳ Reading AZ (2)…";
   let r; try{ r=await post("/api/leluxe/migrate",{phase:"scan",since,limit:25,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
   if(!r.ok){ pr.textContent="❌ "+(r.error||"migration failed"); btn.disabled=false; return; }
+  LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
   const head=`${r.orders} orders · ${r.packages} packages · ${r.items} products${r.skipped?` (${r.skipped} already here)`:""}`;
   let done=0,rem=1;
   while(rem>0){ pr.textContent=`✓ ${head} · fetching Amazon photos… ${done}`;
@@ -3255,7 +3270,8 @@ async function lxMigrate(btn){
   while(trem>0){ pr.textContent=`✓ ${head} · live GAASH tracking… ${tc}`;
     let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
     if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
-  pr.textContent=`✅ Migrated ${head}. Pushing to ClickUp in the background — watch the sync chip.`;
+  pr.innerHTML=`✅ Migrated ${poEsc(head)}. Pushing to ClickUp in the background — watch the sync chip.`
+    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View these (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
 }
 async function lxRefreshTracking(btn){

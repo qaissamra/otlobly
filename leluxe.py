@@ -745,7 +745,7 @@ def migrate_from_source(since_iso, limit=20, config=None):
               and int(t.get("date_created") or 0) >= since_ms]
     orders.sort(key=lambda t: int(t.get("date_created") or 0), reverse=True)
     made = {"orders": 0, "packages": 0, "items": 0, "skipped": 0,
-            "scanned": len(orders)}
+            "scanned": len(orders), "order_ids": []}
     for src_order in orders:
         if made["orders"] >= limit:
             break
@@ -760,6 +760,7 @@ def migrate_from_source(since_iso, limit=20, config=None):
             date_created=ocols["date_created"],
             extra={"source_task_id": src_order["id"]})
         made["orders"] += 1
+        made["order_ids"].append(order_id)
         groups = {}
         for ch in children.get(src_order["id"], []):
             _, cdata = _decode_task(ch, sch)
