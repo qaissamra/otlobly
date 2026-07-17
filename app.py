@@ -2234,6 +2234,22 @@ def api_leluxe_migrate():
     return jsonify({"ok": False, "error": "bad phase"}), 400
 
 
+@app.route("/api/leluxe/dedupe", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_dedupe():
+    """Remove migrate-created duplicate orders: keeps the original imported row,
+    soft-deletes each migrate copy + deletes its pushed twin task in the WORKING
+    list only (AZ (2) is never touched). dry_run=true reports without acting."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = leluxe_mod.dedupe_migrated(dry_run=bool(b.get("dry_run", True)))
+    if not res.get("dry_run"):
+        activity.log("deleted", "leluxe", "dedupe", "Leluxe",
+                     detail=f"deduped {res['removed']} order(s), removed "
+                            f"{res['clickup_deleted']} ClickUp twin task(s)", user=_user())
+    return jsonify({"ok": True, **res})
+
+
 @app.route("/api/leluxe/refresh_tracking", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

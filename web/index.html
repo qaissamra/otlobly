@@ -1091,6 +1091,7 @@
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
           <button class="pop-item" id="lxPullBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxImport(this)" title="fetch ClickUp-side changes into this page (your unsent edits are kept)">↙ Pull from ClickUp</button>
           <button class="pop-item" id="lxMigrateBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxMigrateAsk(this)" title="copy recent orders from the real AZ (2) into this working list (AZ (2) is only read)">⬇ Migrate from AZ (2)…</button>
+          <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
           <button class="pop-item" id="lxActivityBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity log</button>
         </div>
@@ -3243,6 +3244,29 @@ async function lxItemImage(btn){
   toast(r&&r.ok&&r.image?"Amazon photo fetched ✓ — ASIN saved":"No image found for that ASIN (check it / SerpAPI credits)");
 }
 let LX_MIG_SRC="";   // AZ (2) source list id captured by lxMigrateAsk for lxMigrate's scan POST
+// Tools-menu 🧹: dry-run first, confirm with the exact count, then execute.
+// Removes migrate-created duplicate orders (keeps the original imported row;
+// deletes the copy here + its pushed twin task in the WORKING list only).
+async function lxDedupe(btn){
+  btn.disabled=true;
+  let r; try{ r=await post("/api/leluxe/dedupe",{dry_run:true}); }catch(e){ r={}; }
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"dedupe check failed"); return; }
+  const real=(r.groups||[]).filter(g=>!g.ambiguous);
+  const n=real.reduce((s,g)=>s+((g.removed||[]).length),0);
+  if(!n){ toast("لا تكرارات · no duplicates found ✓"); return; }
+  const names=real.map(g=>g.keeper&&g.keeper.name).filter(Boolean);
+  if(!confirm(`Remove ${n} duplicate order(s)?\n\nKeeps the original row; deletes the migrate copy here AND its pushed twin task in the working list. AZ (2) is never touched.\n\n${names.slice(0,8).join("\n")}${names.length>8?"\n…":""}`)) return;
+  btn.disabled=true;
+  let x; try{ x=await post("/api/leluxe/dedupe",{dry_run:false}); }catch(e){ x={}; }
+  btn.disabled=false;
+  if(!x.ok){ toast(x.error||"dedupe failed"); return; }
+  const pr=$("lxProgress"); pr.style.display="block";
+  pr.textContent=`🧹 removed ${x.removed} duplicate(s) · ${x.clickup_deleted} ClickUp twin task(s) deleted`
+    +((x.errors&&x.errors.length)?` · ⚠ ${x.errors.join(" · ")}`:"");
+  toast(`🧹 تمت الإزالة · removed ${x.removed}`);
+  await loadLeluxe(); lxPollStart();
+}
 function lxMigrateAsk(btn){   // Tools-menu entry: ask the source list (once) + since-date, then migrate
   let src=(LX&&LX.source_list_id)||"";
   if(!src){   // never set on this deployment yet — ask once, defaulting to the real AZ (2)

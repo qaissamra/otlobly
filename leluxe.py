@@ -702,6 +702,49 @@ def _source_seen(src_task_id):
             (src_task_id,)).fetchone())
 
 
+# The working list was originally seeded by DUPLICATING AZ (2) inside ClickUp —
+# those rows carry no source_task_id, so _source_seen can't recognize them and
+# migrate would re-copy the same orders (it did, once). Second dedup key: the
+# order NAME, preferring the embedded Amazon order number (name formats vary:
+# "Order # 113-…", "# 111-…", free text).
+_ORDNUM = re.compile(r"\d{3}-\d{7}-\d{7}")
+
+
+def _name_key(name):
+    m = _ORDNUM.search(str(name or ""))
+    if m:
+        return "num:" + m.group(0)
+    return "nm:" + " ".join(str(name or "").casefold().split())
+
+
+def _existing_order_keys():
+    """name-key -> local row id for every visible order/parent row."""
+    out = {}
+    with db.connect() as c:
+        for r in c.execute("SELECT id, name FROM leluxe_orders "
+                           "WHERE kind IN ('order','parent') AND deleted=0"):
+            out.setdefault(_name_key(r["name"]), r["id"])
+    return out
+
+
+def _adopt_source(row_id, src_task_id):
+    """Backfill data_json.source_task_id on a pre-existing (imported) order so
+    _source_seen matches it forever after."""
+    if not src_task_id:
+        return
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (row_id,)).fetchone()
+        if not r:
+            return
+        d = json.loads(r["data_json"] or "{}")
+        if d.get("source_task_id"):
+            return
+        d["source_task_id"] = src_task_id
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), row_id))
+
+
 # order-level fields stay on the order; these ride up to the package they came
 # from (one shipment shares its tracking/clearance state).
 _PKG_FIELDS = ("Tracking Number", "GASH STATUS", "gash date", "DATE SENT",
@@ -746,10 +789,16 @@ def migrate_from_source(since_iso, limit=20, config=None):
     orders.sort(key=lambda t: int(t.get("date_created") or 0), reverse=True)
     made = {"orders": 0, "packages": 0, "items": 0, "skipped": 0,
             "scanned": len(orders), "order_ids": []}
+    keys = _existing_order_keys()          # 2nd dedup key: order name/number
     for src_order in orders:
         if made["orders"] >= limit:
             break
         if _source_seen(src_order["id"]):
+            made["skipped"] += 1
+            continue
+        dup_id = keys.get(_name_key(src_order.get("name")))
+        if dup_id:                          # already here via the ClickUp list duplication
+            _adopt_source(dup_id, src_order["id"])   # heal the proper dedup key
             made["skipped"] += 1
             continue
         ocols, odata = _decode_task(src_order, sch)
@@ -761,6 +810,7 @@ def migrate_from_source(since_iso, limit=20, config=None):
             extra={"source_task_id": src_order["id"]})
         made["orders"] += 1
         made["order_ids"].append(order_id)
+        keys.setdefault(_name_key(src_order.get("name")), order_id)  # same-name twice in one scan
         groups = {}
         for ch in children.get(src_order["id"], []):
             _, cdata = _decode_task(ch, sch)
@@ -789,6 +839,79 @@ def migrate_from_source(since_iso, limit=20, config=None):
                 made["items"] += 1
     kick()
     return made
+
+
+def dedupe_migrated(dry_run=True, config=None):
+    """One-time cleanup for migrate-created duplicates. The working list was
+    seeded by DUPLICATING AZ (2) in ClickUp (rows WITHOUT source_task_id);
+    migrate later re-copied the same orders (rows WITH source_task_id). Where a
+    name-group holds both kinds, keep the original import and remove each
+    migrate copy — locally (cascade to its packages/items) plus its pushed twin
+    task in the WORKING list. Double guard before any ClickUp delete: the row
+    must carry migrate provenance (source_task_id) AND the live task must
+    belong to the working list — AZ (2) can never be touched."""
+    config = config or cfg.load()
+    lid = str(list_id(config) or "")
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders "
+            "WHERE kind IN ('order','parent') AND deleted=0")]
+    groups = {}
+    for r in rows:
+        groups.setdefault(_name_key(r["name"]), []).append(r)
+    report, removed, cu_deleted, errors = [], 0, 0, []
+    for key, grp in groups.items():
+        if len(grp) < 2:
+            continue
+        keepers = [r for r in grp if not (r["data"] or {}).get("source_task_id")]
+        losers = [r for r in grp if (r["data"] or {}).get("source_task_id")]
+        if not keepers or not losers:
+            report.append({"key": key, "ambiguous": True,
+                           "names": [r["name"] for r in grp]})
+            continue
+        keeper = min(keepers, key=lambda r: r["id"])
+        entry = {"key": key, "ambiguous": False,
+                 "keeper": {"id": keeper["id"], "name": keeper["name"]},
+                 "removed": [{"id": l["id"], "name": l["name"],
+                              "tid": l.get("clickup_task_id")} for l in losers]}
+        report.append(entry)
+        if dry_run:
+            continue
+        for loser in losers:
+            tid = loser.get("clickup_task_id")
+            if tid:
+                st, body = _http(f"{CLICKUP_API}/task/{tid}")
+                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
+                    dst, _b = _http(f"{CLICKUP_API}/task/{tid}", "DELETE")
+                    if dst in (200, 204):
+                        cu_deleted += 1
+                    else:
+                        errors.append(f"{loser['name']}: ClickUp delete failed ({dst})")
+                elif st == 404:
+                    pass                             # already gone
+                elif st == 200:
+                    errors.append(f"{loser['name']}: task {tid} is not in the "
+                                  f"working list — ClickUp left untouched")
+                else:
+                    errors.append(f"{loser['name']}: task lookup failed ({st})")
+            now = db.now_iso()
+            with db.connect() as c:
+                kids = [r["id"] for r in c.execute(
+                    "SELECT id FROM leluxe_orders WHERE parent_local_id=?",
+                    (loser["id"],))]
+                ids = [loser["id"]] + kids
+                if kids:
+                    ph = ",".join("?" * len(kids))
+                    ids += [r["id"] for r in c.execute(
+                        f"SELECT id FROM leluxe_orders "
+                        f"WHERE parent_local_id IN ({ph})", kids)]
+                ph = ",".join("?" * len(ids))
+                c.execute(f"UPDATE leluxe_orders SET deleted=1, updated_at=? "
+                          f"WHERE id IN ({ph})", (now, *ids))
+            removed += 1
+            _adopt_source(keeper["id"], (loser["data"] or {}).get("source_task_id"))
+    return {"groups": report, "removed": removed, "clickup_deleted": cu_deleted,
+            "errors": errors, "dry_run": bool(dry_run)}
 
 
 # --------------------------------------------------------------------------- #
