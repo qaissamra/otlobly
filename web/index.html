@@ -1122,8 +1122,6 @@
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
           <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 مزامنة من AZ (2) · Sync from AZ (2)</button>
-          <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة، حقلاً بحقل (قبل ← بعد) · everything the last sync changed, field by field (before → after)">👁 آخر مزامنة · Last sync changes</button>
-          <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
           <button class="pop-item" id="lxActivityBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity log</button>
@@ -1171,14 +1169,6 @@
   <div class="az-box" style="width:560px;max-width:96vw;max-height:90vh;overflow:auto">
     <div class="az-head"><b id="pkgInfoTitle">📦 Package</b><span class="az-x" onclick="pkgInfoClose()">✕</span></div>
     <div id="pkgInfoBody" style="padding:12px 16px"></div>
-  </div>
-</div>
-
-<!-- Last-sync report: every change the sync applied, old → new -->
-<div id="lxSyncReportModal" class="az-modal hidden" onclick="if(event.target===this)lxSyncReportClose()">
-  <div class="az-box" style="width:760px;max-width:96vw;max-height:90vh;overflow:auto;display:flex;flex-direction:column">
-    <div class="az-head"><b>👁 تغييرات آخر مزامنة · Last sync changes</b><span class="az-x" onclick="lxSyncReportClose()">✕</span></div>
-    <div id="lxSyncReportBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -3380,17 +3370,13 @@ function lxSyncAsk(btn){
   const d=prompt("المزامنة تحدّث كل الطلبات الموجودة. هذا التاريخ يحدّد فقط الطلبات الجديدة التي تُضاف (YYYY-MM-DD)\nSync updates ALL existing orders; this date only limits which NEW orders get added",def);
   if(d===null) return;
   $("lxMigrateSince").value=(d||"").trim();
-  // 🛡 safety choice: OK = park EVERY change for approval (nothing overwritten);
-  // Cancel = apply automatic changes directly (true conflicts always park)
-  LX_SYNC_REVIEW=confirm("🛡 مراجعة كل تغيير قبل التطبيق؟ · Review EVERY change before applying?\n\nOK = راجِع كل شيء — لا يُكتب أي تغيير حتى توافق عليه\n        review everything — nothing is written until you approve it\n\nCancel = طبّق التغييرات التلقائية مباشرة (التعارضات تُعرض دائماً للمراجعة)\n            apply automatic changes now (real conflicts still wait for review)");
   lxSync(btn);
 }
-let LX_SYNC_REVIEW=false;   // 🛡 review-everything choice for the next sync run
 async function lxSync(btn){
   let since=$("lxMigrateSince").value;
   if(!since){ since=new Date(Date.now()-30*864e5).toISOString().slice(0,10); $("lxMigrateSince").value=since; }
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="⏳ Reading AZ (2)…";
-  let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,review_all:!!LX_SYNC_REVIEW,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
+  let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
   if(!r.ok){ pr.textContent="❌ "+(r.error||"sync failed"); btn.disabled=false; return; }
   LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
   const head=`+${r.orders||0} جديد·new · ${r.updated||0} محدّث·updated`
@@ -3405,39 +3391,9 @@ async function lxSync(btn){
     let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
     if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
   pr.innerHTML=`✅ مزامنة · Synced — ${poEsc(head)}.`
-    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 اعتمد التغييرات · Approve changes":"⚠ راجع التعارض · Review conflicts"} (${r.conflicts})</button>`:"")
-    +(r.report_changes?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 ما الذي تغيّر · What changed (${r.report_changes})</button>`:"")
+    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">⚠ راجع التعارض · Review conflicts</button>`:"")
     +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
-  if(LX_SYNC_REVIEW&&r.conflicts) lxConflictsOpen();   // 🛡 straight to approve/deny
-}
-// ── Last-sync report: every applied change (old → new), new rows, parked rows ──
-function lxSyncReportClose(){ $("lxSyncReportModal").classList.add("hidden"); }
-async function lxSyncReportOpen(){
-  $("lxSyncReportModal").classList.remove("hidden");
-  const body=$("lxSyncReportBody");
-  body.innerHTML='<div class="muted2" style="padding:16px">⏳ Loading…</div>';
-  let r; try{ r=await (await fetch("/api/leluxe/sync_report")).json(); }catch(e){ r=null; }
-  if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">تعذّر التحميل · could not load</div>'; return; }
-  const sec=(t,html)=>html?`<div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px">${t}</div>${html}`:"";
-  const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"};
-  const applied=(r.applied||[]).map(row=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
-      <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"⌚"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}</div>
-      ${(row.changes||[]).map(ch=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
-        <span class="muted2" style="min-width:120px">${poEsc(ch.label||ch.field)}</span>
-        <span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(ch.old)}</span>
-        <span>→</span><b dir="auto">${lxCVal(ch.new)}</b></div>`).join("")}
-    </div>`).join("");
-  const newOrders=(r.new_orders||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⌚ ${poEsc(o.name||"")}</div>`).join("");
-  const newItems=(r.new_items||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
-  const parked=(r.conflict_rows||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
-  const when=r.ts?`<div class="muted2" style="font-size:11.5px">آخر مزامنة · last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
-  body.innerHTML=(when
-    +sec(`✏️ تغييرات مطبّقة · applied changes (${(r.applied||[]).length})`,applied)
-    +sec(`＋ طلبات جديدة · new orders (${(r.new_orders||[]).length})`,newOrders)
-    +sec(`＋ منتجات جديدة · new products (${(r.new_items||[]).length})`,newItems)
-    +sec(`⚖ بانتظار موافقتك · awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ افتح المراجعة · open review</button>`:""))
-    ||'<div style="padding:24px;text-align:center">لا تغييرات مسجّلة بعد — شغّل مزامنة أولاً · no sync recorded yet</div>';
 }
 // ── Conflict review — Otlobly value vs ClickUp (AZ 2) value, per field ────────
 let LX_CONF=[];
@@ -3465,13 +3421,7 @@ function lxConflictRender(list){
   LX_CONF=list;
   const body=$("lxConflictBody");
   if(!list.length){ body.innerHTML='<div style="padding:24px;text-align:center">✅ لا تعارضات للمراجعة · No conflicts to review.</div>'; return; }
-  const nf=list.reduce((s,o)=>s+((o.conflicts||[]).length),0);
-  body.innerHTML=`<div class="muted2" style="font-size:12px;margin-bottom:8px">اختر القيمة التي تعتمدها لكل حقل · choose which value wins for each field.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 11px;margin-bottom:12px;background:var(--bg2)">
-      <b style="font-size:12.5px">${list.length} عنصر · ${nf} حقل</b><span style="flex:1"></span>
-      <button class="po-btn" onclick="lxResolveAllRows('local')">↩ أبقِ كل قيم أوتلوبلي · Keep ALL Otlobly</button>
-      <button class="po-btn" style="border-color:#f59e0b;color:#b45309" onclick="lxResolveAllRows('remote')">☑ استخدم كل قيم كليك أب · Use ALL ClickUp</button>
-    </div>`
+  body.innerHTML=`<div class="muted2" style="font-size:12px;margin-bottom:10px">تغيّر الحقل في أوتلوبلي و AZ (2) معاً — اختر القيمة التي تعتمدها · this field changed in both Otlobly and AZ (2) — choose which value wins.</div>`
     +list.map((o,oi)=>{
     const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"}[o.kind]||"⌚";
     const rows=(o.conflicts||[]).map((cf,fi)=>`
@@ -3514,21 +3464,6 @@ async function lxResolveOrder(oi,side){
   let r; try{ r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choice:side}); }catch(e){ r={}; }
   if(!r.ok){ toast(r.error||"resolve failed"); return; }
   toast(side==="remote"?"✓ اعتُمدت كل قيم كليك أب · used all ClickUp":"✓ أُبقيت كل قيم أوتلوبلي · kept all Otlobly");
-  await lxConflictReload();
-}
-// bulk: one decision for EVERY parked row (after scanning the list)
-async function lxResolveAllRows(side){
-  if(!LX_CONF.length) return;
-  const q=side==="remote"
-    ?`استخدام قيم ClickUp لكل ${LX_CONF.length} عنصر؟ · Use the ClickUp value for ALL ${LX_CONF.length} rows?`
-    :`إبقاء قيم أوتلوبلي لكل ${LX_CONF.length} عنصر؟ · Keep the Otlobly value for ALL ${LX_CONF.length} rows?`;
-  if(!confirm(q)) return;
-  const body=$("lxConflictBody"); let n=0;
-  for(const o of LX_CONF.slice()){
-    try{ const r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choice:side}); if(r.ok) n++; }catch(e){}
-    body.querySelector(".muted2").textContent=`⏳ ${n}/${LX_CONF.length}…`;
-  }
-  toast(`✓ تم اعتماد ${n} · resolved ${n}`);
   await lxConflictReload();
 }
 async function lxRefreshTracking(btn){
