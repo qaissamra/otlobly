@@ -189,9 +189,44 @@ def connect():
     return conn
 
 
+_CORRUPT_MARKERS = ("file is not a database", "not a database",
+                    "database disk image is malformed", "malformed")
+
+
+def _quarantine_corrupt_db(exc):
+    """A corrupt otlobly.db crashes the app at boot (init_db opens it). Move the
+    bad file aside so a fresh schema can be created and the app can START — then
+    POST /api/restore (worker token) swaps in a good backup DB. Only fires on
+    real corruption, never on a lock/busy. Returns True if it quarantined."""
+    msg = str(exc).lower()
+    if not any(m in msg for m in _CORRUPT_MARKERS) or not DB_FILE.exists():
+        return False
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    try:
+        DB_FILE.rename(DB_FILE.with_name(DB_FILE.name + f".corrupt-{ts}"))
+    except OSError:
+        return False
+    for ext in ("-wal", "-shm"):
+        p = DB_FILE.with_name(DB_FILE.name + ext)
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    print(f"[db] CORRUPT {DB_FILE.name} quarantined (.corrupt-{ts}); starting "
+          f"with an empty schema — restore a backup via POST /api/restore",
+          flush=True)
+    return True
+
+
 def init_db():
-    with connect() as c:
-        c.executescript(SCHEMA)
+    try:
+        with connect() as c:
+            c.executescript(SCHEMA)
+    except sqlite3.DatabaseError as e:
+        if not _quarantine_corrupt_db(e):
+            raise
+        with connect() as c:
+            c.executescript(SCHEMA)
     migrate()
 
 

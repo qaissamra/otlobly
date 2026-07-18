@@ -2870,6 +2870,59 @@ def api_backup():
                      download_name=f"otlobly-backup-{stamp}.zip")
 
 
+@app.route("/api/restore", methods=["POST"])
+def api_restore():
+    """Disaster recovery: replace the live SQLite DB with the otlobly.db inside
+    an uploaded backup zip (worker-token only — same auth as /api/backup). For
+    when the live DB is corrupt. ONLY the DB is swapped; JSON stores + images on
+    the disk are left untouched. The uploaded DB is integrity-checked before the
+    swap, and the current file is kept as otlobly.db.pre-restore-<ts>. Because
+    db.connect() opens the file per-operation, the app serves the restored data
+    immediately (no restart needed)."""
+    if not _backup_ok():
+        abort(401)
+    blob = request.get_data(cache=False)
+    if not blob:
+        abort(400, "empty body — POST the backup zip as the raw body")
+    import io
+    try:
+        raw = zipfile.ZipFile(io.BytesIO(blob)).read("otlobly.db")
+    except Exception as e:            # noqa: BLE001 — report any zip/entry issue
+        abort(400, f"could not read otlobly.db from the zip: {e}")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    staging = db.DB_FILE.with_name(db.DB_FILE.name + f".incoming-{stamp}")
+    staging.write_bytes(raw)
+    try:                              # verify it's a real, intact SQLite DB
+        t = sqlite3.connect(str(staging))
+        ok = t.execute("PRAGMA integrity_check").fetchone()[0]
+        counts = {tb: t.execute(f"SELECT COUNT(*) FROM {tb}").fetchone()[0]
+                  for tb in ("users", "customers", "orders", "payments")}
+        t.close()
+        if ok != "ok":
+            raise ValueError(f"integrity_check={ok}")
+    except Exception as e:            # noqa: BLE001
+        try:
+            staging.unlink()
+        except OSError:
+            pass
+        abort(400, f"uploaded DB failed validation: {e}")
+    for ext in ("-wal", "-shm"):      # drop the corrupt/empty file's WAL sidecars
+        p = db.DB_FILE.with_name(db.DB_FILE.name + ext)
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    if db.DB_FILE.exists():
+        try:
+            db.DB_FILE.rename(db.DB_FILE.with_name(
+                db.DB_FILE.name + f".pre-restore-{stamp}"))
+        except OSError:
+            pass
+    os.replace(staging, db.DB_FILE)   # atomic swap-in
+    db.init_db()                       # idempotent schema/migrate on the restored DB
+    return jsonify({"ok": True, "restored_at": db.now_iso(), "counts": counts})
+
+
 @app.route("/api/worker/seed", methods=["POST"])
 def worker_seed():
     """One-time data import from the Mac → server (orders / customers / purchases).
