@@ -174,6 +174,17 @@ CREATE TABLE IF NOT EXISTS gerizim_registrations (
   updated_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_gerizim_reg_biz ON gerizim_registrations(business_id);
+CREATE TABLE IF NOT EXISTS leluxe_cu_deletes (
+  task_id    TEXT PRIMARY KEY,             -- ClickUp task to delete (working list only)
+  row_id     INTEGER,                      -- local leluxe_orders row it belonged to
+  label      TEXT,                         -- human name for status/error display
+  state      TEXT NOT NULL DEFAULT 'pending', -- pending | doing | done | skipped
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TEXT,
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_leluxe_cudel_state ON leluxe_cu_deletes(state);
 """
 
 

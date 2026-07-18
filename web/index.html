@@ -1874,7 +1874,7 @@ async function loadLeluxe(){
   lxSetupCard();
   renderLeluxe();
   loadGzRegistered().then(()=>renderLeluxe());   // durable Gerizim signs — repaint when they land
-  if(((d.sync.dirty||0)+(d.sync.pushing||0))>0) lxPollStart();
+  if(((d.sync.dirty||0)+(d.sync.pushing||0)+(d.sync.cu_del_pending||0))>0) lxPollStart();
   if(d.ready&&(d.orders||[]).length) lxAutoTracking();   // silent GAASH/Gerizim top-up (TTL-guarded)
 }
 // Fire-and-forget tracking refresh on page open — same idea as the Purchases
@@ -1971,6 +1971,9 @@ function lxChip(sync,disabled){
   else html=`<span class="pill" style="color:#16a34a;background:#ecfdf5">✓ all synced</span>`;
   // both-sides changes waiting on a manual pick — shown alongside any state above
   if(conf) html+=` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2" onclick="lxConflictsOpen()" title="طلبات تغيّرت في أوتلوبلي و AZ (2) معاً — اختر القيمة الصحيحة · orders changed in both Otlobly and AZ (2) — pick the winning value">⚠ ${conf} تعارض · conflict${conf===1?'':'s'}</button>`;
+  // 🧹 dedupe's ClickUp twin-task deletions draining in the background
+  const cudel=sync.cu_del_pending||0;
+  if(cudel) html+=` <span class="pill" style="color:#6d28d9;background:#f3e8ff" title="حذف مهام النسخ المكررة من قائمة العمل في ClickUp — يتقدّم تلقائياً في الخلفية ولا يلمس AZ (2) أبداً · duplicate twin tasks being deleted from the ClickUp working list — runs automatically in the background, AZ (2) is never touched">🧹 ${cudel} حذف ClickUp…</span>`;
   el.innerHTML=html;
 }
 function lxPollStart(){
@@ -1981,7 +1984,7 @@ function lxPollStart(){
     if(!s||!s.ok) return;
     lxChip(s,s.push_disabled);
     if(LX) LX.sync=s;
-    if(((s.dirty||0)+(s.pushing||0))===0){ clearInterval(LX_POLL); LX_POLL=null; loadLeluxe(); }
+    if(((s.dirty||0)+(s.pushing||0)+(s.cu_del_pending||0))===0){ clearInterval(LX_POLL); LX_POLL=null; loadLeluxe(); }
   },5000);
 }
 async function lxRetry(btn){
@@ -3309,8 +3312,8 @@ async function lxItemImage(btn){
 }
 let LX_MIG_SRC="";   // AZ (2) source list id captured by lxMigrateAsk for lxMigrate's scan POST
 // Tools-menu 🧹: dry-run first, confirm with the exact count, then execute.
-// Removes migrate-created duplicate orders (keeps the original imported row;
-// deletes the copy here + its pushed twin task in the WORKING list only).
+// The execute is instant (local-only); the working-list ClickUp twin tasks are
+// deleted by a background queue — the 🧹 chip counts them down (lxChip).
 async function lxDedupe(btn){
   btn.disabled=true;
   let r; try{ r=await post("/api/leluxe/dedupe",{dry_run:true}); }catch(e){ r={}; }
@@ -3323,16 +3326,17 @@ async function lxDedupe(btn){
   const parts=[];
   if(nItems) parts.push(`${nItems} منتج مكرر · duplicate product(s)`);
   if(n) parts.push(`${n} طلب مكرر · duplicate order(s)`);
-  if(!confirm(`إزالة ${parts.join(" + ")}؟ · Remove ${parts.join(" + ")}?\n\nيُبقي النسخة الأصلية (بكل تعديلاتك) ويحذف نسخة المزامنة هنا ومهمتها في قائمة العمل. AZ (2) لا تُمسّ أبداً.\nKeeps your ORIGINALS (with all your edits); deletes the sync-created copies here AND their pushed twin tasks in the working list. AZ (2) is never touched.`)) return;
+  if(!confirm(`إزالة ${parts.join(" + ")}؟ · Remove ${parts.join(" + ")}?\n\nيُبقي النسخة الأصلية (بكل تعديلاتك) وتختفي النسخ فوراً؛ حذف مهامها من قائمة العمل في ClickUp يتواصل في الخلفية تلقائياً. AZ (2) لا تُمسّ أبداً.\nKeeps your ORIGINALS (with all your edits); the copies disappear here instantly, and their twin tasks in the working list are deleted in the background automatically. AZ (2) is never touched.`)) return;
   btn.disabled=true;
   const pr=$("lxProgress"); pr.style.display="block";
-  pr.textContent=`🧹 جارٍ التنظيف · cleaning ${nItems+n} duplicate(s)… (يحذف أيضاً من قائمة العمل · also deleting the ClickUp twins)`;
+  pr.textContent=`🧹 جارٍ التنظيف · cleaning ${nItems+n} duplicate(s)…`;
   let x; try{ x=await post("/api/leluxe/dedupe",{dry_run:false}); }catch(e){ x={}; }
   btn.disabled=false;
   if(!x.ok){ pr.textContent="❌ "+(x.error||"dedupe failed"); return; }
-  pr.textContent=`🧹 حُذف ${x.items_removed||0} منتج + ${x.removed||0} طلب مكرر · removed ${x.items_removed||0} product(s) + ${x.removed||0} order(s)`
-    +` · ${x.clickup_deleted||0} ClickUp twin task(s)`
-    +((x.pkgs_removed||0)?` · ${x.pkgs_removed} emptied package(s)`:"")
+  pr.textContent=`🧹 حُذف ${x.items_removed||0} منتج مكرر · removed ${x.items_removed||0} duplicate product(s)`
+    +((x.pkgs_removed||0)?` + ${x.pkgs_removed} طرد فارغ · emptied package(s)`:"")
+    +((x.removed||0)?` + ${x.removed} طلب · order(s)`:"")
+    +((x.cu_queued||0)?` · حذف ${x.cu_queued} مهمة ClickUp يتواصل في الخلفية (راقب شارة 🧹) · ${x.cu_queued} ClickUp deletion(s) continue in the background (watch the 🧹 chip)`:"")
     +((x.errors&&x.errors.length)?` · ⚠ ${x.errors.join(" · ")}`:"");
   toast(`🧹 تمت الإزالة · removed ${(x.items_removed||0)+(x.removed||0)}`);
   await loadLeluxe(); lxPollStart();

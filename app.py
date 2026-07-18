@@ -2301,11 +2301,16 @@ def api_leluxe_dedupe():
     soft-deletes each migrate copy + deletes its pushed twin task in the WORKING
     list only (AZ (2) is never touched). dry_run=true reports without acting."""
     b = request.get_json(force=True, silent=True) or {}
-    res = leluxe_mod.dedupe_migrated(dry_run=bool(b.get("dry_run", True)))
+    try:
+        res = leluxe_mod.dedupe_migrated(dry_run=bool(b.get("dry_run", True)))
+    except Exception as e:  # noqa: BLE001 — surface the reason, never a dead socket
+        return jsonify({"ok": False, "error": str(e)[:300]})
     if not res.get("dry_run"):
         activity.log("deleted", "leluxe", "dedupe", "Leluxe",
-                     detail=f"deduped {res['removed']} order(s), removed "
-                            f"{res['clickup_deleted']} ClickUp twin task(s)", user=_user())
+                     detail=f"removed {res['items_removed']} duplicate product(s), "
+                            f"{res['pkgs_removed']} emptied package(s), "
+                            f"{res['removed']} order(s); queued "
+                            f"{res['cu_queued']} ClickUp deletion(s)", user=_user())
     return jsonify({"ok": True, **res})
 
 

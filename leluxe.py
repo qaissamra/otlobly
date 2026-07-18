@@ -334,9 +334,14 @@ def sync_counts():
         conflict_rows = [{"id": r["id"], "name": r["name"]} for r in c.execute(
             "SELECT id, name FROM leluxe_orders "
             "WHERE sync_state='conflict' AND deleted=0 LIMIT 50")]
+        dels = {r["state"]: r["n"] for r in c.execute(
+            "SELECT state, COUNT(*) n FROM leluxe_cu_deletes GROUP BY state")}
     return {"synced": counts.get("synced", 0), "dirty": counts.get("dirty", 0),
             "pushing": counts.get("pushing", 0), "error": counts.get("error", 0),
             "conflict": counts.get("conflict", 0),
+            "cu_del_pending": dels.get("pending", 0) + dels.get("doing", 0),
+            "cu_del_done": dels.get("done", 0),
+            "cu_del_skipped": dels.get("skipped", 0),
             "last_errors": errors, "conflict_rows": conflict_rows}
 
 
@@ -845,15 +850,30 @@ def migrate_from_source(since_iso, limit=20, config=None):
     return made
 
 
+def _queue_cu_delete(c, tid, row_id=None, label=None):
+    """Enqueue one working-list ClickUp task for background deletion. INSERT OR
+    IGNORE keeps re-runs idempotent: an already-done entry stays done."""
+    if not tid:
+        return
+    now = db.now_iso()
+    c.execute("""INSERT OR IGNORE INTO leluxe_cu_deletes
+                 (task_id, row_id, label, state, created_at, updated_at)
+                 VALUES (?,?,?,'pending',?,?)""",
+              (str(tid), row_id, label, now, now))
+
+
 def dedupe_migrated(dry_run=True, config=None):
     """One-time cleanup for migrate-created duplicates. The working list was
     seeded by DUPLICATING AZ (2) in ClickUp (rows WITHOUT source_task_id);
     migrate later re-copied the same orders (rows WITH source_task_id). Where a
     name-group holds both kinds, keep the original import and remove each
     migrate copy — locally (cascade to its packages/items) plus its pushed twin
-    task in the WORKING list. Double guard before any ClickUp delete: the row
-    must carry migrate provenance (source_task_id) AND the live task must
-    belong to the working list — AZ (2) can never be touched."""
+    task in the WORKING list. All ClickUp deletions are QUEUED (leluxe_cu_deletes)
+    and drained by run_delete_pass in the background — this request itself is
+    local-only SQLite and returns in under a second, so it can never hit the
+    gunicorn/proxy timeout that killed the first live run. The double guard
+    (row carries provenance AND the live task belongs to the working list —
+    AZ (2) can never be touched) is re-checked per task at delete time."""
     config = config or cfg.load()
     lid = str(list_id(config) or "")
     with db.connect() as c:
@@ -864,6 +884,7 @@ def dedupe_migrated(dry_run=True, config=None):
     for r in rows:
         groups.setdefault(_name_key(r["name"]), []).append(r)
     report, removed, cu_deleted, errors = [], 0, 0, []
+    queue_rows = []                     # (task_id, row_id, label, parent_local_id)
     for key, grp in groups.items():
         if len(grp) < 2:
             continue
@@ -882,22 +903,8 @@ def dedupe_migrated(dry_run=True, config=None):
         if dry_run:
             continue
         for loser in losers:
-            tid = loser.get("clickup_task_id")
-            if tid:
-                st, body = _http(f"{CLICKUP_API}/task/{tid}")
-                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
-                    dst, _b = _http(f"{CLICKUP_API}/task/{tid}", "DELETE")
-                    if dst in (200, 204):
-                        cu_deleted += 1
-                    else:
-                        errors.append(f"{loser['name']}: ClickUp delete failed ({dst})")
-                elif st == 404:
-                    pass                             # already gone
-                elif st == 200:
-                    errors.append(f"{loser['name']}: task {tid} is not in the "
-                                  f"working list — ClickUp left untouched")
-                else:
-                    errors.append(f"{loser['name']}: task lookup failed ({st})")
+            queue_rows.append((loser.get("clickup_task_id"), loser["id"],
+                               loser["name"], None))
             now = db.now_iso()
             with db.connect() as c:
                 kids = [r["id"] for r in c.execute(
@@ -919,11 +926,16 @@ def dedupe_migrated(dry_run=True, config=None):
     # ClickUp list-duplication (no source_task_id); the sync couldn't match them
     # and inserted copies. Pair originals with copies 1:1 by (order, name-key):
     # keep the original (the owner's edits live there), adopt the copy's AZ (2)
-    # provenance onto it, remove the copy locally + its pushed working-list task
-    # (same double guard), then drop any package the removal left empty. ──
+    # provenance onto it, remove the copy locally and queue its working-list
+    # task. Everything is computed in memory first so dry-run predicts the
+    # exact same numbers execute applies. ──
     with db.connect() as c:
         vis = {r["id"]: _row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")}
+    children = {}
+    for r in vis.values():
+        if r["parent_local_id"] is not None:
+            children.setdefault(r["parent_local_id"], []).append(r["id"])
 
     def _order_of(rid):
         cur, seen = rid, set()
@@ -935,15 +947,43 @@ def dedupe_migrated(dry_run=True, config=None):
             cur = p
         return cur
 
+    item_entries, touched_parents, gone = [], set(), set()
+    adopts = []                        # (keeper_id, twin_data) applied on execute
+    ambiguous_items = same_source_fixed = 0
+
+    # repair pass: two visible items sharing one source_task_id — an interrupted
+    # run adopted the twin's id onto the keeper but was killed before removing
+    # the twin. Keep the oldest row (the owner's original), remove the rest.
+    by_src = {}
+    for r in vis.values():
+        if r["kind"] == "item":
+            s = (r["data"] or {}).get("source_task_id")
+            if s:
+                by_src.setdefault(str(s), []).append(r)
+    for s, twins in by_src.items():
+        if len(twins) < 2:
+            continue
+        twins.sort(key=lambda r: r["id"])
+        for extra in twins[1:]:
+            item_entries.append(
+                {"order": (vis.get(_order_of(extra["id"])) or {}).get("name") or "",
+                 "keep": twins[0]["name"], "keep_id": twins[0]["id"],
+                 "twin_id": extra["id"], "tid": extra.get("clickup_task_id"),
+                 "same_source": True, "ambiguous": False})
+            same_source_fixed += 1
+            gone.add(extra["id"])
+            queue_rows.append((extra.get("clickup_task_id"), extra["id"],
+                               extra["name"], extra["parent_local_id"]))
+            if extra["parent_local_id"] is not None:
+                touched_parents.add(extra["parent_local_id"])
+
     igroups = {}
     for r in vis.values():
-        if r["kind"] != "item":
+        if r["kind"] != "item" or r["id"] in gone:
             continue
         g = igroups.setdefault((_order_of(r["id"]), _name_key(r["name"])),
                                {"orig": [], "sync": []})
         g["sync" if (r["data"] or {}).get("source_task_id") else "orig"].append(r)
-    item_entries, touched_parents = [], set()
-    items_removed = items_adopted = pkgs_removed = ambiguous_items = 0
     for (oid, key), g in igroups.items():
         if not g["orig"] or not g["sync"]:
             continue
@@ -959,79 +999,70 @@ def dedupe_migrated(dry_run=True, config=None):
                                  "keep_id": keeper["id"], "twin_id": twin["id"],
                                  "tid": twin.get("clickup_task_id"),
                                  "ambiguous": False})
-            if dry_run:
-                continue
             tdata = twin["data"] or {}
-            with db.connect() as c:
-                kr = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
-                               (keeper["id"],)).fetchone()
-                if kr:
-                    kd = json.loads(kr["data_json"] or "{}")
-                    grew = False
-                    for k2 in ("source_task_id", "source_base", "source_cu_updated"):
-                        if tdata.get(k2) is not None and kd.get(k2) is None:
-                            kd[k2] = tdata[k2]
-                            grew = True
-                    if grew:
-                        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
-                                  (json.dumps(kd, ensure_ascii=False), keeper["id"]))
-                        items_adopted += 1
-            tid = twin.get("clickup_task_id")
-            if tid:
-                st, body = _http(f"{CLICKUP_API}/task/{tid}")
-                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
-                    dst, _b = _http(f"{CLICKUP_API}/task/{tid}", "DELETE")
-                    if dst in (200, 204):
-                        cu_deleted += 1
-                    else:
-                        errors.append(f"{twin['name']}: ClickUp delete failed ({dst})")
-                elif st == 404:
-                    pass                             # already gone
-                elif st == 200:
-                    errors.append(f"{twin['name']}: task {tid} is not in the "
-                                  f"working list — ClickUp left untouched")
-                else:
-                    errors.append(f"{twin['name']}: task lookup failed ({st})")
-            with db.connect() as c:
-                c.execute("UPDATE leluxe_orders SET deleted=1, updated_at=? "
-                          "WHERE id=?", (db.now_iso(), twin["id"]))
-            items_removed += 1
+            kd = keeper["data"] or {}
+            if any(tdata.get(k2) is not None and kd.get(k2) is None
+                   for k2 in ("source_task_id", "source_base", "source_cu_updated")):
+                adopts.append((keeper["id"], tdata))
+            gone.add(twin["id"])
+            queue_rows.append((twin.get("clickup_task_id"), twin["id"],
+                               twin["name"], twin["parent_local_id"]))
             if twin["parent_local_id"] is not None:
                 touched_parents.add(twin["parent_local_id"])
-    if not dry_run and touched_parents:
-        empties = []
+
+    # packages with no product left — emptied by this run, or already emptied
+    # by an interrupted one (sync-created only; a hand-made empty package stays)
+    pkg_gone = []
+    for r in vis.values():
+        if r["kind"] != "package" or r["id"] in gone:
+            continue
+        if any(k not in gone for k in children.get(r["id"], ())):
+            continue
+        if r["id"] in touched_parents or (r["data"] or {}).get("source_task_id"):
+            pkg_gone.append(r)
+
+    # deleting a package task takes its ClickUp subtasks with it — drop the
+    # per-item deletions it makes redundant so the queue drains sooner
+    pkg_ids = {p["id"] for p in pkg_gone}
+    queue_rows = [q for q in queue_rows if q[3] not in pkg_ids]
+    for p in pkg_gone:
+        queue_rows.append((p.get("clickup_task_id"), p["id"], p["name"], None))
+    queue_rows = [q for q in queue_rows if q[0]]
+
+    if not dry_run:
+        now = db.now_iso()
         with db.connect() as c:
-            for pid in touched_parents:
-                pr = c.execute("SELECT id, name, clickup_task_id FROM leluxe_orders "
-                               "WHERE id=? AND deleted=0 AND kind='package'",
-                               (pid,)).fetchone()
-                if not pr:
+            for keeper_id, tdata in adopts:
+                kr = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                               (keeper_id,)).fetchone()
+                if not kr:
                     continue
-                left = c.execute("SELECT COUNT(*) n FROM leluxe_orders "
-                                 "WHERE parent_local_id=? AND deleted=0",
-                                 (pid,)).fetchone()["n"]
-                if left == 0:
-                    empties.append(dict(pr))
-        for pr in empties:
-            ptid = pr["clickup_task_id"]
-            if ptid:
-                st, body = _http(f"{CLICKUP_API}/task/{ptid}")
-                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
-                    dst, _b = _http(f"{CLICKUP_API}/task/{ptid}", "DELETE")
-                    if dst in (200, 204):
-                        cu_deleted += 1
-                    else:
-                        errors.append(f"{pr['name']}: ClickUp delete failed ({dst})")
-            with db.connect() as c:
-                c.execute("UPDATE leluxe_orders SET deleted=1, updated_at=? "
-                          "WHERE id=?", (db.now_iso(), pr["id"]))
-            pkgs_removed += 1
+                kd = json.loads(kr["data_json"] or "{}")
+                grew = False
+                for k2 in ("source_task_id", "source_base", "source_cu_updated"):
+                    if tdata.get(k2) is not None and kd.get(k2) is None:
+                        kd[k2] = tdata[k2]
+                        grew = True
+                if grew:
+                    c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                              (json.dumps(kd, ensure_ascii=False), keeper_id))
+            ids = list(gone) + [p["id"] for p in pkg_gone]
+            if ids:
+                ph = ",".join("?" * len(ids))
+                c.execute(f"UPDATE leluxe_orders SET deleted=1, updated_at=? "
+                          f"WHERE id IN ({ph})", (now, *ids))
+            for tid, rid2, label, _pp in queue_rows:
+                _queue_cu_delete(c, tid, rid2, label)
+        if queue_rows:
+            kick()                     # start draining within seconds
 
     return {"groups": report, "removed": removed, "clickup_deleted": cu_deleted,
+            "cu_queued": len(queue_rows),
             "items": item_entries,
             "item_pairs": sum(1 for e in item_entries if not e.get("ambiguous")),
-            "items_removed": items_removed, "items_adopted": items_adopted,
-            "pkgs_removed": pkgs_removed, "ambiguous_items": ambiguous_items,
+            "items_removed": len(gone), "items_adopted": len(adopts),
+            "pkgs_removed": len(pkg_gone), "ambiguous_items": ambiguous_items,
+            "same_source_fixed": same_source_fixed,
             "errors": errors, "dry_run": bool(dry_run)}
 
 
@@ -2294,6 +2325,78 @@ def retry_errors():
     return n
 
 
+def run_delete_pass(limit=15, config=None):
+    """Drain the ClickUp-twin deletion queue (filled by dedupe_migrated) at a
+    rate-limit-friendly pace — ~2 API calls per task with a 1.5s gap keeps us
+    under half of ClickUp's ~100 req/min cap, leaving room for the pusher.
+    Same shape as run_push_pass: the atomic claim makes it duplicate-safe under
+    two gunicorn workers, and the double guard re-checks at delete time that
+    the task still lives in the WORKING list — AZ (2) or any other list is
+    never touched (marked 'skipped'). On a rate-limit or network error the
+    pass ends early and the next 60s tick retries."""
+    if push_disabled():
+        return {"skipped": "LELUXE_PUSH_DISABLED"}
+    config = config or cfg.load()
+    if not ready(config):
+        return {"skipped": "not configured"}
+    lid = str(list_id(config) or "")
+    if not lid or lid == str(source_list_id(config) or ""):
+        return {"skipped": "working list must differ from AZ (2)"}
+    with db.connect() as c:
+        # stale claims (worker died mid-delete) back to pending after 10 min
+        c.execute("""UPDATE leluxe_cu_deletes SET state='pending'
+                     WHERE state='doing' AND updated_at IS NOT NULL
+                     AND updated_at < datetime('now', '-10 minutes')""")
+        cand = [r["task_id"] for r in c.execute(
+            "SELECT task_id FROM leluxe_cu_deletes WHERE state='pending' "
+            "ORDER BY rowid LIMIT ?", (limit,))]
+    stats = {"deleted": 0, "gone": 0, "skipped": 0, "deferred": 0}
+    for i, tid in enumerate(cand):
+        with db.connect() as c:
+            claimed = c.execute(
+                """UPDATE leluxe_cu_deletes SET state='doing',
+                   updated_at=datetime('now') WHERE task_id=? AND
+                   state='pending'""", (tid,)).rowcount
+        if claimed != 1:
+            continue                    # the other worker owns it
+        if i:
+            time.sleep(1.5)
+        outcome = key = err = None
+        st, body = _http(f"{CLICKUP_API}/task/{tid}")
+        if st == 404:
+            outcome, key = "done", "gone"          # already deleted (cascade)
+        elif st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
+            dst, _b = _http(f"{CLICKUP_API}/task/{tid}", "DELETE")
+            if dst in (200, 204):
+                outcome, key = "done", "deleted"
+            else:
+                err = f"ClickUp delete failed ({dst})"
+        elif st == 200:
+            outcome, key = "skipped", "skipped"
+            err = "task is not in the working list — left untouched"
+        else:
+            err = f"task lookup failed ({st})"
+        with db.connect() as c:
+            if outcome:
+                c.execute("""UPDATE leluxe_cu_deletes SET state=?, last_error=?,
+                             updated_at=datetime('now') WHERE task_id=?""",
+                          (outcome, err, tid))
+            else:
+                row = c.execute("SELECT attempts FROM leluxe_cu_deletes "
+                                "WHERE task_id=?", (tid,)).fetchone()
+                att = ((row["attempts"] if row else 0) or 0) + 1
+                c.execute("""UPDATE leluxe_cu_deletes SET state=?, attempts=?,
+                             last_error=?, updated_at=datetime('now')
+                             WHERE task_id=?""",
+                          ("skipped" if att >= 10 else "pending", att, err, tid))
+        if outcome:
+            stats[key] += 1
+        else:
+            stats["deferred"] += 1
+            break                       # likely rate-limited — retry next tick
+    return stats
+
+
 def _interval_seconds():
     try:
         return max(5, int(os.environ.get("LELUXE_PUSH_INTERVAL_SEC", "60")))
@@ -2311,6 +2414,12 @@ def _loop():
                       f"(failed {out.get('failed', 0)})")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"leluxe: push pass failed ({e})")
+        try:
+            d = run_delete_pass()
+            if d.get("deleted") or d.get("gone") or d.get("deferred"):
+                print(f"leluxe: cu-delete queue {d}")
+        except Exception as e:  # noqa: BLE001 - never let the thread die
+            print(f"leluxe: delete pass failed ({e})")
         _KICK.wait(timeout=_interval_seconds())
         _KICK.clear()
 
