@@ -2217,7 +2217,8 @@ def api_leluxe_migrate():
         db.set_setting("leluxe:import_running", time.time())
         try:
             if phase == "sync":
-                res = leluxe_mod.sync_from_source(since, limit=int(b.get("limit") or 25))
+                res = leluxe_mod.sync_from_source(since, limit=int(b.get("limit") or 25),
+                                                  review_all=bool(b.get("review_all")))
             else:
                 res = leluxe_mod.migrate_from_source(since, limit=int(b.get("limit") or 20))
         finally:
@@ -2228,7 +2229,10 @@ def api_leluxe_migrate():
             activity.log("set", "leluxe", "sync", "Leluxe",
                          detail=f"synced AZ (2) since {since}: +{res['orders']} new, "
                                 f"{res['updated']} updated, {res['conflicts']} conflict(s), "
-                                f"{res['new_items']} new product(s)", user=_user())
+                                f"{res['new_items']} new product(s)"
+                                + (" — 🛡 review-all (nothing auto-applied)" if b.get("review_all") else "")
+                                + (f" · snapshot {res.get('presync')}" if res.get("presync") else ""),
+                         user=_user())
         else:
             activity.log("set", "leluxe", "migrate", "Leluxe",
                          detail=f"migrated {res['orders']} orders / {res['packages']} packages "
@@ -2241,6 +2245,21 @@ def api_leluxe_migrate():
         return jsonify({"ok": True, **leluxe_mod.refresh_tracking(
             batch=min(int(b.get("batch") or 5), 10))})
     return jsonify({"ok": False, "error": "bad phase"}), 400
+
+
+@app.route("/api/leluxe/sync_report")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_sync_report():
+    """The last Sync-from-AZ(2) run's per-change report (what was applied,
+    what's new, what parked as conflicts) — written by sync_from_source."""
+    from paths import data_path
+    try:
+        rep = json.loads(data_path("leluxe_sync_report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rep = {"ts": None, "applied": [], "new_orders": [], "new_items": [],
+               "conflict_rows": []}
+    return jsonify({"ok": True, **rep})
 
 
 @app.route("/api/leluxe/conflicts")
@@ -2798,7 +2817,8 @@ def worker_tracking():
 # Every writable artifact on the data disk. New data_path() files/dirs added to
 # the app MUST be added here too, or they won't be in backups.
 BACKUP_FILES = ("customers.json", "purchases.json", "trash.json", "orders.json",
-                "activity.jsonl", "config.json", "tracking_cache.json")
+                "activity.jsonl", "config.json", "tracking_cache.json",
+                "leluxe_sync_report.json")   # leluxe_presync_* stay out of the zip (short-lived safety snapshots; the DB itself is in every backup)
 BACKUP_DIRS = ("customer_ids", "po_images", "leluxe_images")
 
 

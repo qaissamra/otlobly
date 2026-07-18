@@ -28,7 +28,7 @@ from urllib.parse import quote as urlquote
 
 import cfg
 import db
-from paths import data_path
+from paths import data_path, write_json_atomic
 
 CLICKUP_API = "https://api.clickup.com/api/v2"
 IMAGE_DIR = data_path("leluxe_images")
@@ -1026,10 +1026,13 @@ def _row_id_by_source(src_task_id):
         return r["id"] if r else None
 
 
-def _merge_row(rid, src_task, sch, known, keep):
+def _merge_row(rid, src_task, sch, known, keep, review_all=False, changes=None):
     """3-way merge one existing row against its AZ (2) source task. Returns
     'unchanged' | 'updated' | 'conflict' | 'pushing'. The whole read→merge→write
-    happens in one connection so a concurrent human edit can't be clobbered."""
+    happens in one connection so a concurrent human edit can't be clobbered.
+    review_all=True parks even automatic (AZ (2)-only) changes as conflicts so
+    the owner approves EVERY change — nothing is written until he does.
+    `changes` (mutable list) collects the applied diffs for the sync report."""
     rcols, rdata = _decode_task(src_task, sch)
     remote = _snapshot(rcols, rdata, keep)
     src_cu = str(src_task.get("date_updated") or "")
@@ -1074,6 +1077,13 @@ def _merge_row(rid, src_task, sch, known, keep):
         def _do(field, b, l, rv, label):
             dec = _merge_decide(field, b, l, rv)
             if dec == "apply":
+                if review_all:              # 🛡 park it for approval instead
+                    conflicts.append({"field": field, "label": label,
+                                      "local": l, "remote": rv})
+                    return
+                if changes is not None:
+                    changes.append({"field": field, "label": label,
+                                    "old": l, "new": rv})
                 _apply_value(data, cols_new, field, rv)
                 _base_set(new_base, field, rv)
                 changed[0] = True
@@ -1176,31 +1186,106 @@ def _insert_new_item(order_id, ch, sch, known, keep, made):
     made["new_items"] += 1
 
 
-def _merge_order(rid, src_order, kids, sch, known, keep, made):
+def _merge_order(rid, src_order, kids, sch, known, keep, made,
+                 review_all=False, report=None):
     """Merge an existing order + its AZ (2) children (merge matched items, insert
-    genuinely new ones)."""
-    res = _merge_row(rid, src_order, sch, known, keep)
+    genuinely new ones). Collects per-field applied changes + parked conflicts
+    into `report` for the sync-review UI."""
+    oname = src_order.get("name") or ""
+
+    def _record(row_id, kind, name, res, chs):
+        if report is None:
+            return
+        if res == "updated" and chs:
+            report["applied"].append({"id": row_id, "kind": kind, "name": name,
+                                      "order": oname, "changes": chs})
+        elif res == "conflict":
+            report["conflict_rows"].append({"id": row_id, "kind": kind,
+                                            "name": name, "order": oname})
+
+    chs = []
+    res = _merge_row(rid, src_order, sch, known, keep, review_all, chs)
     if res == "conflict":
         made["conflicts"] += 1
     elif res == "updated":
         made["updated"] += 1
+    _record(rid, "order", oname, res, chs)
     for ch in kids:
         crid = _row_id_by_source(ch["id"])
         if crid:
-            r2 = _merge_row(crid, ch, sch, known, keep)
+            chs2 = []
+            r2 = _merge_row(crid, ch, sch, known, keep, review_all, chs2)
             if r2 == "conflict":
                 made["conflicts"] += 1
             elif r2 == "updated":
                 made["updated"] += 1
+            _record(crid, "item", ch.get("name") or "", r2, chs2)
         else:
             _insert_new_item(rid, ch, sch, known, keep, made)
+            if report is not None:
+                report["new_items"].append({"name": ch.get("name") or "",
+                                            "order": oname})
 
 
-def sync_from_source(since_iso, limit=25, config=None):
+def _presync_snapshot():
+    """Safety net: dump EVERY local Leluxe row (columns + data_json) to the data
+    dir before a sync writes anything; keep the 5 newest. Restore any of them
+    with:  python3 leluxe.py --restore-presync <file>"""
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT id, clickup_task_id, parent_task_id, parent_local_id, kind, "
+            "name, status, due_date, date_created, sync_state, deleted, data_json "
+            "FROM leluxe_orders")]
+    if not rows:
+        return None
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    p = data_path(f"leluxe_presync_{ts}.json")
+    write_json_atomic(p, {"ts": db.now_iso(), "rows": rows})
+    old = sorted(p.parent.glob("leluxe_presync_*.json"))
+    for f in old[:-5]:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+    return p.name
+
+
+def restore_presync(path):
+    """Write a pre-sync snapshot's rows back over the current ones (matched by
+    id; rows created after the snapshot are left alone). Restored rows go
+    'dirty' so the pusher mirrors the restored values to the WORKING list
+    (never AZ (2)). CLI-only — see _presync_snapshot's docstring."""
+    p = data_path(path) if not os.path.isabs(str(path)) else path
+    obj = json.loads(open(p, encoding="utf-8").read())
+    n = 0
+    with db.connect() as c:
+        for r in obj.get("rows") or []:
+            cur = c.execute("SELECT 1 FROM leluxe_orders WHERE id=?",
+                            (r["id"],)).fetchone()
+            if not cur:
+                continue
+            c.execute("""UPDATE leluxe_orders SET clickup_task_id=?,
+                         parent_task_id=?, parent_local_id=?, kind=?, name=?,
+                         status=?, due_date=?, date_created=?, deleted=?,
+                         data_json=?, sync_state='dirty', sync_error=NULL,
+                         sync_attempts=0, updated_at=? WHERE id=?""",
+                      (r["clickup_task_id"], r["parent_task_id"],
+                       r["parent_local_id"], r["kind"], r["name"], r["status"],
+                       r["due_date"], r["date_created"], r["deleted"],
+                       r["data_json"], db.now_iso(), r["id"]))
+            n += 1
+    kick()
+    return f"restored {n} rows from {p} (now dirty → re-pushing to the working list)"
+
+
+def sync_from_source(since_iso, limit=25, config=None, review_all=False):
     """One unified pass over the read-only AZ (2) list: NEW orders (created on/
     after `since_iso`, capped at `limit`) are inserted; every EXISTING local row
     is 3-way merged against its AZ (2) snapshot. Conflicting rows park as
-    sync_state='conflict'. AZ (2) is GET-only — nothing is written back to it."""
+    sync_state='conflict'. AZ (2) is GET-only — nothing is written back to it.
+    review_all=True parks EVERY would-be change for approval (nothing is
+    overwritten); either way a pre-sync snapshot + a per-change report are
+    written to the data dir."""
     config = config or cfg.load()
     src, lid = source_list_id(config), list_id(config)
     if not _token():
@@ -1236,6 +1321,9 @@ def sync_from_source(since_iso, limit=25, config=None):
     made = {"orders": 0, "updated": 0, "conflicts": 0, "packages": 0,
             "items": 0, "new_items": 0, "skipped": 0, "scanned": len(tops),
             "order_ids": []}
+    snap = _presync_snapshot()              # safety net BEFORE any write
+    report = {"ts": db.now_iso(), "review_all": bool(review_all), "applied": [],
+              "new_orders": [], "new_items": [], "conflict_rows": []}
     okeys = _existing_order_keys()          # name-key fallback for pre-feature rows
     inserted = 0
     for src_order in tops:
@@ -1247,15 +1335,21 @@ def sync_from_source(since_iso, limit=25, config=None):
                 rid = dup
         kids = children.get(src_order["id"], [])
         if rid:
-            _merge_order(rid, src_order, kids, sch, known, keep, made)
+            _merge_order(rid, src_order, kids, sch, known, keep, made,
+                         review_all, report)
         elif int(src_order.get("date_created") or 0) >= since_ms and inserted < limit:
             oid = _insert_order_tree(src_order, kids, sch, known, keep, made)
             inserted += 1
             made["orders"] += 1
             made["order_ids"].append(oid)
+            report["new_orders"].append({"id": oid,
+                                         "name": src_order.get("name") or ""})
             okeys.setdefault(_name_key(src_order.get("name")), oid)
         else:
             made["skipped"] += 1
+    write_json_atomic(data_path("leluxe_sync_report.json"), report)
+    made["report_changes"] = len(report["applied"])
+    made["presync"] = snap
     kick()
     return made
 
@@ -2076,3 +2170,20 @@ def start():
         return
     _started = True
     threading.Thread(target=_loop, name="leluxe-push", daemon=True).start()
+
+
+if __name__ == "__main__":
+    # Disaster recovery only: put back a pre-sync snapshot written by
+    # _presync_snapshot (Tools → Sync writes one before every run).
+    #   python3 leluxe.py --restore-presync leluxe_presync_20260718-101500.json
+    import sys as _sys
+    if "--restore-presync" in _sys.argv:
+        _f = _sys.argv[_sys.argv.index("--restore-presync") + 1]
+        if input(f"Restore Leluxe rows from {_f}? This overwrites current local "
+                 f"values (they then re-push to the working list). Type RESTORE: "
+                 ).strip() == "RESTORE":
+            print(restore_presync(_f))
+        else:
+            print("aborted")
+    else:
+        print(__doc__ or "leluxe module — see --restore-presync")
