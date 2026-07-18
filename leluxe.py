@@ -914,7 +914,124 @@ def dedupe_migrated(dry_run=True, config=None):
                           f"WHERE id IN ({ph})", (now, *ids))
             removed += 1
             _adopt_source(keeper["id"], (loser["data"] or {}).get("source_task_id"))
+
+    # ── item-level pass: sync-created twin PRODUCTS. The originals came from the
+    # ClickUp list-duplication (no source_task_id); the sync couldn't match them
+    # and inserted copies. Pair originals with copies 1:1 by (order, name-key):
+    # keep the original (the owner's edits live there), adopt the copy's AZ (2)
+    # provenance onto it, remove the copy locally + its pushed working-list task
+    # (same double guard), then drop any package the removal left empty. ──
+    with db.connect() as c:
+        vis = {r["id"]: _row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0")}
+
+    def _order_of(rid):
+        cur, seen = rid, set()
+        while cur in vis and cur not in seen:
+            seen.add(cur)
+            p = vis[cur]["parent_local_id"]
+            if p is None or p not in vis:
+                break
+            cur = p
+        return cur
+
+    igroups = {}
+    for r in vis.values():
+        if r["kind"] != "item":
+            continue
+        g = igroups.setdefault((_order_of(r["id"]), _name_key(r["name"])),
+                               {"orig": [], "sync": []})
+        g["sync" if (r["data"] or {}).get("source_task_id") else "orig"].append(r)
+    item_entries, touched_parents = [], set()
+    items_removed = items_adopted = pkgs_removed = ambiguous_items = 0
+    for (oid, key), g in igroups.items():
+        if not g["orig"] or not g["sync"]:
+            continue
+        oname = (vis.get(oid) or {}).get("name") or ""
+        if len(g["orig"]) != len(g["sync"]):
+            ambiguous_items += 1
+            item_entries.append({"order": oname, "key": key, "ambiguous": True})
+            continue
+        pairs = zip(sorted(g["orig"], key=lambda r: r["id"]),
+                    sorted(g["sync"], key=lambda r: r["id"]))
+        for keeper, twin in pairs:
+            item_entries.append({"order": oname, "keep": keeper["name"],
+                                 "keep_id": keeper["id"], "twin_id": twin["id"],
+                                 "tid": twin.get("clickup_task_id"),
+                                 "ambiguous": False})
+            if dry_run:
+                continue
+            tdata = twin["data"] or {}
+            with db.connect() as c:
+                kr = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                               (keeper["id"],)).fetchone()
+                if kr:
+                    kd = json.loads(kr["data_json"] or "{}")
+                    grew = False
+                    for k2 in ("source_task_id", "source_base", "source_cu_updated"):
+                        if tdata.get(k2) is not None and kd.get(k2) is None:
+                            kd[k2] = tdata[k2]
+                            grew = True
+                    if grew:
+                        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                                  (json.dumps(kd, ensure_ascii=False), keeper["id"]))
+                        items_adopted += 1
+            tid = twin.get("clickup_task_id")
+            if tid:
+                st, body = _http(f"{CLICKUP_API}/task/{tid}")
+                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
+                    dst, _b = _http(f"{CLICKUP_API}/task/{tid}", "DELETE")
+                    if dst in (200, 204):
+                        cu_deleted += 1
+                    else:
+                        errors.append(f"{twin['name']}: ClickUp delete failed ({dst})")
+                elif st == 404:
+                    pass                             # already gone
+                elif st == 200:
+                    errors.append(f"{twin['name']}: task {tid} is not in the "
+                                  f"working list — ClickUp left untouched")
+                else:
+                    errors.append(f"{twin['name']}: task lookup failed ({st})")
+            with db.connect() as c:
+                c.execute("UPDATE leluxe_orders SET deleted=1, updated_at=? "
+                          "WHERE id=?", (db.now_iso(), twin["id"]))
+            items_removed += 1
+            if twin["parent_local_id"] is not None:
+                touched_parents.add(twin["parent_local_id"])
+    if not dry_run and touched_parents:
+        empties = []
+        with db.connect() as c:
+            for pid in touched_parents:
+                pr = c.execute("SELECT id, name, clickup_task_id FROM leluxe_orders "
+                               "WHERE id=? AND deleted=0 AND kind='package'",
+                               (pid,)).fetchone()
+                if not pr:
+                    continue
+                left = c.execute("SELECT COUNT(*) n FROM leluxe_orders "
+                                 "WHERE parent_local_id=? AND deleted=0",
+                                 (pid,)).fetchone()["n"]
+                if left == 0:
+                    empties.append(dict(pr))
+        for pr in empties:
+            ptid = pr["clickup_task_id"]
+            if ptid:
+                st, body = _http(f"{CLICKUP_API}/task/{ptid}")
+                if st == 200 and str(((body or {}).get("list") or {}).get("id")) == lid:
+                    dst, _b = _http(f"{CLICKUP_API}/task/{ptid}", "DELETE")
+                    if dst in (200, 204):
+                        cu_deleted += 1
+                    else:
+                        errors.append(f"{pr['name']}: ClickUp delete failed ({dst})")
+            with db.connect() as c:
+                c.execute("UPDATE leluxe_orders SET deleted=1, updated_at=? "
+                          "WHERE id=?", (db.now_iso(), pr["id"]))
+            pkgs_removed += 1
+
     return {"groups": report, "removed": removed, "clickup_deleted": cu_deleted,
+            "items": item_entries,
+            "item_pairs": sum(1 for e in item_entries if not e.get("ambiguous")),
+            "items_removed": items_removed, "items_adopted": items_adopted,
+            "pkgs_removed": pkgs_removed, "ambiguous_items": ambiguous_items,
             "errors": errors, "dry_run": bool(dry_run)}
 
 
@@ -1186,6 +1303,26 @@ def _insert_new_item(order_id, ch, sch, known, keep, made):
     made["new_items"] += 1
 
 
+def _adopt_child_source(row_id, src_task, sch, keep):
+    """Seed AZ (2) provenance on a pre-existing ITEM matched by name (originals
+    from the ClickUp list-duplication carry no source_task_id) so future syncs
+    match it directly instead of inserting a twin product."""
+    ccols, cdata = _decode_task(src_task, sch)
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (row_id,)).fetchone()
+        if not r:
+            return
+        d = json.loads(r["data_json"] or "{}")
+        if d.get("source_task_id"):
+            return
+        d["source_task_id"] = src_task["id"]
+        d.setdefault("source_base", _snapshot(ccols, cdata, keep))
+        d.setdefault("source_cu_updated", str(src_task.get("date_updated") or ""))
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), row_id))
+
+
 def _merge_order(rid, src_order, kids, sch, known, keep, made,
                  review_all=False, report=None):
     """Merge an existing order + its AZ (2) children (merge matched items, insert
@@ -1210,8 +1347,24 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
     elif res == "updated":
         made["updated"] += 1
     _record(rid, "order", oname, res, chs)
+    # name-key adoption for CHILDREN too: originals from the list-duplication
+    # carry no source_task_id — match by name so we never twin a product.
+    with db.connect() as c:
+        kid_rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0 AND kind='item' AND "
+            "(parent_local_id=? OR parent_local_id IN (SELECT id FROM "
+            "leluxe_orders WHERE parent_local_id=? AND deleted=0))", (rid, rid))]
+    ikeys = {}
+    for r2 in kid_rows:
+        if not (r2["data"] or {}).get("source_task_id"):
+            ikeys.setdefault(_name_key(r2["name"]), r2["id"])
     for ch in kids:
         crid = _row_id_by_source(ch["id"])
+        if not crid:
+            aid = ikeys.pop(_name_key(ch.get("name")), None)
+            if aid:
+                _adopt_child_source(aid, ch, sch, keep)
+                crid = aid
         if crid:
             chs2 = []
             r2 = _merge_row(crid, ch, sch, known, keep, review_all, chs2)

@@ -3318,17 +3318,23 @@ async function lxDedupe(btn){
   if(!r.ok){ toast(r.error||"dedupe check failed"); return; }
   const real=(r.groups||[]).filter(g=>!g.ambiguous);
   const n=real.reduce((s,g)=>s+((g.removed||[]).length),0);
-  if(!n){ toast("لا تكرارات · no duplicates found ✓"); return; }
-  const names=real.map(g=>g.keeper&&g.keeper.name).filter(Boolean);
-  if(!confirm(`Remove ${n} duplicate order(s)?\n\nKeeps the original row; deletes the migrate copy here AND its pushed twin task in the working list. AZ (2) is never touched.\n\n${names.slice(0,8).join("\n")}${names.length>8?"\n…":""}`)) return;
+  const nItems=r.item_pairs||0;
+  if(!n&&!nItems){ toast("لا تكرارات · no duplicates found ✓"); return; }
+  const parts=[];
+  if(nItems) parts.push(`${nItems} منتج مكرر · duplicate product(s)`);
+  if(n) parts.push(`${n} طلب مكرر · duplicate order(s)`);
+  if(!confirm(`إزالة ${parts.join(" + ")}؟ · Remove ${parts.join(" + ")}?\n\nيُبقي النسخة الأصلية (بكل تعديلاتك) ويحذف نسخة المزامنة هنا ومهمتها في قائمة العمل. AZ (2) لا تُمسّ أبداً.\nKeeps your ORIGINALS (with all your edits); deletes the sync-created copies here AND their pushed twin tasks in the working list. AZ (2) is never touched.`)) return;
   btn.disabled=true;
+  const pr=$("lxProgress"); pr.style.display="block";
+  pr.textContent=`🧹 جارٍ التنظيف · cleaning ${nItems+n} duplicate(s)… (يحذف أيضاً من قائمة العمل · also deleting the ClickUp twins)`;
   let x; try{ x=await post("/api/leluxe/dedupe",{dry_run:false}); }catch(e){ x={}; }
   btn.disabled=false;
-  if(!x.ok){ toast(x.error||"dedupe failed"); return; }
-  const pr=$("lxProgress"); pr.style.display="block";
-  pr.textContent=`🧹 removed ${x.removed} duplicate(s) · ${x.clickup_deleted} ClickUp twin task(s) deleted`
+  if(!x.ok){ pr.textContent="❌ "+(x.error||"dedupe failed"); return; }
+  pr.textContent=`🧹 حُذف ${x.items_removed||0} منتج + ${x.removed||0} طلب مكرر · removed ${x.items_removed||0} product(s) + ${x.removed||0} order(s)`
+    +` · ${x.clickup_deleted||0} ClickUp twin task(s)`
+    +((x.pkgs_removed||0)?` · ${x.pkgs_removed} emptied package(s)`:"")
     +((x.errors&&x.errors.length)?` · ⚠ ${x.errors.join(" · ")}`:"");
-  toast(`🧹 تمت الإزالة · removed ${x.removed}`);
+  toast(`🧹 تمت الإزالة · removed ${(x.items_removed||0)+(x.removed||0)}`);
   await loadLeluxe(); lxPollStart();
 }
 function lxMigrateAsk(btn){   // Tools-menu entry: ask the source list (once) + since-date, then migrate
