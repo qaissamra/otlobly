@@ -1121,8 +1121,7 @@
         <div class="pop-menu" style="min-width:230px">
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
-          <button class="pop-item" id="lxPullBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxImport(this)" title="fetch ClickUp-side changes into this page (your unsent edits are kept)">↙ Pull from ClickUp</button>
-          <button class="pop-item" id="lxMigrateBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxMigrateAsk(this)" title="copy recent orders from the real AZ (2) into this working list (AZ (2) is only read)">⬇ Migrate from AZ (2)…</button>
+          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 مزامنة من AZ (2) · Sync from AZ (2)</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
           <button class="pop-item" id="lxActivityBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity log</button>
@@ -1323,6 +1322,14 @@
   <div class="az-box" style="width:640px;max-width:96vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="lxInfoTitle">⌚ Order</b><span class="az-x" onclick="lxInfoClose()">✕</span></div>
     <div id="lxInfoBody" style="padding:12px 16px"></div>
+  </div>
+</div>
+
+<!-- Sync conflict review: a field changed in BOTH Otlobly and AZ (2) — pick which wins -->
+<div id="lxConflictModal" class="az-modal hidden" onclick="if(event.target===this)lxConflictClose()">
+  <div class="az-box" style="width:680px;max-width:96vw;max-height:92vh;overflow:auto">
+    <div class="az-head"><b>⚠ مراجعة التعارض · Review conflicts</b><span class="az-x" onclick="lxConflictClose()">✕</span></div>
+    <div id="lxConflictBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -1946,11 +1953,15 @@ async function lxImport(btn){
 }
 function lxChip(sync,disabled){
   const el=$("lxSyncChip"); if(!el||!sync) return;
-  const pend=(sync.dirty||0)+(sync.pushing||0), err=sync.error||0;
-  if(disabled) el.innerHTML=`<span class="pill" style="color:#92400e;background:#fef3c7">⏸ push disabled</span>`;
-  else if(err) el.innerHTML=`<span class="pill" style="color:#b42318;background:#fee2e2" title="${poEsc((sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))}">⚠ ${err} failed</span> <button class="minibtn" onclick="lxRetry(this)">Retry</button>`;
-  else if(pend) el.innerHTML=`<span class="pill" style="color:#b45309;background:#fef3c7">↻ ${pend} syncing…</span>`;
-  else el.innerHTML=`<span class="pill" style="color:#16a34a;background:#ecfdf5">✓ all synced</span>`;
+  const pend=(sync.dirty||0)+(sync.pushing||0), err=sync.error||0, conf=sync.conflict||0;
+  let html;
+  if(disabled) html=`<span class="pill" style="color:#92400e;background:#fef3c7">⏸ push disabled</span>`;
+  else if(err) html=`<span class="pill" style="color:#b42318;background:#fee2e2" title="${poEsc((sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))}">⚠ ${err} failed</span> <button class="minibtn" onclick="lxRetry(this)">Retry</button>`;
+  else if(pend) html=`<span class="pill" style="color:#b45309;background:#fef3c7">↻ ${pend} syncing…</span>`;
+  else html=`<span class="pill" style="color:#16a34a;background:#ecfdf5">✓ all synced</span>`;
+  // both-sides changes waiting on a manual pick — shown alongside any state above
+  if(conf) html+=` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2" onclick="lxConflictsOpen()" title="طلبات تغيّرت في أوتلوبلي و AZ (2) معاً — اختر القيمة الصحيحة · orders changed in both Otlobly and AZ (2) — pick the winning value">⚠ ${conf} تعارض · conflict${conf===1?'':'s'}</button>`;
+  el.innerHTML=html;
 }
 function lxPollStart(){
   if(LX_POLL) return;
@@ -3344,6 +3355,116 @@ async function lxMigrate(btn){
   pr.innerHTML=`✅ Migrated ${poEsc(head)}. Pushing to ClickUp in the background — watch the sync chip.`
     +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View these (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
+}
+// ── Sync from AZ (2): one pass that pulls new + updates existing, flagging any
+// order changed on BOTH sides for the conflict-review panel below. ────────────
+function lxSyncAsk(btn){
+  let src=(LX&&LX.source_list_id)||"";
+  if(!src){   // never captured on this deployment yet — ask once, default to the real AZ (2)
+    src=prompt("رقم قائمة AZ (2) الأصلية — تُقرأ فقط ولا تُعدَّل أبداً\nAZ (2) SOURCE list id — read-only, never changed","901520351506");
+    if(src===null) return; src=src.trim();
+    if(!src){ toast("Need the AZ (2) list id"); return; }
+  }
+  LX_MIG_SRC=src;
+  const def=$("lxMigrateSince").value||new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const d=prompt("المزامنة تحدّث كل الطلبات الموجودة. هذا التاريخ يحدّد فقط الطلبات الجديدة التي تُضاف (YYYY-MM-DD)\nSync updates ALL existing orders; this date only limits which NEW orders get added",def);
+  if(d===null) return;
+  $("lxMigrateSince").value=(d||"").trim();
+  lxSync(btn);
+}
+async function lxSync(btn){
+  let since=$("lxMigrateSince").value;
+  if(!since){ since=new Date(Date.now()-30*864e5).toISOString().slice(0,10); $("lxMigrateSince").value=since; }
+  btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="⏳ Reading AZ (2)…";
+  let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
+  if(!r.ok){ pr.textContent="❌ "+(r.error||"sync failed"); btn.disabled=false; return; }
+  LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
+  const head=`+${r.orders||0} جديد·new · ${r.updated||0} محدّث·updated`
+    +(r.conflicts?` · ⚠ ${r.conflicts} تعارض·conflict${r.conflicts===1?'':'s'}`:"")
+    +(r.new_items?` · +${r.new_items} منتج·product${r.new_items===1?'':'s'}`:"");
+  let done=0,rem=1;
+  while(rem>0){ pr.textContent=`✓ ${head} · fetching Amazon photos… ${done}`;
+    let ir; try{ ir=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
+    if(!ir.ok) break; done+=ir.done; rem=ir.remaining; if(ir.done===0&&rem>0) break; }
+  let tc=0,trem=1;
+  while(trem>0){ pr.textContent=`✓ ${head} · live GAASH tracking… ${tc}`;
+    let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
+    if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
+  pr.innerHTML=`✅ مزامنة · Synced — ${poEsc(head)}.`
+    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">⚠ راجع التعارض · Review conflicts</button>`:"")
+    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new (${LX_LAST_MIGRATED.length})</button>`:"");
+  btn.disabled=false; await loadLeluxe(); lxPollStart();
+}
+// ── Conflict review — Otlobly value vs ClickUp (AZ 2) value, per field ────────
+let LX_CONF=[];
+function lxCVal(v){
+  if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— (فارغ · empty)</span>';
+  if(Array.isArray(v)) return v.map(x=>`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">${poEsc(String(x))}</span>`).join(" ");
+  if(v===true) return "✓ نعم · yes";
+  if(v===false) return "✗ لا · no";
+  if(typeof v==="number"||(/^\d{11,}$/).test(String(v))) return poEsc(lxMs(v)||String(v));
+  return poEsc(String(v));
+}
+async function lxConflictsOpen(){
+  $("lxConflictModal").classList.remove("hidden");
+  $("lxConflictBody").innerHTML='<div class="muted2" style="padding:16px">⏳ Loading…</div>';
+  await lxConflictReload(false);
+}
+function lxConflictClose(){ $("lxConflictModal").classList.add("hidden"); }
+async function lxConflictReload(alsoRefresh=true){
+  let r; try{ r=await (await fetch("/api/leluxe/conflicts")).json(); }catch(e){ r=null; }
+  if(!r||!r.ok){ $("lxConflictBody").innerHTML='<div class="muted2" style="padding:16px">تعذّر التحميل · could not load</div>'; return; }
+  lxConflictRender(r.conflicts||[]);
+  if(alsoRefresh){ loadLeluxe(); lxPollStart(); }   // resolved rows are now dirty → syncing
+}
+function lxConflictRender(list){
+  LX_CONF=list;
+  const body=$("lxConflictBody");
+  if(!list.length){ body.innerHTML='<div style="padding:24px;text-align:center">✅ لا تعارضات للمراجعة · No conflicts to review.</div>'; return; }
+  body.innerHTML=`<div class="muted2" style="font-size:12px;margin-bottom:10px">تغيّر الحقل في أوتلوبلي و AZ (2) معاً — اختر القيمة التي تعتمدها · this field changed in both Otlobly and AZ (2) — choose which value wins.</div>`
+    +list.map((o,oi)=>{
+    const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"}[o.kind]||"⌚";
+    const rows=(o.conflicts||[]).map((cf,fi)=>`
+      <div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:8px">
+        <div style="font-weight:800;font-size:12.5px;margin-bottom:7px">${poEsc(cf.label||cf.field)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--bg2)">
+            <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">أوتلوبلي · Otlobly</div>
+            <div dir="auto" style="font-size:12.5px;overflow-wrap:anywhere">${lxCVal(cf.local)}</div>
+            <button class="po-btn" style="margin-top:7px;width:100%" onclick="lxResolveField(${oi},${fi},'local')">⬅ احتفظ بهذه · Keep this</button>
+          </div>
+          <div style="border:1px solid #f59e0b55;border-radius:9px;padding:8px;background:#fff7ed">
+            <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">ClickUp · AZ (2)</div>
+            <div dir="auto" style="font-size:12.5px;overflow-wrap:anywhere">${lxCVal(cf.remote)}</div>
+            <button class="po-btn" style="margin-top:7px;width:100%;border-color:#f59e0b;color:#b45309" onclick="lxResolveField(${oi},${fi},'remote')">استخدم هذه · Use this ➡</button>
+          </div>
+        </div>
+      </div>`).join("");
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+        <b>${kindIcon} ${poEsc(o.order_name||o.name||"")}</b>
+        ${(o.kind==="item"||o.kind==="package")?`<span class="muted2" style="font-size:11.5px">${o.kind==="item"?"🛍":"📦"} ${poEsc(o.name||"")}</span>`:""}
+        <span style="flex:1"></span>
+        <button class="po-btn" onclick="lxResolveOrder(${oi},'local')" title="احتفظ بكل قيم أوتلوبلي لهذا العنصر">↩ كل قيم أوتلوبلي · Keep all Otlobly</button>
+        <button class="po-btn" style="border-color:#f59e0b;color:#b45309" onclick="lxResolveOrder(${oi},'remote')" title="استخدم كل قيم AZ (2) لهذا العنصر">☑ كل قيم كليك أب · Use all ClickUp</button>
+      </div>
+      ${rows}
+    </div>`;
+  }).join("");
+}
+async function lxResolveField(oi,fi,side){
+  const o=LX_CONF[oi]; if(!o) return; const cf=(o.conflicts||[])[fi]; if(!cf) return;
+  let r; try{ r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choices:{[cf.field]:side}}); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"resolve failed"); return; }
+  toast(side==="remote"?"✓ اعتُمدت قيمة كليك أب · used ClickUp":"✓ أُبقيت قيمة أوتلوبلي · kept Otlobly");
+  await lxConflictReload();
+}
+async function lxResolveOrder(oi,side){
+  const o=LX_CONF[oi]; if(!o) return;
+  let r; try{ r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choice:side}); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"resolve failed"); return; }
+  toast(side==="remote"?"✓ اعتُمدت كل قيم كليك أب · used all ClickUp":"✓ أُبقيت كل قيم أوتلوبلي · kept all Otlobly");
+  await lxConflictReload();
 }
 async function lxRefreshTracking(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🚚 Live GAASH tracking…";

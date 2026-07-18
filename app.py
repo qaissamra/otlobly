@@ -2196,7 +2196,7 @@ def api_leluxe_migrate():
     rows (client loops while remaining > 0), same shape as the PO refresh loop."""
     b = request.get_json(force=True, silent=True) or {}
     phase = b.get("phase") or "scan"
-    if phase == "scan":
+    if phase in ("scan", "sync"):
         since = (b.get("since") or "").strip()
         if not since:
             return jsonify({"ok": False, "error": "since date required"}), 400
@@ -2216,14 +2216,23 @@ def api_leluxe_migrate():
             return jsonify({"ok": False, "error": "a migration/import is already running"}), 409
         db.set_setting("leluxe:import_running", time.time())
         try:
-            res = leluxe_mod.migrate_from_source(since, limit=int(b.get("limit") or 20))
+            if phase == "sync":
+                res = leluxe_mod.sync_from_source(since, limit=int(b.get("limit") or 25))
+            else:
+                res = leluxe_mod.migrate_from_source(since, limit=int(b.get("limit") or 20))
         finally:
             db.set_setting("leluxe:import_running", 0)
         if res.get("error"):
             return jsonify({"ok": False, **res}), 502
-        activity.log("set", "leluxe", "migrate", "Leluxe",
-                     detail=f"migrated {res['orders']} orders / {res['packages']} packages "
-                            f"/ {res['items']} items from AZ (2) since {since}", user=_user())
+        if phase == "sync":
+            activity.log("set", "leluxe", "sync", "Leluxe",
+                         detail=f"synced AZ (2) since {since}: +{res['orders']} new, "
+                                f"{res['updated']} updated, {res['conflicts']} conflict(s), "
+                                f"{res['new_items']} new product(s)", user=_user())
+        else:
+            activity.log("set", "leluxe", "migrate", "Leluxe",
+                         detail=f"migrated {res['orders']} orders / {res['packages']} packages "
+                                f"/ {res['items']} items from AZ (2) since {since}", user=_user())
         return jsonify({"ok": True, **res})
     if phase == "images":
         return jsonify({"ok": True, **leluxe_mod.fetch_item_images(
@@ -2232,6 +2241,37 @@ def api_leluxe_migrate():
         return jsonify({"ok": True, **leluxe_mod.refresh_tracking(
             batch=min(int(b.get("batch") or 5), 10))})
     return jsonify({"ok": False, "error": "bad phase"}), 400
+
+
+@app.route("/api/leluxe/conflicts")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_conflicts():
+    """Rows parked in a sync merge conflict — Otlobly vs AZ (2) per field."""
+    return jsonify({"ok": True, "conflicts": leluxe_mod.list_conflicts()})
+
+
+@app.route("/api/leluxe/resolve_conflict", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_resolve_conflict():
+    """Apply the owner's pick to a parked conflict row. Body: {row_id, choice:
+    'local'|'remote'} to resolve the whole row, or {row_id, choices:{field:side}}
+    per field. Resolving the last field flips the row to 'dirty' → mirrored to the
+    working copy (AZ (2) is never written)."""
+    b = request.get_json(force=True, silent=True) or {}
+    rid = b.get("row_id")
+    if not rid:
+        return jsonify({"ok": False, "error": "row_id required"}), 400
+    row, err = leluxe_mod.resolve_conflict(
+        rid, choices=b.get("choices"), choice=b.get("choice"))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    remaining = len(row["data"].get("conflicts") or []) if row else 0
+    activity.log("set", "leluxe", str(rid), row.get("name") if row else "Leluxe",
+                 detail=f"resolved sync conflict ({b.get('choice') or 'per-field'})",
+                 user=_user())
+    return jsonify({"ok": True, "row": row, "remaining_conflicts": remaining})
 
 
 @app.route("/api/leluxe/dedupe", methods=["POST"])

@@ -331,9 +331,13 @@ def sync_counts():
                   for r in c.execute(
                       "SELECT id, name, sync_error FROM leluxe_orders "
                       "WHERE sync_state='error' AND deleted=0 LIMIT 10")]
+        conflict_rows = [{"id": r["id"], "name": r["name"]} for r in c.execute(
+            "SELECT id, name FROM leluxe_orders "
+            "WHERE sync_state='conflict' AND deleted=0 LIMIT 50")]
     return {"synced": counts.get("synced", 0), "dirty": counts.get("dirty", 0),
             "pushing": counts.get("pushing", 0), "error": counts.get("error", 0),
-            "last_errors": errors}
+            "conflict": counts.get("conflict", 0),
+            "last_errors": errors, "conflict_rows": conflict_rows}
 
 
 def _insert_row(kind, name, *, status="", due_date=None, fields=None, desc="",
@@ -912,6 +916,422 @@ def dedupe_migrated(dry_run=True, config=None):
             _adopt_source(keeper["id"], (loser["data"] or {}).get("source_task_id"))
     return {"groups": report, "removed": removed, "clickup_deleted": cu_deleted,
             "errors": errors, "dry_run": bool(dry_run)}
+
+
+# --------------------------------------------------------------------------- #
+# Unified Sync — one pass over AZ (2): INSERT new orders (migrate) + 3-way MERGE
+# existing rows against `data.source_base` (the AZ (2) snapshot last reconciled).
+# A field changed on BOTH sides parks the row as sync_state='conflict' for manual
+# review. AZ (2) is GET-only; every write here only ever reaches the working copy
+# via the background pusher.
+# --------------------------------------------------------------------------- #
+_SCALARS = ("name", "status", "due_date", "description", "tags")
+_FIELD_LABELS = {"name": "الاسم · Name", "status": "الحالة · Status",
+                 "due_date": "الاستحقاق · Due date",
+                 "description": "الوصف · Description", "tags": "الوسوم · Tags"}
+
+
+def _strip_embeds(text):
+    """Drop ClickUp image-embed markdown so a description that only differs by
+    uploaded-image embeds isn't seen as an edit."""
+    return _IMG_MD.sub("", text or "")
+
+
+def _cmp(field, v):
+    """Normalize a value for equality only (not for storage): empty forms →
+    "", lists → order-insensitive, description → embeds/whitespace stripped."""
+    if v is None or v == "" or v == []:
+        return ""
+    if isinstance(v, list):
+        return sorted(str(x) for x in v)
+    if field == "description":
+        return _strip_embeds(v).strip()
+    return v
+
+
+def _vals_equal(field, a, b):
+    return _cmp(field, a) == _cmp(field, b)
+
+
+def _merge_decide(field, base, local, remote):
+    """3-way merge verdict for one field."""
+    r_eq_b = _vals_equal(field, remote, base)
+    l_eq_b = _vals_equal(field, local, base)
+    if r_eq_b and l_eq_b:
+        return "unchanged"
+    if l_eq_b:
+        return "apply"                 # AZ (2)-only change → take remote
+    if r_eq_b:
+        return "keep"                  # app-only change → keep local
+    if _vals_equal(field, remote, local):
+        return "converge"             # both reached the same value
+    return "conflict"
+
+
+def _snapshot(cols, data, keep):
+    """The comparable AZ (2) shape stored as source_base / pushed."""
+    return {"name": cols["name"], "status": cols["status"],
+            "due_date": cols["due_date"], "description": data["description"],
+            "tags": list(data["tags"]), "fields": keep(data["fields"])}
+
+
+def _apply_value(data, cols, field, value):
+    """Write a resolved value into the row's local representation (columns for
+    name/status/due_date, data_json for the rest)."""
+    if field in ("name", "status", "due_date"):
+        cols[field] = value
+    elif field == "description":
+        data["description"] = value or ""
+    elif field == "tags":
+        data["tags"] = list(value or [])
+    else:
+        f = data.setdefault("fields", {})
+        if value in (None, "", []):
+            f.pop(field, None)
+        else:
+            f[field] = value
+
+
+def _base_set(base, field, value):
+    if field == "tags":
+        base["tags"] = list(value or [])
+    elif field in ("name", "status", "due_date", "description"):
+        base[field] = value
+    else:
+        base.setdefault("fields", {})[field] = value
+
+
+def _write_row(c, rid, cols, data, sync_state=None, reset_sync=False):
+    sets = ["data_json=?", "updated_at=?"]
+    args = [json.dumps(data, ensure_ascii=False), db.now_iso()]
+    for k in ("name", "status", "due_date"):
+        if k in cols:
+            sets.append(f"{k}=?")
+            args.append(cols[k])
+    if sync_state is not None:
+        sets.append("sync_state=?")
+        args.append(sync_state)
+    if reset_sync:
+        sets.append("sync_error=NULL")
+        sets.append("sync_attempts=0")
+    args.append(rid)
+    c.execute(f"UPDATE leluxe_orders SET {', '.join(sets)} WHERE id=?", args)
+
+
+def _row_id_by_source(src_task_id):
+    with db.connect() as c:
+        r = c.execute("SELECT id FROM leluxe_orders "
+                      "WHERE json_extract(data_json,'$.source_task_id')=? "
+                      "AND deleted=0 LIMIT 1", (src_task_id,)).fetchone()
+        return r["id"] if r else None
+
+
+def _merge_row(rid, src_task, sch, known, keep):
+    """3-way merge one existing row against its AZ (2) source task. Returns
+    'unchanged' | 'updated' | 'conflict' | 'pushing'. The whole read→merge→write
+    happens in one connection so a concurrent human edit can't be clobbered."""
+    rcols, rdata = _decode_task(src_task, sch)
+    remote = _snapshot(rcols, rdata, keep)
+    src_cu = str(src_task.get("date_updated") or "")
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM leluxe_orders WHERE id=? AND deleted=0",
+                      (rid,)).fetchone()
+        if not r:
+            return "unchanged"
+        d = _row(r)
+        if d["sync_state"] == "pushing":
+            return "pushing"               # let the pusher finish; catch it next pass
+        data = d["data"]
+        base = data.get("source_base")
+        if base is None:                    # pre-feature row — seed a merge base
+            if d["sync_state"] == "synced" and (data.get("pushed") or {}):
+                p = data["pushed"]          # trust the confirmed copy state as base
+                base = {"name": p.get("name"), "status": p.get("status"),
+                        "due_date": p.get("due_date"),
+                        "description": p.get("description"),
+                        "tags": list(p.get("tags") or []),
+                        "fields": dict(p.get("fields") or {})}
+            else:                           # unverifiable provenance — baseline only
+                data["source_base"] = remote
+                data["source_cu_updated"] = src_cu
+                c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                          (json.dumps(data, ensure_ascii=False), rid))
+                return "unchanged"
+        elif data.get("source_cu_updated") == src_cu:
+            return "unchanged"              # AZ (2) task untouched since last sync
+        local = {"name": r["name"], "status": r["status"] or "",
+                 "due_date": r["due_date"],
+                 "description": data.get("description") or "",
+                 "tags": list(data.get("tags") or []),
+                 "fields": dict(data.get("fields") or {})}
+        new_base = {"name": base.get("name"), "status": base.get("status"),
+                    "due_date": base.get("due_date"),
+                    "description": base.get("description"),
+                    "tags": list(base.get("tags") or []),
+                    "fields": dict(base.get("fields") or {})}
+        cols_new, conflicts, changed = {}, [], [False]
+
+        def _do(field, b, l, rv, label):
+            dec = _merge_decide(field, b, l, rv)
+            if dec == "apply":
+                _apply_value(data, cols_new, field, rv)
+                _base_set(new_base, field, rv)
+                changed[0] = True
+            elif dec == "converge":
+                _base_set(new_base, field, rv)
+            elif dec == "conflict":
+                conflicts.append({"field": field, "label": label,
+                                  "local": l, "remote": rv})
+
+        for field in _SCALARS:
+            _do(field, new_base.get(field), local.get(field), remote.get(field),
+                _FIELD_LABELS.get(field, field))
+        lf, rf, bf = local["fields"], remote["fields"], new_base["fields"]
+        for fname in sorted((set(lf) | set(rf) | set(bf)) & known):
+            _do(fname, bf.get(fname), lf.get(fname), rf.get(fname), fname)
+        data["source_base"] = new_base
+        data["source_cu_updated"] = src_cu
+        if conflicts:
+            data["conflicts"] = conflicts
+            _write_row(c, rid, cols_new, data, sync_state="conflict")
+            return "conflict"
+        data.pop("conflicts", None)
+        if changed[0]:
+            _write_row(c, rid, cols_new, data, sync_state="dirty", reset_sync=True)
+            return "updated"
+        _write_row(c, rid, cols_new, data)     # only base / cu advanced
+        return "unchanged"
+
+
+def _insert_order_tree(src_order, kids, sch, known, keep, made):
+    """INSERT one AZ (2) order as order → package(by Tracking Number) → item,
+    seeding source_task_id + source_base on the order and each item (mirrors
+    migrate_from_source, plus the merge-base seeds)."""
+    ocols, odata = _decode_task(src_order, sch)
+    order_id = _insert_row(
+        "order", ocols["name"], status=ocols["status"],
+        due_date=ocols["due_date"], fields=keep(odata["fields"]),
+        desc=odata["description"], tags=odata["tags"],
+        date_created=ocols["date_created"],
+        extra={"source_task_id": src_order["id"],
+               "source_cu_updated": str(src_order.get("date_updated") or ""),
+               "source_base": _snapshot(ocols, odata, keep)})
+    groups = {}
+    for ch in kids:
+        _, cdata = _decode_task(ch, sch)
+        tn = str(cdata["fields"].get("Tracking Number") or "").strip()
+        groups.setdefault(tn, []).append((ch, cdata))
+    for tn, members in groups.items():
+        first = members[0][1]["fields"]
+        pkg_fields = keep({k: first[k] for k in _PKG_FIELDS if first.get(k) is not None})
+        if tn and "Tracking Number" in known:
+            pkg_fields["Tracking Number"] = tn
+        pkg_id = _insert_row("package", f"📦 {tn}" if tn else "📦 no tracking",
+                             fields=pkg_fields, parent_local_id=order_id,
+                             date_created=ocols["date_created"],
+                             extra={"tracking_number": tn or None})
+        made["packages"] += 1
+        for ch, cdata in members:
+            ccols, _c = _decode_task(ch, sch)
+            _insert_row("item", ccols["name"], status=ccols["status"],
+                        due_date=ccols["due_date"], fields=keep(cdata["fields"]),
+                        desc=cdata["description"], parent_local_id=pkg_id,
+                        date_created=ccols["date_created"],
+                        extra={"source_task_id": ch["id"],
+                               "source_cu_updated": str(ch.get("date_updated") or ""),
+                               "source_base": _snapshot(ccols, cdata, keep)})
+            made["items"] += 1
+    return order_id
+
+
+def _insert_new_item(order_id, ch, sch, known, keep, made):
+    """A product added in AZ (2) after its order was migrated → INSERT it under
+    the order's package whose tracking matches (create the package if none)."""
+    ccols, cdata = _decode_task(ch, sch)
+    tn = str(cdata["fields"].get("Tracking Number") or "").strip()
+    with db.connect() as c:
+        pkgs = [_row(x) for x in c.execute(
+            "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND kind='package' "
+            "AND deleted=0", (order_id,))]
+    pkg_id = next((p["id"] for p in pkgs
+                   if str(p["data"].get("tracking_number") or "").strip() == tn), None)
+    if pkg_id is None:
+        pkg_fields = keep({k: cdata["fields"][k] for k in _PKG_FIELDS
+                           if cdata["fields"].get(k) is not None})
+        if tn and "Tracking Number" in known:
+            pkg_fields["Tracking Number"] = tn
+        pkg_id = _insert_row("package", f"📦 {tn}" if tn else "📦 no tracking",
+                             fields=pkg_fields, parent_local_id=order_id,
+                             date_created=ccols["date_created"],
+                             extra={"tracking_number": tn or None})
+        made["packages"] += 1
+    _insert_row("item", ccols["name"], status=ccols["status"],
+                due_date=ccols["due_date"], fields=keep(cdata["fields"]),
+                desc=cdata["description"], parent_local_id=pkg_id,
+                date_created=ccols["date_created"],
+                extra={"source_task_id": ch["id"],
+                       "source_cu_updated": str(ch.get("date_updated") or ""),
+                       "source_base": _snapshot(ccols, cdata, keep)})
+    made["items"] += 1
+    made["new_items"] += 1
+
+
+def _merge_order(rid, src_order, kids, sch, known, keep, made):
+    """Merge an existing order + its AZ (2) children (merge matched items, insert
+    genuinely new ones)."""
+    res = _merge_row(rid, src_order, sch, known, keep)
+    if res == "conflict":
+        made["conflicts"] += 1
+    elif res == "updated":
+        made["updated"] += 1
+    for ch in kids:
+        crid = _row_id_by_source(ch["id"])
+        if crid:
+            r2 = _merge_row(crid, ch, sch, known, keep)
+            if r2 == "conflict":
+                made["conflicts"] += 1
+            elif r2 == "updated":
+                made["updated"] += 1
+        else:
+            _insert_new_item(rid, ch, sch, known, keep, made)
+
+
+def sync_from_source(since_iso, limit=25, config=None):
+    """One unified pass over the read-only AZ (2) list: NEW orders (created on/
+    after `since_iso`, capped at `limit`) are inserted; every EXISTING local row
+    is 3-way merged against its AZ (2) snapshot. Conflicting rows park as
+    sync_state='conflict'. AZ (2) is GET-only — nothing is written back to it."""
+    config = config or cfg.load()
+    src, lid = source_list_id(config), list_id(config)
+    if not _token():
+        return {"error": "CLICKUP_API_TOKEN is not set"}
+    if not src:
+        return {"error": "leluxe.source_list_id (AZ 2) is not set"}
+    if not lid:
+        return {"error": "leluxe.list_id (working list) is not set — Discover first"}
+    if src == lid:
+        return {"error": "the working list must differ from AZ (2)"}
+    since_ms = to_ms(since_iso) or 0
+    sch = schema(config)
+    known = set((sch.get("fields") or {}).keys())
+    keep = lambda fields: {k: v for k, v in fields.items() if k in known}
+    tasks, page = [], 0
+    while True:
+        st, body = _http(f"{CLICKUP_API}/list/{src}/task?include_closed=true"
+                         f"&subtasks=true&include_markdown_description=true&page={page}")
+        if st != 200:
+            return {"error": f"AZ (2) fetch failed ({st}): "
+                             f"{(body or {}).get('_error') or body}"}
+        batch = body.get("tasks") or []
+        tasks.extend(batch)
+        if body.get("last_page", True) or not batch:
+            break
+        page += 1
+    children = {}
+    for t in tasks:
+        if t.get("parent"):
+            children.setdefault(t["parent"], []).append(t)
+    tops = [t for t in tasks if not t.get("parent")]
+    tops.sort(key=lambda t: int(t.get("date_created") or 0), reverse=True)
+    made = {"orders": 0, "updated": 0, "conflicts": 0, "packages": 0,
+            "items": 0, "new_items": 0, "skipped": 0, "scanned": len(tops),
+            "order_ids": []}
+    okeys = _existing_order_keys()          # name-key fallback for pre-feature rows
+    inserted = 0
+    for src_order in tops:
+        rid = _row_id_by_source(src_order["id"])
+        if not rid:
+            dup = okeys.get(_name_key(src_order.get("name")))
+            if dup:
+                _adopt_source(dup, src_order["id"])
+                rid = dup
+        kids = children.get(src_order["id"], [])
+        if rid:
+            _merge_order(rid, src_order, kids, sch, known, keep, made)
+        elif int(src_order.get("date_created") or 0) >= since_ms and inserted < limit:
+            oid = _insert_order_tree(src_order, kids, sch, known, keep, made)
+            inserted += 1
+            made["orders"] += 1
+            made["order_ids"].append(oid)
+            okeys.setdefault(_name_key(src_order.get("name")), oid)
+        else:
+            made["skipped"] += 1
+    kick()
+    return made
+
+
+def list_conflicts():
+    """Every row parked in a merge conflict, with its per-field diffs and the
+    parent order's name (for grouping in the review panel)."""
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE sync_state='conflict' AND deleted=0")]
+        names = {r["id"]: r["name"] for r in c.execute(
+            "SELECT id, name FROM leluxe_orders")}
+        parents = {r["id"]: r["parent_local_id"] for r in c.execute(
+            "SELECT id, parent_local_id FROM leluxe_orders")}
+
+    def _order_name(row):
+        cur, seen = row["id"], set()
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            p = parents.get(cur)
+            if p is None:
+                break
+            cur = p
+        return names.get(cur, row["name"])
+
+    out = []
+    for r in rows:
+        confs = r["data"].get("conflicts") or []
+        if not confs:
+            continue
+        out.append({"row_id": r["id"], "name": r["name"], "kind": r["kind"],
+                    "order_name": _order_name(r), "conflicts": confs,
+                    "source_cu_updated": r["data"].get("source_cu_updated")})
+    return out
+
+
+def resolve_conflict(row_id, choices=None, choice=None):
+    """Apply the owner's choice to a parked conflict row. `choice` ('local' /
+    'remote') resolves EVERY field; `choices`={field: side} resolves a subset.
+    'remote' takes AZ (2)'s value; 'local' keeps the Otlobly value. Either way
+    the base advances to AZ (2)'s value so the field won't re-flag. When the last
+    conflict clears, the row flips to 'dirty' and the pusher mirrors it to the
+    working copy (never AZ 2). Returns (row, error)."""
+    choices = choices or {}
+    remaining = None
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM leluxe_orders WHERE id=? AND deleted=0",
+                      (row_id,)).fetchone()
+        if not r:
+            return None, "row not found"
+        d = _row(r)
+        data = d["data"]
+        confs = data.get("conflicts") or []
+        if not confs:
+            return None, "no conflict to resolve"
+        base = data.get("source_base") or {}
+        cols_new, remaining = {}, []
+        for cf in confs:
+            field = cf["field"]
+            pick = choice or choices.get(field)
+            if pick not in ("local", "remote"):
+                remaining.append(cf)
+                continue
+            if pick == "remote":
+                _apply_value(data, cols_new, field, cf.get("remote"))
+            _base_set(base, field, cf.get("remote"))    # advance base either way
+        data["source_base"] = base
+        if remaining:
+            data["conflicts"] = remaining
+            _write_row(c, row_id, cols_new, data, sync_state="conflict")
+        else:
+            data.pop("conflicts", None)
+            _write_row(c, row_id, cols_new, data, sync_state="dirty", reset_sync=True)
+    if not remaining:
+        kick()
+    return get_row(row_id), None
 
 
 # --------------------------------------------------------------------------- #
