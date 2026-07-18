@@ -2669,7 +2669,7 @@ function lxCardHtml(o){
   const ordTn=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();
   const pkgTns=pkgs.map(pk=>String((pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"").trim());
   const uTn=[...new Set([...its.map(i=>String(lxF(i,"tracking number")||(i.data&&i.data.tracking_number)||"").trim()),...pkgTns,ordTn].filter(Boolean))];
-  const headTn=uTn.length===1?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px" title="tracking number">${poEsc(uTn[0])}</span>${lxCopyRawBtn(uTn[0])}`
+  const headTn=uTn.length===1?`${poTn4(uTn[0],'10.5px')}${lxCopyRawBtn(uTn[0])}`
     :uTn.length>1?`<span class="muted2" style="font-size:10.5px;opacity:.7" title="products have different tracking numbers">📦 multiple tracking</span>`
     :`<span class="muted2" style="font-size:10.5px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`;
   const oMenu=popMenu([
@@ -2859,7 +2859,7 @@ function lxItemRow(it,parentO,opts){
     </div>`;
   // split "Products" view: same fixed-column, resizable grid as the orders header
   if(opts.cols){
-    const tnCell=tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`
+    const tnCell=tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`
       :`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 —</span>`;
     // same-order run: tie=start|mid|end (adjacent rows sharing one order) — the
     // run's first row keeps the order pill (+×N), the rest show a └ same marker
@@ -2900,7 +2900,7 @@ function lxItemRow(it,parentO,opts){
     <span class="lx-cols">
       <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
       <span class="lxc"></span>
-      <span class="lxc">${opts.inPkg?"":(tn?`<span class="muted2" style="font-family:ui-monospace,Menlo,monospace;font-size:10px" title="tracking number">${poEsc(tn)}</span>${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}</span>
+      <span class="lxc">${opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}</span>
       <span class="lxc">${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}</span>
       <span class="lxc"></span>
       <span class="lxc"></span>
@@ -6260,9 +6260,12 @@ function pkgInfoOpen(id,pi){
 }
 // Tracking number with the LAST 4 DIGITS emphasized — the team refers to
 // parcels by their last-4; hover the row for the 📋 that copies the full number.
-function poTn4(t){
-  t=String(t||""); if(t.length<=4) return `<b class="mono" title="GAASH tracking #" style="color:var(--ink)">${poEsc(t)}</b>`;
-  return `<span class="mono" title="${poEsc(t)}"><span class="muted2">${poEsc(t.slice(0,-4))}</span><b style="color:var(--ink)">${poEsc(t.slice(-4))}</b></span>`;
+function poTn4(t,fs){
+  t=String(t||""); if(!t) return "";
+  const sz=fs?`;font-size:${fs}`:"";
+  if(t.length<=4) return `<b class="mono" title="tracking number" style="color:var(--ink)${sz}">${poEsc(t)}</b>`;
+  // whole number bold + dark (readable); last 4 digits the strongest
+  return `<b class="mono" title="${poEsc(t)}" style="color:var(--ink);font-weight:600${sz}">${poEsc(t.slice(0,-4))}<span style="font-weight:800">${poEsc(t.slice(-4))}</span></b>`;
 }
 function poPkgHtml(p,pk,pi){
   const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
