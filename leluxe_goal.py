@@ -537,12 +537,15 @@ def _null_ordered_at_count():
 
 
 def run_autoheal():
-    """One pass: if any row lacks ordered_at and the AZ (2) source is known,
-    backfill it — at most once per day (claim_once), cross-worker-safe."""
-    if _null_ordered_at_count() == 0 or not _source_list_id():
+    """One pass: if any row lacks ordered_at, backfill it from AZ (2) — at most
+    once per day (claim_once), cross-worker-safe."""
+    n = _null_ordered_at_count()
+    if n == 0:
         return None
     if not db.claim_once(f"leluxe:autobackfill:{date.today().isoformat()}"):
         return None
+    print(f"leluxe_goal: auto-heal — {n} rows missing ordered_at, backfilling "
+          f"from source {_source_list_id()}")
     rep = backfill_ordered_at(dry_run=False)
     print(f"leluxe_goal: auto-heal ordered_at → {rep}")
     return rep
@@ -570,14 +573,20 @@ def start_autoheal():
 # --------------------------------------------------------------------------- #
 # One-time backfill: true order dates from the AZ (2) source list
 # --------------------------------------------------------------------------- #
+# The owner's fixed AZ (2) list id. Leluxe is a single-business feature (its
+# working-list and PO-list ids are already committed in config.default.json), so
+# a constant is the deploy-guaranteed fallback — it makes the date auto-heal work
+# on Render without depending on config.json or a render.yaml env applying.
+DEFAULT_SOURCE_LIST_ID = "901520351506"
+
+
 def _source_list_id():
-    """Resolve the AZ (2) source list: config → env → None. The env fallback
-    (LELUXE_SOURCE_LIST_ID, set in render.yaml) lets Render run the backfill
-    even though its config.json on the persistent disk may never have had it
-    set (it's a non-secret ClickUp list id)."""
+    """Resolve the AZ (2) source list: config → env → constant. Never None, so
+    the auto-heal always has a source (Render's config.json may lack it)."""
     import leluxe
     return (leluxe.source_list_id(cfg.load())
-            or os.environ.get("LELUXE_SOURCE_LIST_ID", "").strip() or None)
+            or os.environ.get("LELUXE_SOURCE_LIST_ID", "").strip()
+            or DEFAULT_SOURCE_LIST_ID)
 
 
 def _fetch_source_tasks(src=None):
