@@ -2369,7 +2369,8 @@ def api_leluxe_move():
         return jsonify({"ok": False, "error": err}), 400
     if summary["mode"] == "split":
         detail = (f"split {summary['moved_qty']} unit(s) off (kept "
-                  f"{summary['left_qty']}) → new package → syncing to ClickUp")
+                  f"{summary['left_qty']}) → new subtask, amount stays on the "
+                  f"original → syncing to ClickUp")
     else:
         detail = "moved to another package → syncing to ClickUp"
     activity.log("moved", "leluxe", summary["row_id"], f"#{summary['row_id']}",

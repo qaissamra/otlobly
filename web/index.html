@@ -3878,11 +3878,7 @@ function lxMoveQtyPreview(){
   if(v>=LX_MOVE.qty){ el.textContent="↔️ moves the whole product to the chosen package."; return; }
   if(v<=0){ el.textContent="Enter at least 1."; return; }
   let s=`splits: ${v} move · ${LX_MOVE.qty-v} stay`;
-  if(LX_MOVE.amt){
-    const moved=Math.round(LX_MOVE.amt*v/LX_MOVE.qty*100)/100;
-    const stays=Math.round((LX_MOVE.amt-moved)*100)/100;
-    s+=` · $${moved.toLocaleString()} moves, $${stays.toLocaleString()} stays`;
-  }
+  if(LX_MOVE.amt) s+=` · full amount (${LX_MOVE.amt.toLocaleString()}) stays on the original`;
   el.textContent=s;
 }
 function lxMoveClose(){ $("lxMoveModal").classList.add("hidden"); LX_MOVE=null; }

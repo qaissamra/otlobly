@@ -625,9 +625,14 @@ def move_between_packages():
                               "fields": {"Tracking Number": "GWD-B"}})
     item, _ = leluxe.save_row({"kind": "item", "name": "8 Watch",
                               "parent_local_id": pkgA["id"],
-                              "fields": {"Quantity ordered ": 8, "Total Amount": 800}})
-    with db.connect() as c:
+                              "fields": {"Quantity ordered ": 8, "Total Amount": 800,
+                                         "ASIN": "B0WATCH"}})
+    with db.connect() as c:                          # seed a photo + true date on the source
         c.execute("UPDATE leluxe_orders SET ordered_at='1780000000000' WHERE id=?", (item["id"],))
+    d = leluxe.get_row(item["id"])["data"]; d["image"] = "http://img/watch.jpg"; d["image_asin"] = "B0WATCH"
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), item["id"]))
     qk = "Quantity ordered "
 
     # ── partial split into a NEW package ──
@@ -636,9 +641,13 @@ def move_between_packages():
     src, new = leluxe.get_row(item["id"]), leluxe.get_row(summ["new_id"])
     check("source qty 8→7", leluxe._as_num(src["data"]["fields"][qk]) == 7)
     check("new row qty 1", leluxe._as_num(new["data"]["fields"][qk]) == 1)
-    check("amount split proportionally (700/100)",
-          leluxe._as_num(src["data"]["fields"]["Total Amount"]) == 700
-          and leluxe._as_num(new["data"]["fields"]["Total Amount"]) == 100)
+    check("amount NOT divided — full ₪ stays on source",
+          leluxe._as_num(src["data"]["fields"]["Total Amount"]) == 800)
+    check("new row carries NO amount", "Total Amount" not in new["data"]["fields"])
+    check("split-off row carries the picture + ASIN",
+          new["data"].get("image") == "http://img/watch.jpg"
+          and new["data"].get("image_asin") == "B0WATCH"
+          and new["data"]["fields"].get("ASIN") == "B0WATCH")
     check("new row not yet in ClickUp", new["clickup_task_id"] is None and new["kind"] == "item")
     check("new row inherits ordered_at", new["ordered_at"] == "1780000000000")
     newpkg = leluxe.get_row(new["parent_local_id"])
@@ -652,8 +661,8 @@ def move_between_packages():
                              "parent_local_id": pkgA["id"], "fields": {"Quantity ordered ": 6}})
     s2, _ = leluxe.move_item(it2["id"], dest_parent_local_id=pkgB["id"], move_qty=2)
     n2 = leluxe.get_row(s2["new_id"])
-    check("amount-less split: qty only", s2["moved_amount"] is None
-          and leluxe._as_num(leluxe.get_row(it2["id"])["data"]["fields"][qk]) == 4
+    check("amount-less split: qty only",
+          leluxe._as_num(leluxe.get_row(it2["id"])["data"]["fields"][qk]) == 4
           and leluxe._as_num(n2["data"]["fields"][qk]) == 2
           and "Total Amount" not in n2["data"]["fields"])
 

@@ -616,17 +616,16 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
     if mq <= 0:
         return None, "quantity to move must be at least 1"
 
-    # ── partial split: reduce the source, clone the moved units into dest ──
-    T = _as_num(fields.get(ak)) if ak in fields else None
-    moved_amt = round(T * mq / Q, 2) if T is not None else None
+    # ── partial split: reduce the source's QTY only, clone the moved units into
+    # dest. The Total Amount is NOT divided — the full original ₪ stays on the
+    # source (which keeps the original ClickUp task, so its amount is unchanged
+    # on re-sync); the new row carries no amount. The owner tracks the physical
+    # split without the money moving between packages. ──
     src_fields = dict(fields)
-    src_fields[qk] = Q - mq
-    if T is not None:
-        src_fields[ak] = round(T - (moved_amt or 0), 2)
+    src_fields[qk] = Q - mq                         # qty down; Total Amount untouched
     new_fields = dict(fields)
     new_fields[qk] = mq
-    if T is not None:
-        new_fields[ak] = moved_amt
+    new_fields.pop(ak, None)                        # new product shows "—" (no amount)
 
     now = db.now_iso()
     with db.connect() as c:
@@ -642,7 +641,13 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
         status=row.get("status") or "", due_date=row.get("due_date"),
         fields=new_fields, desc=data.get("description") or "",
         tags=list(data.get("tags") or []), parent_local_id=dest["id"],
-        parent_task_id=dest.get("clickup_task_id"))
+        parent_task_id=dest.get("clickup_task_id"),
+        # carry the product's identity so the split-off row looks the same: the
+        # board thumbnail (data.image + its ASIN cache key) and the editor gallery.
+        # ASIN itself rides along in new_fields. image_asin matching the ASIN makes
+        # the batch photo-fetch skip it (no redundant lookup).
+        extra={"image": data.get("image"), "image_asin": data.get("image_asin"),
+               "images": [dict(i) for i in data.get("images") or []]})
     if row.get("ordered_at"):                      # keep the true order date on the split unit
         with db.connect() as c:
             c.execute("UPDATE leluxe_orders SET ordered_at=? WHERE id=?",
@@ -650,7 +655,7 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
     kick()
     return {"mode": "split", "row_id": row_id, "new_id": new_id,
             "dest_id": dest["id"], "moved_qty": mq, "left_qty": Q - mq,
-            "moved_amount": moved_amt, "new_package": bool(new_package)}, None
+            "new_package": bool(new_package)}, None
 
 
 # --------------------------------------------------------------------------- #
