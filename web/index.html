@@ -261,7 +261,9 @@
   .warnflag{color:var(--warn);font-weight:700}
   .minibtn{padding:3px 8px;font-size:11.5px;border-radius:7px}
   .row-actions{display:flex;gap:5px;flex-wrap:wrap}
-  .statussel{padding:3px 6px;font-size:11.5px;border-radius:7px;font-weight:700}
+  /* min-width floor: without it the status button collapses to an empty sliver
+     inside a shrunken .lxc cell (min-width:0 + overflow:hidden) */
+  .statussel{padding:3px 6px;font-size:11.5px;border-radius:7px;font-weight:700;min-width:84px}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .form-grid .full{grid-column:1/3}
   label.fld{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:3px}
@@ -390,6 +392,10 @@
   #poTree{container-type:inline-size;container-name:poboard}
   .lx-cols,.lx-pcols,.po-cols{display:contents}
   .lx-cols .lxc,.lx-pcols .lxc,.po-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  /* the STATUS cell must never crush: in the display:contents fallback each .lxc
+     is a shrinkable flex item — keep the one holding the status control at content
+     width (the flex-wrap row wraps instead). Inert in grid mode. */
+  .lx-cols .lxc:has(.statussel),.lx-pcols .lxc:has(.statussel),.po-cols .lxc:has(.statussel){flex-shrink:0}
   .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lx-colhead,.lx-pcolhead,.po-colhead{display:none;position:sticky;top:70px;z-index:20;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
   .lx-colhead .lbl,.lx-pcolhead .lbl,.po-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2223,10 +2229,15 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // ── column widths: drag a header edge (persisted); double-click resets all ──
 // Two tables share the machinery: ""=orders header (.lx-colhead), "p"=products
 // header (.lx-pcolhead). Both write CSS vars on #lxRows (a common ancestor).
+// mins: per-column width floors (by header index). The STATUS column is floored
+// at 84px in BOTH the drag clamp and lxColwApply — a status column once dragged
+// to the 30px generic floor persisted in localStorage and re-collapsed the
+// status button on every load/deploy ("the empty orange box" bug); clamping at
+// apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows"},
-  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows"},
-  "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree"},
+  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows", mins:{0:84}},
+  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows", mins:{2:84}},
+  "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -2238,7 +2249,7 @@ function lxColwApply(){
     // only apply when the saved width count matches the live column count —
     // so a stale array from an older layout (e.g. the pre-merge 9-wide) is dropped
     if(head&&Array.isArray(arr)&&arr.length===head.children.length)
-      rows.style.setProperty(t.varn, arr.map(w=>w+"px").join(" "));
+      rows.style.setProperty(t.varn, arr.map((w,i)=>Math.max((t.mins&&t.mins[i])||0,w)+"px").join(" "));
     else rows.style.removeProperty(t.varn);
   }
 }
@@ -2249,7 +2260,7 @@ function lxRszDown(ev,i,tbl){
   if(cur.length!==h.children.length) return;
   const startX=ev.clientX, startW=cur[i], handle=ev.target, rows=$(t.rows);
   handle.classList.add("dragging");
-  const move=e=>{ cur[i]=Math.max(30,Math.round(startW+e.clientX-startX));
+  const move=e=>{ cur[i]=Math.max((t.mins&&t.mins[i])||30,Math.round(startW+e.clientX-startX));
     rows.style.setProperty(t.varn, cur.map(w=>w+"px").join(" ")); };
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
     handle.classList.remove("dragging"); lxColwSet(tbl,cur.slice()); };
