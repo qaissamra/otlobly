@@ -39,6 +39,9 @@ services:
       # ── Optional integrations: fill these in Render's dashboard if you use them ──
       - key: CLICKUP_API_TOKEN     # needed for ClickUp sync + P&L cost
         sync: false
+      - key: LELUXE_SOURCE_LIST_ID # AZ (2) source list (non-secret) — lets the Goal
+        value: "901520351506"      # auto-heal date-backfill run even if config.json lacks it
+
       - key: SERPAPI_KEY           # optional: price estimates
         sync: false
       - key: SERPAPI_KEY_2

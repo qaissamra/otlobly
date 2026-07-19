@@ -181,7 +181,13 @@ def _units(rows, st):
     """The value units the goal math sums — per top order: its non-excluded
     items when any item carries an amount, else the top itself. Orphan items
     are their own units. Each unit: {usd, day, status, row, top} where `top`
-    is the order-level row the unit belongs to (itself for orphans/tops)."""
+    is the order-level row the unit belongs to (itself for orphans/tops).
+
+    Exclusion works at BOTH levels: an excluded ORDER-level status (e.g.
+    'order number', 'cancelled') drops the whole order — its value is summed
+    from the items, so filtering only the parent row would miss it; and an
+    excluded ITEM status still drops just that item (a partial cancellation
+    inside a live order)."""
     excluded = {_norm(s) for s in st["excluded"]}
     kids = {}
     for r in rows:
@@ -192,6 +198,11 @@ def _units(rows, st):
     pkg_ids = set()
     units = []
     for t in tops:
+        if t["status"] in excluded:     # order-level status excluded → whole order out
+            for k in kids.get(t["id"], []):
+                if k["kind"] == "package":
+                    pkg_ids.add(k["id"])
+            continue
         items = []
         for k in kids.get(t["id"], []):
             if k["kind"] == "item":
@@ -510,13 +521,69 @@ def start():
 
 
 # --------------------------------------------------------------------------- #
+# Auto-heal: keep ordered_at (true order dates) populated. UNGATED — runs on
+# Render too (where LELUXE_DIGEST is off), because Render's leluxe_orders is
+# the copy that gets stuck all-NULL → every order falls back to the migration
+# day and the Goal reads wildly inflated. Self-no-ops once every row is dated.
+# --------------------------------------------------------------------------- #
+_autoheal_started = False
+
+
+def _null_ordered_at_count():
+    with db.connect() as c:
+        r = c.execute("SELECT COUNT(*) n FROM leluxe_orders "
+                      "WHERE ordered_at IS NULL AND deleted=0").fetchone()
+    return r["n"] if r else 0
+
+
+def run_autoheal():
+    """One pass: if any row lacks ordered_at and the AZ (2) source is known,
+    backfill it — at most once per day (claim_once), cross-worker-safe."""
+    if _null_ordered_at_count() == 0 or not _source_list_id():
+        return None
+    if not db.claim_once(f"leluxe:autobackfill:{date.today().isoformat()}"):
+        return None
+    rep = backfill_ordered_at(dry_run=False)
+    print(f"leluxe_goal: auto-heal ordered_at → {rep}")
+    return rep
+
+
+def _autoheal_loop():
+    time.sleep(45)                    # let the app + DDL migration settle
+    while True:
+        try:
+            run_autoheal()
+        except Exception as e:  # noqa: BLE001 - never break boot / the thread
+            print(f"leluxe_goal: auto-heal pass failed ({e})")
+        time.sleep(6 * 3600)
+
+
+def start_autoheal():
+    global _autoheal_started
+    if _autoheal_started:
+        return
+    _autoheal_started = True
+    threading.Thread(target=_autoheal_loop, name="leluxe-goal-autoheal",
+                     daemon=True).start()
+
+
+# --------------------------------------------------------------------------- #
 # One-time backfill: true order dates from the AZ (2) source list
 # --------------------------------------------------------------------------- #
-def _fetch_source_tasks():
+def _source_list_id():
+    """Resolve the AZ (2) source list: config → env → None. The env fallback
+    (LELUXE_SOURCE_LIST_ID, set in render.yaml) lets Render run the backfill
+    even though its config.json on the persistent disk may never have had it
+    set (it's a non-secret ClickUp list id)."""
+    import leluxe
+    return (leluxe.source_list_id(cfg.load())
+            or os.environ.get("LELUXE_SOURCE_LIST_ID", "").strip() or None)
+
+
+def _fetch_source_tasks(src=None):
     """Every task in AZ (2) (closed + subtasks), same paging as sync_from_source."""
     import leluxe
-    config = cfg.load()
-    src = leluxe.source_list_id(config)
+    src = src or _source_list_id()
     if not leluxe._token():
         return None, "CLICKUP_API_TOKEN is not set"
     if not src:

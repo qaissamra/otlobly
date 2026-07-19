@@ -102,6 +102,7 @@ import leluxe as leluxe_mod
 leluxe_mod.start()         # Leluxe → ClickUp mirror pusher (no-op until configured)
 import leluxe_goal
 leluxe_goal.start()        # daily goal digest — no-op unless env LELUXE_DIGEST=1
+leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Render's all-NULL copy)
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 

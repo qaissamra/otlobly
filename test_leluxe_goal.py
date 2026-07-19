@@ -124,6 +124,20 @@ check("parent-with-amount-items → item sum", "A-300" in u and "A" not in u)
 check("parent alone when items carry no amount", "B" in u and abs(u["B"]["usd"] - 809.17) < 0.01)
 check("itemless parent = own amount", abs(u["C"]["usd"] - 645.60) < 0.01)
 check("cancelled item excluded", "D-dead" not in u and abs(u["D-live"]["usd"] - 300) < 0.01)
+
+# order-level exclusion: an excluded PARENT status drops the whole order (its
+# value is summed from the items, so filtering only the parent row misses it —
+# the "excluded 'order number' but the total didn't move" bug)
+e = mk("order", "E", status="order number", amt=None)
+mk("item", "E-1", status="oredered", amt=400, parent=e)
+mk("item", "E-2", status="oredered", amt=500, parent=e)
+u2 = {x["row"]["name"]: x for x in leluxe_goal._units(leluxe_goal._load(), leluxe_goal.settings())}
+check("order-number order counts by default", "E-1" in u2 and "E-2" in u2)
+st_excl = dict(leluxe_goal.settings()); st_excl["excluded"] = ["cancelled", "order number"]
+u3 = {x["row"]["name"]: x for x in leluxe_goal._units(leluxe_goal._load(), st_excl)}
+check("excluding parent status drops the WHOLE order",
+      "E-1" not in u3 and "E-2" not in u3 and "E" not in u3)
+check("other orders unaffected by the exclusion", "A-300" in u3 and "D-live" in u3)
 wipe()
 
 # ── 2 · windows, pace, streak, coalesce ───────────────────────────────────── #
