@@ -179,10 +179,14 @@
      above siblings (position+z-index) AND stop clipping while a menu is open */
   .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible;position:relative;z-index:40}
   .pkg-body:has(.pop-menu.open),.po-body:has(.pop-menu.open){overflow:visible}
-  /* the fixed-width Products/Orders grid cells clip too (.lxc has overflow:hidden, and
-     .lxc>span ellipsis-clips the .pop wrapper) — let the open status dropdown escape */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop{overflow:visible}
+  /* the fixed-width Products/Orders/Purchases grid cells clip too (.lxc has
+     overflow:hidden, and .lxc>span ellipsis-clips the .pop wrapper) — let the
+     open dropdown escape. .po-cols was MISSING here since the Purchases board
+     got the same grid cells (806c25f): clicking a package row's status button
+     opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
+     white box" the owner kept reporting. */
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.po-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
