@@ -2351,6 +2351,31 @@ def api_leluxe_order():
     return jsonify({"ok": True, "row": row})
 
 
+@app.route("/api/leluxe/move", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_move():
+    """Move a product to another package of the same order (Amazon split a
+    shipment), optionally splitting a partial quantity into it. `qty` omitted or
+    ≥ the item's count moves the whole product (re-parents the ClickUp subtask);
+    a smaller `qty` splits off a new product row. `new_package:true` creates an
+    empty destination package first."""
+    b = request.get_json(force=True, silent=True) or {}
+    summary, err = leluxe_mod.move_item(
+        b.get("id"), dest_parent_local_id=b.get("parent_local_id"),
+        new_package=bool(b.get("new_package")), move_qty=b.get("qty"))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    if summary["mode"] == "split":
+        detail = (f"split {summary['moved_qty']} unit(s) off (kept "
+                  f"{summary['left_qty']}) → new package → syncing to ClickUp")
+    else:
+        detail = "moved to another package → syncing to ClickUp"
+    activity.log("moved", "leluxe", summary["row_id"], f"#{summary['row_id']}",
+                 detail=detail, user=_user())
+    return jsonify({"ok": True, **summary})
+
+
 @app.route("/api/leluxe/status", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

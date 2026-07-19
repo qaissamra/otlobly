@@ -603,6 +603,125 @@ def endpoints_gated():
     r = otlo.get("/api/leluxe/orders").get_json()
     check("orders payload carries schema + sync",
           "schema" in r and "sync" in r and r.get("list_id") == "L1")
+    check("move route blocks a broker (feature off)",
+          brk.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
+    check("move route blocks sales (needs admin_actions)",
+          sales.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
+
+
+def move_between_packages():
+    """Move a product to another package: a partial quantity splits off a new
+    row (fresh subtask, no re-parent); a whole move re-parents the ClickUp
+    subtask via PUT {parent}. Cross-order moves are rejected."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    order, _ = leluxe.save_row({"kind": "order", "name": "Order # MOVE",
+                                "status": "order number", "fields": {"NAME": "B5"}})
+    pkgA, _ = leluxe.save_row({"kind": "package", "name": "📦 A",
+                              "parent_local_id": order["id"],
+                              "fields": {"Tracking Number": "GWD-A"}})
+    pkgB, _ = leluxe.save_row({"kind": "package", "name": "📦 B",
+                              "parent_local_id": order["id"],
+                              "fields": {"Tracking Number": "GWD-B"}})
+    item, _ = leluxe.save_row({"kind": "item", "name": "8 Watch",
+                              "parent_local_id": pkgA["id"],
+                              "fields": {"Quantity ordered ": 8, "Total Amount": 800}})
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET ordered_at='1780000000000' WHERE id=?", (item["id"],))
+    qk = "Quantity ordered "
+
+    # ── partial split into a NEW package ──
+    summ, err = leluxe.move_item(item["id"], new_package=True, move_qty=1)
+    check("split ok", err is None and summ["mode"] == "split" and summ["moved_qty"] == 1)
+    src, new = leluxe.get_row(item["id"]), leluxe.get_row(summ["new_id"])
+    check("source qty 8→7", leluxe._as_num(src["data"]["fields"][qk]) == 7)
+    check("new row qty 1", leluxe._as_num(new["data"]["fields"][qk]) == 1)
+    check("amount split proportionally (700/100)",
+          leluxe._as_num(src["data"]["fields"]["Total Amount"]) == 700
+          and leluxe._as_num(new["data"]["fields"]["Total Amount"]) == 100)
+    check("new row not yet in ClickUp", new["clickup_task_id"] is None and new["kind"] == "item")
+    check("new row inherits ordered_at", new["ordered_at"] == "1780000000000")
+    newpkg = leluxe.get_row(new["parent_local_id"])
+    check("new package created under the order",
+          newpkg["kind"] == "package" and newpkg["parent_local_id"] == order["id"])
+    check("source + new row both dirty",
+          src["sync_state"] == "dirty" and new["sync_state"] == "dirty")
+
+    # ── split with no item-level amount just divides the count ──
+    it2, _ = leluxe.save_row({"kind": "item", "name": "6 Strap",
+                             "parent_local_id": pkgA["id"], "fields": {"Quantity ordered ": 6}})
+    s2, _ = leluxe.move_item(it2["id"], dest_parent_local_id=pkgB["id"], move_qty=2)
+    n2 = leluxe.get_row(s2["new_id"])
+    check("amount-less split: qty only", s2["moved_amount"] is None
+          and leluxe._as_num(leluxe.get_row(it2["id"])["data"]["fields"][qk]) == 4
+          and leluxe._as_num(n2["data"]["fields"][qk]) == 2
+          and "Total Amount" not in n2["data"]["fields"])
+
+    # ── cross-order move rejected ──
+    order2, _ = leluxe.save_row({"kind": "order", "name": "Order # OTHER"})
+    pkgC, _ = leluxe.save_row({"kind": "package", "name": "📦 C", "parent_local_id": order2["id"]})
+    _, err2 = leluxe.move_item(item["id"], dest_parent_local_id=pkgC["id"])
+    check("cross-order move rejected", err2 is not None)
+
+    # ── whole move A→B re-parents the subtask in ClickUp ──
+    real = leluxe._http
+    leluxe._http = fake_http
+    os.environ["LELUXE_PUSH_DISABLED"] = "0"
+    try:
+        for _ in range(8):
+            leluxe.run_push_pass()
+        it_tid = leluxe.get_row(item["id"])["clickup_task_id"]
+        b_tid = leluxe.get_row(pkgB["id"])["clickup_task_id"]
+        a_tid = leluxe.get_row(pkgA["id"])["clickup_task_id"]
+        check("item + both packages pushed", bool(it_tid and a_tid and b_tid))
+        check("create recorded pushed.parent = A",
+              leluxe.get_row(item["id"])["data"]["pushed"].get("parent") == a_tid)
+        CALLS.clear()
+        summ2, err3 = leluxe.move_item(item["id"], dest_parent_local_id=pkgB["id"])
+        moved = leluxe.get_row(item["id"])
+        check("whole move repoints both ids to B",
+              err3 is None and summ2["mode"] == "move"
+              and moved["parent_local_id"] == pkgB["id"]
+              and moved["parent_task_id"] == b_tid and moved["sync_state"] == "dirty")
+        for _ in range(2):
+            leluxe.run_push_pass()
+        reparents = [b for m, u, b in CALLS if m == "PUT" and u.endswith(f"/task/{it_tid}")
+                     and isinstance(b, dict) and "parent" in b]
+        check("exactly one re-parent PUT to package B",
+              len(reparents) == 1 and reparents[0]["parent"] == b_tid)
+        check("item synced, pushed.parent now B",
+              leluxe.get_row(item["id"])["sync_state"] == "synced"
+              and leluxe.get_row(item["id"])["data"]["pushed"].get("parent") == b_tid)
+        CALLS.clear()
+        for _ in range(2):
+            leluxe.run_push_pass()
+        check("no spurious re-parent on an unchanged push",
+              not [1 for m, u, b in CALLS if m == "PUT" and isinstance(b, dict) and "parent" in b])
+
+        # ── legacy child (pulled, no pushed.parent) adopts its parent, no PUT ──
+        with db.connect() as c:
+            c.execute("DELETE FROM leluxe_orders")
+        leluxe.upsert_from_clickup(_task("LP", "Order # LEG", "order number",
+                                         fields=[("NAME", 37)]), SCHEMA)
+        leluxe.upsert_from_clickup(_task("LC", "5 Watch", "sent rd", parent="LP",
+                                         fields=[("Quantity ordered ", "5")]), SCHEMA)
+        leluxe._relink()
+        child = leluxe.get_by_task("LC")
+        check("pulled child has no pushed.parent",
+              "parent" not in (child["data"].get("pushed") or {}))
+        leluxe.save_row({"id": child["id"], "kind": "item", "name": "5 Watch EDIT",
+                         "parent_local_id": child["parent_local_id"],
+                         "fields": {"Quantity ordered ": "5"}})
+        CALLS.clear()
+        for _ in range(2):
+            leluxe.run_push_pass()
+        check("legacy child edit fires NO re-parent PUT",
+              not [1 for m, u, b in CALLS if m == "PUT" and isinstance(b, dict) and "parent" in b])
+        check("legacy child adopts pushed.parent = LP",
+              leluxe.get_by_task("LC")["data"]["pushed"].get("parent") == "LP")
+    finally:
+        leluxe._http = real
+        os.environ["LELUXE_PUSH_DISABLED"] = "1"
 
 
 def main():
@@ -619,6 +738,7 @@ def main():
     print("gash status sync:");  gash_status_sync()
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
+    print("move packages:");     move_between_packages()
     print("endpoint gates:");    endpoints_gated()
     print()
     if fails:

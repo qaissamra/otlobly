@@ -1383,6 +1383,15 @@
   </div>
 </div>
 
+<!-- Move a product to another package (Amazon split a shipment) — whole product
+     or a partial quantity into a new/existing package -->
+<div id="lxMoveModal" class="az-modal hidden" onclick="if(event.target===this)lxMoveClose()">
+  <div class="az-box" style="width:520px;max-width:96vw;max-height:90vh;overflow:auto">
+    <div class="az-head"><b>↔️ نقل إلى طرد · Move to package</b><span class="az-x" onclick="lxMoveClose()">✕</span></div>
+    <div id="lxMoveBody" style="padding:14px 16px"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 </div></div></div><!-- /.wrap /.main /.app -->
 
@@ -3028,6 +3037,7 @@ function lxVPkgHtml(o,g){
         <span class="lxc">${lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
         <span class="lxc">${popMenu([
           [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
+          [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
           g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
           g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
@@ -3109,6 +3119,7 @@ function lxItemRow(it,parentO,opts){
   const ordTn=parentO?String((parentO.data&&parentO.data.tracking_number)||lxF(parentO,"tracking number")||"").trim():"";
   const itMenu=popMenu([
     [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
+    [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
     [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(tn)}','${poEsc(ordTn)}')`],
     tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
     [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
@@ -3806,6 +3817,70 @@ async function lxImgUpload(input){
   toast("Image(s) attached ✓ syncing to ClickUp ↗");
   await loadLeluxe(); lxPollStart();
   if(LX_EDIT&&LX_EDIT.id===rid) $("lxEditBody").innerHTML=lxEditorHtml(lxFind(rid));
+}
+// ── Move a product to another package (Amazon split a shipment). Whole product,
+//    or a partial quantity that splits off a new row in the destination. ──
+let LX_MOVE=null;   // {it, order, curPkgId, qty, amt}
+function lxPkgLabel(pk){
+  const tn=String(lxF(pk,"tracking number")||(pk.data&&pk.data.tracking_number)||"").trim();
+  const n=(pk.items||[]).length;
+  return `📦 ${tn?poEsc(tn):"no tracking"} · ${n} product${n===1?"":"s"}`;
+}
+function lxMovePrompt(itemId){
+  const path=lxFindPath(itemId);
+  if(!path||!path.order){ toast("This product isn't inside an order."); return; }
+  const it=path.row, order=path.order;
+  const qty=Number(lxF(it,"quantity ordered")); const amt=Number(lxF(it,"total amount"));
+  LX_MOVE={it, order, curPkgId:path.pkg?path.pkg.id:null,
+    qty:isNaN(qty)?null:qty, amt:isNaN(amt)?null:amt};
+  const dests=(order.packages||[]).filter(pk=>pk.id!==(path.pkg&&path.pkg.id));
+  const destBtns=dests.map(pk=>`<button class="po-btn" style="display:block;width:100%;text-align:start;margin:4px 0" onclick="lxMoveDo(${pk.id},false)">${lxPkgLabel(pk)}</button>`).join("")
+    ||`<div class="muted2" style="font-size:12px;margin:6px 0">No other package yet — create one below.</div>`;
+  const hasQty=LX_MOVE.qty&&LX_MOVE.qty>1;
+  const qtyBlock=hasQty?`
+    <div style="background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0">
+      <label style="font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        كم قطعة تنقل؟ · How many of the ${LX_MOVE.qty} to move?
+        <input id="lxMoveQty" type="number" min="1" max="${LX_MOVE.qty}" value="${LX_MOVE.qty}"
+          style="width:80px" oninput="lxMoveQtyPreview()">
+      </label>
+      <div id="lxMovePrev" class="muted2" style="font-size:11.5px;margin-top:6px"></div>
+    </div>`:"";
+  $("lxMoveBody").innerHTML=`
+    <div style="font-size:13px;margin-bottom:4px">↔️ <b>${poEsc(lxShort3(it.name))}</b>${LX_MOVE.qty?` <span class="muted2">×${LX_MOVE.qty}</span>`:""}</div>
+    <div class="muted2" style="font-size:11.5px;margin-bottom:8px">من · from ${path.pkg?lxPkgLabel(path.pkg):"the order (no package)"}</div>
+    ${qtyBlock}
+    <div class="muted2" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 2px">إلى · send to</div>
+    ${destBtns}
+    <button class="po-btn" style="display:block;width:100%;text-align:start;margin:8px 0 2px;border-style:dashed" onclick="lxMoveDo(null,true)">➕ طرد جديد · New empty package</button>`;
+  $("lxMoveModal").classList.remove("hidden");
+  lxMoveQtyPreview();
+}
+function lxMoveQtyPreview(){
+  if(!LX_MOVE) return;
+  const el=$("lxMovePrev"), q=$("lxMoveQty"); if(!el||!q) return;
+  const v=Math.max(0,Math.min(LX_MOVE.qty,Math.floor(+q.value||0)));
+  if(v>=LX_MOVE.qty){ el.textContent="↔️ moves the whole product to the chosen package."; return; }
+  if(v<=0){ el.textContent="Enter at least 1."; return; }
+  let s=`splits: ${v} move · ${LX_MOVE.qty-v} stay`;
+  if(LX_MOVE.amt){
+    const moved=Math.round(LX_MOVE.amt*v/LX_MOVE.qty*100)/100;
+    const stays=Math.round((LX_MOVE.amt-moved)*100)/100;
+    s+=` · $${moved.toLocaleString()} moves, $${stays.toLocaleString()} stays`;
+  }
+  el.textContent=s;
+}
+function lxMoveClose(){ $("lxMoveModal").classList.add("hidden"); LX_MOVE=null; }
+async function lxMoveDo(destId,newPkg){
+  if(!LX_MOVE) return;
+  const body={id:LX_MOVE.it.id};
+  if(newPkg) body.new_package=true; else body.parent_local_id=destId;
+  const q=$("lxMoveQty"); if(q) body.qty=Math.floor(+q.value||0);
+  let r; try{ r=await post("/api/leluxe/move",body); }catch(e){ r={}; }
+  if(!r.ok){ toast(r.error||"Move failed"); return; }
+  lxMoveClose();
+  toast(r.mode==="split"?`✔ split ${r.moved_qty} off (kept ${r.left_qty}) → syncing`:"✔ moved → syncing to ClickUp");
+  loadLeluxe(); lxPollStart();
 }
 async function lxDelete(id){
   if(!confirm("Hide this from the Leluxe page? The ClickUp task is NOT touched.")) return;

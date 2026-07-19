@@ -503,6 +503,157 @@ def soft_delete(row_id):
 
 
 # --------------------------------------------------------------------------- #
+# Move a product between packages (Amazon split a shipment) — with an optional
+# quantity split. See move_item().
+# --------------------------------------------------------------------------- #
+def _as_num(v):
+    """'8' / 8.0 → 8 (int when whole); None when not a number."""
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return None
+    return int(n) if n == int(n) else n
+
+
+def _field_key(fields, name, schema_fields=None):
+    """The EXACT stored key matching `name` (case/whitespace-insensitive) so we
+    reuse 'Quantity ordered ' with its trailing space instead of forking a twin.
+    Falls back to the schema's canonical key, then `name` itself."""
+    want = " ".join(str(name).lower().split())
+    for k in fields:
+        if " ".join(str(k).lower().split()) == want:
+            return k
+    for k in (schema_fields or {}):
+        if " ".join(str(k).lower().split()) == want:
+            return k
+    return name
+
+
+_QTY_PREFIX = re.compile(r"^\s*(\d+)(\s+)")
+
+
+def _relabel_qty(name, old_q, new_q):
+    """If the name starts with the exact old quantity ("8 U.S. Polo…"), swap in
+    the new count; otherwise leave the Amazon title untouched."""
+    m = _QTY_PREFIX.match(str(name or ""))
+    if m and _as_num(m.group(1)) == old_q:
+        return f"{int(new_q)}{m.group(2)}{name[m.end():]}"
+    return name
+
+
+def _top_order_of(row):
+    """Walk parent_local_id up to the order/parent row (or None)."""
+    cur, seen, hops = row, set(), 0
+    while cur and cur["kind"] not in TOP_KINDS and hops < 8:
+        pid = cur.get("parent_local_id")
+        if not pid or pid in seen:
+            return None
+        seen.add(pid)
+        cur = get_row(pid)
+        hops += 1
+    return cur if cur and cur["kind"] in TOP_KINDS else None
+
+
+def move_item(row_id, dest_parent_local_id=None, new_package=False,
+              move_qty=None, config=None):
+    """Move a product to another package of the SAME order, or split a partial
+    quantity off into it. Returns (summary, error).
+
+    Whole move (all units) re-parents the existing row — both parent ids are set
+    so _relink() stays consistent, and the pusher re-parents the ClickUp subtask.
+    A partial split leaves the source in place with a reduced quantity/amount and
+    CREATES a new row in the destination, which pushes as a fresh subtask (no
+    re-parent needed). Total Amount is divided proportionally, but only when the
+    item actually carries one (it's often null — the amount lives on the order)."""
+    config = config or cfg.load()
+    row = get_row(row_id)
+    if not row or row.get("deleted"):
+        return None, "row not found"
+    if row["kind"] != "item":
+        return None, "only a product can be moved"
+    order = _top_order_of(row)
+    if not order:
+        return None, "this product isn't inside an order"
+
+    # ── resolve the destination package ──
+    if new_package:
+        dest_id = _insert_row("package", "📦 no tracking",
+                              parent_local_id=order["id"],
+                              parent_task_id=order.get("clickup_task_id"))
+        dest = get_row(dest_id)
+    else:
+        dest = get_row(dest_parent_local_id)
+        if not dest or dest.get("deleted"):
+            return None, "destination package not found"
+        if dest["kind"] not in ("package",) + TOP_KINDS:
+            return None, "destination must be a package or the order"
+        dtop = dest if dest["kind"] in TOP_KINDS else _top_order_of(dest)
+        if not dtop or dtop["id"] != order["id"]:
+            return None, "can only move within the same order"
+        if dest["id"] == row.get("parent_local_id"):
+            return None, "already in that package"
+
+    sch = schema(config)
+    sfields = sch.get("fields") or {}
+    data = dict(row["data"])
+    fields = dict(data.get("fields") or {})
+    qk = _field_key(fields, "Quantity ordered", sfields)
+    ak = _field_key(fields, "Total Amount", sfields)
+    Q = _as_num(fields.get(qk))
+    mq = _as_num(move_qty)
+
+    # ── whole move: re-parent the row (both ids → dirty → pusher re-parents) ──
+    if mq is None or Q is None or mq >= Q:
+        with db.connect() as c:
+            c.execute("""UPDATE leluxe_orders SET parent_local_id=?, parent_task_id=?,
+                         sync_state='dirty', sync_error=NULL, sync_attempts=0,
+                         updated_at=? WHERE id=?""",
+                      (dest["id"], dest.get("clickup_task_id"), db.now_iso(), row_id))
+        _clear_pending(row_id)      # a leftover field-only marker would skip the re-parent push
+        kick()
+        return {"mode": "move", "row_id": row_id, "dest_id": dest["id"],
+                "qty": Q, "new_package": bool(new_package)}, None
+    if mq <= 0:
+        return None, "quantity to move must be at least 1"
+
+    # ── partial split: reduce the source, clone the moved units into dest ──
+    T = _as_num(fields.get(ak)) if ak in fields else None
+    moved_amt = round(T * mq / Q, 2) if T is not None else None
+    src_fields = dict(fields)
+    src_fields[qk] = Q - mq
+    if T is not None:
+        src_fields[ak] = round(T - (moved_amt or 0), 2)
+    new_fields = dict(fields)
+    new_fields[qk] = mq
+    if T is not None:
+        new_fields[ak] = moved_amt
+
+    now = db.now_iso()
+    with db.connect() as c:
+        d = dict(data)
+        d["fields"] = src_fields
+        d.pop("pending_fields", None)              # a real edit → full push takes over
+        c.execute("""UPDATE leluxe_orders SET name=?, data_json=?, sync_state='dirty',
+                     sync_error=NULL, sync_attempts=0, updated_at=? WHERE id=?""",
+                  (_relabel_qty(row["name"], Q, Q - mq),
+                   json.dumps(d, ensure_ascii=False), now, row_id))
+    new_id = _insert_row(
+        "item", _relabel_qty(row["name"], Q, mq),
+        status=row.get("status") or "", due_date=row.get("due_date"),
+        fields=new_fields, desc=data.get("description") or "",
+        tags=list(data.get("tags") or []), parent_local_id=dest["id"],
+        parent_task_id=dest.get("clickup_task_id"))
+    if row.get("ordered_at"):                      # keep the true order date on the split unit
+        with db.connect() as c:
+            c.execute("UPDATE leluxe_orders SET ordered_at=? WHERE id=?",
+                      (row["ordered_at"], new_id))
+    kick()
+    return {"mode": "split", "row_id": row_id, "new_id": new_id,
+            "dest_id": dest["id"], "moved_qty": mq, "left_qty": Q - mq,
+            "moved_amount": moved_amt, "new_package": bool(new_package)}, None
+
+
+# --------------------------------------------------------------------------- #
 # Pull (ClickUp → local): paged fetch + upsert. Local unpushed edits win.
 # --------------------------------------------------------------------------- #
 def _decode_task(task, sch):
@@ -2157,7 +2308,7 @@ def push_one(row, config=None):
         _persist_task_id(row["id"], tid, parent_tid)
         pushed.update({"name": row["name"], "status": row.get("status"),
                        "due_date": row.get("due_date"), "description": desc,
-                       "tags": list(tags)})
+                       "tags": list(tags), "parent": parent_tid})
         time.sleep(_pace())
     else:                                                  # ── update core
         core_now = {"name": row["name"], "status": row.get("status"),
@@ -2189,6 +2340,23 @@ def push_one(row, config=None):
                 errors.append(f"tag -{t} ({st})")
             time.sleep(_pace())
         pushed["tags"] = list(tags)
+        # ── re-parent (product moved to another package) ──
+        # ClickUp's Update-Task `parent` moves a subtask. Legacy rows predate the
+        # snapshot key, so adopt their current parent as the baseline (no PUT);
+        # only a genuine change fires the move. A failure fails the row (retryable)
+        # rather than silently diverging the boards.
+        if is_child:
+            cur_parent = _parent_task_id(row)
+            old_parent = pushed.get("parent")
+            if old_parent is None:
+                pushed["parent"] = cur_parent
+            elif cur_parent and cur_parent != old_parent:
+                st, resp = _http(f"{CLICKUP_API}/task/{tid}", "PUT",
+                                 {"parent": cur_parent})
+                if st != 200:
+                    return False, f"move failed ({st}): {(resp or {}).get('_error') or resp}"
+                pushed["parent"] = cur_parent
+                time.sleep(_pace())
 
     # ── custom fields (only the changed ones) ──
     # A field the working list can't represent (missing field, or a dropdown
