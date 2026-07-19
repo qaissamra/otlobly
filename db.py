@@ -15,6 +15,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -240,15 +241,32 @@ def _quarantine_corrupt_db(exc):
 
 
 def init_db():
-    try:
-        with connect() as c:
-            c.executescript(SCHEMA)
-    except sqlite3.DatabaseError as e:
-        if not _quarantine_corrupt_db(e):
-            raise
-        with connect() as c:
-            c.executescript(SCHEMA)
-    migrate()
+    # gunicorn boots 2 workers that BOTH run this at import. Concurrent DDL
+    # (executescript / migrate's ALTERs) can collide as "database is locked" —
+    # SQLite's deadlock detection returns it instantly, ignoring the connect
+    # timeout — which kills the worker and fails the whole deploy. The loser
+    # simply retries after the winner commits; every statement is guarded
+    # (IF NOT EXISTS / _columns), so a re-run is a no-op.
+    last = None
+    for attempt in range(6):
+        if attempt:
+            time.sleep(0.5 * attempt)
+        try:
+            try:
+                with connect() as c:
+                    c.executescript(SCHEMA)
+            except sqlite3.DatabaseError as e:
+                if not _quarantine_corrupt_db(e):
+                    raise
+                with connect() as c:
+                    c.executescript(SCHEMA)
+            migrate()
+            return
+        except sqlite3.OperationalError as e:
+            if not any(m in str(e).lower() for m in ("locked", "busy", "duplicate column")):
+                raise
+            last = e
+    raise last
 
 
 # --------------------------------------------------------------------------- #
