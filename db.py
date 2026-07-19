@@ -185,6 +185,16 @@ CREATE TABLE IF NOT EXISTS leluxe_cu_deletes (
   updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_leluxe_cudel_state ON leluxe_cu_deletes(state);
+CREATE TABLE IF NOT EXISTS leluxe_status_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  row_id INTEGER NOT NULL,              -- leluxe_orders.id
+  old_status TEXT,
+  new_status TEXT,
+  ts TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'app'    -- app | pull | sync
+);
+CREATE INDEX IF NOT EXISTS ix_lxlog_row ON leluxe_status_log(row_id, ts);
+CREATE INDEX IF NOT EXISTS ix_lxlog_new ON leluxe_status_log(new_status);
 """
 
 
@@ -278,6 +288,12 @@ def migrate():
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_email "
                   "ON customers(business_id, lower(email)) "
                   "WHERE email IS NOT NULL AND email <> ''")
+        # True order date for Leluxe goal math (ms-epoch string). Set once —
+        # backfilled from the AZ (2) source list or stamped at insert; the
+        # ClickUp pull/push sync never writes this column, so it survives every
+        # import/merge (date_created was reset to migration day on 2026-07-14).
+        if "ordered_at" not in _columns(c, "leluxe_orders"):
+            c.execute("ALTER TABLE leluxe_orders ADD COLUMN ordered_at TEXT")
         # Seed business #1 (owner of all pre-tenancy data) exactly once.
         if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
             c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "
@@ -738,6 +754,22 @@ def claim_once(key):
             return True
         except sqlite3.IntegrityError:
             return False
+
+
+def log_leluxe_status(row_id, old, new, source="app", c=None):
+    """Record a Leluxe status TRANSITION (never initial statuses — an import of an
+    already-'sent rd' item must not stamp import day as its done date). The goal
+    dashboard dates RD completions by the first transition into an rd-done status."""
+    if (old or "") == (new or ""):
+        return
+    row = (row_id, old, new, now_iso(), source)
+    sql = ("INSERT INTO leluxe_status_log (row_id, old_status, new_status, ts, source) "
+           "VALUES (?,?,?,?,?)")
+    if c is not None:
+        c.execute(sql, row)
+        return
+    with connect() as conn:
+        conn.execute(sql, row)
 
 
 def audit(actor, action, entity, entity_id, detail=""):

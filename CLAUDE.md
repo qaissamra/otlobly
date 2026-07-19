@@ -24,6 +24,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
 - report.py / pnl.py — money summary + P&L
 - tracking.py — GAASH timeline + customer-friendly status remap
 - meta_leads.py / notify.py — Meta DM+lead-form sync / WhatsApp OTP
+- leluxe_goal.py / telegram_bot.py — Leluxe $30k/month goal engine (🎯 Goal view,
+  daily Telegram digest, ordered_at backfill) + owner Telegram command bot; both
+  daemons are gated by env LELUXE_DIGEST / LELUXE_TG_BOT, set ONLY in
+  com.otlobly.app.plist (always-on local launchd service) — never on Render
 - web/index.html — the whole staff UI
 - com.otlobly.sync.plist — optional launchd ClickUp-sync job (paths point at ~/projects)
 - backup_pull.py / com.otlobly.backup.plist — nightly off-site backup: pulls the

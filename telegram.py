@@ -50,6 +50,45 @@ def send(text):
         return {"ok": False, "error": str(e)}
 
 
+def send_to(chat_id, text):
+    """Like send(), but to an explicit chat — the command bot replies to the
+    chat that asked (which _creds() verified is the owner's)."""
+    tok, _ = _creds()
+    if not tok:
+        return {"ok": False, "error": "Telegram not configured"}
+    data = parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+    try:
+        with request.urlopen(request.Request(f"{API}/bot{tok}/sendMessage", data=data),
+                             timeout=20) as r:
+            out = json.loads(r.read().decode() or "{}")
+        return {"ok": True} if out.get("ok") else {"ok": False, "error": str(out)[:200]}
+    except error.HTTPError as e:
+        return {"ok": False, "error": f"Telegram {e.code}: {e.read().decode('utf-8', 'replace')[:200]}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def get_updates(offset=None, timeout=50):
+    """Long-poll getUpdates for the owner command bot. Returns
+    {ok, result: [updates]} or {ok: False, code} — 409 means another consumer
+    (a second poller, or the Settings 'Detect chat id' button) holds the slot."""
+    tok, _ = _creds()
+    if not tok:
+        return {"ok": False, "code": 0, "error": "Telegram not configured"}
+    qs = {"timeout": int(timeout)}
+    if offset is not None:
+        qs["offset"] = int(offset)
+    url = f"{API}/bot{tok}/getUpdates?{parse.urlencode(qs)}"
+    try:
+        with request.urlopen(url, timeout=timeout + 10) as r:
+            out = json.loads(r.read().decode() or "{}")
+        return {"ok": bool(out.get("ok")), "result": out.get("result") or []}
+    except error.HTTPError as e:
+        return {"ok": False, "code": e.code, "error": f"Telegram {e.code}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "code": 0, "error": str(e)}
+
+
 def detect_chat_id(token=None):
     """The newest chat that messaged the bot (the owner pressing START) → id or
     None. Used by the Settings 'Detect chat id' button."""

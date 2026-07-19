@@ -100,6 +100,10 @@ import alerts as alerts_mod
 alerts_mod.start()         # owner Telegram alerts (no-op without bot creds)
 import leluxe as leluxe_mod
 leluxe_mod.start()         # Leluxe → ClickUp mirror pusher (no-op until configured)
+import leluxe_goal
+leluxe_goal.start()        # daily goal digest — no-op unless env LELUXE_DIGEST=1
+import telegram_bot
+telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 
 app = Flask(__name__, template_folder="templates")
 # Behind Render's single proxy hop: trust ONE X-Forwarded-For entry so the rate
@@ -2422,6 +2426,89 @@ def api_leluxe_push_status():
 def api_leluxe_push():
     n = leluxe_mod.retry_errors()
     return jsonify({"ok": True, "retried": n})
+
+
+@app.route("/api/leluxe/goal")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_goal():
+    """Everything the 🎯 Goal view renders: the month's math, the az-tool
+    ready-profile capacity, and the settings. ?month=YYYY-MM views a past
+    month; ?refresh=1 re-reads az-tool (busts its 60s cache)."""
+    refresh = request.args.get("refresh") == "1"
+    month = (request.args.get("month") or "").strip() or None
+    if month and not re.fullmatch(r"\d{4}-\d{2}", month):
+        return jsonify({"ok": False, "error": "month must be YYYY-MM"}), 400
+    st = leluxe_goal.settings()
+    prof = leluxe_goal.profiles_summary(st, refresh=refresh)
+    return jsonify({"ok": True, "goal": leluxe_goal.compute(month=month),
+                    "profiles": prof, "settings": st,
+                    "all_tags": prof.get("all_tags") or []})
+
+
+@app.route("/api/leluxe/goal_settings", methods=["GET", "POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_goal_settings():
+    if request.method == "GET":
+        return jsonify({"ok": True, "settings": leluxe_goal.settings()})
+    st, err = leluxe_goal.save_settings(request.get_json(force=True, silent=True) or {})
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    activity.log("set", "leluxe", "goal", "Goal settings",
+                 detail=f"goal ${st['goal_usd']:,.0f}/شهر · tag {st['ready_tag']!r}"
+                        f" · digest {st['digest_hour']}:00"
+                        f"{'' if st['digest_enabled'] else ' (off)'}", user=_user())
+    return jsonify({"ok": True, "settings": st})
+
+
+@app.route("/api/leluxe/goal_digest", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_goal_digest():
+    """{send:false} → preview the digest text; {send:true} → send it to the
+    owner chat NOW (the ⋮ test button — deliberately outside the once-a-day
+    claim, so testing never eats the real 21:00 digest)."""
+    import telegram
+    b = request.get_json(force=True, silent=True) or {}
+    txt = leluxe_goal.digest_text()
+    if not b.get("send"):
+        return jsonify({"ok": True, "text": txt, "sent": False})
+    out = telegram.send(txt)
+    if not out.get("ok"):
+        return jsonify({"ok": False, "text": txt, "error": out.get("error")}), 502
+    return jsonify({"ok": True, "text": txt, "sent": True})
+
+
+@app.route("/api/leluxe/goal_backfill", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_goal_backfill():
+    """Fill ordered_at (true AZ (2) order dates) — {dry_run:true} reports what
+    WOULD change; a real run writes it. Guarded by the same 120s mutex as the
+    importer so it can't race a pull."""
+    b = request.get_json(force=True, silent=True) or {}
+    dry = bool(b.get("dry_run", True))
+    flag = db.get_setting("leluxe:import_running") or 0
+    try:
+        flag = float(flag)
+    except (TypeError, ValueError):
+        flag = 0
+    if time.time() - flag < 120:
+        return jsonify({"ok": False, "error": "an import is already running"}), 409
+    db.set_setting("leluxe:import_running", time.time())
+    try:
+        rep = leluxe_goal.backfill_ordered_at(dry_run=dry, force=bool(b.get("force")))
+    finally:
+        db.set_setting("leluxe:import_running", 0)
+    if rep.get("error"):
+        return jsonify({"ok": False, **rep}), 502
+    if not dry:
+        activity.log("set", "leluxe", "goal", "Goal dates backfill",
+                     detail=f"ordered_at filled on {rep['filled']} rows "
+                            f"(src {rep['matched_source']} · name {rep['matched_name']}"
+                            f" · inherited {rep['matched_inherit']})", user=_user())
+    return jsonify({"ok": True, **rep})
 
 
 # --------------------------------------------------------------------------- #

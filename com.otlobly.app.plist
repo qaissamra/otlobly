@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Always-on LOCAL otlobly app on this Mac (port 8789) — like az-tool's
+     com.aztool.server. This is what keeps the Leluxe daily goal digest and the
+     owner Telegram command bot alive: LELUXE_DIGEST / LELUXE_TG_BOT live ONLY
+     here (not in .env), so a manual `python app.py` dev run and Render's
+     workers never double-send or double-poll. Secrets still come from .env
+     via the app's own load_env().
+     Install:  cp com.otlobly.app.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.otlobly.app.plist
+     Restart:  launchctl kickstart -k gui/$(id -u)/com.otlobly.app
+     Remove:   launchctl unload ~/Library/LaunchAgents/com.otlobly.app.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.otlobly.app</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/leluxegroup2/projects/otlobly-orders/.venv/bin/python</string>
+    <string>/Users/leluxegroup2/projects/otlobly-orders/app.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LELUXE_DIGEST</key>
+    <string>1</string>
+    <key>LELUXE_TG_BOT</key>
+    <string>1</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/app.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/app.log</string>
+</dict>
+</plist>

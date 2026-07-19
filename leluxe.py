@@ -434,6 +434,7 @@ def save_row(payload, config=None):
                          sync_error=NULL, sync_attempts=0 WHERE id=?""",
                       (name, status, str(due_ms) if due_ms else None, now,
                        json.dumps(d, ensure_ascii=False), payload["id"]))
+            db.log_leluxe_status(payload["id"], r["status"], status, "app", c=c)
         row_id = payload["id"]
     else:
         extra = {"tracking_number": tn} if tn else {}
@@ -455,10 +456,14 @@ def set_status(row_id, status, config=None):
     if not status or (known and status not in known):
         return None, f"unknown status {status!r}"
     with db.connect() as c:
+        old = c.execute("SELECT status FROM leluxe_orders WHERE id=? AND deleted=0",
+                        (row_id,)).fetchone()
         n = c.execute("""UPDATE leluxe_orders SET status=?, updated_at=?,
                          sync_state='dirty', sync_error=NULL, sync_attempts=0
                          WHERE id=? AND deleted=0""",
                       (status, db.now_iso(), row_id)).rowcount
+        if n:
+            db.log_leluxe_status(row_id, old["status"], status, "app", c=c)
     if not n:
         return None, "row not found"
     _clear_pending(row_id)      # a real edit → the full push takes over
@@ -576,6 +581,9 @@ def upsert_from_clickup(task, sch):
                   (cols["parent_task_id"], cols["kind"], cols["name"],
                    cols["status"], cols["due_date"], cols["date_created"], now,
                    json.dumps(d, ensure_ascii=False), old["id"]))
+        # a ClickUp-side status change (Faisal) is a real transition — log it so
+        # the goal dashboard can date RD completions
+        db.log_leluxe_status(old["id"], old["status"], cols["status"], "pull", c=c)
         return "updated"
 
 
@@ -1149,7 +1157,13 @@ def _base_set(base, field, value):
         base.setdefault("fields", {})[field] = value
 
 
-def _write_row(c, rid, cols, data, sync_state=None, reset_sync=False):
+def _write_row(c, rid, cols, data, sync_state=None, reset_sync=False,
+               log_source="sync"):
+    if "status" in cols:            # merge/resolve applied a status transition
+        old = c.execute("SELECT status FROM leluxe_orders WHERE id=?",
+                        (rid,)).fetchone()
+        if old is not None:
+            db.log_leluxe_status(rid, old["status"], cols["status"], log_source, c=c)
     sets = ["data_json=?", "updated_at=?"]
     args = [json.dumps(data, ensure_ascii=False), db.now_iso()]
     for k in ("name", "status", "due_date"):
@@ -1603,10 +1617,12 @@ def resolve_conflict(row_id, choices=None, choice=None):
         data["source_base"] = base
         if remaining:
             data["conflicts"] = remaining
-            _write_row(c, row_id, cols_new, data, sync_state="conflict")
+            _write_row(c, row_id, cols_new, data, sync_state="conflict",
+                       log_source="app")
         else:
             data.pop("conflicts", None)
-            _write_row(c, row_id, cols_new, data, sync_state="dirty", reset_sync=True)
+            _write_row(c, row_id, cols_new, data, sync_state="dirty",
+                       reset_sync=True, log_source="app")
     if not remaining:
         kick()
     return get_row(row_id), None

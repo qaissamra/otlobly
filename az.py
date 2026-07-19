@@ -43,6 +43,15 @@ def _post(url, body, timeout=40, headers=None):
         return json.loads(r.read().decode())
 
 
+def healthy(timeout=2):
+    """Quick liveness probe of the AZ tool — cheap gate before the heavy
+    /api/all_profiles fetch (which enriches 250+ profiles)."""
+    try:
+        return bool(_get(f"{AZ_APP}/api/health", timeout=timeout).get("ok"))
+    except Exception:  # noqa: BLE001 - down/refused/timeout → just not healthy
+        return False
+
+
 def all_profiles(force=False):
     """All AZ profiles (cached 60s). {} on failure."""
     if not force and _cache["profiles"] is not None and time.time() - _cache["ts"] < 60:

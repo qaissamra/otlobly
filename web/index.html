@@ -450,6 +450,27 @@
   .lx-bar .track .fill{display:block;height:100%;border-radius:99px;min-width:2px}
   .lx-bar .lx-bar-n{flex:0 0 auto;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11px}
   .lx-bar[onclick]:hover .lx-bar-l{color:var(--ink);font-weight:700}
+  /* 🎯 Goal view: hero progress + milestone ticks + day columns + confetti */
+  .lx-goal-hero{background:linear-gradient(135deg,var(--bg2),var(--card));border:1px solid var(--line);border-radius:14px;padding:18px 20px 22px;margin-bottom:12px}
+  .lx-goal-big{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15}
+  .lx-goal-big small{font-size:16px;color:var(--muted);font-weight:700}
+  .lx-goal-pct{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums}
+  .lx-goal-track{position:relative;height:16px;border-radius:99px;background:var(--bg3);margin:22px 0 6px}
+  .lx-goal-fill{position:absolute;inset-block:0;inset-inline-start:0;border-radius:99px;background:linear-gradient(90deg,#f59e0b,#f97316);min-width:4px;transition:width .6s}
+  .lx-goal-fill.done{background:linear-gradient(90deg,#16a34a,#22c55e)}
+  .lx-goal-tick{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--line)}
+  .lx-goal-tick i{position:absolute;top:-17px;inset-inline-start:-14px;width:30px;text-align:center;font-size:9.5px;font-style:normal;color:var(--muted);font-weight:700}
+  .lx-goal-tick.hit{background:#f59e0b}
+  .lx-goal-tick.hit i{color:#f59e0b}
+  .lx-goal-line{font-size:14.5px;font-weight:700;margin-top:12px}
+  .lx-goal-cols{display:flex;align-items:flex-end;gap:3px;height:74px;margin-top:8px}
+  .lx-goal-cols .c{flex:1;min-width:3px;background:var(--bg3);border-radius:3px 3px 0 0;position:relative;height:100%}
+  .lx-goal-cols .c .f{position:absolute;inset-inline:0;bottom:0;border-radius:3px 3px 0 0;background:#f59e0b;min-height:2px}
+  .lx-goal-cols .c.zero .f{display:none}
+  .lx-goal-cols .c.today{outline:1.5px solid var(--accent);outline-offset:1px}
+  @keyframes lxfall{0%{transform:translateY(-30px) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.55}}
+  .lx-confetti{position:fixed;inset:0;pointer-events:none;z-index:99}
+  .lx-confetti i{position:absolute;top:0;width:9px;height:14px;border-radius:2px;animation:lxfall 1.4s ease-in forwards}
   @media(max-width:820px){.pnl-2col{grid-template-columns:1fr}}
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   /* popup KV rows have no hover scope — keep their copy buttons faintly visible */
@@ -1127,6 +1148,7 @@
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
           <button class="pop-item" id="lxActivityBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxActivityOpen()" title="log of every Leluxe change synced to ClickUp">🕑 Activity log</button>
+          <button class="pop-item" id="lxGoalSetBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxGoalSettingsOpen()" title="هدف الشهر بالدولار، تاغ البروفايلات الجاهزة من az-tool، رسالة تيليجرام اليومية، وتصنيف حالات RD · monthly $ goal, ready-profile tag (from az-tool), the daily Telegram digest, and the RD status buckets">🎯 إعدادات الهدف · Goal settings</button>
         </div>
       </span>
       <button class="minibtn" onclick="gzBulkOpen()" title="سجّل عدة طرود في جيرزيم دفعة واحدة · register many parcels at Gerizim at once">📮 Register at Gerizim</button>
@@ -1144,6 +1166,7 @@
           <button class="minibtn" id="lxSegOrders" style="border:0;border-radius:0" onclick="lxSetView('orders')">▤ Orders</button>
           <button class="minibtn" id="lxSegProducts" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('products')" title="flat products list (like ClickUp's subtasks-as-separate-tasks)">⫶ Products</button>
           <button class="minibtn" id="lxSegDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('dashboard')" title="a live KPI dashboard — the numbers follow the filter you set below">📊 Board</button>
+          <button class="minibtn" id="lxSegGoal" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('goal')" title="هدف الشهر — التقدم، البروفايلات الجاهزة، الـ RD · the monthly goal game: progress, ready profiles, RD pipeline">🎯 Goal</button>
         </span>
         <span id="lxSeparate"></span>
         <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
@@ -1322,6 +1345,15 @@
   <div class="az-box" style="width:620px;max-width:96vw;max-height:88vh;overflow:auto">
     <div class="az-head"><b>🕑 Leluxe activity — changes synced to ClickUp</b><span class="az-x" onclick="lxActivityClose()">✕</span></div>
     <div style="padding:12px 16px" id="lxActivityBody"></div>
+  </div>
+</div>
+
+<!-- 🎯 Goal settings: goal $, ready-profile tag (live from az-tool), daily
+     Telegram digest, and which statuses count (excluded / RD current / RD done) -->
+<div id="lxGoalSetModal" class="az-modal hidden" onclick="if(event.target===this)lxGoalSettingsClose()">
+  <div class="az-box" style="width:660px;max-width:96vw;max-height:92vh;overflow:auto">
+    <div class="az-head"><b>🎯 إعدادات الهدف · Goal settings</b><span class="az-x" onclick="lxGoalSettingsClose()">✕</span></div>
+    <div id="lxGoalSetBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -2470,9 +2502,10 @@ function renderLeluxe(){
   const match=r=>!q||[r.name,lxF(r,"tracking number"),lxF(r,"asin"),lxF(r,"visa"),lxF(r,"name"),lxF(r,"exact name")]
     .some(v=>v&&String(v).toLowerCase().includes(q));
   const active=lxFActive();
-  [["lxSegOrders","orders"],["lxSegProducts","products"],["lxSegDash","dashboard"]].forEach(([bid,v])=>{
-    const b=$(bid); if(b) b.classList.toggle("accent",LX_VIEW===v||(v==="orders"&&LX_VIEW!=="products"&&LX_VIEW!=="dashboard")); });
+  [["lxSegOrders","orders"],["lxSegProducts","products"],["lxSegDash","dashboard"],["lxSegGoal","goal"]].forEach(([bid,v])=>{
+    const b=$(bid); if(b) b.classList.toggle("accent",LX_VIEW===v||(v==="orders"&&LX_VIEW!=="products"&&LX_VIEW!=="dashboard"&&LX_VIEW!=="goal")); });
   lxRenderSeparate();
+  if(LX_VIEW==="goal"){ lxRenderGoal(); return; }
   if(LX_VIEW==="dashboard"){ lxRenderDashboard(lxFilteredOrders().orders); return; }
   if(LX_VIEW==="products"){
     // split view: every product standalone; a row matches if the product OR its
@@ -2596,8 +2629,8 @@ function lxRenderDashboard(orders){
   const filtered=lxFActive().length||($("lxSearch").value||"").trim();
   $("lxCount").textContent=`${orders.length} orders · ${items.length} products`+(filtered?" · filtered":"");
   $("lxEmpty").style.display="none";
-  const money=n=>`₪${Math.round(n).toLocaleString()}`;
-  const isVal=LX_DASH_METRIC==="value";              // Count ⇄ ₪ Value breakdown toggle
+  const money=n=>`$${Math.round(n).toLocaleString()}`;   // Total Amount is USD (Amazon)
+  const isVal=LX_DASH_METRIC==="value";              // Count ⇄ $ Value breakdown toggle
   const amtOf=r=>{ const v=Number(lxF(r,"total amount")); return isNaN(v)?0:v; };
   const wOf=r=>isVal?amtOf(r):1;                      // weight = ₪ in value mode, else 1 (count)
   const totalVal=orders.reduce((a,o)=>{ const v=Number(lxF(o,"total amount")); return a+(isNaN(v)?0:v); },0);
@@ -2653,12 +2686,12 @@ function lxRenderDashboard(orders){
     <div class="lx-sec">deadline &amp; late risk</div>
     <div class="lx-dash">
       ${card("GAASH overdue",overdue,overdue?"neg":"")}${card("GAASH due ≤7d",dueSoon,dueSoon?"neg":"")}
-      ${card("₪ at risk",money(atRisk),atRisk?"neg":"")}${card("Late (past due)",late,late?"neg":"")}
+      ${card("$ at risk",money(atRisk),atRisk?"neg":"")}${card("Late (past due)",late,late?"neg":"")}
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin:14px 0 2px">
       <span class="lx-sec" style="margin:0">status breakdown</span>
       <span style="flex:1"></span>
-      <span class="muted2" style="font-size:11px">show</span>${mseg("count","Count")}${mseg("value","₪ Value")}
+      <span class="muted2" style="font-size:11px">show</span>${mseg("count","Count")}${mseg("value","$ Value")}
     </div>
     <div class="pnl-2col" style="align-items:start">
       <div><div class="lx-sec">${unit==="orders"?"order status":"product status"}</div>
@@ -2670,6 +2703,209 @@ function lxRenderDashboard(orders){
         ${byRd.length?byRd.map(x=>bar(x.k,x.n,rdTot,lxOptColor("rd status",x.k),x.k?`lxDashFilter('RD STATUS','${poEsc(x.k)}')`:"")).join(""):`<div class="muted2" style="font-size:12px">—</div>`}
       </div>
     </div>`;
+}
+// ── 🎯 Goal view: the $30k/month game. Numbers come from the SERVER
+//    (/api/leluxe/goal): true order dates (ordered_at), RD dated via the
+//    status log, az-tool ready-profile capacity. Cached 60s client-side. ──
+let LX_GOAL=null, LX_GOAL_TS=0, LX_GOAL_BUSY=false;
+function lxGm(n){ return "$"+Math.round(Number(n)||0).toLocaleString(); }
+async function lxGoalFetch(refresh){
+  if(LX_GOAL_BUSY) return;
+  LX_GOAL_BUSY=true;
+  let d; try{ d=await (await fetch("/api/leluxe/goal"+(refresh?"?refresh=1":""))).json(); }catch(e){ d=null; }
+  LX_GOAL_BUSY=false;
+  if(d&&d.ok){ LX_GOAL=d; LX_GOAL_TS=Date.now(); }
+  else if(!LX_GOAL) toast("Couldn't load the goal");
+  if(LX_VIEW==="goal") renderLeluxe();
+}
+function lxLocalToday(){ const t=new Date();
+  return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; }
+function lxRenderGoal(){
+  $("lxCount").textContent="";
+  $("lxEmpty").style.display="none";
+  if((!LX_GOAL||Date.now()-LX_GOAL_TS>60000)&&!LX_GOAL_BUSY) lxGoalFetch();
+  if(!LX_GOAL){ $("lxRows").innerHTML=`<div class="muted2" style="padding:36px;text-align:center;font-size:14px">🎯 Loading the goal…</div>`; return; }
+  const g=LX_GOAL.goal, p=LX_GOAL.profiles||{}, st=LX_GOAL.settings||{};
+  const done=g.pct>=100, width=Math.min(100,g.pct);
+  const ticks=[25,50,75,100].map(t=>`<span class="lx-goal-tick${g.pct>=t?" hit":""}" style="inset-inline-start:${t}%"><i>${t===100?"🏆":t+"%"}</i></span>`).join("");
+  const today=lxLocalToday();
+  const mx=Math.max(1,...g.by_day.map(d=>d.usd));
+  const cols=g.by_day.map(d=>`<span class="c${d.d===today?" today":""}${d.usd?"":" zero"}" title="${d.d} — ${lxGm(d.usd)}${d.orders?` · ${d.orders} order${d.orders===1?"":"s"}`:""}"><span class="f" style="height:${Math.max(3,Math.round(100*d.usd/mx))}%"></span></span>`).join("");
+  const card=(l,v,cls,title)=>`<div class="card"${title?` title="${poEsc(title)}"`:""}><div class="n ${cls||""}">${v}</div><div class="l">${poEsc(l)}</div></div>`;
+  // profiles / capacity verdict
+  let profCards;
+  if(p.offline){
+    profCards=card("az-tool offline ⚠","—","neg","az-tool is not reachable on 127.0.0.1:8765 — start com.aztool.server, then ↻")
+      +card("ready profiles","?","", "unknown while az-tool is offline");
+  }else{
+    let verdict, vcls="good";
+    if(g.remaining<=0){ verdict="🏆 goal reached"; }
+    else if(p.capacity_max>=g.remaining){ verdict="✅ capacity covers the rest"; }
+    else{ const lo=Math.ceil(g.remaining/(st.acct_max_usd||1000)), hi=Math.ceil(g.remaining/(st.acct_min_usd||400));
+      verdict=`⚠ need ~${lo}–${hi} more ready accounts`; vcls="neg"; }
+    profCards=card(`👤 ready × "${p.ready_tag}"`,p.count,p.count?"":"neg",`${p.total_profiles} profiles total in Multilogin`)
+      +card("firepower (min–max)",`${lxGm(p.capacity_min)}–${lxGm(p.capacity_max)}`,"money",
+            `${p.count} ready × ${lxGm(st.acct_min_usd)}–${lxGm(st.acct_max_usd)} per account`)
+      +card("pace check",verdict,vcls,"can the ready profiles cover what's left of the goal?");
+  }
+  const rd=g.rd||{};
+  $("lxRows").innerHTML=`
+    <div class="lx-goal-hero">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+        <div>
+          <div class="muted2" style="font-size:12px;font-weight:700">🎯 هدف ${poEsc(g.month_label)} · resets on the 1st</div>
+          <div class="lx-goal-big">${lxGm(g.month_total)} <small>/ ${lxGm(g.goal_usd)}</small></div>
+        </div>
+        <span class="spacer" style="flex:1"></span>
+        <div style="text-align:end">
+          <div class="lx-goal-pct" style="color:${done?"#16a34a":"var(--accent)"}">${g.pct}%</div>
+          ${g.streak_days>=2?`<div style="font-size:12.5px;font-weight:800;color:#f97316">🔥 ${g.streak_days} days streak</div>`:""}
+        </div>
+      </div>
+      <div class="lx-goal-track">${ticks}<span class="lx-goal-fill${done?" done":""}" style="width:${width}%"></span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+        <span>${done?"فوق الهدف":"باقي "+lxGm(g.remaining)}</span><span class="spacer" style="flex:1"></span>
+        <span>${g.days_left} day${g.days_left===1?"":"s"} left</span>
+      </div>
+      <div class="lx-goal-line">${poEsc(g.line||"")}</div>
+    </div>
+    <div class="lx-dash">
+      ${card("Today",`${lxGm(g.today_total)}`+(g.today_orders?` <small style="font-size:12px;color:var(--muted)">· ${g.today_orders} order${g.today_orders===1?"":"s"}</small>`:""),"money","orders dated today")}
+      ${card("Remaining",lxGm(g.remaining),g.remaining>0?"":"good","to hit the monthly goal")}
+      ${card("Need / day",lxGm(g.need_per_day),g.need_per_day>g.avg_per_day?"neg":"good","remaining ÷ days left (incl. today)")}
+      ${card("Avg / day",lxGm(g.avg_per_day),"money","month so far ÷ days elapsed")}
+      ${card("Best day",g.best_day?`${lxGm(g.best_day.usd)} <small style="font-size:11px;color:var(--muted)">${g.best_day.d.slice(8)}/${g.best_day.d.slice(5,7)}</small>`:"—","money","the month's strongest day")}
+      ${card("Last month",lxGm(g.last_month_total),"money","previous month's ordered total")}
+    </div>
+    <div class="lx-sec">this month, day by day</div>
+    <div class="lx-goal-cols">${cols}</div>
+    <div class="lx-sec">🔁 RD pipeline</div>
+    <div class="lx-dash">
+      ${card("RD current",`${rd.current_count||0} <small style="font-size:12px;color:var(--muted)">· ${lxGm(rd.current_usd)}</small>`,"", `statuses: ${(st.rd_current||[]).join(", ")}`)}
+      ${card("RD done — this month",lxGm(rd.done_month_usd),"money",`statuses: ${(st.rd_done||[]).join(", ")} — dated by the first status change`)}
+      ${card("RD done — last month",lxGm(rd.done_last_month_usd),"money","what the daily Telegram digest reports")}
+    </div>
+    <div class="lx-sec">👤 profiles firepower (az-tool) <button class="minibtn" style="margin-inline-start:8px" onclick="LX_GOAL=null;lxGoalFetch(true)" title="re-read profiles from az-tool now">↻</button></div>
+    <div class="lx-dash">${profCards}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center">
+      <button class="minibtn" onclick="lxGoalSettingsOpen()">🎯 إعدادات الهدف · Goal settings</button>
+      <span class="muted2" style="font-size:11.5px">🤖 اسأل البوت على تيليجرام: <b>today</b> · <b>month</b> · <b>rd</b> · <b>profiles</b> · <b>last year rd</b></span>
+    </div>`;
+  lxGoalCelebrate(g.milestone,g.month);
+}
+// milestone confetti — once per milestone per month (localStorage remembers)
+function lxGoalCelebrate(milestone,month){
+  if(!milestone) return;
+  let seen={}; try{ seen=JSON.parse(localStorage.getItem("lx_goal_celeb")||"{}"); }catch(e){}
+  if((seen[month]||0)>=milestone) return;
+  seen[month]=milestone;
+  try{ localStorage.setItem("lx_goal_celeb",JSON.stringify(seen)); }catch(e){}
+  const box=document.createElement("div"); box.className="lx-confetti";
+  const hues=[42,25,10,140,205,280,330];
+  for(let i=0;i<70;i++){
+    const s=document.createElement("i");
+    s.style.insetInlineStart=(Math.random()*100)+"vw";
+    s.style.background=`hsl(${hues[i%hues.length]} 90% 55%)`;
+    s.style.animationDelay=(Math.random()*.6)+"s";
+    box.appendChild(s);
+  }
+  document.body.appendChild(box);
+  setTimeout(()=>box.remove(),2400);
+  toast(milestone>=100?"🏆 GOAL SMASHED!":`🔥 ${milestone}% milestone!`);
+}
+// ── 🎯 Goal settings modal (⋮ menu / the Goal view button) ──
+function lxGoalSettingsOpen(){
+  $("lxGoalSetModal").classList.remove("hidden");
+  lxGoalSetRender();
+}
+function lxGoalSettingsClose(){ $("lxGoalSetModal").classList.add("hidden"); }
+async function lxGoalSetRender(){
+  const box=$("lxGoalSetBody");
+  box.innerHTML=`<div class="muted2" style="padding:14px">Loading…</div>`;
+  let st=null, tags=[], offline=true;
+  if(LX_GOAL&&Date.now()-LX_GOAL_TS<60000){ st=LX_GOAL.settings; tags=LX_GOAL.all_tags||[]; offline=!!(LX_GOAL.profiles||{}).offline; }
+  else{
+    let d; try{ d=await (await fetch("/api/leluxe/goal")).json(); }catch(e){ d=null; }
+    if(d&&d.ok){ LX_GOAL=d; LX_GOAL_TS=Date.now(); st=d.settings; tags=d.all_tags||[]; offline=!!(d.profiles||{}).offline; }
+  }
+  if(!st){ box.innerHTML=`<div class="muted2" style="padding:14px">Couldn't load settings.</div>`; return; }
+  const schemaSt=((LX&&LX.schema&&LX.schema.statuses)||[]).map(s=>s.status);
+  const extra=[...new Set([...(st.excluded||[]),...(st.rd_current||[]),...(st.rd_done||[])])].filter(s=>!schemaSt.includes(s));
+  const allSt=[...schemaSt,...extra];   // unknown (renamed in ClickUp) shown greyed, never dropped
+  const grp=(key,label,hint,set)=>{
+    const chosen=new Set((set||[]).map(s=>String(s).toLowerCase()));
+    return `<div style="margin-top:12px"><b style="font-size:12.5px">${label}</b> <span class="muted2" style="font-size:11px">${hint}</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px 10px;margin-top:5px">
+        ${allSt.map(s=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer${schemaSt.includes(s)?"":";opacity:.5"}" title="${schemaSt.includes(s)?poEsc(s):poEsc(s)+" — no longer in the ClickUp list"}">
+          <input type="checkbox" data-grp="${key}" value="${poEsc(s)}"${chosen.has(String(s).toLowerCase())?" checked":""}>
+          <span style="width:9px;height:9px;border-radius:99px;flex:0 0 auto;background:${lxStatusColor(s)}"></span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s)}</span></label>`).join("")}
+      </div></div>`;
+  };
+  box.innerHTML=`
+    <div class="pnl-2col" style="gap:10px">
+      <label class="field" style="display:block"><span class="lbl">🎯 monthly goal (USD)</span>
+        <input id="lxgGoal" type="number" min="1" step="100" value="${poEsc(st.goal_usd)}" style="width:100%"></label>
+      <label class="field" style="display:block"><span class="lbl">👤 ready-profile tag ${offline?`<i style="color:#dc2626">az-tool offline — type it manually</i>`:"(from az-tool, live)"}</span>
+        <input id="lxgTag" list="lxgTagList" value="${poEsc(st.ready_tag)}" style="width:100%">
+        <datalist id="lxgTagList">${tags.map(t=>`<option value="${poEsc(t)}">`).join("")}</datalist></label>
+      <label class="field" style="display:block"><span class="lbl">💵 per-account order min (USD)</span>
+        <input id="lxgMin" type="number" min="1" step="50" value="${poEsc(st.acct_min_usd)}" style="width:100%"></label>
+      <label class="field" style="display:block"><span class="lbl">💵 per-account order max (USD)</span>
+        <input id="lxgMax" type="number" min="1" step="50" value="${poEsc(st.acct_max_usd)}" style="width:100%"></label>
+      <label class="field" style="display:block"><span class="lbl">📨 daily Telegram digest</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <input id="lxgOn" type="checkbox"${st.digest_enabled?" checked":""}> <span style="font-size:12.5px">send every day at</span>
+          <select id="lxgHour">${Array.from({length:24},(_,h)=>`<option value="${h}"${h===st.digest_hour?" selected":""}>${String(h).padStart(2,"0")}:00</option>`).join("")}</select>
+        </span></label>
+    </div>
+    ${grp("excluded","🚫 excluded from the goal","(cancelled etc. — everything else counts)",st.excluded)}
+    ${grp("rd_current","🔁 RD current","(in the RD pipeline now)",st.rd_current)}
+    ${grp("rd_done","✅ RD done","(counts into the monthly RD total)",st.rd_done)}
+    <pre id="lxGoalDigestPre" style="display:none;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;white-space:pre-wrap;margin-top:12px"></pre>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="accent" onclick="lxGoalSetSave(this)">💾 Save</button>
+      <button class="minibtn" onclick="lxGoalDigest(false,this)" title="see today's digest text without sending">👁 Preview digest</button>
+      <button class="minibtn" onclick="lxGoalDigest(true,this)" title="send the digest to your Telegram right now (doesn't consume the daily 21:00 one)">📨 Send test digest</button>
+      <button class="minibtn" onclick="lxGoalBackfill(this)" title="pull the TRUE order dates from AZ (2) (the migration reset them to Jul 14) — dry-run report first, nothing written until you confirm. Re-run this after any disaster-restore.">🩹 Fix historic dates</button>
+    </div>`;
+}
+async function lxGoalSetSave(btn){
+  const grab=k=>[...document.querySelectorAll(`#lxGoalSetBody input[data-grp="${k}"]:checked`)].map(i=>i.value);
+  const body={goal_usd:+$("lxgGoal").value||0, ready_tag:$("lxgTag").value.trim(),
+    acct_min_usd:+$("lxgMin").value||0, acct_max_usd:+$("lxgMax").value||0,
+    digest_enabled:$("lxgOn").checked, digest_hour:+$("lxgHour").value,
+    excluded:grab("excluded"), rd_current:grab("rd_current"), rd_done:grab("rd_done")};
+  btn.disabled=true;
+  let r; try{ r=await post("/api/leluxe/goal_settings",body); }catch(e){ r=null; }
+  btn.disabled=false;
+  if(r&&r.ok){ toast("✔ saved"); LX_GOAL=null; lxGoalSettingsClose(); lxGoalFetch(); }
+  else toast((r&&r.error)||"save failed");
+}
+async function lxGoalDigest(send,btn){
+  btn.disabled=true;
+  let r; try{ r=await post("/api/leluxe/goal_digest",{send:!!send}); }catch(e){ r=null; }
+  btn.disabled=false;
+  if(!r){ toast("digest failed"); return; }
+  const pre=$("lxGoalDigestPre");
+  if(pre&&r.text){ pre.style.display="block"; pre.textContent=r.text; }
+  if(send) toast(r.ok?"📨 sent — check Telegram":"⚠ "+(r.error||"send failed"));
+}
+async function lxGoalBackfill(btn){
+  btn.disabled=true; btn.textContent="🔍 dry-run…";
+  let rep; try{ rep=await post("/api/leluxe/goal_backfill",{dry_run:true}); }catch(e){ rep=null; }
+  btn.disabled=false; btn.textContent="🩹 Fix historic dates";
+  if(!rep||!rep.ok){ toast((rep&&rep.error)||"backfill failed"); return; }
+  const names=(rep.unmatched_names||[]).slice(0,10).join("\n");
+  if(!confirm(`Dry run — ${rep.filled} rows would get their TRUE AZ (2) date`
+    +`\n· matched by source id: ${rep.matched_source}\n· matched by name: ${rep.matched_name}`
+    +`\n· inherit order date: ${rep.matched_inherit}\n· already set: ${rep.already_set}`
+    +`\n· unmatched: ${rep.unmatched}${names?"\n\nunmatched examples:\n"+names:""}\n\nApply now?`)) return;
+  btn.disabled=true; btn.textContent="🩹 fixing…";
+  let r2; try{ r2=await post("/api/leluxe/goal_backfill",{dry_run:false}); }catch(e){ r2=null; }
+  btn.disabled=false; btn.textContent="🩹 Fix historic dates";
+  if(r2&&r2.ok){ toast(`✔ true dates written on ${r2.filled} rows`); LX_GOAL=null; lxGoalFetch(); }
+  else toast((r2&&r2.error)||"backfill failed");
 }
 function lxCardHtml(o){
   const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];

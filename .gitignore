@@ -23,6 +23,7 @@ drafts.json
 *.db-journal
 sync.log
 backup.log
+app.log
 leluxe_migrate.log
 leluxe_cleanup.log
 otlobly-backup-*.zip
