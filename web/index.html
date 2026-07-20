@@ -1152,8 +1152,8 @@
         <div class="pop-menu" style="min-width:230px">
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
-          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 مزامنة من AZ (2) · Sync from AZ (2)</button>
-          <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة، حقلاً بحقل (قبل ← بعد) · everything the last sync changed, field by field (before → after)">👁 آخر مزامنة · Last sync changes</button>
+          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
+          <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
           <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
@@ -1210,7 +1210,7 @@
 <!-- Last-sync report: every change the sync applied, old → new -->
 <div id="lxSyncReportModal" class="az-modal hidden" onclick="if(event.target===this)lxSyncReportClose()">
   <div class="az-box" style="width:760px;max-width:96vw;max-height:90vh;overflow:auto;display:flex;flex-direction:column">
-    <div class="az-head"><b>👁 تغييرات آخر مزامنة · Last sync changes</b><span class="az-x" onclick="lxSyncReportClose()">✕</span></div>
+    <div class="az-head"><b>👁 Last sync changes</b><span class="az-x" onclick="lxSyncReportClose()">✕</span></div>
     <div id="lxSyncReportBody" style="padding:12px 16px"></div>
   </div>
 </div>
@@ -3665,22 +3665,26 @@ async function lxSync(btn){
   let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,review_all:!!LX_SYNC_REVIEW,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
   if(!r.ok){ pr.textContent="❌ "+(r.error||"sync failed"); btn.disabled=false; return; }
   LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
-  const head=`+${r.orders||0} جديد·new · ${r.updated||0} محدّث·updated`
-    +(r.conflicts?` · ⚠ ${r.conflicts} تعارض·conflict${r.conflicts===1?'':'s'}`:"")
-    +(r.new_items?` · +${r.new_items} منتج·product${r.new_items===1?'':'s'}`:"")
-    +(r.kept?` · 🕔 ${r.kept} تعديلك أحدث·yours kept`:"");
+  const head=`+${r.orders||0} new · ${r.updated||0} updated`
+    +(r.conflicts?` · ⚠ ${r.conflicts} conflict${r.conflicts===1?'':'s'}`:"")
+    +(r.new_items?` · +${r.new_items} product${r.new_items===1?'':'s'} added`:"")
+    +(r.kept?` · 🕔 ${r.kept} of your edits kept`:"");
+  // the details button exists from the FIRST repaint — the photo/tracking phases
+  // can run for minutes, and the owner must be able to open the report during them
+  const total=(r.report_changes||0)+(r.new_items||0)+(r.orders||0)+(r.kept||0);
+  const seeBtn=total?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 See details (${total})</button>`:"";
   let done=0,rem=1;
-  while(rem>0){ pr.textContent=`✓ ${head} · fetching Amazon photos… ${done}`;
+  while(rem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · fetching product photos… ${done}`;
     let ir; try{ ir=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
     if(!ir.ok) break; done+=ir.done; rem=ir.remaining; if(ir.done===0&&rem>0) break; }
   let tc=0,trem=1;
-  while(trem>0){ pr.textContent=`✓ ${head} · live GAASH tracking… ${tc}`;
+  while(trem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · updating live GAASH tracking… ${tc}`;
     let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
     if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
-  pr.innerHTML=`✅ مزامنة · Synced — ${poEsc(head)}.`
-    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 اعتمد التغييرات · Approve changes":"⚠ راجع التعارض · Review conflicts"} (${r.conflicts})</button>`:"")
-    +((r.report_changes||r.new_items||r.orders||r.kept)?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 ما الذي تغيّر · What changed (${(r.report_changes||0)+(r.new_items||0)+(r.orders||0)+(r.kept||0)})</button>`:"")
-    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new (${LX_LAST_MIGRATED.length})</button>`:"");
+  pr.innerHTML=`✅ Synced — ${poEsc(head)}.`
+    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 Approve changes":"⚠ Review conflicts"} (${r.conflicts})</button>`:"")
+    +seeBtn
+    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new orders (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
   if(LX_SYNC_REVIEW&&r.conflicts) lxConflictsOpen();   // 🛡 straight to approve/deny
 }
@@ -3694,41 +3698,43 @@ async function lxSyncReportOpen(){
   if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">تعذّر التحميل · could not load</div>'; return; }
   const sec=(t,html)=>html?`<div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px">${t}</div>${html}`:"";
   const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"};
+  // backend field labels are bilingual ("الحالة · Status") — show the English half here
+  const enLbl=s=>String(s||"").split("·").pop().trim();
   // every entry carries order_id (or its own id for orders) → click = jump to the order on the board
-  const jump=id=>id?` style="cursor:pointer" title="انقر للانتقال إلى الطلب · click to open this order" onclick="lxSyncReportClose();lxJumpOrder(${id})"`:"";
+  const jump=id=>id?` style="cursor:pointer" title="click to open this order" onclick="lxSyncReportClose();lxJumpOrder(${id})"`:"";
   const appliedHtml=(r.applied||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
       <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"⌚"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}</div>
       ${(row.changes||[]).map(ch=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
-        <span class="muted2" style="min-width:120px">${poEsc(ch.label||ch.field)}</span>
+        <span class="muted2" style="min-width:120px">${poEsc(enLbl(ch.label||ch.field))}</span>
         <span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(ch.old)}</span>
         <span>→</span><b dir="auto">${lxCVal(ch.new)}</b></div>`).join("")}
     </div></div>`).join("");
   // 🕔 your newer edits kept — the app value differs from AZ (2) and the app won
   const keptHtml=(r.kept||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
       <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
-        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ لسا بيرفع · uploading to ClickUp</span>`:""}</div>
+        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ UPLOADING TO CLICKUP</span>`:""}</div>
       ${(row.diffs||[]).map(d=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
-        <span class="muted2" style="min-width:120px">${poEsc(d.label||d.field)}</span>
+        <span class="muted2" style="min-width:120px">${poEsc(enLbl(d.label||d.field))}</span>
         <span class="muted2">ClickUp:</span><span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(d.remote)}</span>
-        <span>→</span><span class="muted2">عندك · yours:</span><b dir="auto">${lxCVal(d.local)}</b></div>`).join("")}
+        <span>→</span><span class="muted2">yours:</span><b dir="auto">${lxCVal(d.local)}</b></div>`).join("")}
     </div></div>`).join("");
-  const keptHint=(r.kept||[]).length?`<div class="muted2" style="font-size:11.5px;margin:2px 0 6px">تعديلاتك أحدث من AZ (2) فبقيت كما هي — ستصل ClickUp تلقائياً عند اكتمال الرفع · your edits are newer than AZ (2), so they were kept — they reach ClickUp automatically once uploading finishes</div>`:"";
+  const keptHint=(r.kept||[]).length?`<div class="muted2" style="font-size:11.5px;margin:2px 0 6px">These values are newer in the app than in AZ (2), so your version was kept. They upload to ClickUp automatically — rows marked ⏳ are still uploading.</div>`:"";
   const newOrders=(r.new_orders||[]).map(o=>`<div${jump(o.id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.id?'pointer':'default'}">⌚ ${poEsc(o.name||"")}</div>`).join("");
   const newItems=(r.new_items||[]).map(o=>`<div${jump(o.order_id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.order_id?'pointer':'default'}">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
   const parked=(r.conflict_rows||[]).map(o=>`<div${jump(o.order_id)} style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
-  const when=r.ts?`<div class="muted2" style="font-size:11.5px">آخر مزامنة · last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
+  const when=r.ts?`<div class="muted2" style="font-size:11.5px">Last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
   body.innerHTML=(when
-    +sec(`✏️ تغييرات مطبّقة · applied changes (${(r.applied||[]).length})`,appliedHtml)
-    +sec(`＋ طلبات جديدة · new orders (${(r.new_orders||[]).length})`,newOrders)
-    +sec(`＋ منتجات جديدة · new products (${(r.new_items||[]).length})`,newItems)
-    +sec(`🕔 تعديلاتك أحدث وبقيت · your newer edits kept (${(r.kept||[]).length})`,keptHtml?keptHint+keptHtml:"")
-    +sec(`⚖ بانتظار موافقتك · awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ افتح المراجعة · open review</button>`:""))
-    ||'<div style="padding:24px;text-align:center">لا تغييرات مسجّلة بعد — شغّل مزامنة أولاً · no sync recorded yet</div>';
+    +sec(`✏️ Applied changes (${(r.applied||[]).length})`,appliedHtml)
+    +sec(`＋ New orders (${(r.new_orders||[]).length})`,newOrders)
+    +sec(`＋ New products (${(r.new_items||[]).length})`,newItems)
+    +sec(`🕔 Your newer edits — kept (${(r.kept||[]).length})`,keptHtml?keptHint+keptHtml:"")
+    +sec(`⚖ Awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ Open review</button>`:""))
+    ||'<div style="padding:24px;text-align:center">No sync recorded yet — run Sync from AZ (2) first.</div>';
 }
 // ── Conflict review — Otlobly value vs ClickUp (AZ 2) value, per field ────────
 let LX_CONF=[];
 function lxCVal(v){
-  if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— (فارغ · empty)</span>';
+  if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— empty</span>';
   if(Array.isArray(v)) return v.map(x=>`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">${poEsc(String(x))}</span>`).join(" ");
   if(v===true) return "✓ نعم · yes";
   if(v===false) return "✗ لا · no";
