@@ -2378,6 +2378,45 @@ def api_leluxe_move():
     return jsonify({"ok": True, **summary})
 
 
+@app.route("/api/leluxe/az2_push", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_push():
+    """Manually push ONE row's status into the AZ (2) source list. The only
+    write path to AZ (2) — CAS-guarded, journalled, tagged + commented there."""
+    b = request.get_json(force=True, silent=True) or {}
+    entry, err = leluxe_mod.az2_push_status(
+        b.get("row_id"), expected_remote=b.get("expected_remote"), user=_user())
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    if not entry.get("noop"):
+        activity.log("pushed", "leluxe", b.get("row_id"), f"#{b.get('row_id')}",
+                     detail=f"AZ (2) status {entry['old']!r} → {entry['new']!r}"
+                            f" (task {entry['task_id']})", user=_user())
+    return jsonify({"ok": True, **entry})
+
+
+@app.route("/api/leluxe/az2_undo", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_undo():
+    b = request.get_json(force=True, silent=True) or {}
+    entry, err = leluxe_mod.az2_undo(b.get("push_id"), user=_user())
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    activity.log("undone", "leluxe", entry["task_id"], f"AZ (2) {entry['task_id']}",
+                 detail=f"push #{entry['id']} reverted → {entry['restored']!r}",
+                 user=_user())
+    return jsonify({"ok": True, **entry})
+
+
+@app.route("/api/leluxe/az2_pushes")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_pushes():
+    return jsonify({"ok": True, "pushes": leluxe_mod.az2_push_history()})
+
+
 @app.route("/api/leluxe/status", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

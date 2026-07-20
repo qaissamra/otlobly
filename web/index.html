@@ -1154,6 +1154,7 @@
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
           <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
           <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
+          <button class="pop-item" id="lxAz2HistBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2HistoryOpen()" title="كل دفعة رفعتها إلى AZ (2) — مع تراجع · every push you made INTO AZ (2), with undo">⤴ AZ (2) push history</button>
           <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
@@ -1390,6 +1391,14 @@
   <div class="az-box" style="width:780px;max-width:96vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="lxEditTitle">⌚ Leluxe order</b><span class="az-x" onclick="lxEditClose()">✕</span></div>
     <div style="padding:14px 16px" id="lxEditBody"></div>
+  </div>
+</div>
+
+<!-- ⤴ AZ (2) push history: every manual write into Faisal's list, with undo -->
+<div id="lxAz2HistModal" class="az-modal hidden" onclick="if(event.target===this)lxAz2HistoryClose()">
+  <div class="az-box" style="width:640px;max-width:96vw;max-height:90vh;overflow:auto">
+    <div class="az-head"><b>⤴ AZ (2) push history</b><span class="az-x" onclick="lxAz2HistoryClose()">✕</span></div>
+    <div id="lxAz2HistBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -3709,15 +3718,20 @@ async function lxSyncReportOpen(){
         <span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(ch.old)}</span>
         <span>→</span><b dir="auto">${lxCVal(ch.new)}</b></div>`).join("")}
     </div></div>`).join("");
-  // 🕔 your newer edits kept — the app value differs from AZ (2) and the app won
-  const keptHtml=(r.kept||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
-      <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
-        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ UPLOADING TO CLICKUP</span>`:""}</div>
+  // 🕔 your newer edits kept — the app value differs from AZ (2) and the app won.
+  // Status rows with an AZ (2) link get ⤴ Push: the ONE manual write path into
+  // AZ (2) (CAS-guarded server-side against the value shown here).
+  const keptHtml=(r.kept||[]).map(row=>{
+    const sd=(row.diffs||[]).find(d=>d.field==="status");
+    const pushBtn=(sd&&row.task_id)?`<button class="minibtn" id="az2p_${row.id}" onclick="event.stopPropagation();lxAz2Push(${row.id},'${poEsc(String(sd.remote??""))}','${poEsc(String(sd.local??""))}')" title="write YOUR status into the AZ (2) task — tagged + commented there, undo in AZ (2) push history">⤴ Push to AZ (2)</button>`:"";
+    return `<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
+      <div style="font-weight:800;font-size:12.5px;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
+        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ UPLOADING TO CLICKUP</span>`:""}<span style="flex:1"></span>${pushBtn}</div>
       ${(row.diffs||[]).map(d=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
         <span class="muted2" style="min-width:120px">${poEsc(enLbl(d.label||d.field))}</span>
         <span class="muted2">ClickUp:</span><span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(d.remote)}</span>
         <span>→</span><span class="muted2">yours:</span><b dir="auto">${lxCVal(d.local)}</b></div>`).join("")}
-    </div></div>`).join("");
+    </div></div>`;}).join("");
   const keptHint=(r.kept||[]).length?`<div class="muted2" style="font-size:11.5px;margin:2px 0 6px">These values are newer in the app than in AZ (2), so your version was kept. They upload to ClickUp automatically — rows marked ⏳ are still uploading.</div>`:"";
   const newOrders=(r.new_orders||[]).map(o=>`<div${jump(o.id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.id?'pointer':'default'}">⌚ ${poEsc(o.name||"")}</div>`).join("");
   const newItems=(r.new_items||[]).map(o=>`<div${jump(o.order_id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.order_id?'pointer':'default'}">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
@@ -3730,6 +3744,48 @@ async function lxSyncReportOpen(){
     +sec(`🕔 Your newer edits — kept (${(r.kept||[]).length})`,keptHtml?keptHint+keptHtml:"")
     +sec(`⚖ Awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ Open review</button>`:""))
     ||'<div style="padding:24px;text-align:center">No sync recorded yet — run Sync from AZ (2) first.</div>';
+}
+// ── ⤴ Push to AZ (2): the one manual write path into Faisal's list. One row,
+//    one field (status), CAS-guarded server-side, journalled, undoable. ──
+async function lxAz2Push(rowId,remoteNow,mine){
+  if(!confirm(`Push YOUR status to AZ (2)?\n\nClickUp now: ${remoteNow||"—"}\nYours:        ${mine||"—"}\n\nThe AZ (2) task gets the "otl-push" tag + a comment, and you can undo this from Tools → AZ (2) push history.`)) return;
+  const b=$("az2p_"+rowId); if(b){ b.disabled=true; b.textContent="⤴ pushing…"; }
+  let r; try{ r=await post("/api/leluxe/az2_push",{row_id:rowId,expected_remote:remoteNow}); }catch(e){ r={}; }
+  if(!r.ok){ if(b){ b.disabled=false; b.textContent="⤴ Push to AZ (2)"; } toast(r.error||"Push failed"); return; }
+  if(b){ b.textContent=r.noop?"✅ already matched":"✅ Pushed to AZ (2)"; b.disabled=true; }
+  toast(r.noop?"AZ (2) already has this value":"✅ Pushed to AZ (2) — undo available in push history");
+}
+function lxAz2HistoryClose(){ $("lxAz2HistModal").classList.add("hidden"); }
+async function lxAz2HistoryOpen(){
+  $("lxAz2HistModal").classList.remove("hidden");
+  const body=$("lxAz2HistBody");
+  body.innerHTML='<div class="muted2" style="padding:16px">⏳ Loading…</div>';
+  let r; try{ r=await (await fetch("/api/leluxe/az2_pushes")).json(); }catch(e){ r=null; }
+  if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">Could not load.</div>'; return; }
+  const rows=(r.pushes||[]).map(p=>{
+    const when=String(p.ts||"").slice(0,16).replace("T"," ");
+    const icon=p.state==="undo"?"↩️":p.state==="undone"?"🚫":"🔁";
+    const dim=p.state==="undone"?"opacity:.55;":"";
+    const label=p.state==="undo"?`reverted push #${p.undo_of}`:`${poEsc(p.old_value??"—")} → <b>${poEsc(p.new_value??"—")}</b>`;
+    const undoBtn=p.state==="pushed"?`<button class="minibtn" onclick="lxAz2Undo(${p.id},this)" title="write the old value back to AZ (2) — aborts safely if AZ (2) changed meanwhile">↩ Undo</button>`:
+      (p.state==="undone"?`<span class="muted2" style="font-size:11px">undone</span>`:"");
+    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 11px;margin-bottom:7px;${dim}">
+      <span>${icon}</span>
+      <span style="min-width:0;flex:1">
+        <div style="font-weight:700;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:${p.row_id?'pointer':'default'}"${p.row_id?` onclick="lxAz2HistoryClose();lxJumpOrder(${p.row_id})" title="open on the board"`:""}>${poEsc(p.name||("#"+p.row_id))}</div>
+        <div class="muted2" style="font-size:11.5px">${enLblGlobal(p.field)} · ${label} · ${poEsc(when)}${p.user?` · ${poEsc(p.user)}`:""}</div>
+      </span>${undoBtn}</div>`;
+  }).join("");
+  body.innerHTML=rows||'<div style="padding:24px;text-align:center" class="muted2">No pushes to AZ (2) yet — use ⤴ Push to AZ (2) on a kept edit in Last sync changes.</div>';
+}
+function enLblGlobal(s){ return String(s||"").split("·").pop().trim(); }
+async function lxAz2Undo(pushId,btn){
+  if(!confirm("Undo this push? The old value is written back to AZ (2).\n(Aborts safely if AZ (2) changed since the push.)")) return;
+  btn.disabled=true; btn.textContent="↩ undoing…";
+  let r; try{ r=await post("/api/leluxe/az2_undo",{push_id:pushId}); }catch(e){ r={}; }
+  if(!r.ok){ btn.disabled=false; btn.textContent="↩ Undo"; toast(r.error||"Undo failed"); return; }
+  toast(`✅ Reverted — AZ (2) is back to "${r.restored}"`);
+  lxAz2HistoryOpen();
 }
 // ── Conflict review — Otlobly value vs ClickUp (AZ 2) value, per field ────────
 let LX_CONF=[];

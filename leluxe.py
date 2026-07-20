@@ -1571,6 +1571,7 @@ def _kept_diffs(row_id, src_task, sch, keep, report, oname, order_id):
         report.setdefault("kept", []).append({
             "id": row_id, "kind": row["kind"], "name": row["name"] or "",
             "order": oname, "order_id": order_id,
+            "task_id": data.get("source_task_id"),   # → enables ⤴ Push to AZ (2)
             "syncing": row["sync_state"] in ("dirty", "pushing"),
             "diffs": diffs})
 
@@ -1763,6 +1764,135 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
     made["presync"] = snap
     kick()
     return made
+
+
+# --------------------------------------------------------------------------- #
+# Selective push INTO AZ (2) — the one deliberate exception to "AZ (2) is
+# read-only". Safety layers: manual per-row action only (the automatic pusher
+# still can never touch AZ (2)); STATUS-only allowlist; compare-and-set against
+# the value the owner reviewed; a before-image journal (az2_pushes) enabling
+# undo; and a ClickUp-visible trail (tag + comment) so pushed tasks are
+# filterable inside ClickUp.
+# --------------------------------------------------------------------------- #
+def _az2_settings():
+    st = {"enabled": True, "tag": "otl-push"}
+    saved = db.get_setting("leluxe:az2")
+    if isinstance(saved, dict):
+        st.update({k: saved[k] for k in st if k in saved})
+    return st
+
+
+def _az2_comment(task_id, text):
+    """Soft-fail comment on an AZ (2) task — the trail matters, but a failed
+    comment must never fail a push that already landed."""
+    try:
+        _http(f"{CLICKUP_API}/task/{task_id}/comment", "POST",
+              {"comment_text": text})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def az2_push_status(row_id, expected_remote=None, user=""):
+    """Write ONE row's status to its AZ (2) source task. Returns (entry, error)."""
+    st = _az2_settings()
+    if not st["enabled"]:
+        return None, "AZ (2) push is disabled (leluxe:az2 setting)"
+    row = get_row(row_id)
+    if not row or row.get("deleted"):
+        return None, "row not found"
+    src_tid = (row["data"] or {}).get("source_task_id")
+    if not src_tid:
+        return None, "this row has no AZ (2) link (no source task)"
+    new_status = (row.get("status") or "").strip()
+    if not new_status:
+        return None, "the row has no status to push"
+    code, task = _http(f"{CLICKUP_API}/task/{src_tid}")
+    if code != 200 or not isinstance(task, dict):
+        return None, f"couldn't read the AZ (2) task ({code})"
+    cur = ((task.get("status") or {}).get("status") or "").strip()
+    if expected_remote is not None and cur != (expected_remote or "").strip():
+        return None, (f"AZ (2) changed since you reviewed — it now says "
+                      f"{cur!r}. Run Sync from AZ (2) and review again.")
+    if cur == new_status:
+        return {"noop": True, "task_id": src_tid, "status": cur}, None
+    time.sleep(_pace())
+    code, resp = _http(f"{CLICKUP_API}/task/{src_tid}", "PUT",
+                       {"status": new_status})
+    if code != 200:
+        return None, (f"AZ (2) refused the status ({code}): "
+                      f"{(resp or {}).get('_error') or resp}")
+    now = db.now_iso()
+    with db.connect() as c:
+        cur_id = c.execute(
+            """INSERT INTO az2_pushes (row_id, task_id, field, old_value,
+               new_value, snapshot_json, ts, user, state)
+               VALUES (?,?,?,?,?,?,?,?,'pushed')""",
+            (row_id, src_tid, "status", cur, new_status,
+             json.dumps(task, ensure_ascii=False), now, user)).lastrowid
+    time.sleep(_pace())
+    stcode, _r = _http(f"{CLICKUP_API}/task/{src_tid}/tag/{urlquote(st['tag'])}",
+                       "POST", {})
+    _az2_comment(src_tid, f"🔁 Otlobly push: Status '{cur}' → '{new_status}'"
+                          f" · by {user or 'admin'} · {now[:16].replace('T', ' ')}"
+                          f" (undo available in Otlobly)")
+    return {"id": cur_id, "task_id": src_tid, "old": cur, "new": new_status,
+            "tagged": stcode in (200, 201)}, None
+
+
+def az2_undo(push_id, user=""):
+    """Revert one journalled push — CAS-guarded: AZ (2) must still hold the
+    value we wrote, else the undo aborts untouched. Returns (entry, error)."""
+    with db.connect() as c:
+        p = c.execute("SELECT * FROM az2_pushes WHERE id=?", (push_id,)).fetchone()
+    if not p:
+        return None, "push not found"
+    p = dict(p)
+    if p["state"] != "pushed" or p["field"] != "status":
+        return None, "this entry can't be undone"
+    code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}")
+    if code != 200 or not isinstance(task, dict):
+        return None, f"couldn't read the AZ (2) task ({code})"
+    cur = ((task.get("status") or {}).get("status") or "").strip()
+    if cur != (p["new_value"] or "").strip():
+        return None, (f"AZ (2) changed after this push — it now says {cur!r}, "
+                      f"so the undo was aborted. Review it in ClickUp.")
+    time.sleep(_pace())
+    code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}", "PUT",
+                       {"status": p["old_value"]})
+    if code != 200:
+        return None, (f"AZ (2) refused the revert ({code}): "
+                      f"{(resp or {}).get('_error') or resp}")
+    now = db.now_iso()
+    with db.connect() as c:
+        c.execute("UPDATE az2_pushes SET state='undone' WHERE id=?", (push_id,))
+        c.execute("""INSERT INTO az2_pushes (row_id, task_id, field, old_value,
+                     new_value, ts, user, state, undo_of)
+                     VALUES (?,?,?,?,?,?,?,'undo',?)""",
+                  (p["row_id"], p["task_id"], "status", p["new_value"],
+                   p["old_value"], now, user, push_id))
+        others = c.execute("SELECT COUNT(*) n FROM az2_pushes WHERE task_id=? "
+                           "AND state='pushed'", (p["task_id"],)).fetchone()["n"]
+    _az2_comment(p["task_id"], f"↩️ Otlobly undo: Status back to "
+                               f"'{p['old_value']}' · by {user or 'admin'}"
+                               f" · {now[:16].replace('T', ' ')}")
+    if others == 0:                     # last active push undone → drop the marker
+        time.sleep(_pace())
+        _http(f"{CLICKUP_API}/task/{p['task_id']}/tag/"
+              f"{urlquote(_az2_settings()['tag'])}", "DELETE")
+    return {"id": push_id, "task_id": p["task_id"],
+            "restored": p["old_value"]}, None
+
+
+def az2_push_history(limit=200):
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT id, row_id, task_id, field, old_value, new_value, ts, user, "
+            "state, undo_of FROM az2_pushes ORDER BY id DESC LIMIT ?", (limit,))]
+        names = {r["id"]: r["name"] for r in c.execute(
+            "SELECT id, name FROM leluxe_orders")}
+    for r in rows:
+        r["name"] = names.get(r["row_id"]) or f"#{r['row_id']}"
+    return rows
 
 
 def list_conflicts():

@@ -627,6 +627,88 @@ def sync_kept_report():
         leluxe._http = real
 
 
+AZ2_STATE = {"status": "rd"}
+
+
+def fake_az2_http(url, method="GET", body=None, _retried=False):
+    CALLS.append((method, url, body))
+    if url.endswith("/task/AZT") and method == "GET":
+        return 200, {"id": "AZT", "name": "az2 task",
+                     "status": {"status": AZ2_STATE["status"]}}
+    if url.endswith("/task/AZT") and method == "PUT":
+        AZ2_STATE["status"] = (body or {}).get("status")
+        return 200, {}
+    return 200, {}
+
+
+def az2_push_and_undo():
+    """The one write path into AZ (2): CAS-guarded, journalled with a before-
+    image, tagged+commented, undoable — and refusals write NOTHING."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+        c.execute("DELETE FROM az2_pushes")
+    rid = leluxe._insert_row("item", "9 Watch", status="sent rd",
+                             extra={"source_task_id": "AZT"})
+    bare = leluxe._insert_row("item", "no-link item", status="rd")
+    AZ2_STATE["status"] = "rd"
+    real = leluxe._http
+    leluxe._http = fake_az2_http
+    try:
+        CALLS.clear()
+        _, err = leluxe.az2_push_status(rid, expected_remote="oredered")
+        check("CAS mismatch aborts", err is not None and "changed since" in err)
+        check("aborted push wrote NOTHING",
+              not [1 for m, u, b in CALLS if m in ("PUT", "POST")])
+        _, err = leluxe.az2_push_status(bare)
+        check("row without AZ (2) link refused", err is not None and "no AZ (2) link" in err)
+        db.set_setting("leluxe:az2", {"enabled": False})
+        _, err = leluxe.az2_push_status(rid, expected_remote="rd")
+        check("kill switch honored", err is not None and "disabled" in err)
+        db.set_setting("leluxe:az2", {"enabled": True})
+
+        CALLS.clear()
+        entry, err = leluxe.az2_push_status(rid, expected_remote="rd", user="qais")
+        check("push ok", err is None and entry["old"] == "rd" and entry["new"] == "sent rd")
+        check("AZ (2) task updated", AZ2_STATE["status"] == "sent rd")
+        check("tag + comment posted",
+              any("/tag/otl-push" in u and m == "POST" for m, u, b in CALLS)
+              and any(u.endswith("/comment") and m == "POST" for m, u, b in CALLS))
+        with db.connect() as c:
+            j = dict(c.execute("SELECT * FROM az2_pushes WHERE id=?",
+                               (entry["id"],)).fetchone())
+        check("journal keeps the before-image", j["state"] == "pushed"
+              and j["old_value"] == "rd" and j["new_value"] == "sent rd"
+              and j["user"] == "qais" and "az2 task" in (j["snapshot_json"] or ""))
+        e2, err = leluxe.az2_push_status(rid, expected_remote="sent rd")
+        with db.connect() as c:
+            n = c.execute("SELECT COUNT(*) n FROM az2_pushes").fetchone()["n"]
+        check("already-equal is a no-op (no journal)", err is None
+              and e2.get("noop") and n == 1)
+
+        AZ2_STATE["status"] = "delivered"          # Faisal moved it meanwhile
+        _, err = leluxe.az2_undo(entry["id"])
+        check("undo aborts when AZ (2) drifted", err is not None and "changed after" in err)
+        AZ2_STATE["status"] = "sent rd"
+        CALLS.clear()
+        u1, err = leluxe.az2_undo(entry["id"], user="qais")
+        check("undo restores the old value", err is None
+              and u1["restored"] == "rd" and AZ2_STATE["status"] == "rd")
+        with db.connect() as c:
+            st1 = c.execute("SELECT state FROM az2_pushes WHERE id=?",
+                            (entry["id"],)).fetchone()["state"]
+            und = c.execute("SELECT * FROM az2_pushes WHERE undo_of=?",
+                            (entry["id"],)).fetchone()
+        check("journal marks undone + records the undo",
+              st1 == "undone" and und and und["state"] == "undo")
+        check("marker tag removed after last undo",
+              any("/tag/otl-push" in u and m == "DELETE" for m, u, b in CALLS))
+        hist = leluxe.az2_push_history()
+        check("history lists newest first", hist and hist[0]["state"] == "undo"
+              and hist[-1]["state"] == "undone")
+    finally:
+        leluxe._http = real
+
+
 def endpoints_gated():
     import app as appmod
     import auth
@@ -656,6 +738,10 @@ def endpoints_gated():
           brk.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
     check("move route blocks sales (needs admin_actions)",
           sales.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
+    check("az2 push blocked for broker + sales",
+          brk.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
+          and sales.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
+          and sales.get("/api/leluxe/az2_pushes").status_code == 403)
 
 
 def move_between_packages():
@@ -798,6 +884,7 @@ def main():
     print("image cache:");       image_cache()
     print("move packages:");     move_between_packages()
     print("sync kept report:");  sync_kept_report()
+    print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
     print()
     if fails:
