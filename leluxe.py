@@ -1493,15 +1493,16 @@ def _insert_new_item(order_id, ch, sch, known, keep, made):
                              date_created=ccols["date_created"],
                              extra={"tracking_number": tn or None})
         made["packages"] += 1
-    _insert_row("item", ccols["name"], status=ccols["status"],
-                due_date=ccols["due_date"], fields=keep(cdata["fields"]),
-                desc=cdata["description"], parent_local_id=pkg_id,
-                date_created=ccols["date_created"],
-                extra={"source_task_id": ch["id"],
-                       "source_cu_updated": str(ch.get("date_updated") or ""),
-                       "source_base": _snapshot(ccols, cdata, keep)})
+    iid = _insert_row("item", ccols["name"], status=ccols["status"],
+                      due_date=ccols["due_date"], fields=keep(cdata["fields"]),
+                      desc=cdata["description"], parent_local_id=pkg_id,
+                      date_created=ccols["date_created"],
+                      extra={"source_task_id": ch["id"],
+                             "source_cu_updated": str(ch.get("date_updated") or ""),
+                             "source_base": _snapshot(ccols, cdata, keep)})
     made["items"] += 1
     made["new_items"] += 1
+    return iid
 
 
 def _adopt_child_source(row_id, src_task, sch, keep):
@@ -1524,6 +1525,56 @@ def _adopt_child_source(row_id, src_task, sch, keep):
                   (json.dumps(d, ensure_ascii=False), row_id))
 
 
+def _trim_val(field, v):
+    """Report-friendly value: long text (descriptions) clipped so the sync
+    report stays readable/small."""
+    if isinstance(v, str) and len(v) > 120:
+        return v[:120] + "…"
+    return v
+
+
+def _kept_diffs(row_id, src_task, sch, keep, report, oname, order_id):
+    """Owner-visible comparison: current LOCAL row vs AZ (2) RIGHT NOW — run for
+    every matched row regardless of the merge's skips (source_cu_updated
+    unchanged, dirty-wins, base-equal 'keep'). Any field where the app kept a
+    value different from AZ (2) lands in report['kept'], so 'Sync from AZ (2)'
+    always SHOWS the comparison even when it changes nothing. Conflict-parked
+    rows are skipped (they're surfaced in the review panel already)."""
+    if report is None or len(report.get("kept") or []) >= 400:
+        return
+    row = get_row(row_id)
+    if not row or row.get("deleted") or row["sync_state"] == "conflict":
+        return
+    rcols, rdata = _decode_task(src_task, sch)
+    remote = _snapshot(rcols, rdata, keep)
+    data = row["data"]
+    local = {"name": row["name"], "status": row["status"] or "",
+             "due_date": row["due_date"],
+             "description": data.get("description") or "",
+             "tags": list(data.get("tags") or []),
+             "fields": dict(data.get("fields") or {})}
+    diffs = []
+    for field in _SCALARS:
+        if field == "fields":
+            continue
+        if not _vals_equal(field, remote.get(field), local.get(field)):
+            diffs.append({"field": field, "label": _FIELD_LABELS.get(field, field),
+                          "local": _trim_val(field, local.get(field)),
+                          "remote": _trim_val(field, remote.get(field))})
+    rf, lf = remote.get("fields") or {}, local.get("fields") or {}
+    for fname in sorted(set(rf) | set(lf)):
+        if not _vals_equal(fname, rf.get(fname), lf.get(fname)):
+            diffs.append({"field": fname, "label": fname,
+                          "local": _trim_val(fname, lf.get(fname)),
+                          "remote": _trim_val(fname, rf.get(fname))})
+    if diffs:
+        report.setdefault("kept", []).append({
+            "id": row_id, "kind": row["kind"], "name": row["name"] or "",
+            "order": oname, "order_id": order_id,
+            "syncing": row["sync_state"] in ("dirty", "pushing"),
+            "diffs": diffs})
+
+
 def _merge_order(rid, src_order, kids, sch, known, keep, made,
                  review_all=False, report=None):
     """Merge an existing order + its AZ (2) children (merge matched items, insert
@@ -1536,10 +1587,12 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
             return
         if res == "updated" and chs:
             report["applied"].append({"id": row_id, "kind": kind, "name": name,
-                                      "order": oname, "changes": chs})
+                                      "order": oname, "order_id": rid,
+                                      "changes": chs})
         elif res == "conflict":
             report["conflict_rows"].append({"id": row_id, "kind": kind,
-                                            "name": name, "order": oname})
+                                            "name": name, "order": oname,
+                                            "order_id": rid})
 
     chs = []
     res = _merge_row(rid, src_order, sch, known, keep, review_all, chs)
@@ -1548,6 +1601,7 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
     elif res == "updated":
         made["updated"] += 1
     _record(rid, "order", oname, res, chs)
+    _kept_diffs(rid, src_order, sch, keep, report, oname, rid)
     # name-key adoption for CHILDREN too: originals from the list-duplication
     # carry no source_task_id — match by name so we never twin a product.
     with db.connect() as c:
@@ -1574,10 +1628,12 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
             elif r2 == "updated":
                 made["updated"] += 1
             _record(crid, "item", ch.get("name") or "", r2, chs2)
+            _kept_diffs(crid, ch, sch, keep, report, oname, rid)
         else:
-            _insert_new_item(rid, ch, sch, known, keep, made)
+            iid = _insert_new_item(rid, ch, sch, known, keep, made)
             if report is not None:
-                report["new_items"].append({"name": ch.get("name") or "",
+                report["new_items"].append({"id": iid, "order_id": rid,
+                                            "name": ch.get("name") or "",
                                             "order": oname})
 
 
@@ -1677,7 +1733,7 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
             "order_ids": []}
     snap = _presync_snapshot()              # safety net BEFORE any write
     report = {"ts": db.now_iso(), "review_all": bool(review_all), "applied": [],
-              "new_orders": [], "new_items": [], "conflict_rows": []}
+              "new_orders": [], "new_items": [], "conflict_rows": [], "kept": []}
     okeys = _existing_order_keys()          # name-key fallback for pre-feature rows
     inserted = 0
     for src_order in tops:
@@ -1703,6 +1759,7 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
             made["skipped"] += 1
     write_json_atomic(data_path("leluxe_sync_report.json"), report)
     made["report_changes"] = len(report["applied"])
+    made["kept"] = len(report["kept"])
     made["presync"] = snap
     kick()
     return made

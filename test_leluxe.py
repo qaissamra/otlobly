@@ -578,6 +578,55 @@ def gash_status_sync():
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
 
 
+def sync_kept_report():
+    """Sync from AZ (2) must SHOW the comparison even when it changes nothing:
+    app-side edits that win land in report['kept'] (with the ClickUp value),
+    and newly-added products carry ids so the UI can jump to them."""
+    global SRC_TASKS
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.set_path(config, "leluxe.list_id", "L1")
+    cfg.save(config)
+    SRC_TASKS = [
+        _task("SO1", "Order # SYNC-1", "order number", fields=[("NAME", 37)]),
+        _task("SC1", "10 Watch", "sent rd", parent="SO1",
+              fields=[("Tracking Number", "GWD-S1")]),
+    ]
+    for t in SRC_TASKS:
+        t["date_created"] = "1780000000000"
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        r1 = leluxe.sync_from_source("2026-01-01", limit=25)
+        check("initial sync inserts the order", r1.get("orders") == 1 and not r1.get("error"))
+        check("nothing kept on a clean first sync", r1.get("kept") == 0)
+        cid = leluxe._row_id_by_source("SC1")
+        leluxe.set_status(cid, "order number")         # app-side edit, AZ (2) untouched
+        r2 = leluxe.sync_from_source("2026-01-01")
+        check("app edit is reported as kept", r2.get("kept", 0) >= 1 and r2.get("updated") == 0)
+        rep = json.loads(open(leluxe.data_path("leluxe_sync_report.json"), encoding="utf-8").read())
+        ke = next((k for k in rep.get("kept") or [] if k["id"] == cid), None)
+        check("kept entry compares yours vs ClickUp",
+              ke is not None and ke["syncing"] is True and ke["order_id"]
+              and any(d["field"] == "status" and d["local"] == "order number"
+                      and d["remote"] == "sent rd" for d in ke["diffs"]))
+        SRC_TASKS.append(_task("SC2", "3 Strap", "sent rd", parent="SO1",
+                               fields=[("Tracking Number", "GWD-S1")]))
+        SRC_TASKS[-1]["date_created"] = "1780000000001"
+        r3 = leluxe.sync_from_source("2026-01-01")
+        check("added product counted", r3.get("new_items") == 1)
+        rep = json.loads(open(leluxe.data_path("leluxe_sync_report.json"), encoding="utf-8").read())
+        ni = (rep.get("new_items") or [{}])[0]
+        row = ni.get("id") and leluxe.get_row(ni["id"])
+        check("added product carries jumpable ids",
+              bool(ni.get("id")) and bool(ni.get("order_id"))
+              and row and row["kind"] == "item" and row["name"] == "3 Strap")
+    finally:
+        leluxe._http = real
+
+
 def endpoints_gated():
     import app as appmod
     import auth
@@ -748,6 +797,7 @@ def main():
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
     print("move packages:");     move_between_packages()
+    print("sync kept report:");  sync_kept_report()
     print("endpoint gates:");    endpoints_gated()
     print()
     if fails:

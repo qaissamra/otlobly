@@ -3667,7 +3667,8 @@ async function lxSync(btn){
   LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
   const head=`+${r.orders||0} جديد·new · ${r.updated||0} محدّث·updated`
     +(r.conflicts?` · ⚠ ${r.conflicts} تعارض·conflict${r.conflicts===1?'':'s'}`:"")
-    +(r.new_items?` · +${r.new_items} منتج·product${r.new_items===1?'':'s'}`:"");
+    +(r.new_items?` · +${r.new_items} منتج·product${r.new_items===1?'':'s'}`:"")
+    +(r.kept?` · 🕔 ${r.kept} تعديلك أحدث·yours kept`:"");
   let done=0,rem=1;
   while(rem>0){ pr.textContent=`✓ ${head} · fetching Amazon photos… ${done}`;
     let ir; try{ ir=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
@@ -3678,7 +3679,7 @@ async function lxSync(btn){
     if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
   pr.innerHTML=`✅ مزامنة · Synced — ${poEsc(head)}.`
     +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 اعتمد التغييرات · Approve changes":"⚠ راجع التعارض · Review conflicts"} (${r.conflicts})</button>`:"")
-    +(r.report_changes?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 ما الذي تغيّر · What changed (${r.report_changes})</button>`:"")
+    +((r.report_changes||r.new_items||r.orders||r.kept)?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 ما الذي تغيّر · What changed (${(r.report_changes||0)+(r.new_items||0)+(r.orders||0)+(r.kept||0)})</button>`:"")
     +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
   if(LX_SYNC_REVIEW&&r.conflicts) lxConflictsOpen();   // 🛡 straight to approve/deny
@@ -3693,21 +3694,34 @@ async function lxSyncReportOpen(){
   if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">تعذّر التحميل · could not load</div>'; return; }
   const sec=(t,html)=>html?`<div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px">${t}</div>${html}`:"";
   const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"};
-  const applied=(r.applied||[]).map(row=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+  // every entry carries order_id (or its own id for orders) → click = jump to the order on the board
+  const jump=id=>id?` style="cursor:pointer" title="انقر للانتقال إلى الطلب · click to open this order" onclick="lxSyncReportClose();lxJumpOrder(${id})"`:"";
+  const appliedHtml=(r.applied||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
       <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"⌚"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}</div>
       ${(row.changes||[]).map(ch=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
         <span class="muted2" style="min-width:120px">${poEsc(ch.label||ch.field)}</span>
         <span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(ch.old)}</span>
         <span>→</span><b dir="auto">${lxCVal(ch.new)}</b></div>`).join("")}
-    </div>`).join("");
-  const newOrders=(r.new_orders||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⌚ ${poEsc(o.name||"")}</div>`).join("");
-  const newItems=(r.new_items||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
-  const parked=(r.conflict_rows||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
+    </div></div>`).join("");
+  // 🕔 your newer edits kept — the app value differs from AZ (2) and the app won
+  const keptHtml=(r.kept||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
+      <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
+        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ لسا بيرفع · uploading to ClickUp</span>`:""}</div>
+      ${(row.diffs||[]).map(d=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
+        <span class="muted2" style="min-width:120px">${poEsc(d.label||d.field)}</span>
+        <span class="muted2">ClickUp:</span><span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(d.remote)}</span>
+        <span>→</span><span class="muted2">عندك · yours:</span><b dir="auto">${lxCVal(d.local)}</b></div>`).join("")}
+    </div></div>`).join("");
+  const keptHint=(r.kept||[]).length?`<div class="muted2" style="font-size:11.5px;margin:2px 0 6px">تعديلاتك أحدث من AZ (2) فبقيت كما هي — ستصل ClickUp تلقائياً عند اكتمال الرفع · your edits are newer than AZ (2), so they were kept — they reach ClickUp automatically once uploading finishes</div>`:"";
+  const newOrders=(r.new_orders||[]).map(o=>`<div${jump(o.id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.id?'pointer':'default'}">⌚ ${poEsc(o.name||"")}</div>`).join("");
+  const newItems=(r.new_items||[]).map(o=>`<div${jump(o.order_id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.order_id?'pointer':'default'}">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
+  const parked=(r.conflict_rows||[]).map(o=>`<div${jump(o.order_id)} style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
   const when=r.ts?`<div class="muted2" style="font-size:11.5px">آخر مزامنة · last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
   body.innerHTML=(when
-    +sec(`✏️ تغييرات مطبّقة · applied changes (${(r.applied||[]).length})`,applied)
+    +sec(`✏️ تغييرات مطبّقة · applied changes (${(r.applied||[]).length})`,appliedHtml)
     +sec(`＋ طلبات جديدة · new orders (${(r.new_orders||[]).length})`,newOrders)
     +sec(`＋ منتجات جديدة · new products (${(r.new_items||[]).length})`,newItems)
+    +sec(`🕔 تعديلاتك أحدث وبقيت · your newer edits kept (${(r.kept||[]).length})`,keptHtml?keptHint+keptHtml:"")
     +sec(`⚖ بانتظار موافقتك · awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ افتح المراجعة · open review</button>`:""))
     ||'<div style="padding:24px;text-align:center">لا تغييرات مسجّلة بعد — شغّل مزامنة أولاً · no sync recorded yet</div>';
 }
