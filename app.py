@@ -4274,6 +4274,20 @@ def api_gen_customer_tracking():
     return jsonify({"ok": True, "customer_tracking": pk["customer_tracking"]})
 
 
+@app.route("/api/pkgprep")
+@auth.require("view_orders")
+def api_pkgprep():
+    """Package prep: customers whose pieces are received (استلمتها اطلبلي) —
+    ready-to-ship vs still-missing — with prefilled WhatsApp status messages."""
+    import pkgprep
+    try:
+        rate = float(cfg.get(cfg.load(), "fx.pkg_ils_per_usd", 3.1)) or 3.1
+    except (TypeError, ValueError):
+        rate = 3.1
+    return jsonify(pkgprep.build(db.list_orders(), purchases.load(), rate,
+                                 include_money=current_user.has("view_money")))
+
+
 # One-time legacy backfills, run ONCE per deploy (not per worker, not per request):
 #   * link deposits recorded without an order # to the customer's order (by phone)
 #   * ensure every order's customer exists in the CRM (intake/lead orders skipped it)

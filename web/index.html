@@ -552,6 +552,7 @@
     <button id="catalogBtn" onclick="setView('catalog')" title="products the public /catalog page sells — paste an Amazon link to add"><span class="ic">🏬</span>Catalog</button>
     <button id="leluxeBtn" style="display:none" onclick="setView('leluxe')" title="Leluxe — Amazon bulk (AZ) orders, mirrored live to ClickUp"><span class="ic">⌚</span>Leluxe</button>
     <button id="pickBtn" onclick="setView('picking')"><span class="ic">🧾</span>Picking list</button>
+    <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span>Package prep</button>
     <div class="nav-sec">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span>P&amp;L</button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span>Activity</button>
@@ -859,6 +860,7 @@
       <div class="form-grid">
         <div><label class="fld">Markup %</label><input id="s_markup" type="number" step="0.5" style="width:100%" placeholder="10"></div>
         <div><label class="fld">ILS per USD (₪ → $ for deposits)</label><input id="s_ils" type="number" step="0.01" style="width:100%" placeholder="3.7"></div>
+        <div><label class="fld">Package prep ₪ rate ($ → ₪ in the customer message)</label><input id="s_pkg_ils" type="number" step="0.01" style="width:100%" placeholder="3.1"></div>
         <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
         <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
         <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
@@ -1189,6 +1191,20 @@
       <div id="lxRows"></div>
       <div id="lxEmpty" class="muted2" style="display:none;padding:14px;text-align:center;font-size:13px"></div>
     </div>
+  </div>
+
+  <!-- Package prep (تجهيز الطرود): crosses customer orders with received PO packages
+       (استلمتها اطلبلي) — who can we pack & ship right now vs who's still missing pieces. -->
+  <div id="pkgprepView" class="hidden">
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🎁 Package prep · تجهيز الطرود</h2>
+      <span class="muted2" id="ppSub" style="font-size:12px"></span>
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="loadPkgprep()">↻ Refresh</button>
+    </div>
+    <div id="ppReady"></div>
+    <div id="ppWaiting" style="margin-top:14px"></div>
+    <div id="ppEmpty" class="muted2" style="display:none;padding:16px;text-align:center;font-size:13px"></div>
   </div>
 </div>
 
@@ -1794,7 +1810,7 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -1822,15 +1838,16 @@ function setView(v){
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   $("leluxeView").classList.toggle("hidden",v!=="leluxe");
+  $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
     brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn"};
+    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn"};
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -1855,9 +1872,89 @@ function setView(v){
   if(v==="deposits"){ loadDeposits(); }
   if(v==="catalog"){ loadCatalog(); }
   if(v==="leluxe"){ loadLeluxe(); }
+  if(v==="pkgprep"){ loadPkgprep(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
+// ---- Package prep (تجهيز الطرود): who can we pack & ship right now? --------- //
+// Crosses orders with received PO packages (استلمتها اطلبلي). READY = every live
+// piece in hand; WAITING = part received, part still on the way.
+let PKGPREP=null; const PP_OPEN=new Set();
+async function loadPkgprep(){
+  let d; try{ d=await (await fetch("/api/pkgprep")).json(); }catch(e){ d=null; }
+  PKGPREP=d; renderPkgprep();
+}
+function ppToggle(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
+  if(PP_OPEN.has(c.key)) PP_OPEN.delete(c.key); else PP_OPEN.add(c.key); renderPkgprep(); }
+function ppCopy(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
+  (navigator.clipboard?navigator.clipboard.writeText(c.wa_text):Promise.reject())
+    .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
+function ppUsd(x){ return "$"+(+x).toFixed(2).replace(/\.00$/,""); }
+function ppItemRow(it){
+  const img=it.image?`<img src="${poEsc(it.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border:1px solid var(--line);border-radius:7px;background:#fff;flex:none">`
+    :`<span style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:7px;background:var(--bg2);flex:none">📦</span>`;
+  const t=poEsc(it.title||it.asin||"—");
+  const nm=it.url?`<a href="${poEsc(it.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${t}</a>`:t;
+  const chips=[];
+  if(it.received_qty) chips.push(tonePill("green","✓ وصلت"+(it.qty>1?` ${it.received_qty}/${it.qty}`:"")));
+  if(it.missing_qty) chips.push(tonePill("amber","⏳ ناقصة"+(it.qty>1?` ${it.missing_qty}/${it.qty}`:"")));
+  if(it.sent_qty) chips.push(tonePill("gray","✈ أُرسلت سابقاً"));
+  if(it.exception_qty) chips.push(tonePill("red","⚠ "+(it.exceptions||[]).join(" / "),"هذه القطعة لن تصل — الطرد يُشحن بدونها"));
+  return `<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-top:1px solid var(--line)">
+    ${img}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px">${nm}</span>
+    ${it.qty>1?`<span class="muted" style="font-size:11px;flex:none">×${it.qty}</span>`:""}<span style="flex:none;display:inline-flex;gap:5px">${chips.join("")}</span></div>`;
+}
+function ppCard(c,bucket,i){
+  const open=PP_OPEN.has(c.key), t=c.totals||{}, money=t.usd!=null;
+  const wa=c.wa_url?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب برسالة جاهزة — الحالة + المبلغ">📱 واتساب</a>`
+    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم هاتف — انسخ الرسالة 📋">☎ بلا رقم</span>`;
+  const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
+  const flds=[`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`];
+  if(money){
+    flds.push(`<span class="field"><span class="lbl">Total</span><b>${ppUsd(t.usd)}</b><span class="unit">≈ ₪${t.ils}</span></span>`);
+    if(t.deposit_usd>0){
+      flds.push(`<span class="field"><span class="lbl">عربون</span><b>${ppUsd(t.deposit_usd)}</b></span>`);
+      flds.push(`<span class="field"><span class="lbl">المتبقي</span><b>${ppUsd(t.remaining_usd)}</b><span class="unit">≈ ₪${t.remaining_ils}</span></span>`);
+    }
+    if(t.unpriced) flds.push(tonePill("amber","فيه طلب بدون تسعير","المجموع لا يشمل الطلب غير المسعّر"));
+  }
+  const head=`<div class="po-head">
+    <div class="po-title" onclick="ppToggle('${bucket}',${i})" style="cursor:pointer">
+      <span class="caret">${open?"▾":"▸"}</span>
+      <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
+      <span class="muted" style="font-size:12px">${c.orders.length>1?`${c.orders.length} orders · `:""}${poEsc(c.phone||"")}</span>
+      ${state}
+      <span class="spacer"></span>
+      ${wa}
+      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopy('${bucket}',${i})" title="نسخ الرسالة">📋</button>
+    </div>
+    <div class="po-meta">${flds.join("")}</div>
+  </div>`;
+  if(!open) return `<div class="po-card">${head}</div>`;
+  const body=(c.orders||[]).map(o=>{
+    const amt=o.amount_to_collect_usd!=null?`<span class="muted" style="font-size:11.5px">${ppUsd(o.amount_to_collect_usd)}</span>`:"";
+    return `<div style="padding:7px 12px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:9px 9px 0 0;display:flex;align-items:center;gap:8px">
+      <b style="font-size:12px">${poEsc(o.order_id)}</b>${statusPill(o.status)}${amt}</div>
+    <div style="border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;overflow:hidden">${(o.items||[]).map(ppItemRow).join("")||`<div class="muted2" style="padding:8px 10px;font-size:12px">لا توجد منتجات</div>`}</div>`;
+  }).join("");
+  return `<div class="po-card open">${head}<div class="po-body">${body}</div></div>`;
+}
+function ppSection(emoji,label,count,sub,tone){
+  return `<div style="display:flex;align-items:center;gap:9px;margin:4px 0 10px">
+    <h2 style="margin:0;font-size:15px;font-weight:800">${emoji} ${label}</h2>
+    <span class="pill" style="${tone};font-weight:700">${count}</span>
+    <span class="muted2" style="font-size:12px">${sub}</span></div>`;
+}
+function renderPkgprep(){
+  const d=PKGPREP, R=$("ppReady"), W=$("ppWaiting"), E=$("ppEmpty");
+  if(!d){ R.innerHTML=""; W.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
+  $("ppSub").textContent=`1$ = ${d.rate} ₪ · تتغيّر من الإعدادات`;
+  const ready=d.ready||[], waiting=d.waiting||[];
+  R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي",TONE.green)+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
+  W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع",TONE.amber)+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
+  E.style.display=(ready.length||waiting.length)?"none":"";
+  if(!(ready.length||waiting.length)) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
+}
 // ---- Catalog: products the public /catalog page sells ----------------------- //
 let CATALOG=[];
 async function loadCatalog(){
@@ -5278,6 +5375,7 @@ async function loadSettings(){
   const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
   const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
   if($("s_ils")) $("s_ils").value=s.ils_per_usd||3.7;
+  if($("s_pkg_ils")) $("s_pkg_ils").value=s.pkg_ils_per_usd||3.1;
   $("s_wa").value=s.business_whatsapp||""; $("s_dest").value=s.destination.shipping_location||"";
   $("s_destlabel").value=s.destination.label||"";
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
@@ -5416,7 +5514,8 @@ function msCollect(){ const out={};
 async function saveSettings(b){
   b.disabled=true;
   const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100,
-    ils_per_usd:parseFloat($("s_ils").value)||3.7, business_whatsapp:$("s_wa").value,
+    ils_per_usd:parseFloat($("s_ils").value)||3.7,
+    pkg_ils_per_usd:parseFloat($("s_pkg_ils").value)||3.1, business_whatsapp:$("s_wa").value,
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
