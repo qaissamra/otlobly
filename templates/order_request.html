@@ -28,47 +28,63 @@
   .hero{text-align:center;margin-bottom:22px}
   .hero .eyebrow{display:inline-block;background:#fff3ee;color:var(--orange);font-size:.8rem;font-weight:700;
     padding:5px 16px;border-radius:99px;margin-bottom:12px}
-  .hero h1{font-size:clamp(1.7rem,5.5vw,2.4rem);font-weight:900;line-height:1.15;margin-bottom:8px}
+  .hero h1{font-size:clamp(1.7rem,5.5vw,2.4rem);font-weight:900;line-height:1.15;margin-bottom:8px;text-wrap:balance}
   .hero h1 em{color:var(--orange);font-style:normal}
   .hero p{color:var(--muted);font-size:.95rem;max-width:460px;margin:0 auto}
-  .nofriction{display:inline-block;background:#fff;border:1.5px dashed var(--line);border-radius:99px;
-    padding:7px 16px;margin-top:12px;font-size:.82rem;font-weight:800;color:var(--ink)}
+  .nofriction{display:inline-block;background:#fff;border:1.5px dashed var(--orange);border-radius:99px;
+    padding:9px 18px;margin-top:14px;font-size:.85rem;font-weight:800;color:var(--ink);
+    box-shadow:0 4px 14px rgba(255,90,31,.10)}
   /* batch-campaign urgency strip (shown only when the Settings toggle is ON) */
   .batchbar{background:#fff3ee;border:1.5px solid #ffd9c9;color:var(--ink);border-radius:14px;
     padding:11px 15px;margin:18px 0 4px;font-size:.84rem;font-weight:700;line-height:1.6;text-align:center}
-  .stepnum{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
-    background:#111;color:#fff;font-size:.8rem;font-weight:800;flex:none}
+  /* 2-step wizard progress */
+  .steps{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 18px;
+    font-size:.8rem;font-weight:800;color:var(--muted)}
+  .steps .st{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
+    border-radius:50%;background:#e7e2da;color:#8a7f6d;font-size:.75rem;font-weight:800;flex:none}
+  .steps .st.on{background:var(--ink);color:#fff}
+  .steps .stlab{color:var(--muted)}
+  .steps .stlab.on{color:var(--ink)}
+  .steps .stline{width:34px;height:2px;background:var(--line);border-radius:2px;flex:none}
+  .backlink{border:none;background:none;color:var(--muted);font-family:inherit;font-size:.82rem;
+    font-weight:800;cursor:pointer;padding:4px 2px;display:inline-flex;align-items:center;gap:5px;margin-top:2px}
+  .backlink:hover{color:var(--ink)}
   h2.sec{display:flex;align-items:center;gap:9px;font-size:1.02rem;font-weight:800;margin:26px 2px 12px}
+  .helpq{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+    border:none;background:none;color:var(--muted);cursor:pointer;flex:none;padding:0}
+  .helpq .ico{width:18px;height:18px}
+  .helpq:hover,.helpq[aria-expanded="true"]{color:var(--orange)}
+  .helptext{background:#fff3ee;border:1.5px solid #ffe0d1;color:#7a4a35;border-radius:12px;padding:10px 13px;
+    font-size:.8rem;line-height:1.6;margin:-4px 0 14px}
   /* plan cards */
   .plans{display:grid;grid-template-columns:1fr;gap:10px}
   @media(min-width:560px){.plans{grid-template-columns:1fr 1fr}}
   .plan{position:relative;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:16px 15px;
     cursor:pointer;transition:border-color .15s, box-shadow .15s}
   .plan.on{border-color:var(--orange);box-shadow:0 6px 22px rgba(255,90,31,.13)}
-  .plan .tick{position:absolute;inset-inline-end:12px;top:12px;width:22px;height:22px;border-radius:50%;
-    border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.75rem;color:#fff}
-  .plan.on .tick{background:var(--orange);border-color:var(--orange)}
-  .plan .ic{font-size:1.5rem}
-  .plan b{display:block;font-size:1rem;margin:6px 0 3px}
-  .plan .subt{display:block;color:var(--muted);font-size:.8rem;line-height:1.45;margin-bottom:2px}
-  .plan small{color:var(--muted);font-size:.8rem;line-height:1.5;display:block}
+  /* header row — title+sub at the start (right in RTL), tinted icon box + radio grouped at the end */
+  .plan .phead{display:flex;align-items:center;gap:10px}
+  .plan .pt-t{flex:1;min-width:0}
+  .plan .ic{width:44px;height:44px;border-radius:12px;background:#f7f5f2;color:var(--ink);
+    display:flex;align-items:center;justify-content:center;flex:none}
+  .plan.on .ic{background:#fff3ee;color:var(--orange)}
+  .plan b{display:block;font-size:1.05rem;margin:0 0 3px}
+  .plan .subt{display:block;color:var(--ink);font-weight:700;font-size:.86rem;line-height:1.5;margin-top:1px}   /* the key differentiator — emphasized, not a muted caption */
+  /* the big price line — caption + big % number (mockup style) */
+  .plan .rate{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:14px 0 0}
+  .plan .rate .pct{font-size:2rem;font-weight:900;line-height:1;letter-spacing:-.02em}
+  .plan .rate .ratetxt{color:var(--muted);font-size:.78rem;font-weight:700}
   .plan .tag{position:absolute;inset-inline-start:12px;top:-9px;background:var(--orange);color:#fff;font-size:.66rem;
     font-weight:800;padding:2px 10px;border-radius:99px}
-  .plan .tag.quiet{background:#efece7;color:#8a7f6d}   /* quiet downsell badge (no fight with the hero badge) */
-  .plan ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
-  .plan ul li{font-size:.76rem;color:#444;display:flex;gap:6px;align-items:flex-start;line-height:1.45;text-align:right}
-  .plan ul li::before{content:"✓";color:var(--ink);font-weight:800;flex:none}   /* ink check — green is money-only */
-  .plan .fee{display:block;margin-top:9px;color:var(--muted);font-size:.74rem;line-height:1.5}
-  .plan .fee a{color:var(--orange);font-weight:700;text-decoration:none}
+  /* bullets — divider above, uniform green-circle checks, each row hosts a ؟ popup */
+  .plan ul{list-style:none;margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line);
+    display:flex;flex-direction:column;gap:7px}
+  .plan ul li{font-size:.78rem;color:#333;display:flex;gap:7px;align-items:center;line-height:1.45;text-align:right}
+  .plan ul li::before{content:"✓";width:20px;height:20px;border-radius:50%;background:#e8f7ee;color:var(--good);
+    display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;flex:none}
   .plans-note{color:var(--muted);font-size:.78rem;text-align:center;margin:12px 2px 0}
-  /* headline feature bullet — bold orange, the Saver plan's #1 hook (0% commission) */
+  /* headline feature bullet — bold orange (COD on the Safety card) */
   .plan ul li.hilite{color:var(--orange);font-weight:800}
-  .plan ul li.hilite::before{color:var(--orange)}
-  /* folded-in protection bullets — shield + bold ink, distinct from the ✓ feature bullets */
-  .plan ul li.prot{color:var(--ink);font-weight:800;align-items:center;margin-top:3px}
-  .plan ul li.prot::before{content:none}
-  .plan ul li.prot .ico{width:14px;height:14px;color:var(--ink)}
-  .plan ul li.prot span{flex:1}
   /* slim universal guarantee line under the cards (protection now lives inside each card) */
   .guarline{display:flex;align-items:center;justify-content:center;gap:7px;font-weight:800;
     font-size:.88rem;color:var(--ink);margin:14px 0 0}
@@ -78,10 +94,26 @@
   .bonuses b{display:flex;align-items:center;gap:7px;font-size:.95rem;margin-bottom:8px}
   .bonuses ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
   .bonuses ul li{font-size:.82rem;color:#333;display:flex;justify-content:space-between;gap:10px;
-    align-items:center;line-height:1.5;text-align:right}
-  .bonuses ul li .bon-txt{display:flex;align-items:center;gap:7px;flex:1}
+    align-items:flex-start;line-height:1.5;text-align:right}
+  .bon-txt{display:flex;align-items:center;gap:7px;flex:1;min-width:0}   /* text + ؟ group (bonus rows + plan bullets) */
   .freechip{background:#e8f7ee;color:var(--good);font-weight:800;font-size:.68rem;border-radius:99px;
     padding:2px 11px;flex:none}
+  /* ؟ detail toggle on a bonus row — reuses .helpq, shrunk for the list line */
+  .helpq.sm{width:16px;height:16px}
+  .helpq.sm .ico{width:14px;height:14px}
+  /* hover/tap popup rows — positioned to the row so the popup never clips or overflows */
+  li.bonrow{position:relative}
+  .tip-wrap{display:inline-flex;align-items:center}
+  .tip-pop{position:absolute;top:calc(100% + 5px);inset-inline:0;z-index:20;background:#fff;
+    border:1.5px solid var(--line);border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,.16);
+    padding:10px 13px;font-size:.75rem;line-height:1.6;color:#555;text-align:start;
+    opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .15s,transform .15s;pointer-events:none}
+  .tip-pop b{display:block;color:var(--ink);font-size:.78rem;margin-bottom:3px}
+  .tip-wrap:hover .tip-pop,.tip-wrap.show .tip-pop{opacity:1;visibility:visible;transform:none}
+  /* mini status stepper inside the tracking popup — illustration, not live data */
+  .tip-track{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 7px}
+  .tip-track .tk{background:#f4f1ea;color:#8a7f6d;border-radius:99px;padding:2px 9px;font-size:.62rem;font-weight:800;white-space:nowrap}
+  .tip-track .tk.on{background:#e8f7ee;color:var(--good)}
   .bon-total{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);text-align:center;
     font-weight:800;font-size:.84rem;color:var(--good)}   /* green = money */
   /* social-proof strip (hidden until OFFER.ordersDelivered is set) */
@@ -89,34 +121,7 @@
   /* inline line-icon set (Lucide outline via the sprite below <body>) */
   .ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;
     stroke-linejoin:round;flex:none}
-  .plan .ic .ico{width:28px;height:28px}
-  /* hero primary CTA (above the fold) */
-  .hero-cta{display:inline-block;margin-top:16px;background:var(--orange);color:#fff;text-decoration:none;
-    border:none;border-radius:14px;font-family:inherit;font-size:1rem;font-weight:800;padding:14px 26px;cursor:pointer}
-  .deliverywhy{color:var(--muted);font-size:.8rem;line-height:1.6;max-width:440px;margin:12px auto 0}
-  /* payment-decision framing header */
-  .decide{text-align:center;font-weight:800;font-size:1rem;line-height:1.55;margin:0 2px 14px;color:var(--ink)}
-  /* optional approx-value field (UI-only, drives the live deposit numbers) */
-  .valrow{max-width:300px;margin:0 auto 14px;text-align:center}
-  .valrow label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin:0 0 5px}
-  .valwrap{display:flex;align-items:center;gap:6px;justify-content:center;border:1.5px solid var(--line);
-    border-radius:12px;background:#fff;padding:2px 12px}
-  .valwrap span{font-weight:800;color:var(--muted)}
-  .valwrap input{border:none;outline:none;font-family:inherit;font-size:1rem;font-weight:800;width:110px;
-    padding:10px 4px;text-align:center;background:transparent;direction:ltr}
-  /* payment-timing device */
-  .tl{position:relative;display:flex;margin:10px 0 8px}
-  .tl::before{content:"";position:absolute;top:13px;inset-inline:16%;height:2px;background:var(--line);z-index:0}
-  .tl-step{flex:1;text-align:center;position:relative;z-index:1}
-  .tl-dot{width:26px;height:26px;border-radius:50%;background:#f0ede8;color:var(--ink);font-size:.78rem;
-    font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 5px}
-  .tl-step.paid .tl-dot{background:var(--good);color:#fff}   /* green = money paid here */
-  .tl-lab{font-size:.62rem;line-height:1.3;color:#666;padding:0 3px;white-space:pre-line}
-  .tl-step.paid .tl-lab{color:var(--good);font-weight:800}
-  /* live side-by-side summary (shown once a value is entered) */
-  .mini{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:12px;
-    font-size:.8rem;font-weight:700;text-align:center;line-height:1.7}
-  .mini b{color:var(--good)}
+  .plan .ic .ico{width:22px;height:22px}
   /* burger + dropdown nav */
   .burger{border:none;background:#f0ede8;border-radius:10px;width:38px;height:38px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
@@ -147,6 +152,13 @@
   .addlink{margin-top:10px;border:1.5px dashed #d8d2c8;background:none;border-radius:12px;width:100%;padding:11px;
     font-family:inherit;font-weight:700;font-size:.88rem;color:var(--muted);cursor:pointer}
   .addlink:hover{color:var(--ink);border-color:var(--ink)}
+  /* "browse Amazon" helper — opens amazon.com in a new tab so the form isn't lost */
+  .amzbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin:0 0 10px;
+    padding:11px 14px;background:#fff;border:1.5px solid var(--line);border-radius:12px;text-decoration:none;
+    color:var(--ink);font-weight:800;font-size:.9rem;transition:border-color .15s, background .15s}
+  .amzbtn:hover{border-color:#ffb266;background:#fffaf5}
+  .amzbtn .amzlogo{width:64px;height:auto;flex:none}
+  .amzbtn .amzarrow{color:var(--muted);font-weight:700;font-size:1rem}
   /* contact */
   label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin:12px 2px 5px}
   .fin{width:100%;font-family:inherit;font-size:.95rem;padding:12px 13px;border:1.5px solid var(--line);
@@ -170,6 +182,7 @@
   .done .oid{font-size:1.35rem;font-weight:800;background:#fff;border:1px dashed #d8d2c8;border-radius:12px;
     padding:12px;margin:16px auto;max-width:260px;letter-spacing:1px}
   .done a{color:var(--orange);font-weight:700}
+  .done a.btn-wa-done{color:#fff}   /* keep the green WhatsApp button's text white (beats .done a orange) */
 </style>
 <body>
 {% include "_nav.html" %}
@@ -180,247 +193,288 @@
   <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h16a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M18 12a1 1 0 0 0 0 4h4v-4z"/></symbol>
   <symbol id="i-gift" viewBox="0 0 24 24"><path d="M20 12v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8"/><path d="M2 8h20v4H2z"/><path d="M12 8v13"/><path d="M12 8S10.5 3 7.5 3a2.5 2.5 0 0 0 0 5"/><path d="M12 8s1.5-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
   <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h1"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-1"/><path d="M9 18h6"/><circle cx="7.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
 </svg>
 
 <div class="wrap" id="main">
-  <div class="hero">
-    <div class="eyebrow" data-i18n="eyebrow">عرض سعر خلال ساعات</div>
-    <h1><em data-i18n="h1em">عرض الافتتاح 🇵🇸</em> <span data-i18n="h1rest">— أي منتج من أمازون أمريكا، على بابك، والجمارك علينا</span></h1>
-    <p data-i18n="sub">الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.</p>
-    <p class="nofriction" data-i18n="nofriction">بدون فيزا · بدون عنوان · بدون مخاطرة — بس الصق الرابط</p>
-    <div><button class="hero-cta" type="button" onclick="scrollToLinks()" data-i18n="heroCta">احصل على عرض السعر ←</button></div>
-    <p class="deliverywhy" data-i18n="deliverywhy">التوصيل خلال ٢٠–٣٠ يوم — منجمّع الطلبات بدفعات عشان نغطّي جماركك ونوصّلك أرخص</p>
+  <!-- 2-step wizard progress -->
+  <div class="steps">
+    <span class="st on" id="st1">1</span><span class="stlab on" id="stlab1" data-i18n="step1Lab">روابطك وبياناتك</span>
+    <span class="stline"></span>
+    <span class="st" id="st2">2</span><span class="stlab" id="stlab2" data-i18n="step2Lab">اختر الباقة</span>
   </div>
 
-  {% if sections.get('order_batch_urgency', False) %}
-  <!-- Batch-campaign urgency strip — visibility: Settings › 🌐 Website sections.
-       The day/counts live in OFFER.batch at the top of the script below. -->
-  <div class="batchbar" id="batchbar"></div>
-  {% endif %}
-
-  <!-- ══ Step 1 — paste Amazon links (the easy, high-intent yes) ══ -->
-  <h2 class="sec" id="step-links"><span class="stepnum">1</span><span data-i18n="s2">روابط منتجاتك من أمازون</span></h2>
-  <div class="links" id="links"></div>
-  <button class="addlink" onclick="addLink()" data-i18n="addlink">＋ أضف رابطاً آخر</button>
-
-  <!-- ══ Step 2 — choose how to pay (with the payment-timing device) ══ -->
-  <h2 class="sec"><span class="stepnum">2</span><span data-i18n="s1">اختر طريقة الدفع</span></h2>
-  <p class="decide" data-i18n="decide">القرار الوحيد: تدفع الكل الآن وتوفّر؟ ولا تدفع عند الباب وترتاح؟</p>
-  <div class="valrow">
-    <label for="orderval" data-i18n="valLbl">قيمة طلبك التقريبية (اختياري)</label>
-    <div class="valwrap"><span>$</span><input id="orderval" type="number" inputmode="numeric" min="0" step="5" placeholder="100" oninput="paintTimeline()"></div>
-  </div>
-  <div class="plans">
-    <!-- HERO — باقة الأمان: default-selected, right side in RTL -->
-    <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
-      <span class="tag" data-i18n="p2tag">الأكثر أماناً</span>
-      <span class="tick">✓</span>
-      <span class="ic"><svg class="ico"><use href="#i-shield"/></svg></span>
-      <b data-i18n="p2t">باقة الأمان</b>
-      <span class="subt" data-i18n="p2sub">استلم أولاً — وادفع الباقي على بابك</span>
-      <div class="tl">
-        <div class="tl-step paid" id="tl-aman-1"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlAman1">اليوم · عربون ١٠٪ بس</div></div>
-        <div class="tl-step"><div class="tl-dot">2</div><div class="tl-lab" data-i18n="tlAman2">نطلب ونشحن على حسابنا</div></div>
-        <div class="tl-step paid" id="tl-aman-3"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlAman3">يوصل · ادفع الباقي</div></div>
-      </div>
-      <ul>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protPrice">ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا</span></li>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protLost">تعويض كامل لو ضاع الطرد</span></li>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protStock">استرداد فوري لو المنتج مش متوفر</span></li>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protLate">تأخر عن ٣٥ يوم؟ العمولة علينا</span></li>
-        <li data-i18n="p2g1">ما تدفع إلا عربون ١٠٪ بسيط الآن</li>
-        <li data-i18n="clearance">إحنا بنخلّص الجمارك عنك</li>
-      </ul>
-      <small class="fee" data-i18n="p2fee1">مثال: طلب $100 → عمولتك $8</small>
+  <!-- ══ Screen 1 — links + contact: the lead is captured the moment متابعة is pressed ══ -->
+  <section id="screen1">
+    <div class="hero">
+      <div class="eyebrow" data-i18n="eyebrow">عرض الافتتاح 🇵🇸</div>
+      <h1><span data-i18n="h1rest">أي منتج من أمازون أمريكا،</span> <em data-i18n="h1door">على بابك</em></h1>
+      <p class="nofriction" data-i18n="nofriction">بدون فيزا · بدون عنوان · بدون مخاطرة</p>
+      <p data-i18n="sub">عبي معلوماتك واحصل على سعر الطرد على واتساب.</p>
     </div>
-    <!-- Downsell — باقة التوفير: quiet, left side -->
-    <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
-      <span class="tag quiet" data-i18n="p1badge">للعملاء المكررين</span>
-      <span class="tick">✓</span>
-      <span class="ic"><svg class="ico"><use href="#i-wallet"/></svg></span>
-      <b data-i18n="p1t">باقة التوفير</b>
-      <span class="subt" data-i18n="p1sub">رسوم ثابتة $5 مهما كبر طلبك</span>
-      <div class="tl">
-        <div class="tl-step paid" id="tl-tawfir-1"><div class="tl-dot">$</div><div class="tl-lab" data-i18n="tlTawfir1">اليوم · ادفع كامل المبلغ</div></div>
-        <div class="tl-step"><div class="tl-dot">2</div><div class="tl-lab" data-i18n="tlTawfir2">نطلب من أمازون فوراً</div></div>
-        <div class="tl-step"><div class="tl-dot">3</div><div class="tl-lab" data-i18n="tlTawfir3">يوصل على بابك</div></div>
-      </div>
-      <ul>
-        <li class="hilite" data-i18n="p1g0">0% عمولة — بس رسوم ثابتة $5</li>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protPrice">ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا</span></li>
-        <li class="prot"><svg class="ico"><use href="#i-shield"/></svg><span data-i18n="protStock">استرداد فوري لو المنتج مش متوفر</span></li>
-        <li data-i18n="p1g3">تسعيرة نهائية شاملة الشحن</li>
-        <li data-i18n="clearance">إحنا بنخلّص الجمارك عنك</li>
-      </ul>
-      <small class="fee" data-i18n="p1who">الأنسب للي واثق وبدّو أقل تكلفة</small>
+
+    {% if sections.get('order_batch_urgency', False) %}
+    <!-- Batch-campaign urgency strip — visibility: Settings › 🌐 Website sections.
+         The day/counts live in OFFER.batch at the top of the script below. -->
+    <div class="batchbar" id="batchbar"></div>
+    {% endif %}
+
+    <h2 class="sec" id="step-links"><span data-i18n="s2">روابط منتجاتك من أمازون</span>
+      <button type="button" class="helpq" onclick="toggleHelp('linkshelp',this)" aria-expanded="false" aria-label="مساعدة · Help">
+        <svg class="ico"><use href="#i-help"/></svg>
+      </button>
+    </h2>
+    <p class="helptext" id="linkshelp" hidden data-i18n="linksHelp">افتح أمازون، انسخ رابط أي منتج بدك ياه، والصقه هون — منتج واحد بكل سطر.</p>
+    <a class="amzbtn" href="https://www.amazon.com/" target="_blank" rel="noopener">
+      <svg class="amzlogo" viewBox="0 0 603 182" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="fill:#221f1f" aria-hidden="true"><path d="m 374.00642,142.18404 c -34.99948,25.79739 -85.72909,39.56123 -129.40634,39.56123 -61.24255,0 -116.37656,-22.65135 -158.08757,-60.32496 -3.2771,-2.96252 -0.34083,-6.9999 3.59171,-4.69283 45.01431,26.19064 100.67269,41.94697 158.16623,41.94697 38.774689,0 81.4295,-8.02237 120.6499,-24.67006 5.92501,-2.51683 10.87999,3.88009 5.08607,8.17965" id="amz-path8" style="fill:#ff9900" /><path d="m 388.55678,125.53635 c -4.45688,-5.71527 -29.57261,-2.70033 -40.84585,-1.36327 -3.43442,0.41947 -3.95874,-2.56925 -0.86517,-4.71905 20.00346,-14.07844 52.82696,-10.01483 56.65462,-5.2958 3.82764,4.74526 -0.99624,37.64741 -19.79373,53.35128 -2.88385,2.41195 -5.63662,1.12734 -4.35198,-2.07113 4.2209,-10.53917 13.68519,-34.16054 9.20211,-39.90203" id="amz-path10" style="fill:#ff9900" /><path d="M 348.49744,20.06598 V 6.38079 c 0,-2.07113 1.57301,-3.46062 3.46062,-3.46062 h 61.26875 c 1.96628,0 3.53929,1.41571 3.53929,3.46062 v 11.71893 c -0.0262,1.96626 -1.67788,4.53551 -4.61418,8.59912 l -31.74859,45.32893 c 11.79759,-0.28837 24.25059,1.46814 34.94706,7.49802 2.41195,1.36327 3.06737,3.35575 3.25089,5.32203 V 99.4506 c 0,1.99248 -2.20222,4.32576 -4.5093,3.1198 -18.84992,-9.88376 -43.887,-10.95865 -64.72939,0.10487 -2.12356,1.15354 -4.35199,-1.15354 -4.35199,-3.14602 V 85.66054 c 0,-2.22843 0.0262,-6.02989 2.25463,-9.41186 l 36.78224,-52.74829 h -32.01076 c -1.96626,0 -3.53927,-1.38948 -3.53927,-3.43441" id="amz-path12" /><path d="m 124.99883,105.45424 h -18.64017 c -1.78273,-0.13107 -3.19845,-1.46813 -3.32954,-3.17224 V 6.61676 c 0,-1.91383 1.59923,-3.43442 3.59171,-3.43442 h 17.38176 c 1.80898,0.0786 3.25089,1.46814 3.38199,3.19845 v 12.50545 h 0.34082 c 4.53551,-12.08598 13.05597,-17.7226 24.53896,-17.7226 11.66649,0 18.95477,5.63662 24.19814,17.7226 4.5093,-12.08598 14.76008,-17.7226 25.74495,-17.7226 7.81262,0 16.35931,3.22467 21.57646,10.46052 5.89879,8.04857 4.69281,19.74128 4.69281,29.99208 l -0.0262,60.37739 c 0,1.91383 -1.59923,3.46061 -3.59171,3.46061 h -18.61397 c -1.86138,-0.13107 -3.35574,-1.62543 -3.35574,-3.46061 V 51.29025 c 0,-4.03739 0.36702,-14.10466 -0.52434,-17.93233 -1.38949,-6.42311 -5.55797,-8.23209 -10.95865,-8.23209 -4.5093,0 -9.22833,3.01494 -11.14216,7.83885 -1.91383,4.8239 -1.73031,12.89867 -1.73031,18.32557 v 50.70338 c 0,1.91383 -1.59923,3.46061 -3.59171,3.46061 h -18.61395 c -1.88761,-0.13107 -3.35576,-1.62543 -3.35576,-3.46061 L 152.946,51.29025 c 0,-10.67025 1.75651,-26.37415 -11.48298,-26.37415 -13.39682,0 -12.87248,15.31063 -12.87248,26.37415 v 50.70338 c 0,1.91383 -1.59923,3.46061 -3.59171,3.46061" id="amz-path14" /><path d="m 469.51439,1.16364 c 27.65877,0 42.62858,23.75246 42.62858,53.95427 0,29.17934 -16.54284,52.32881 -42.62858,52.32881 -27.16066,0 -41.94697,-23.75246 -41.94697,-53.35127 0,-29.78234 14.96983,-52.93181 41.94697,-52.93181 m 0.15729,19.53156 c -13.73761,0 -14.60278,18.71881 -14.60278,30.38532 0,11.69271 -0.18352,36.65114 14.44549,36.65114 14.44548,0 15.12712,-20.13452 15.12712,-32.40403 0,-8.07477 -0.34082,-17.72257 -2.779,-25.3779 -2.09735,-6.65906 -6.26581,-9.25453 -12.19083,-9.25453" id="amz-path16" /><path d="M 548.00762,105.45424 H 529.4461 c -1.86141,-0.13107 -3.35577,-1.62543 -3.35577,-3.46061 l -0.0262,-95.69149 c 0.1573,-1.75653 1.7041,-3.1198 3.59171,-3.1198 h 17.27691 c 1.62543,0.0786 2.96249,1.17976 3.32954,2.67412 v 14.62899 h 0.3408 c 5.21717,-13.0822 12.53165,-19.32181 25.40412,-19.32181 8.36317,0 16.51662,3.01494 21.75999,11.27324 4.87633,7.65532 4.87633,20.5278 4.87633,29.78233 v 60.22011 c -0.20973,1.67786 -1.75653,3.01492 -3.59169,3.01492 h -18.69262 c -1.70411,-0.13107 -3.11982,-1.38948 -3.30332,-3.01492 V 50.47753 c 0,-10.46052 1.20597,-25.77117 -11.66651,-25.77117 -4.5355,0 -8.70399,3.04117 -10.77512,7.65532 -2.62167,5.84637 -2.96249,11.66651 -2.96249,18.11585 v 51.5161 c -0.0262,1.91383 -1.65166,3.46061 -3.64414,3.46061" id="amz-path18" /><use xlink:href="#amz-path30" transform="translate(244.36719)" id="amz-use28" /><path d="M 55.288261,59.75829 V 55.7209 c -13.475471,0 -27.711211,2.88385 -27.711211,18.77125 0,8.04857 4.16847,13.50169 11.32567,13.50169 5.24337,0 9.93618,-3.22467 12.8987,-8.46805 3.670341,-6.44935 3.486841,-12.50544 3.486841,-19.7675 m 18.79747,45.43378 c -1.23219,1.10111 -3.01495,1.17976 -4.40444,0.4457 -6.18716,-5.1385 -7.28828,-7.52423 -10.69647,-12.42678 -10.224571,10.4343 -17.460401,13.55409 -30.726141,13.55409 -15.67768,0 -27.89471,-9.67401 -27.89471,-29.04824 0,-15.12713 8.20587,-25.43035 19.87236,-30.46398 10.1197,-4.45688 24.25058,-5.24337 35.051931,-6.47556 v -2.41195 c 0,-4.43066 0.34082,-9.67403 -2.25465,-13.50167 -2.280881,-3.43442 -6.632861,-4.85013 -10.460531,-4.85013 -7.10475,0 -13.44924,3.64414 -14.99603,11.19459 -0.31461,1.67789 -1.5468,3.32955 -3.22467,3.4082 L 6.26276,32.67628 C 4.74218,32.33548 3.0643,31.10327 3.48377,28.76999 7.65225,6.85271 27.44596,0.24605 45.16856,0.24605 c 9.071011,0 20.921021,2.41195 28.078221,9.28076 9.07104,8.46804 8.20587,19.7675 8.20587,32.06321 v 29.04826 c 0,8.73022 3.61794,12.55786 7.02613,17.27691 1.20597,1.67786 1.46814,3.69656 -0.05244,4.95497 -3.80144,3.17225 -10.56538,9.07104 -14.28819,12.37436 l -0.05242,-0.0525" id="amz-path30" /></svg>
+      <span data-i18n="amzBrowse">تصفّح أمازون واجلب روابطك</span>
+      <span class="amzarrow" aria-hidden="true">↗</span>
+    </a>
+    <div class="links" id="links"></div>
+    <button class="addlink" onclick="addLink()" data-i18n="addlink">＋ أضف رابطاً آخر</button>
+
+    <h2 class="sec"><span data-i18n="s3">بياناتك</span></h2>
+    <label data-i18n="name">الاسم الكامل</label>
+    <input class="fin" id="f_name" autocomplete="name">
+    <label data-i18n="phone">رقم الواتساب (نرسل عليه عرض السعر)</label>
+    <div class="phonegrp">
+      <select class="fin ccsel" id="f_cc" aria-label="مقدمة الرقم">
+        <option value="" selected disabled data-i18n="ccpick">🇵🇸 اختر المقدمة</option>
+        <option value="970">🇵🇸 +970</option>
+        <option value="972">🇵🇸 +972</option>
+      </select>
+      <input class="fin" id="f_phone" type="tel" inputmode="tel" placeholder="5xxxxxxxx" style="direction:ltr;text-align:left" autocomplete="tel">
     </div>
-  </div>
-  <p class="mini" id="mini" hidden></p>
-  <p class="plans-note" data-i18n="plansnote">الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.</p>
+    <p class="ccnote" data-i18n="ccnote">اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)</p>
 
-  <!-- ══ Slim universal guarantee line — the per-plan protection bullets live inside each card ══ -->
-  <p class="guarline"><svg class="ico"><use href="#i-shield"/></svg> <span data-i18n="guarLine">كل طلب محمي بضمان الوصول</span></p>
+    <div id="out1"></div>
+    <button class="go" id="contBtn" onclick="continueLead()" data-i18n="cont">متابعة</button>
+    <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
+  </section>
 
-  <!-- ══ Free-bonus stack ══ -->
-  <div class="bonuses">
-    <b><svg class="ico"><use href="#i-gift"/></svg> <span data-i18n="bonT">كل طلب بيشمل مجاناً:</span></b>
-    <ul>
-      <li><span data-i18n="bon1">تغطية الجمارك الكاملة (قيمتها حتى $100)</span><span class="freechip" data-i18n="free">مجاناً</span></li>
-      <li><span data-i18n="bon2">فحص أفضل سعر: بنتأكد إن سعرك أرخص سعر على أمازون قبل ما نطلب</span><span class="freechip" data-i18n="free">مجاناً</span></li>
-      <li><span data-i18n="bon3">تتبع لحظي عبر المنصة</span><span class="freechip" data-i18n="free">مجاناً</span></li>
-      <li><span data-i18n="bon4">إلغاء مجاني قبل الشحن</span><span class="freechip" data-i18n="free">مجاناً</span></li>
-    </ul>
-    <p class="bon-total" data-i18n="bonTotal">قيمة إجمالية $130+ — مجاناً مع كل طلب</p>
-  </div>
+  <!-- ══ Screen 2 — pick the plan (the lead is already saved server-side) ══ -->
+  <section id="screen2" hidden>
+    <button class="backlink" type="button" onclick="gotoStep(1)" data-i18n="back">→ رجوع وتعديل</button>
+    <h2 class="sec"><span data-i18n="s1">اختر طريقة الدفع</span></h2>
+    <div class="plans">
+      <!-- الباقة المجانية 0% — first (right side in RTL) -->
+      <div class="plan" id="plan-prepaid" onclick="pickPlan('prepaid')" role="radio" aria-checked="false">
+        <div class="phead">
+          <span class="ic" aria-hidden="true"><svg class="ico"><use href="#i-wallet"/></svg></span>
+          <div class="pt-t"><b data-i18n="p1t">الباقة المجانية</b><span class="subt" data-i18n="p1sub">ادفع كامل المبلغ الآن ووفّر</span></div>
+        </div>
+        <div class="rate"><span class="ratetxt" data-i18n="p1rate">عمولة · رسوم ثابتة $5</span><span class="pct">0%</span></div>
+        <ul>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="s1b1">تعويض كامل في حال عدم استلام الطرد</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon5tipT">الحالات المغطّاة</b><span data-i18n="bon5tip">ضاع الطرد · لم يتم تخليصه من الجمارك · ما استلمته لأي سبب خارج عن إرادتك — بنرجّعلك كامل قيمة طلبك لحد $3000.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="bon1">تغطية الجمارك بشكل كامل</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon1tipT">جماركك علينا</b><span data-i18n="bon1tip">أي رسوم جمركية إضافية أو مفاجئة بتطلع عند التخليص — منغطيها عنك بالكامل، ما بتدفع ولا قرش زيادة عن عرض السعر.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="bon3">تتبع لحظي عبر المنصة</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon3tipT">تتبّع مباشر خطوة بخطوة</b><span class="tip-track" aria-hidden="true"><span class="tk on" data-i18n="tk1">تم الشراء</span><span class="tk on" data-i18n="tk2">في الشحن</span><span class="tk" data-i18n="tk3">وصلت</span><span class="tk" data-i18n="tk4">تم التسليم</span></span><span data-i18n="bon3tip">بتقدر تتبّع طردك بأي وقت من صفحة التتبّع — من لحظة الشراء لحد باب بيتك.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="s1b4">رسوم ثابتة ع الطرد $5 مهما كانت قيمة الطرد</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="s1b4tipT">مثال</b><span data-i18n="s1b4tip">طلب بقيمة $300 → رسومك $5 فقط — مهما كبر طلبك، الرسوم ثابتة.</span></span></span></span></li>
+        </ul>
+      </div>
+      <!-- باقة الأمان 8% — featured + default-selected -->
+      <div class="plan on" id="plan-zero_risk" onclick="pickPlan('zero_risk')" role="radio" aria-checked="true">
+        <span class="tag" data-i18n="p2tag">الأكثر أماناً</span>
+        <div class="phead">
+          <span class="ic" aria-hidden="true"><svg class="ico"><use href="#i-shield"/></svg></span>
+          <div class="pt-t"><b data-i18n="p2t">باقة الأمان</b><span class="subt" data-i18n="p2sub">استلم أولاً — وادفع الباقي على بابك</span></div>
+        </div>
+        <div class="rate"><span class="ratetxt" data-i18n="p2rate">عمولة ثابتة · حد أدنى $8</span><span class="pct">8%</span></div>
+        <ul>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="s2b1">كل مزايا الباقة المجانية مشمولة</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="s2b1tipT">شو بيشمل؟</b><span data-i18n="s2b1tip">تعويض كامل عند عدم الاستلام · تغطية الجمارك بشكل كامل · تتبع لحظي — نفس ضمانات الباقة المجانية.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="codBullet">الدفع عند الاستلام</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="codTipT">كيف بيتم الدفع؟</b><span data-i18n="codTip">بتدفع أغلب المبلغ عند الاستلام. وإذا قيمة الطرد فوق $200، في عربون بسيط ٥٠ شيكل — بننخصمه من باقي المبلغ.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="bon2">فحص أفضل سعر على أمازون قبل الطلب</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon2tipT">ضمان أفضل صفقة</b><span data-i18n="bon2tip">كل منتج عنا إله تتبّع سعر — منراقب سعره على أمازون قبل ما نشتري ومنتأكد إنك ماخد أفضل صفقة.</span></span></span></span></li>
+          <li class="bonrow"><span class="bon-txt"><span data-i18n="bon4">إلغاء مجاني قبل الشحن</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon4tipT">غيّرت رأيك؟</b><span data-i18n="bon4tip">بتقدر تلغي طلبك بأي لحظة قبل ما يتم شحنه — بدون أي رسوم، وأي مبلغ دفعته بيرجعلك كامل.</span></span></span></span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="plans-note" data-i18n="plansnote">الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.</p>
 
-  <h2 class="sec"><span class="stepnum">3</span><span data-i18n="s3">بياناتك</span></h2>
-  <label data-i18n="name">الاسم الكامل</label>
-  <input class="fin" id="f_name" autocomplete="name">
-  <label data-i18n="phone">رقم الواتساب (نرسل عليه عرض السعر)</label>
-  <div class="phonegrp">
-    <select class="fin ccsel" id="f_cc" aria-label="مقدمة الرقم">
-      <option value="" selected disabled data-i18n="ccpick">🇵🇸 اختر المقدمة</option>
-      <option value="970">🇵🇸 +970</option>
-      <option value="972">🇵🇸 +972</option>
-    </select>
-    <input class="fin" id="f_phone" type="tel" inputmode="tel" placeholder="5xxxxxxxx" style="direction:ltr;text-align:left" autocomplete="tel">
-  </div>
-  <p class="ccnote" data-i18n="ccnote">اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)</p>
+    <div id="out2"></div>
+    <button class="go" id="goBtn" onclick="submitPlan()" data-i18n="send">احصل على عرض السعر</button>
+    <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
 
-  <button class="go" id="goBtn" onclick="submitQuote()" data-i18n="send">أرسل لي عرض السعر</button>
-  <div class="hintline" data-i18n="hint">مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.</div>
+    <!-- ══ Slim universal guarantee line — the per-plan protection bullets live inside each card ══ -->
+    <p class="guarline"><svg class="ico"><use href="#i-shield"/></svg> <span data-i18n="guarLine">كل طلب محمي بضمان الوصول</span></p>
 
-  <!-- Social proof — driven by OFFER.ordersDelivered (auto-hidden if 0) -->
-  <p class="proofline" id="proofline" hidden></p>
-  <!-- TESTIMONIALS SLOT — when you have 2-3 WhatsApp screenshots, drop the files next to
-       the app (e.g. web/) and uncomment; keep them small (~300px wide) and blur customer names:
-  <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
-    <img src="/testimonial-1.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
-    <img src="/testimonial-2.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
-    <img src="/testimonial-3.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
-  </div>
-  -->
-  <div id="out"></div>
+    <!-- ══ Free-bonus stack ══ -->
+    <div class="bonuses">
+      <b><svg class="ico"><use href="#i-gift"/></svg> <span data-i18n="bonT">كل طلب بيشمل مجاناً:</span></b>
+      <ul>
+        <li class="bonrow"><span class="bon-txt"><span data-i18n="bon5">تعويض كامل لحد $3000</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon5tipT">الحالات المغطّاة</b><span data-i18n="bon5tip">ضاع الطرد · لم يتم تخليصه من الجمارك · ما استلمته لأي سبب خارج عن إرادتك — بنرجّعلك كامل قيمة طلبك لحد $3000.</span></span></span></span><span class="freechip" data-i18n="free">مجاناً</span></li>
+        <li class="bonrow"><span class="bon-txt"><span data-i18n="bon1">تغطية الجمارك بشكل كامل</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon1tipT">جماركك علينا</b><span data-i18n="bon1tip">أي رسوم جمركية إضافية أو مفاجئة بتطلع عند التخليص — منغطيها عنك بالكامل، ما بتدفع ولا قرش زيادة عن عرض السعر.</span></span></span></span><span class="freechip" data-i18n="free">مجاناً</span></li>
+        <li class="bonrow"><span class="bon-txt"><span data-i18n="bon3">تتبع لحظي عبر المنصة</span><span class="tip-wrap"><button type="button" class="helpq sm" onclick="toggleTip(event,this)" aria-expanded="false" aria-label="تفاصيل · details"><svg class="ico"><use href="#i-help"/></svg></button><span class="tip-pop" role="tooltip"><b data-i18n="bon3tipT">تتبّع مباشر خطوة بخطوة</b><span class="tip-track" aria-hidden="true"><span class="tk on" data-i18n="tk1">تم الشراء</span><span class="tk on" data-i18n="tk2">في الشحن</span><span class="tk" data-i18n="tk3">وصلت</span><span class="tk" data-i18n="tk4">تم التسليم</span></span><span data-i18n="bon3tip">بتقدر تتبّع طردك بأي وقت من صفحة التتبّع — من لحظة الشراء لحد باب بيتك.</span></span></span></span><span class="freechip" data-i18n="free">مجاناً</span></li>
+      </ul>
+      <p class="bon-total" data-i18n="bonTotal">إنت محميّ من خسائر تصل $3210 — بلا أي رسوم</p>
+    </div>
+
+    <!-- Social proof — driven by OFFER.ordersDelivered (auto-hidden if 0) -->
+    <p class="proofline" id="proofline" hidden></p>
+    <!-- TESTIMONIALS SLOT — when you have 2-3 WhatsApp screenshots, drop the files next to
+         the app (e.g. web/) and uncomment; keep them small (~300px wide) and blur customer names:
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+      <img src="/testimonial-1.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+      <img src="/testimonial-2.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+      <img src="/testimonial-3.png" alt="" style="width:31%;max-width:180px;border-radius:12px;border:1px solid var(--line)">
+    </div>
+    -->
+  </section>
 </div>
 <script>window.OTL_WA_NUMBER = "{{ wa_number }}";</script>
 <script>
 const $=id=>document.getElementById(id);
 function toggleMenu(e){ if(e) e.stopPropagation(); $("navmenu").classList.toggle("open"); }
+function toggleHelp(id, btn){
+  const el=$(id); if(!el) return;
+  el.hidden=!el.hidden;
+  btn.setAttribute("aria-expanded", el.hidden?"false":"true");
+}
 /* ☰ menu WhatsApp item — hidden when no number is configured */
 (function(){
   const el=document.getElementById("wa-menu"); if(!el) return;
   if(window.OTL_WA_NUMBER){ el.href="https://wa.me/"+window.OTL_WA_NUMBER+"?text="+encodeURIComponent("مرحباً اطلبلي 👋"); }
   else el.style.display="none";
 })();
+function toggleTip(e, btn){ if(e) e.stopPropagation(); const w=btn.closest(".tip-wrap"); if(!w) return;
+  document.querySelectorAll(".tip-wrap.show").forEach(o=>{ if(o!==w){ o.classList.remove("show");   // one tip at a time
+    const b=o.querySelector(".helpq"); if(b) b.setAttribute("aria-expanded","false"); } });
+  const open=w.classList.toggle("show"); btn.setAttribute("aria-expanded", open?"true":"false"); }
 document.addEventListener("click", function(e){
   const m=$("navmenu");
   if(m && m.classList.contains("open") && !m.contains(e.target)) m.classList.remove("open");
+  document.querySelectorAll(".tip-wrap.show").forEach(w=>{ if(!w.contains(e.target)){
+    w.classList.remove("show"); const b=w.querySelector(".helpq"); if(b) b.setAttribute("aria-expanded","false"); } });
 });
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-let LANG="ar", PLAN="zero_risk";
+let LANG="ar", PLAN="zero_risk", STEP=1, busy=false;
+const LEAD={order_id:null, token:null};   // set by /api/quote/lead; screen 2 completes the same order
 /* ── OFFER — the single source of truth for every number on this page ────────
    Edit these per batch; nothing is hard-coded in the markup. The urgency banner
    only shows while the Settings toggle «🚚 Batch urgency banner» is ON.
-   NOTE: depositPct / commissionPct / flatFeeUsd mirror pricing.html's PRICES —
-   keep them in sync by hand until the fee model is server-injected. */
+   NOTE: the plan-card fee lines (0%/$5 · 8%/$8 min) live in the i18n strings —
+   keep them in sync with pricing.html's PRICES by hand until server-injected. */
 const OFFER={
-  depositPct:10, commissionPct:8, flatFeeUsd:5,
-  deliveryDays:"20–30", guaranteeDays:35,
+  deliveryDays:"20–30",
   batch:{closeDay:"الخميس", spotsLeft:6, spotsTotal:20, nextDelayDays:10},
-  ordersDelivered:40,
+  ordersDelivered:400,
 };
 /* Localize day-counts to Arabic-Indic digits in AR (dollar amounts stay Latin per the brand rule). */
 const _ARDIG="٠١٢٣٤٥٦٧٨٩";
 function num(n){ return LANG==="ar" ? String(n).replace(/[0-9]/g,d=>_ARDIG[+d]) : String(n); }
 const T={
-  ar:{eyebrow:"عرض سعر خلال ساعات",
-      h1em:"عرض الافتتاح 🇵🇸", h1rest:"— أي منتج من أمازون أمريكا، على بابك، والجمارك علينا",
-      sub:"الصق روابط منتجاتك من أمازون، اختر طريقة الدفع، وسنرسل لك عرض السعر النهائي على واتساب.",
-      nofriction:"بدون فيزا · بدون عنوان · بدون مخاطرة — بس الصق الرابط",
-      heroCta:"احصل على عرض السعر ←",
-      deliverywhy:"التوصيل خلال {deliveryDays} يوم — منجمّع الطلبات بدفعات عشان نغطّي جماركك ونوصّلك أرخص",
+  ar:{eyebrow:"عرض الافتتاح 🇵🇸",
+      h1rest:"أي منتج من أمازون أمريكا،", h1door:"على بابك",
+      sub:"عبي معلوماتك واحصل على سعر الطرد على واتساب.",
+      nofriction:"بدون فيزا · بدون عنوان · بدون مخاطرة",
       batch:"الدفعة الحالية تسكر يوم {closeDay} — باقي {spotsLeft} أماكن من {spotsTotal}. بعدها طلبك يلحق الدفعة الجاية (+{nextDelayDays} أيام)",
-      s1:"اختر طريقة الدفع", decide:"القرار الوحيد: تدفع الكل الآن وتوفّر؟ ولا تدفع عند الباب وترتاح؟", valLbl:"قيمة طلبك التقريبية (اختياري)",
-      p1badge:"للعملاء المكررين", p1t:"باقة التوفير", p1sub:"رسوم ثابتة $5 مهما كبر طلبك",
-      p1g0:"0% عمولة — بس رسوم ثابتة $5",
-      p1g3:"تسعيرة نهائية شاملة الشحن",
-      p1who:"الأنسب للي واثق وبدّو أقل تكلفة",
+      step1Lab:"روابطك وبياناتك", step2Lab:"اختر الباقة",
+      cont:"متابعة", contSending:"لحظة…", back:"→ رجوع وتعديل",
+      s1:"اختر طريقة الدفع",
+      p1t:"الباقة المجانية", p1sub:"ادفع كامل المبلغ الآن ووفّر",
+      p1rate:"عمولة · رسوم ثابتة $5",
+      s1b1:"تعويض كامل في حال عدم استلام الطرد",
+      s1b4:"رسوم ثابتة ع الطرد $5 مهما كانت قيمة الطرد",
+      s1b4tipT:"مثال",
+      s1b4tip:"طلب بقيمة $300 → رسومك $5 فقط — مهما كبر طلبك، الرسوم ثابتة.",
       p2tag:"الأكثر أماناً", p2t:"باقة الأمان", p2sub:"استلم أولاً — وادفع الباقي على بابك",
-      p2g1:"ما تدفع إلا عربون ١٠٪ بسيط الآن",
-      clearance:"إحنا بنخلّص الجمارك عنك",
-      p2fee1:"مثال: طلب $100 → عمولتك $8",
-      tlAman1:"اليوم\nعربون ١٠٪ بس", tlAman2:"نطلب ونشحن\nعلى حسابنا", tlAman3:"يوصل\nادفع الباقي",
-      tlTawfir1:"اليوم\nادفع كامل المبلغ", tlTawfir2:"نطلب من\nأمازون فوراً", tlTawfir3:"يوصل\nعلى بابك",
-      depWord:"عربونك", restWord:"الباقي عند الباب", payNowWord:"ادفع الآن",
-      miniTpl:"الأمان: عربون {dep} الآن + {rest} عند الباب  ·  التوفير: {tot} كامل الآن",
-      protPrice:"ما بتدفع ولا زيادة عن السعر المقتبس — أي جمارك إضافية علينا",
-      protLost:"تعويض كامل لو ضاع الطرد",
-      protStock:"استرداد فوري لو المنتج مش متوفر",
-      protLate:"تأخر عن {guaranteeDays} يوم؟ العمولة علينا",
+      p2rate:"عمولة ثابتة · حد أدنى $8",
+      s2b1:"كل مزايا الباقة المجانية مشمولة",
+      s2b1tipT:"شو بيشمل؟",
+      s2b1tip:"تعويض كامل عند عدم الاستلام · تغطية الجمارك بشكل كامل · تتبع لحظي — نفس ضمانات الباقة المجانية.",
+      codBullet:"الدفع عند الاستلام",
+      codTipT:"كيف بيتم الدفع؟",
+      codTip:"بتدفع أغلب المبلغ عند الاستلام. وإذا قيمة الطرد فوق $200، في عربون بسيط ٥٠ شيكل — بننخصمه من باقي المبلغ.",
       guarLine:"كل طلب محمي بضمان الوصول",
       bonT:"كل طلب بيشمل مجاناً:",
-      bon1:"تغطية الجمارك الكاملة (قيمتها حتى $100)",
-      bon2:"فحص أفضل سعر: بنتأكد إن سعرك أرخص سعر على أمازون قبل ما نطلب",
+      bon1:"تغطية الجمارك بشكل كامل",
+      bon1tipT:"جماركك علينا",
+      bon1tip:"أي رسوم جمركية إضافية أو مفاجئة بتطلع عند التخليص — منغطيها عنك بالكامل، ما بتدفع ولا قرش زيادة عن عرض السعر.",
+      bon2:"فحص أفضل سعر على أمازون قبل الطلب",
+      bon2tipT:"ضمان أفضل صفقة",
+      bon2tip:"كل منتج عنا إله تتبّع سعر — منراقب سعره على أمازون قبل ما نشتري ومنتأكد إنك ماخد أفضل صفقة.",
       bon3:"تتبع لحظي عبر المنصة",
+      bon3tipT:"تتبّع مباشر خطوة بخطوة",
+      bon3tip:"بتقدر تتبّع طردك بأي وقت من صفحة التتبّع — من لحظة الشراء لحد باب بيتك.",
+      tk1:"تم الشراء", tk2:"في الشحن", tk3:"وصلت", tk4:"تم التسليم",
       bon4:"إلغاء مجاني قبل الشحن",
-      bonTotal:"قيمة إجمالية $130+ — مجاناً مع كل طلب",
+      bon4tipT:"غيّرت رأيك؟",
+      bon4tip:"بتقدر تلغي طلبك بأي لحظة قبل ما يتم شحنه — بدون أي رسوم، وأي مبلغ دفعته بيرجعلك كامل.",
+      bon5:"تعويض كامل لحد $3000",
+      bon5tipT:"الحالات المغطّاة",
+      bon5tip:"ضاع الطرد · لم يتم تخليصه من الجمارك · ما استلمته لأي سبب خارج عن إرادتك — بنرجّعلك كامل قيمة طلبك لحد $3000.",
+      bonTotal:"إنت محميّ من خسائر تصل $3210 — بلا أي رسوم",
       free:"مجاناً",
       proof:"+{n} طلب وصل بنجاح لفلسطين 🇵🇸",
       plansnote:"الرسوم النهائية تظهر لك في عرض السعر قبل ما تأكد — ما في مفاجآت.",
       "m.order":"اطلب الآن", "m.plans":"الباقات", "m.track":"تتبّع شحنتك",
       "m.how":"كيف تعمل", "m.account":"حسابي · تسجيل الدخول", "m.wa":"واتساب",
       s2:"روابط منتجاتك من أمازون", linkph:"https://www.amazon.com/…", addlink:"＋ أضف رابطاً آخر",
+      linksHelp:"افتح أمازون، انسخ رابط أي منتج بدك ياه، والصقه هون — منتج واحد بكل سطر.",
+      amzBrowse:"تصفّح أمازون واجلب روابطك",
       s3:"بياناتك", name:"الاسم الكامل", phone:"رقم الواتساب (نرسل عليه عرض السعر)",
       ccpick:"🇵🇸 اختر المقدمة", ccnote:"اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)",
       needprefix:"اختر مقدمة الرقم (970 أو 972) أولاً.",
-      send:"أرسل لي عرض السعر", sending:"جارٍ الإرسال…",
+      send:"احصل على عرض السعر", sending:"جارٍ الإرسال…",
+      planRetry:"ما قدرنا نسجّل اختيارك — اضغط الزر مرة ثانية.",
       hint:"مجاناً وبدون التزام — السعر النهائي يصلك على واتساب للتأكيد.",
       needlink:"أضف رابط منتج واحداً على الأقل من أمازون.", needinfo:"الاسم ورقم الواتساب مطلوبان.",
       doneT:"وصلنا طلبك! 🎉", doneP:"سنراجع الروابط ونرسل لك عرض السعر النهائي على واتساب خلال ساعات العمل.",
       keep:"رقم طلبك — احتفظ به للمتابعة:", more:"→ العودة للرئيسية",
       wabtn:"راسلنا الآن على واتساب", wanudge:"أسرع طريقة يوصلك فيها عرض السعر — افتح المحادثة الآن.",
       wamsg:"مرحباً اطلبلي 👋 أنا {name} — أرسلت طلب تسعير رقم {oid}"},
-  en:{eyebrow:"A quote within hours",
-      h1em:"Opening offer 🇵🇸", h1rest:"— any product from Amazon USA, at your door, customs on us",
-      sub:"Paste your Amazon product links, pick how you want to pay, and we'll send the final quote to your WhatsApp.",
-      nofriction:"No Visa · no US address · no risk — just paste the link",
-      heroCta:"Get my quote →",
-      deliverywhy:"Delivery in {deliveryDays} days — we batch orders so we can cover your customs and get you a lower price",
+  en:{eyebrow:"Opening offer 🇵🇸",
+      h1rest:"Any product from Amazon USA,", h1door:"to your door",
+      sub:"Fill in your details and get your parcel's price on WhatsApp.",
+      nofriction:"No Visa · no address · no risk",
       batch:"The current batch closes {closeDay} — {spotsLeft} of {spotsTotal} spots left. After that, your order joins the next batch (+{nextDelayDays} days)",
-      s1:"Choose how to pay", decide:"The only decision: pay it all now and save? Or pay at the door and relax?", valLbl:"Your approx. order value (optional)",
-      p1badge:"For repeat customers", p1t:"Saver Plan", p1sub:"A flat $5 fee, however big your order",
-      p1g0:"0% commission — just a flat $5 fee",
-      p1g3:"Final quote includes shipping",
-      p1who:"Best if you're confident and want the lowest cost",
+      step1Lab:"Your links & details", step2Lab:"Pick your plan",
+      cont:"Continue", contSending:"One moment…", back:"← Back to edit",
+      s1:"Choose how to pay",
+      p1t:"Free Package", p1sub:"Pay in full now and save",
+      p1rate:"commission · flat $5 fee",
+      s1b1:"Full compensation if your parcel never arrives",
+      s1b4:"A flat $5 fee whatever the parcel's value",
+      s1b4tipT:"Example",
+      s1b4tip:"A $300 order → your fee is just $5 — however big the order, the fee stays flat.",
       p2tag:"Safest", p2t:"Safety Plan", p2sub:"Receive first — pay the rest at your door",
-      p2g1:"You pay only a small 10% deposit now",
-      clearance:"We handle customs clearance for you",
-      p2fee1:"Example: a $100 order → your fee is $8",
-      tlAman1:"Today\n10% deposit only", tlAman2:"We buy & ship\non our account", tlAman3:"It arrives\npay the rest",
-      tlTawfir1:"Today\npay in full", tlTawfir2:"We order from\nAmazon right away", tlTawfir3:"It arrives\nat your door",
-      depWord:"Your deposit", restWord:"Rest at the door", payNowWord:"Pay now",
-      miniTpl:"Safety: {dep} deposit now + {rest} at the door  ·  Saver: {tot} in full now",
-      protPrice:"You never pay above the quoted price — any extra customs is on us",
-      protLost:"Full compensation if the parcel is lost",
-      protStock:"Instant refund if the item's unavailable",
-      protLate:"Later than {guaranteeDays} days? Our commission is on us",
+      p2rate:"flat commission · $8 minimum",
+      s2b1:"Everything in the Free Package, included",
+      s2b1tipT:"What's included",
+      s2b1tip:"Full compensation if not received · full customs coverage · live tracking — the same Free-Package guarantees.",
+      codBullet:"Pay on delivery",
+      codTipT:"How payment works",
+      codTip:"You pay most of the amount on delivery. If the parcel's value is above $200, there's a small 50-shekel deposit — deducted from the remaining balance.",
       guarLine:"Every order is protected by our Arrival Guarantee",
       bonT:"Every order includes, for free:",
-      bon1:"Full customs coverage (worth up to $100)",
-      bon2:"Best-price check: we confirm yours is the lowest price on Amazon before ordering",
+      bon1:"Full customs coverage",
+      bon1tipT:"Customs on us",
+      bon1tip:"Any extra or surprise customs charges at clearance are covered by us in full — you never pay a cent above your quote.",
+      bon2:"Best-price check on Amazon before ordering",
+      bon2tipT:"Best-deal guarantee",
+      bon2tip:"Every product has price tracking — we watch its Amazon price before buying to make sure you're getting a good deal.",
       bon3:"Live tracking on our platform",
+      bon3tipT:"Live tracking, step by step",
+      bon3tip:"Track your parcel any time on the tracking page — from purchase to your door.",
+      tk1:"Purchased", tk2:"Shipping", tk3:"Arrived", tk4:"Delivered",
       bon4:"Free cancellation before shipping",
-      bonTotal:"$130+ total value — free with every order",
+      bon4tipT:"Changed your mind?",
+      bon4tip:"Cancel any time before your order ships — no fees, and anything you've paid is fully refunded.",
+      bon5:"Full compensation up to $3000",
+      bon5tipT:"What's covered",
+      bon5tip:"Parcel lost · not cleared through customs · not received for any reason beyond your control — we refund your full order value, up to $3000.",
+      bonTotal:"You're protected from up to $3210 in losses — at no cost",
       free:"FREE",
       proof:"+{n} orders delivered to Palestine 🇵🇸",
       plansnote:"The final fees appear in your quote before you confirm — no surprises.",
       "m.order":"Order now", "m.plans":"Pricing", "m.track":"Track a shipment",
       "m.how":"How it works", "m.account":"My account · Sign in", "m.wa":"WhatsApp",
       s2:"Your Amazon product links", linkph:"https://www.amazon.com/…", addlink:"＋ Add another link",
+      linksHelp:"Open Amazon, copy the link of any product you want, and paste it here — one product per line.",
+      amzBrowse:"Browse Amazon & grab your links",
       s3:"Your details", name:"Full name", phone:"WhatsApp number (we send the quote there)",
       ccpick:"🇵🇸 Select prefix", ccnote:"Pick 970 or 972, then type your number without the leading 0 (e.g. 59…)",
       needprefix:"Choose your number prefix (970 or 972) first.",
-      send:"Send me the quote", sending:"Sending…",
+      send:"Get my quote", sending:"Sending…",
+      planRetry:"We couldn't save your choice — press the button again.",
       hint:"Free, no commitment — the final price arrives on WhatsApp for you to confirm.",
       needlink:"Add at least one Amazon product link.", needinfo:"Name and WhatsApp number are required.",
       doneT:"We got your request! 🎉", doneP:"We'll review the links and send your final quote on WhatsApp during working hours.",
@@ -439,8 +493,6 @@ function setLang(l){ LANG=l; document.documentElement.lang=l; document.documentE
 const _set=(sel,txt)=>{ const e=document.querySelector(sel); if(e) e.textContent=txt; };
 /* Interpolate the OFFER knobs into every place they appear (runs after the generic i18n pass). */
 function paintOffer(){
-  _set('[data-i18n="deliverywhy"]', t("deliverywhy").replace("{deliveryDays}", num(OFFER.deliveryDays)));
-  document.querySelectorAll('[data-i18n="protLate"]').forEach(e=>{ e.textContent=t("protLate").replace("{guaranteeDays}", num(OFFER.guaranteeDays)); });
   const b=$("batchbar");
   if(b){ const txt=t("batch").replace("{closeDay}",OFFER.batch.closeDay).replace("{spotsLeft}",num(OFFER.batch.spotsLeft))
                              .replace("{spotsTotal}",num(OFFER.batch.spotsTotal)).replace("{nextDelayDays}",num(OFFER.batch.nextDelayDays));
@@ -448,30 +500,6 @@ function paintOffer(){
   const p=$("proofline");
   if(p){ if(OFFER.ordersDelivered>0){ p.textContent=t("proof").replace("{n}",num(OFFER.ordersDelivered)); p.hidden=false; }
          else p.hidden=true; }
-  paintTimeline();
-}
-/* Live deposit calc — an approx order value turns the timeline labels into real numbers. */
-function paintTimeline(){
-  const v=parseFloat(($("orderval")||{}).value)||0;
-  if(v>0){
-    const dep=Math.round(v*OFFER.depositPct/100), com=Math.round(v*OFFER.commissionPct/100);
-    const rest=v-dep+com, tot=v+OFFER.flatFeeUsd;
-    _set('[data-i18n="tlAman1"]', t("depWord")+"\n$"+dep);
-    _set('[data-i18n="tlAman3"]', t("restWord")+"\n$"+rest);
-    _set('[data-i18n="tlTawfir1"]', t("payNowWord")+"\n$"+tot);
-    const m=$("mini");
-    if(m){ m.hidden=false; m.innerHTML=t("miniTpl").replace("{dep}","<b>$"+dep+"</b>")
-                                   .replace("{rest}","<b>$"+rest+"</b>").replace("{tot}","<b>$"+tot+"</b>"); }
-  } else {
-    _set('[data-i18n="tlAman1"]', t("tlAman1"));
-    _set('[data-i18n="tlAman3"]', t("tlAman3"));
-    _set('[data-i18n="tlTawfir1"]', t("tlTawfir1"));
-    const m=$("mini"); if(m) m.hidden=true;
-  }
-}
-function scrollToLinks(){
-  const s=$("step-links"); if(s) s.scrollIntoView({behavior:"smooth",block:"start"});
-  const inp=document.querySelector("#links input"); if(inp) setTimeout(()=>inp.focus(),350);
 }
 function pickPlan(p){ PLAN=p;
   ["prepaid","zero_risk"].forEach(x=>{ const el=$("plan-"+x); el.classList.toggle("on",x===p);
@@ -486,24 +514,84 @@ function addLink(focus=true){
   $("links").appendChild(div);
   if(focus) div.querySelector("input").focus();
 }
-async function submitQuote(){
+/* ── 2-screen wizard ──────────────────────────────────────────────────────── */
+function gotoStep(n){
+  STEP=n;
+  $("screen1").hidden = n!==1;
+  $("screen2").hidden = n!==2;
+  $("st2").classList.toggle("on", n===2);
+  $("stlab2").classList.toggle("on", n===2);
+  window.scrollTo(0,0);
+}
+function collectForm(){
   const links=[...document.querySelectorAll("#links input")].map(i=>i.value.trim())
     .filter(v=>/^https?:\/\//i.test(v));
   const name=$("f_name").value.trim();
   const cc=$("f_cc").value;
   const local=$("f_phone").value.replace(/\D/g,"").replace(/^0+/,"");   // strip separators + leading 0(s)
-  const phone=cc+local;
-  if(!links.length){ $("out").innerHTML=`<div class="err">${t("needlink")}</div>`; return; }
-  if(!name||!local){ $("out").innerHTML=`<div class="err">${t("needinfo")}</div>`; return; }
-  if(!cc){ $("out").innerHTML=`<div class="err">${t("needprefix")}</div>`; return; }
-  const b=$("goBtn"); b.disabled=true; b.textContent=t("sending");
-  let d; try{ d=await (await fetch("/api/quote/request",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({plan:PLAN,links,name,phone})})).json(); }catch(e){ d={error:"network"}; }
-  b.disabled=false; b.textContent=t("send");
-  if(!d.ok){ $("out").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
+  return {links, name, cc, local, phone: cc+local};
+}
+/* متابعة — validate, CAPTURE THE LEAD server-side, then show the plan screen.
+   The whole point: the customer + links are saved even if they never pick a plan. */
+async function continueLead(){
+  if(busy) return;
+  const f=collectForm();
+  if(!f.links.length){ $("out1").innerHTML=`<div class="err">${t("needlink")}</div>`; return; }
+  if(!f.name||!f.local){ $("out1").innerHTML=`<div class="err">${t("needinfo")}</div>`; return; }
+  if(!f.cc){ $("out1").innerHTML=`<div class="err">${t("needprefix")}</div>`; return; }
+  $("out1").innerHTML="";
+  busy=true; const btn=$("contBtn"); btn.disabled=true; btn.textContent=t("contSending");
+  const payload={links:f.links, name:f.name, phone:f.phone};
+  if(LEAD.order_id&&LEAD.token){ payload.order_id=LEAD.order_id; payload.token=LEAD.token; }   // back+continue → update, don't duplicate
+  let d=null, status=0;
+  try{
+    const r=await fetch("/api/quote/lead",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)});
+    status=r.status; d=await r.json();
+  }catch(e){ d=null; }
+  busy=false; btn.disabled=false; btn.textContent=t("cont");
+  if(d&&d.ok){
+    LEAD.order_id=d.order_id; LEAD.token=d.token;
+    try{ sessionStorage.setItem("otl_lead", JSON.stringify({order_id:d.order_id, token:d.token,
+      name:f.name, cc:f.cc, local:$("f_phone").value, links:f.links})); }catch(e){}
+  } else if(status===400&&d&&d.error){
+    $("out1").innerHTML=`<div class="err">${esc(d.error)}</div>`;   // server-side validation — fix and retry
+    return;
+  }
+  /* capture-first: on network/server trouble we still advance — with no LEAD on
+     file the final submit falls back to the classic one-shot /api/quote/request. */
+  gotoStep(2);
+}
+/* احصل على عرض السعر — record the chosen plan on the captured lead. */
+async function submitPlan(){
+  if(busy) return;
+  busy=true; const btn=$("goBtn"); btn.disabled=true; btn.textContent=t("sending");
+  let d=null;
+  if(LEAD.order_id&&LEAD.token){
+    try{ d=await (await fetch("/api/quote/plan",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({order_id:LEAD.order_id, token:LEAD.token, plan:PLAN})})).json(); }
+    catch(e){ d=null; }
+    busy=false; btn.disabled=false; btn.textContent=t("send");
+    if(!(d&&d.ok)){ $("out2").innerHTML=`<div class="err">${t("planRetry")}</div>`; return; }   // the button IS the retry — never re-create
+    try{ sessionStorage.removeItem("otl_lead"); }catch(e){}
+    renderDone(LEAD.order_id);
+    return;
+  }
+  // no lead on file (lead POST failed earlier) → the classic one-shot create
+  const f=collectForm();
+  try{ d=await (await fetch("/api/quote/request",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({plan:PLAN, links:f.links, name:f.name, phone:f.phone})})).json(); }
+  catch(e){ d={error:"network"}; }
+  busy=false; btn.disabled=false; btn.textContent=t("send");
+  if(!d.ok){ $("out2").innerHTML=`<div class="err">${esc(d.error)||"Error"}</div>`; return; }
+  try{ sessionStorage.removeItem("otl_lead"); }catch(e){}
+  renderDone(d.order_id);
+}
+function renderDone(oid){
+  const name=$("f_name").value.trim();
   let waBtn="";
   if(window.OTL_WA_NUMBER){
-    const msg=t("wamsg").replace("{name}",name).replace("{oid}",d.order_id);
+    const msg=t("wamsg").replace("{name}",name).replace("{oid}",oid);
     waBtn=`<a class="btn-wa-done" href="https://wa.me/${window.OTL_WA_NUMBER}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">🟢 ${t("wabtn")}</a>
       <p style="font-size:.78rem;color:var(--muted);margin:0 0 8px">${t("wanudge")}</p>`;
   }
@@ -511,10 +599,25 @@ async function submitQuote(){
     <h3>${t("doneT")}</h3><p>${t("doneP")}</p>
     ${waBtn}
     <p style="margin-top:14px;font-size:.8rem;color:var(--muted)">${t("keep")}</p>
-    <div class="oid">${esc(d.order_id)}</div>
+    <div class="oid">${esc(oid)}</div>
     <p><a href="/">${t("more")}</a></p></div>`;
 }
 addLink(false);
+/* Restore an in-progress lead (refresh mid-wizard) so متابعة UPDATES the same order. */
+try{
+  const s=JSON.parse(sessionStorage.getItem("otl_lead")||"null");
+  if(s&&s.order_id&&s.token){
+    LEAD.order_id=s.order_id; LEAD.token=s.token;
+    if(s.name) $("f_name").value=s.name;
+    if(s.cc) $("f_cc").value=s.cc;
+    if(s.local) $("f_phone").value=s.local;
+    (Array.isArray(s.links)?s.links:[]).forEach((l,i)=>{
+      if(i>0) addLink(false);
+      const inputs=document.querySelectorAll("#links input");
+      inputs[inputs.length-1].value=l;
+    });
+  }
+}catch(e){}
 const qp=new URLSearchParams(location.search).get("plan");
 if(qp==="prepaid"||qp==="zero_risk") pickPlan(qp);
 setLang("ar");
