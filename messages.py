@@ -9,7 +9,8 @@ No email, ever. Amounts in USD ($).
     python3 messages.py        # preview all templates for the first order
 """
 
-from urllib.parse import quote
+# Aliased: quote() below is the price-quote template, part of the public API.
+from urllib.parse import quote as _urlquote
 
 import store
 
@@ -117,7 +118,7 @@ def wa_link(order, text):
     ph = store.primary_phone(order)
     if not ph:
         return None
-    return f"https://wa.me/{ph['wa']}?text={quote(text)}"
+    return f"https://wa.me/{ph['wa']}?text={_urlquote(text)}"
 
 
 # Template registry used by the dashboard ("kind" -> builder).
