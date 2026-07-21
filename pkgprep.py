@@ -42,6 +42,7 @@ def _tally(pdb):
     recv = defaultdict(int)
     sent = defaultdict(int)
     exc = defaultdict(lambda: defaultdict(int))
+    meta = {}                         # key -> {image, title} from the PO item
     for po in (pdb or {}).get("purchase_orders", []):
         for pk in po.get("packages", []):
             pstat = (pk.get("otlobly_status") or "").strip().lower()
@@ -50,6 +51,14 @@ def _tally(pdb):
                 if not oid:
                     continue          # unmatched supply can't vouch for anyone
                 key = (oid, (it.get("asin") or "").upper() or None)
+                # PO items carry the fetched Amazon photo + real title; order
+                # items usually don't. Remember the first non-empty of each so
+                # the card can show a picture (fall back per field, not per item).
+                m = meta.setdefault(key, {"image": None, "title": None})
+                if not m["image"] and it.get("image"):
+                    m["image"] = it["image"]
+                if not m["title"] and it.get("title"):
+                    m["title"] = it["title"]
                 q = int(it.get("qty") or 1)
                 istat = (it.get("status") or "").strip().upper()
                 if istat in ITEM_EXCEPTIONS:
@@ -58,7 +67,7 @@ def _tally(pdb):
                     recv[key] += q
                 elif pstat in DISPATCHED_STATUSES:
                     sent[key] += q
-    return recv, sent, exc
+    return recv, sent, exc, meta
 
 
 def _person_key(order):
@@ -69,7 +78,7 @@ def _person_key(order):
     return "name:" + (order.get("customer", {}).get("name") or "").strip().lower()
 
 
-def _annotate_items(order, recv, sent, exc):
+def _annotate_items(order, recv, sent, exc, meta):
     """Attach received/sent/exception/missing unit counts to each order item.
 
     Consumes from the tally pools so a duplicated ASIN line in one order can't
@@ -79,6 +88,7 @@ def _annotate_items(order, recv, sent, exc):
     for it in order.get("items", []):
         n = int(it.get("qty") or 1)
         key = (order["order_id"], (it.get("asin") or "").upper() or None)
+        m = meta.get(key) or {}       # PO-item image/title fallback
         exc_q, exceptions = 0, []
         pool = exc.get(key)
         if pool:
@@ -103,8 +113,8 @@ def _annotate_items(order, recv, sent, exc):
                  "sent" if s else "exception")
         out.append({
             "asin": it.get("asin"),
-            "title": it.get("title"),
-            "image": it.get("image"),
+            "title": it.get("title") or m.get("title"),
+            "image": it.get("image") or m.get("image"),
             "url": it.get("clean_url") or it.get("raw_url"),
             "qty": n,
             "received_qty": r,
@@ -156,7 +166,7 @@ def _partial_message(name, received_items):
 
 def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
     """Group active orders by person and split into ready / waiting cards."""
-    recv, sent, exc = _tally(pdb)
+    recv, sent, exc, meta = _tally(pdb)
 
     groups = {}
     for o in orders or []:
@@ -173,7 +183,7 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
         unpriced = False
         received_items = []
         for o in sorted(group, key=lambda x: x.get("order_id") or ""):
-            items = _annotate_items(o, recv, sent, exc)
+            items = _annotate_items(o, recv, sent, exc, meta)
             for it in items:
                 n_items += it["qty"]
                 n_received += it["received_qty"]

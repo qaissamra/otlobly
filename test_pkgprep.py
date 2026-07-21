@@ -39,8 +39,9 @@ def _pkg(status, items):
     return {"otlobly_status": status, "items": items}
 
 
-def _pitem(oid, asin, qty=1, status=""):
-    return {"customer_order_id": oid, "asin": asin, "qty": qty, "status": status}
+def _pitem(oid, asin, qty=1, status="", image=None, title=None):
+    return {"customer_order_id": oid, "asin": asin, "qty": qty, "status": status,
+            "image": image, "title": title}
 
 
 def main():
@@ -48,8 +49,8 @@ def main():
     orders = [
         # A: one order, ASIN split across two received packages + one more piece → READY
         _order("OTL-0001", "Ready Rana",
-               [{"asin": "B0AAA", "title": "Smart Watch", "qty": 2},
-                {"asin": "B0BBB", "title": "Headphones", "qty": 1}],
+               [{"asin": "B0AAA", "qty": 2},                    # no title/image → PO fills both
+                {"asin": "B0BBB", "title": "Headphones", "qty": 1}],  # title set → order wins
                status="ARRIVED", amount=150.0, deposit=50.0),
         # B: two orders, one piece received, the other order untouched → WAITING
         _order("OTL-0002", "Waiting Wael", [{"asin": "B0CCC", "title": "Shoes", "qty": 1}],
@@ -69,13 +70,14 @@ def main():
                status="QUOTED", amount=99.0),
     ]
     pdb = {"purchase_orders": [{"packages": [
-        _pkg("recieved rd", [_pitem("OTL-0001", "B0AAA", 1),
+        _pkg("recieved rd", [_pitem("OTL-0001", "B0AAA", 1,
+                                    image="http://img/aaa.jpg", title="Smart Watch Pro"),
                              _pitem("OTL-0002", "B0CCC", 1),
                              _pitem("OTL-0005", "B0FFF", 1),
                              _pitem("OTL-0006", "B0HHH", 1),
                              _pitem(None, "B0ZZZ", 5)]),          # unmatched → ignored
         _pkg("Recieved NO RD", [_pitem("OTL-0001", "B0AAA", 1),   # case-insensitive
-                                _pitem("OTL-0001", "B0BBB", 1),
+                                _pitem("OTL-0001", "B0BBB", 1, image="http://img/bbb.jpg"),
                                 _pitem("OTL-0005", "B0GGG", 1, status="CANCELLED")]),
         _pkg("sent rd", [_pitem("OTL-0004", "B0EEE", 1)]),
     ]}]}
@@ -101,6 +103,12 @@ def main():
     check("ready message has remaining line", "100.00$" in rana["wa_text"] and "310 ₪" in rana["wa_text"])
     check("wa_url points at the customer's number", (rana["wa_url"] or "").startswith("https://wa.me/970599000001?text="))
     check("wa_url is percent-encoded (no raw spaces)", " " not in (rana["wa_url"] or "x"))
+    # product image/title come from the matched PO item when the order line lacks them
+    ritems = {it["asin"]: it for o in rana["orders"] for it in o["items"]}
+    check("image falls back to PO item photo", ritems["B0AAA"]["image"] == "http://img/aaa.jpg")
+    check("title falls back to PO item title", ritems["B0AAA"]["title"] == "Smart Watch Pro")
+    check("PO image fills even when order title is set", ritems["B0BBB"]["image"] == "http://img/bbb.jpg")
+    check("order-supplied title wins over PO title", ritems["B0BBB"]["title"] == "Headphones")
 
     wael = waiting["Waiting Wael"]
     check("waiting counts received vs missing", wael["n_received"] == 1 and wael["n_missing"] == 1)
