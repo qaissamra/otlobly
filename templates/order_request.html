@@ -152,6 +152,13 @@
   .addlink{margin-top:10px;border:1.5px dashed #d8d2c8;background:none;border-radius:12px;width:100%;padding:11px;
     font-family:inherit;font-weight:700;font-size:.88rem;color:var(--muted);cursor:pointer}
   .addlink:hover{color:var(--ink);border-color:var(--ink)}
+  /* "browse Amazon" helper — opens amazon.com in a new tab so the form isn't lost */
+  .amzbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin:0 0 10px;
+    padding:11px 14px;background:#fff;border:1.5px solid var(--line);border-radius:12px;text-decoration:none;
+    color:var(--ink);font-weight:800;font-size:.9rem;transition:border-color .15s, background .15s}
+  .amzbtn:hover{border-color:#ffb266;background:#fffaf5}
+  .amzbtn .amzlogo{width:64px;height:auto;flex:none}
+  .amzbtn .amzarrow{color:var(--muted);font-weight:700;font-size:1rem}
   /* contact */
   label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);margin:12px 2px 5px}
   .fin{width:100%;font-family:inherit;font-size:.95rem;padding:12px 13px;border:1.5px solid var(--line);
@@ -217,6 +224,15 @@
       </button>
     </h2>
     <p class="helptext" id="linkshelp" hidden data-i18n="linksHelp">افتح أمازون، انسخ رابط أي منتج بدك ياه، والصقه هون — منتج واحد بكل سطر.</p>
+    <a class="amzbtn" href="https://www.amazon.com/" target="_blank" rel="noopener">
+      <svg class="amzlogo" viewBox="0 0 100 34" aria-hidden="true">
+        <text x="50" y="21" text-anchor="middle" font-family="'Poppins',Arial,sans-serif" font-weight="700" font-size="21" letter-spacing="-.5" fill="#232f3e">amazon</text>
+        <path d="M20 25 C 42 33 62 33 82 24" fill="none" stroke="#ff9900" stroke-width="3" stroke-linecap="round"/>
+        <path d="M82 24 l -7 0 l 4 4.4 z" fill="#ff9900"/>
+      </svg>
+      <span data-i18n="amzBrowse">تصفّح أمازون واجلب روابطك</span>
+      <span class="amzarrow" aria-hidden="true">↗</span>
+    </a>
     <div class="links" id="links"></div>
     <button class="addlink" onclick="addLink()" data-i18n="addlink">＋ أضف رابطاً آخر</button>
 
@@ -396,6 +412,7 @@ const T={
       "m.how":"كيف تعمل", "m.account":"حسابي · تسجيل الدخول", "m.wa":"واتساب",
       s2:"روابط منتجاتك من أمازون", linkph:"https://www.amazon.com/…", addlink:"＋ أضف رابطاً آخر",
       linksHelp:"افتح أمازون، انسخ رابط أي منتج بدك ياه، والصقه هون — منتج واحد بكل سطر.",
+      amzBrowse:"تصفّح أمازون واجلب روابطك",
       s3:"بياناتك", name:"الاسم الكامل", phone:"رقم الواتساب (نرسل عليه عرض السعر)",
       ccpick:"🇵🇸 اختر المقدمة", ccnote:"اختر 970 أو 972 ثم اكتب رقمك بدون الصفر (مثال: 59…)",
       needprefix:"اختر مقدمة الرقم (970 أو 972) أولاً.",
@@ -455,6 +472,7 @@ const T={
       "m.how":"How it works", "m.account":"My account · Sign in", "m.wa":"WhatsApp",
       s2:"Your Amazon product links", linkph:"https://www.amazon.com/…", addlink:"＋ Add another link",
       linksHelp:"Open Amazon, copy the link of any product you want, and paste it here — one product per line.",
+      amzBrowse:"Browse Amazon & grab your links",
       s3:"Your details", name:"Full name", phone:"WhatsApp number (we send the quote there)",
       ccpick:"🇵🇸 Select prefix", ccnote:"Pick 970 or 972, then type your number without the leading 0 (e.g. 59…)",
       needprefix:"Choose your number prefix (970 or 972) first.",
