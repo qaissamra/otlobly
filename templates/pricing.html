@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>باقات اطلبلي · Otlobly Pricing</title>
-  <meta name="description" content="باقات وأسعار خدمة اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين: ادفع مقدماً برسوم ثابتة، أو عربون والباقي عند الاستلام، أو عضوية شهرية برسوم أقل.">
+  <meta name="description" content="باقات وأسعار خدمة اطلبلي — نشتري لك من أمازون ونوصلها إلى فلسطين: ادفع مقدماً برسوم ثابتة، أو ادفع عند الاستلام مع عربون بسيط للطلبات الكبيرة، أو عضوية شهرية برسوم أقل.">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/favicon.svg">
   <meta name="theme-color" content="#111111">
@@ -441,7 +441,7 @@ footer a:hover{color:#fff}
 
     <!-- Card 1: FREE -->
     <div class="plan-card" id="card-prepaid">
-      <div class="plan-name" data-i18n="plan1.name">باقة التوفير</div>
+      <div class="plan-name" data-i18n="plan1.name">الباقة المجانية</div>
       <div class="plan-tagline" data-i18n="plan1.tagline">ادفع الآن ووفّر — رسوم ثابتة $5 على أي طلب</div>
       <div class="plan-rate">0%<sup></sup></div>
       <div class="plan-rate-sub" data-i18n="plan1.ratesub">فقط $5 رسوم ثابتة للطلبات حتى $150 · 5% لما فوق</div>
@@ -465,7 +465,7 @@ footer a:hover{color:#fff}
     <div class="plan-card featured" id="card-deposit">
       <div class="plan-badge" data-i18n="plan2.badge">الأكثر شيوعًا</div>
       <div class="plan-name" data-i18n="plan2.name">باقة الأمان</div>
-      <div class="plan-tagline" data-i18n="plan2.tagline">ادفع جزء الآن والباقي لما يوصل لبابك</div>
+      <div class="plan-tagline" data-i18n="plan2.tagline">ادفع عند الاستلام — وعربون ٥٠ شيكل فقط للطلبات فوق $200</div>
       <div class="plan-rate">8%</div>
       <div class="plan-rate-sub" data-i18n="plan2.ratesub">عمولة ثابتة 8% · حد أدنى $8</div>
       <div class="card-slider">
@@ -477,9 +477,10 @@ footer a:hover{color:#fff}
         <div class="fee-val" id="fee-deposit">$12.00</div>
       </div>
       <ul class="plan-features">
+        <li class="feature-exclusive" data-i18n="plan2.fPay">الدفع عند الاستلام</li>
         <li class="feature-exclusive" data-i18n="plan1.f4">تعويض كامل إذا ضاع أو تضرر الطرد</li>
         <li class="feature-exclusive" data-i18n="plan2.f1">نغطي أي رسوم جمركية إضافية</li>
-        <li class="feature-parent" data-i18n="plan2.f0">كل مزايا باقة التوفير مشمولة</li>
+        <li class="feature-parent" data-i18n="plan2.f0">كل مزايا الباقة المجانية مشمولة</li>
         <li data-i18n="plan2.f2">إلغاء مجاني قبل الشحن</li>
         <li data-i18n="plan2.f3">رقم تتبّع OTL خاص</li>
       </ul>
@@ -585,7 +586,7 @@ footer a:hover{color:#fff}
       <thead>
         <tr>
           <th data-i18n="cmp.feature">الميزة</th>
-          <th data-i18n="cmp.col1">باقة التوفير</th>
+          <th data-i18n="cmp.col1">الباقة المجانية</th>
           <th class="featured-col" data-i18n="cmp.col2">باقة الأمان</th>
           <th data-i18n="cmp.col3">VIP</th>
           <th data-i18n="cmp.col4">العضوية</th>
@@ -609,7 +610,7 @@ footer a:hover{color:#fff}
         <tr>
           <td data-i18n="cmp.row3">الدفع المقدم</td>
           <td data-i18n="cmp.r3c1">كامل المبلغ</td>
-          <td class="featured-col" data-i18n="cmp.r3c2">عربون جزئي</td>
+          <td class="featured-col" data-i18n="cmp.r3c2">عربون ٥٠ شيكل (فوق $200)</td>
           <td data-i18n="cmp.r3c3">صفر</td>
           <td data-i18n="cmp.r3c4">حسب الطريقة</td>
         </tr>
@@ -724,7 +725,7 @@ const I18N = {
     "hero.sub":               "كل ما تدفع أبكر — كل ما توفّر أكثر",
     "slider.label.pre":       "قيمة طلبك: ",
     "fee.label":              "رسومك لهذا الطلب",
-    "plan1.name":             "باقة التوفير",
+    "plan1.name":             "الباقة المجانية",
     "plan1.tagline":          "ادفع الآن ووفّر — رسوم ثابتة $5 على أي طلب",
     "plan1.best":             "الأنسب للي واثق وبدّو أقل تكلفة",
     "plan2.best":             "الأنسب لأول طلب أو للي بدّو راحة بال",
@@ -738,9 +739,10 @@ const I18N = {
     "plan1.cta":              "اطلب بالدفع المسبق",
     "plan2.badge":            "الأكثر شيوعًا",
     "plan2.name":             "باقة الأمان",
-    "plan2.tagline":          "ادفع جزء الآن والباقي لما يوصل لبابك",
+    "plan2.tagline":          "ادفع عند الاستلام — وعربون ٥٠ شيكل فقط للطلبات فوق $200",
     "plan2.ratesub":          "عمولة ثابتة 8% · حد أدنى $8",
-    "plan2.f0":               "كل مزايا باقة التوفير مشمولة",
+    "plan2.fPay":             "الدفع عند الاستلام",
+    "plan2.f0":               "كل مزايا الباقة المجانية مشمولة",
     "plan2.f1":               "نغطي أي رسوم جمركية إضافية",
     "plan2.f2":               "إلغاء مجاني قبل الشحن",
     "plan2.f3":               "رقم تتبّع OTL خاص",
@@ -792,7 +794,7 @@ const I18N = {
     "mem.ent.cta":            "تواصل معنا",
     "cmp.toggle":             "مقارنة كاملة",
     "cmp.feature":            "الميزة",
-    "cmp.col1":               "باقة التوفير",
+    "cmp.col1":               "الباقة المجانية",
     "cmp.col2":               "باقة الأمان",
     "cmp.col3":               "VIP",
     "cmp.col4":               "العضوية",
@@ -808,7 +810,7 @@ const I18N = {
     "cmp.r2c4":               "$5",
     "cmp.row3":               "الدفع المقدم",
     "cmp.r3c1":               "كامل المبلغ",
-    "cmp.r3c2":               "عربون جزئي",
+    "cmp.r3c2":               "عربون ٥٠ شيكل (فوق $200)",
     "cmp.r3c3":               "صفر",
     "cmp.r3c4":               "حسب الطريقة",
     "cmp.row4":               "أولوية الشراء",
@@ -841,7 +843,7 @@ const I18N = {
     "hero.sub":               "The earlier you pay, the more you save.",
     "slider.label.pre":       "Your order value: ",
     "fee.label":              "Your fee for this order",
-    "plan1.name":             "Saver Plan",
+    "plan1.name":             "Free Package",
     "plan1.tagline":          "Pay now and save — a flat $5 on any order",
     "plan1.best":             "Best if you're confident and want the lowest cost",
     "plan2.best":             "Best for a first order or total peace of mind",
@@ -855,9 +857,10 @@ const I18N = {
     "plan1.cta":              "Order — Pay Upfront",
     "plan2.badge":            "Most Popular",
     "plan2.name":             "Safety Plan",
-    "plan2.tagline":          "Pay part now, the rest when it arrives at your door",
+    "plan2.tagline":          "Pay on delivery — just a 50-shekel deposit for orders over $200",
     "plan2.ratesub":          "Flat 8% · $8 minimum",
-    "plan2.f0":               "Everything in the Saver Plan, included",
+    "plan2.fPay":             "Pay on delivery",
+    "plan2.f0":               "Everything in the Free Package, included",
     "plan2.f1":               "We cover any additional customs fees",
     "plan2.f2":               "Free cancellation before shipping",
     "plan2.f3":               "Dedicated OTL tracking number",
@@ -909,7 +912,7 @@ const I18N = {
     "mem.ent.cta":            "Contact us",
     "cmp.toggle":             "Full comparison",
     "cmp.feature":            "Feature",
-    "cmp.col1":               "Saver Plan",
+    "cmp.col1":               "Free Package",
     "cmp.col2":               "Safety Plan",
     "cmp.col3":               "VIP",
     "cmp.col4":               "Membership",
@@ -925,7 +928,7 @@ const I18N = {
     "cmp.r2c4":               "$5",
     "cmp.row3":               "Upfront payment",
     "cmp.r3c1":               "Full amount",
-    "cmp.r3c2":               "Partial deposit",
+    "cmp.r3c2":               "50 ILS deposit (over $200)",
     "cmp.r3c3":               "Zero",
     "cmp.r3c4":               "Per method",
     "cmp.row4":               "Purchase priority",

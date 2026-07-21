@@ -946,6 +946,91 @@ def api_quote_request():
     return jsonify({"ok": True, "order_id": o["order_id"]})
 
 
+# ── /order wizard v2: the lead is captured BEFORE the plan is chosen ───────── #
+LEAD_NOTE = "🌐 طلب تسعير من الموقع · لم يختر الباقة بعد · website quote lead"
+QUOTE_NOTE = "🌐 طلب تسعير من الموقع · website quote request"
+
+
+def _valid_lead_order(o, token):
+    """A wizard endpoint may only touch its own order: website-sourced, still
+    REQUESTED, and holding the lead token issued at create time."""
+    return (o and o.get("source") == "website" and o.get("status") == "REQUESTED"
+            and o.get("lead_token")
+            and hmac.compare_digest(str(o["lead_token"]), str(token or "")))
+
+
+@app.route("/api/quote/lead", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_quote_lead():
+    """Public: screen 1 of the /order wizard (links + name + phone) → saved as a
+    REQUESTED order IMMEDIATELY, before the plan screen — so the lead survives even
+    if the customer abandons there. Re-POSTing with order_id+token (back + متابعة,
+    or a refreshed session) updates the SAME order instead of duplicating."""
+    b = request.get_json(force=True, silent=True) or {}
+    phones = normalize.collect_phones(b.get("phone"))
+    name = (b.get("name") or "").strip()
+    if not name or not phones:
+        return jsonify({"error": "الاسم ورقم واتساب صالح مطلوبان · "
+                                 "Name and a valid WhatsApp number are required."}), 400
+    raw = b.get("links") if isinstance(b.get("links"), list) else []
+    links = [str(l).strip() for l in raw if str(l).strip().lower().startswith("http")][:15]
+    if not links:
+        return jsonify({"error": "أضف رابط منتج واحداً على الأقل · "
+                                 "Add at least one product link."}), 400
+    items = normalize.parse_items(links, expand=False)   # a.co → needs_expand for the queue
+    if not items:
+        return jsonify({"error": "لم نتعرف على الروابط — تأكد أنها من أمازون · "
+                                 "Links not recognized — make sure they're Amazon links."}), 400
+    if b.get("order_id"):
+        o = db.get_order(str(b["order_id"]))
+        if _valid_lead_order(o, b.get("token")):
+            cust = dict(o.get("customer") or {})
+            cust["name"], cust["phones"] = name, phones
+            db.update_order(o["order_id"], {
+                "items": items, "customer": cust,
+                "signature": store.signature(normalize.customer_key(phones, name), items)})
+            _ensure_customer(o)
+            db.audit({"username": "customer"}, "quote_lead_update", "order", o["order_id"], "")
+            activity.log("set", "order", o["order_id"], _olabel(o),
+                         detail="website lead edited (back + continue)", user="customer")
+            return jsonify({"ok": True, "order_id": o["order_id"], "token": o["lead_token"]})
+        # stale token / order already advanced → fall through to a fresh create
+    o = make_order(name=name, phones=phones, address="", city="",
+                   items=items, status="REQUESTED", amount_to_collect_usd=None,
+                   notes=LEAD_NOTE)
+    o["source"] = "website"
+    o["payment_plan"] = ""                     # set by /api/quote/plan; empty → no staff badge
+    o["lead_token"] = secrets.token_urlsafe(16)
+    db.insert_new_order(o)
+    _ensure_customer(o)
+    db.audit({"username": "customer"}, "quote_lead", "order", o["order_id"], "")
+    activity.log("created", "order", o["order_id"], _olabel(o),
+                 detail="website quote lead · no plan yet", user="customer")
+    return jsonify({"ok": True, "order_id": o["order_id"], "token": o["lead_token"]})
+
+
+@app.route("/api/quote/plan", methods=["POST"])
+@limiter.limit("12 per minute")
+def api_quote_plan():
+    """Public: screen 2 of the /order wizard — record the chosen plan on the lead
+    order. Token-gated; idempotent while the order is still REQUESTED."""
+    b = request.get_json(force=True, silent=True) or {}
+    plan = b.get("plan")
+    if plan not in ("prepaid", "zero_risk"):
+        return jsonify({"error": "bad plan"}), 400
+    o = db.get_order(str(b.get("order_id") or ""))
+    if not _valid_lead_order(o, b.get("token")):
+        return jsonify({"error": "not found"}), 404     # generic — no token oracle
+    cust = dict(o.get("customer") or {})
+    if (cust.get("notes") or "") == LEAD_NOTE:
+        cust["notes"] = QUOTE_NOTE                      # lead → full request; custom notes kept
+    db.update_order(o["order_id"], {"payment_plan": plan, "customer": cust})
+    db.audit({"username": "customer"}, "quote_plan", "order", o["order_id"], plan)
+    activity.log("set", "order", o["order_id"], _olabel(o), field="payment_plan",
+                 new=plan, detail="website plan chosen", user="customer")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/catalog/public")
 @limiter.limit("30 per minute")
 def api_catalog_public():
