@@ -4288,6 +4288,33 @@ def api_pkgprep():
                                  include_money=current_user.has("view_money")))
 
 
+@app.route("/api/pkgprep/status", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_pkgprep_status():
+    """Set a PO package's owner Otlobly status from Package prep (recieved rd/no
+    rd, sent rd/no rd, complete, …). It's a PACKAGE-level field, so if the same
+    package also holds other customers' items their cards change too."""
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    status = (b.get("otlobly_status") or "").strip()
+    pdb = purchases.load()
+    po = purchases.find(pdb, b.get("po_id"))
+    pno = b.get("package_no")
+    pk = next((p for p in (po or {}).get("packages", [])
+               if str(p.get("package_no")) == str(pno)), None) if po else None
+    if not pk:
+        return jsonify({"ok": False, "error": "package not found"}), 404
+    old = pk.get("otlobly_status")
+    pk["otlobly_status"] = status or None
+    po["updated_at"] = purchases.now_iso()
+    purchases.save(pdb)
+    db.audit(auth.actor(), "pkg_otlobly_status", "purchase", po["po_id"],
+             f"pkg {pno}: {old or '—'} → {status or '—'}")
+    activity.log("set", "purchase", po["po_id"], _polabel(po),
+                 detail=f"Otlobly status → {status or '—'} (pkg {pno})", user=_user())
+    return jsonify({"ok": True, "otlobly_status": pk["otlobly_status"]})
+
+
 # One-time legacy backfills, run ONCE per deploy (not per worker, not per request):
 #   * link deposits recorded without an order # to the customer's order (by phone)
 #   * ensure every order's customer exists in the CRM (intake/lead orders skipped it)

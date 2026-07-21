@@ -35,8 +35,8 @@ def _order(oid, name, items, status="ORDERED", amount=None, deposit=0, phones=No
             "items": items, "amount_to_collect_usd": amount, "deposit_usd": deposit}
 
 
-def _pkg(status, items):
-    return {"otlobly_status": status, "items": items}
+def _pkg(status, package_no, items):
+    return {"otlobly_status": status, "package_no": package_no, "items": items}
 
 
 def _pitem(oid, asin, qty=1, status="", image=None, title=None):
@@ -69,17 +69,17 @@ def main():
         _order("OTL-0006", "Quoted Qusai", [{"asin": "B0HHH", "qty": 1}],
                status="QUOTED", amount=99.0),
     ]
-    pdb = {"purchase_orders": [{"packages": [
-        _pkg("recieved rd", [_pitem("OTL-0001", "B0AAA", 1,
-                                    image="http://img/aaa.jpg", title="Smart Watch Pro"),
-                             _pitem("OTL-0002", "B0CCC", 1),
-                             _pitem("OTL-0005", "B0FFF", 1),
-                             _pitem("OTL-0006", "B0HHH", 1),
-                             _pitem(None, "B0ZZZ", 5)]),          # unmatched → ignored
-        _pkg("Recieved NO RD", [_pitem("OTL-0001", "B0AAA", 1),   # case-insensitive
-                                _pitem("OTL-0001", "B0BBB", 1, image="http://img/bbb.jpg"),
-                                _pitem("OTL-0005", "B0GGG", 1, status="CANCELLED")]),
-        _pkg("sent rd", [_pitem("OTL-0004", "B0EEE", 1)]),
+    pdb = {"purchase_orders": [{"po_id": "PO-1", "packages": [
+        _pkg("recieved rd", 1, [_pitem("OTL-0001", "B0AAA", 1,
+                                       image="http://img/aaa.jpg", title="Smart Watch Pro"),
+                                _pitem("OTL-0002", "B0CCC", 1),
+                                _pitem("OTL-0005", "B0FFF", 1),
+                                _pitem("OTL-0006", "B0HHH", 1),
+                                _pitem(None, "B0ZZZ", 5)]),          # unmatched → ignored
+        _pkg("Recieved NO RD", 2, [_pitem("OTL-0001", "B0AAA", 1),   # case-insensitive
+                                   _pitem("OTL-0001", "B0BBB", 1, image="http://img/bbb.jpg"),
+                                   _pitem("OTL-0005", "B0GGG", 1, status="CANCELLED")]),
+        _pkg("sent rd", 3, [_pitem("OTL-0004", "B0EEE", 1)]),
     ]}]}
 
     rep = pkgprep.build(orders, pdb, rate=3.1)
@@ -109,6 +109,11 @@ def main():
     check("title falls back to PO item title", ritems["B0AAA"]["title"] == "Smart Watch Pro")
     check("PO image fills even when order title is set", ritems["B0BBB"]["image"] == "http://img/bbb.jpg")
     check("order-supplied title wins over PO title", ritems["B0BBB"]["title"] == "Headphones")
+    # the card surfaces the PO package(s) so the page can change otlobly_status
+    rpk = {(p["po_id"], p["package_no"]): p for p in rana["packages"]}
+    check("card exposes contributing packages", ("PO-1", 1) in rpk and ("PO-1", 2) in rpk)
+    check("package carries its otlobly_status", rpk[("PO-1", 1)]["otlobly_status"] == "recieved rd")
+    check("package flagged shared (holds other customers too)", rpk[("PO-1", 1)]["shared"] is True)
 
     wael = waiting["Waiting Wael"]
     check("waiting counts received vs missing", wael["n_received"] == 1 and wael["n_missing"] == 1)
@@ -149,6 +154,11 @@ def main():
     check("loader + renderer defined",
           "async function loadPkgprep(" in html and "function renderPkgprep(" in html)
     check("WA button uses accent po-btn", 'class="po-btn accent"' in html and "واتساب" in html)
+    check("status picker + setter defined",
+          "function ppStatusPicker(" in html and "async function ppSetStatus(" in html
+          and "function ppPkgRow(" in html)
+    check("status setter posts to the endpoint", '"/api/pkgprep/status"' in html)
+    check("status edit gated on edit_fulfillment", "edit_fulfillment" in html and "function ppCanEdit(" in html)
     check("settings input exists", 'id="s_pkg_ils"' in html)
     check("settings save sends the key", "pkg_ils_per_usd:parseFloat($(\"s_pkg_ils\").value)||3.1" in html)
 

@@ -1904,6 +1904,39 @@ function ppItemRow(it){
     ${img}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px">${nm}</span>
     ${it.qty>1?`<span class="muted" style="font-size:11px;flex:none">×${it.qty}</span>`:""}<span style="flex:none;display:inline-flex;gap:5px">${chips.join("")}</span></div>`;
 }
+function ppCanEdit(){ return (typeof ME==='undefined'||!ME) ? true
+  : (ME.local || (ME.perms&&ME.perms.includes('edit_fulfillment'))); }
+// Change a PO package's Otlobly status straight from the card, then reload
+// (the customer may switch buckets or drop off once marked sent/complete).
+async function ppSetStatus(poId,pno,status){
+  const r=await post("/api/pkgprep/status",{po_id:poId,package_no:pno,otlobly_status:status});
+  if(r&&r.ok){ toast("الحالة تغيّرت ✓"); loadPkgprep(); } else { toast((r&&r.error)||"تعذّر التغيير"); }
+}
+// ClickUp-style status picker (reuses CU_STATUSES + the global .cu-menu/popToggle/cuFilter).
+function ppStatusPicker(pkg){
+  const cur=pkg.otlobly_status||"", c=CU_COLOR[cur]||"#8d8d8d";
+  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur||'—',"#8d8d8d"]].concat(CU_STATUSES));
+  const rows=opts.map(([s,h])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
+      onclick="ppSetStatus('${poEsc(pkg.po_id)}',${JSON.stringify(pkg.package_no)},'${poEsc(s)}')">
+      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(s)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
+    </button>`).join("");
+  return `<span class="pop" style="flex:0 0 auto" onclick="event.stopPropagation()">
+    <button class="statussel" title="حالة أوطلبلي — غيّرها من هنا · Otlobly status"
+      style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cur||'—')} ▾</button>
+    <div class="pop-menu cu-menu">
+      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+      ${rows}
+    </div></span>`;
+}
+function ppPkgRow(pkg){
+  const shared=pkg.shared?tonePill("amber","⚠ مشترك","هذا الطرد يحوي أغراض زبائن آخرين — تغيير الحالة يغيّرها لهم أيضاً"):"";
+  const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",pkg.otlobly_status||"—");
+  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap">
+    <b style="font-size:12px">📦 ${poEsc(pkg.po_id)}</b>
+    <span class="muted" style="font-size:11px">طرد ${poEsc(pkg.package_no)} · ${pkg.n_items} قطعة${pkg.tracking_number?` · ${poEsc(pkg.tracking_number)}`:""}</span>
+    ${shared}<span class="spacer"></span>${ctrl}</div>`;
+}
 function ppCard(c,bucket,i){
   const open=PP_OPEN.has(c.key), t=c.totals||{}, money=t.usd!=null;
   const wa=c.wa_url?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب برسالة جاهزة — الحالة + المبلغ">📱 واتساب</a>`
@@ -1931,7 +1964,11 @@ function ppCard(c,bucket,i){
     <div class="po-meta">${flds.join("")}</div>
   </div>`;
   if(!open) return `<div class="po-card">${head}</div>`;
-  const body=(c.orders||[]).map(o=>{
+  const pkgs=(c.packages||[]);
+  const pkgsHtml=pkgs.length?`<div style="margin-top:8px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px">
+    <div class="lbl" style="margin-bottom:2px">حالة الطرد · package status${ppCanEdit()?" — غيّرها من هنا":""}</div>
+    ${pkgs.map(ppPkgRow).join("")}</div>`:"";
+  const body=pkgsHtml+(c.orders||[]).map(o=>{
     const amt=o.amount_to_collect_usd!=null?`<span class="muted" style="font-size:11.5px">${ppUsd(o.amount_to_collect_usd)}</span>`:"";
     return `<div style="padding:7px 12px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:9px 9px 0 0;display:flex;align-items:center;gap:8px">
       <b style="font-size:12px">${poEsc(o.order_id)}</b>${statusPill(o.status)}${amt}</div>

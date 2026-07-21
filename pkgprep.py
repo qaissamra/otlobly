@@ -42,14 +42,25 @@ def _tally(pdb):
     recv = defaultdict(int)
     sent = defaultdict(int)
     exc = defaultdict(lambda: defaultdict(int))
-    meta = {}                         # key -> {image, title} from the PO item
+    meta = {}                         # (order,asin) -> {image, title} from the PO item
+    pkgmeta = {}                      # (po_id,package_no) -> package + the orders it holds
     for po in (pdb or {}).get("purchase_orders", []):
+        po_id = po.get("po_id")
         for pk in po.get("packages", []):
             pstat = (pk.get("otlobly_status") or "").strip().lower()
+            pkey = (po_id, pk.get("package_no"))
             for it in pk.get("items", []):
                 oid = it.get("customer_order_id")
                 if not oid:
                     continue          # unmatched supply can't vouch for anyone
+                # remember the package so the card can offer a status dropdown
+                pm = pkgmeta.setdefault(pkey, {
+                    "po_id": po_id, "package_no": pk.get("package_no"),
+                    "otlobly_status": pk.get("otlobly_status"),
+                    "tracking_number": pk.get("tracking_number"),
+                    "orders": set(), "n_items": 0})
+                pm["orders"].add(oid)
+                pm["n_items"] += int(it.get("qty") or 1)
                 key = (oid, (it.get("asin") or "").upper() or None)
                 # PO items carry the fetched Amazon photo + real title; order
                 # items usually don't. Remember the first non-empty of each so
@@ -67,7 +78,7 @@ def _tally(pdb):
                     recv[key] += q
                 elif pstat in DISPATCHED_STATUSES:
                     sent[key] += q
-    return recv, sent, exc, meta
+    return recv, sent, exc, meta, pkgmeta
 
 
 def _person_key(order):
@@ -166,7 +177,7 @@ def _partial_message(name, received_items):
 
 def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
     """Group active orders by person and split into ready / waiting cards."""
-    recv, sent, exc, meta = _tally(pdb)
+    recv, sent, exc, meta, pkgmeta = _tally(pdb)
 
     groups = {}
     for o in orders or []:
@@ -206,6 +217,18 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
         if n_received == 0:
             continue                  # nothing of theirs on the prep table yet
 
+        # The PO packages holding this customer's pieces — each carries the
+        # owner-set otlobly_status the card lets you change (recieved/sent/…).
+        order_ids = {o["order_id"] for o in group}
+        card_pkgs = sorted(
+            ({"po_id": pm["po_id"], "package_no": pm["package_no"],
+              "otlobly_status": pm["otlobly_status"],
+              "tracking_number": pm.get("tracking_number"),
+              "n_items": pm["n_items"],
+              "shared": bool(pm["orders"] - order_ids)}   # also holds other customers?
+             for pm in pkgmeta.values() if pm["orders"] & order_ids),
+            key=lambda p: (p["po_id"] or "", p["package_no"] or 0))
+
         usd_r = round(usd, 2)
         dep_r = round(dep, 2)
         totals = {
@@ -228,6 +251,7 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
             "phone": ph.get("e164") if ph else None,
             "wa": wa,
             "orders": card_orders,
+            "packages": card_pkgs,
             "totals": totals,
             "n_items": n_items,
             "n_received": n_received,
