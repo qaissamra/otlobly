@@ -2463,6 +2463,45 @@ def api_leluxe_move():
     return jsonify({"ok": True, **summary})
 
 
+@app.route("/api/leluxe/az2_push", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_push():
+    """Manually push ONE row's status into the AZ (2) source list. The only
+    write path to AZ (2) — CAS-guarded, journalled, tagged + commented there."""
+    b = request.get_json(force=True, silent=True) or {}
+    entry, err = leluxe_mod.az2_push_status(
+        b.get("row_id"), expected_remote=b.get("expected_remote"), user=_user())
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    if not entry.get("noop"):
+        activity.log("pushed", "leluxe", b.get("row_id"), f"#{b.get('row_id')}",
+                     detail=f"AZ (2) status {entry['old']!r} → {entry['new']!r}"
+                            f" (task {entry['task_id']})", user=_user())
+    return jsonify({"ok": True, **entry})
+
+
+@app.route("/api/leluxe/az2_undo", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_undo():
+    b = request.get_json(force=True, silent=True) or {}
+    entry, err = leluxe_mod.az2_undo(b.get("push_id"), user=_user())
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    activity.log("undone", "leluxe", entry["task_id"], f"AZ (2) {entry['task_id']}",
+                 detail=f"push #{entry['id']} reverted → {entry['restored']!r}",
+                 user=_user())
+    return jsonify({"ok": True, **entry})
+
+
+@app.route("/api/leluxe/az2_pushes")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_pushes():
+    return jsonify({"ok": True, "pushes": leluxe_mod.az2_push_history()})
+
+
 @app.route("/api/leluxe/status", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")
@@ -4318,6 +4357,47 @@ def api_gen_customer_tracking():
         pk["customer_tracking"] = purchases.gen_customer_tracking(pdb)
         purchases.save(pdb)
     return jsonify({"ok": True, "customer_tracking": pk["customer_tracking"]})
+
+
+@app.route("/api/pkgprep")
+@auth.require("view_orders")
+def api_pkgprep():
+    """Package prep: customers whose pieces are received (استلمتها اطلبلي) —
+    ready-to-ship vs still-missing — with prefilled WhatsApp status messages."""
+    import pkgprep
+    try:
+        rate = float(cfg.get(cfg.load(), "fx.pkg_ils_per_usd", 3.1)) or 3.1
+    except (TypeError, ValueError):
+        rate = 3.1
+    return jsonify(pkgprep.build(db.list_orders(), purchases.load(), rate,
+                                 include_money=current_user.has("view_money")))
+
+
+@app.route("/api/pkgprep/status", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_pkgprep_status():
+    """Set a PO package's owner Otlobly status from Package prep (recieved rd/no
+    rd, sent rd/no rd, complete, …). It's a PACKAGE-level field, so if the same
+    package also holds other customers' items their cards change too."""
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    status = (b.get("otlobly_status") or "").strip()
+    pdb = purchases.load()
+    po = purchases.find(pdb, b.get("po_id"))
+    pno = b.get("package_no")
+    pk = next((p for p in (po or {}).get("packages", [])
+               if str(p.get("package_no")) == str(pno)), None) if po else None
+    if not pk:
+        return jsonify({"ok": False, "error": "package not found"}), 404
+    old = pk.get("otlobly_status")
+    pk["otlobly_status"] = status or None
+    po["updated_at"] = purchases.now_iso()
+    purchases.save(pdb)
+    db.audit(auth.actor(), "pkg_otlobly_status", "purchase", po["po_id"],
+             f"pkg {pno}: {old or '—'} → {status or '—'}")
+    activity.log("set", "purchase", po["po_id"], _polabel(po),
+                 detail=f"Otlobly status → {status or '—'} (pkg {pno})", user=_user())
+    return jsonify({"ok": True, "otlobly_status": pk["otlobly_status"]})
 
 
 # One-time legacy backfills, run ONCE per deploy (not per worker, not per request):

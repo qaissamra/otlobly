@@ -183,9 +183,12 @@ sent_to = []
 telegram_bot._handle_update({"message": {"chat": {"id": 999}, "text": "today"}},
                             "5551234", send=lambda c, t: sent_to.append((c, t)))
 check("foreign chat ignored", not sent_to)
+# NOTE: _handle_update answers with REAL today (no frozen clock), so assert the
+# auth gate + a well-formed reply, not fixture amounts (those rot at midnight).
 telegram_bot._handle_update({"message": {"chat": {"id": 5551234}, "text": "today"}},
                             "5551234", send=lambda c, t: sent_to.append((c, t)))
-check("owner chat answered", len(sent_to) == 1 and "$500" in sent_to[0][1])
+check("owner chat answered", len(sent_to) == 1 and sent_to[0][0] == 5551234
+      and "📦" in sent_to[0][1])
 
 # ── 4 · digest: text, once-a-day claim, failed-send release ───────────────── #
 print("digest")

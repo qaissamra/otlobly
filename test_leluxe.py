@@ -578,6 +578,137 @@ def gash_status_sync():
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
 
 
+def sync_kept_report():
+    """Sync from AZ (2) must SHOW the comparison even when it changes nothing:
+    app-side edits that win land in report['kept'] (with the ClickUp value),
+    and newly-added products carry ids so the UI can jump to them."""
+    global SRC_TASKS
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.set_path(config, "leluxe.list_id", "L1")
+    cfg.save(config)
+    SRC_TASKS = [
+        _task("SO1", "Order # SYNC-1", "order number", fields=[("NAME", 37)]),
+        _task("SC1", "10 Watch", "sent rd", parent="SO1",
+              fields=[("Tracking Number", "GWD-S1")]),
+    ]
+    for t in SRC_TASKS:
+        t["date_created"] = "1780000000000"
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        r1 = leluxe.sync_from_source("2026-01-01", limit=25)
+        check("initial sync inserts the order", r1.get("orders") == 1 and not r1.get("error"))
+        check("nothing kept on a clean first sync", r1.get("kept") == 0)
+        cid = leluxe._row_id_by_source("SC1")
+        leluxe.set_status(cid, "order number")         # app-side edit, AZ (2) untouched
+        r2 = leluxe.sync_from_source("2026-01-01")
+        check("app edit is reported as kept", r2.get("kept", 0) >= 1 and r2.get("updated") == 0)
+        rep = json.loads(open(leluxe.data_path("leluxe_sync_report.json"), encoding="utf-8").read())
+        ke = next((k for k in rep.get("kept") or [] if k["id"] == cid), None)
+        check("kept entry compares yours vs ClickUp",
+              ke is not None and ke["syncing"] is True and ke["order_id"]
+              and any(d["field"] == "status" and d["local"] == "order number"
+                      and d["remote"] == "sent rd" for d in ke["diffs"]))
+        SRC_TASKS.append(_task("SC2", "3 Strap", "sent rd", parent="SO1",
+                               fields=[("Tracking Number", "GWD-S1")]))
+        SRC_TASKS[-1]["date_created"] = "1780000000001"
+        r3 = leluxe.sync_from_source("2026-01-01")
+        check("added product counted", r3.get("new_items") == 1)
+        rep = json.loads(open(leluxe.data_path("leluxe_sync_report.json"), encoding="utf-8").read())
+        ni = (rep.get("new_items") or [{}])[0]
+        row = ni.get("id") and leluxe.get_row(ni["id"])
+        check("added product carries jumpable ids",
+              bool(ni.get("id")) and bool(ni.get("order_id"))
+              and row and row["kind"] == "item" and row["name"] == "3 Strap")
+    finally:
+        leluxe._http = real
+
+
+AZ2_STATE = {"status": "rd"}
+
+
+def fake_az2_http(url, method="GET", body=None, _retried=False):
+    CALLS.append((method, url, body))
+    if url.endswith("/task/AZT") and method == "GET":
+        return 200, {"id": "AZT", "name": "az2 task",
+                     "status": {"status": AZ2_STATE["status"]}}
+    if url.endswith("/task/AZT") and method == "PUT":
+        AZ2_STATE["status"] = (body or {}).get("status")
+        return 200, {}
+    return 200, {}
+
+
+def az2_push_and_undo():
+    """The one write path into AZ (2): CAS-guarded, journalled with a before-
+    image, tagged+commented, undoable — and refusals write NOTHING."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+        c.execute("DELETE FROM az2_pushes")
+    rid = leluxe._insert_row("item", "9 Watch", status="sent rd",
+                             extra={"source_task_id": "AZT"})
+    bare = leluxe._insert_row("item", "no-link item", status="rd")
+    AZ2_STATE["status"] = "rd"
+    real = leluxe._http
+    leluxe._http = fake_az2_http
+    try:
+        CALLS.clear()
+        _, err = leluxe.az2_push_status(rid, expected_remote="oredered")
+        check("CAS mismatch aborts", err is not None and "changed since" in err)
+        check("aborted push wrote NOTHING",
+              not [1 for m, u, b in CALLS if m in ("PUT", "POST")])
+        _, err = leluxe.az2_push_status(bare)
+        check("row without AZ (2) link refused", err is not None and "no AZ (2) link" in err)
+        db.set_setting("leluxe:az2", {"enabled": False})
+        _, err = leluxe.az2_push_status(rid, expected_remote="rd")
+        check("kill switch honored", err is not None and "disabled" in err)
+        db.set_setting("leluxe:az2", {"enabled": True})
+
+        CALLS.clear()
+        entry, err = leluxe.az2_push_status(rid, expected_remote="rd", user="qais")
+        check("push ok", err is None and entry["old"] == "rd" and entry["new"] == "sent rd")
+        check("AZ (2) task updated", AZ2_STATE["status"] == "sent rd")
+        check("tag + comment posted",
+              any("/tag/otl-push" in u and m == "POST" for m, u, b in CALLS)
+              and any(u.endswith("/comment") and m == "POST" for m, u, b in CALLS))
+        with db.connect() as c:
+            j = dict(c.execute("SELECT * FROM az2_pushes WHERE id=?",
+                               (entry["id"],)).fetchone())
+        check("journal keeps the before-image", j["state"] == "pushed"
+              and j["old_value"] == "rd" and j["new_value"] == "sent rd"
+              and j["user"] == "qais" and "az2 task" in (j["snapshot_json"] or ""))
+        e2, err = leluxe.az2_push_status(rid, expected_remote="sent rd")
+        with db.connect() as c:
+            n = c.execute("SELECT COUNT(*) n FROM az2_pushes").fetchone()["n"]
+        check("already-equal is a no-op (no journal)", err is None
+              and e2.get("noop") and n == 1)
+
+        AZ2_STATE["status"] = "delivered"          # Faisal moved it meanwhile
+        _, err = leluxe.az2_undo(entry["id"])
+        check("undo aborts when AZ (2) drifted", err is not None and "changed after" in err)
+        AZ2_STATE["status"] = "sent rd"
+        CALLS.clear()
+        u1, err = leluxe.az2_undo(entry["id"], user="qais")
+        check("undo restores the old value", err is None
+              and u1["restored"] == "rd" and AZ2_STATE["status"] == "rd")
+        with db.connect() as c:
+            st1 = c.execute("SELECT state FROM az2_pushes WHERE id=?",
+                            (entry["id"],)).fetchone()["state"]
+            und = c.execute("SELECT * FROM az2_pushes WHERE undo_of=?",
+                            (entry["id"],)).fetchone()
+        check("journal marks undone + records the undo",
+              st1 == "undone" and und and und["state"] == "undo")
+        check("marker tag removed after last undo",
+              any("/tag/otl-push" in u and m == "DELETE" for m, u, b in CALLS))
+        hist = leluxe.az2_push_history()
+        check("history lists newest first", hist and hist[0]["state"] == "undo"
+              and hist[-1]["state"] == "undone")
+    finally:
+        leluxe._http = real
+
+
 def endpoints_gated():
     import app as appmod
     import auth
@@ -607,6 +738,10 @@ def endpoints_gated():
           brk.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
     check("move route blocks sales (needs admin_actions)",
           sales.post("/api/leluxe/move", json={"id": 1, "parent_local_id": 2}).status_code == 403)
+    check("az2 push blocked for broker + sales",
+          brk.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
+          and sales.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
+          and sales.get("/api/leluxe/az2_pushes").status_code == 403)
 
 
 def move_between_packages():
@@ -733,6 +868,169 @@ def move_between_packages():
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
 
 
+def regroup_and_sweep():
+    """A product's GWD decides its 📦: regroup re-homes tracked products into
+    per-tracking packages (backfilling a whole package in place when all its
+    products agree on one new GWD), sweeps dead untracked packages two-phase
+    (the ClickUp twin is queued only once nothing can cascade), and the
+    save_row / move_item hooks fire it. See leluxe.regroup_order()."""
+    import time as _t
+    OLD = int(_t.time() * 1000) - 7_200_000        # beyond the 1h sweep grace
+    F, SF = "Tracking Number", SCHEMA["fields"]
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+        c.execute("DELETE FROM leluxe_cu_deletes")
+
+    def order(name):
+        return leluxe._insert_row("order", name)
+
+    def pkg(oid, tn=None, tid=None, fresh=False):
+        pid = leluxe._insert_row(
+            "package", f"📦 {tn}" if tn else "📦 no tracking",
+            parent_local_id=oid, extra={"tracking_number": tn} if tn else {},
+            date_created=None if fresh else OLD)
+        if tid:
+            with db.connect() as c:
+                c.execute("UPDATE leluxe_orders SET clickup_task_id=?, "
+                          "sync_state='synced' WHERE id=?", (tid, pid))
+        return pid
+
+    def item(pid, name, tn=None):
+        return leluxe._insert_row("item", name, parent_local_id=pid,
+                                  fields={F: tn} if tn else {})
+
+    def queued():
+        with db.connect() as c:
+            return sorted(r["task_id"] for r in
+                          c.execute("SELECT task_id FROM leluxe_cu_deletes"))
+
+    row = leluxe.get_row
+
+    # ── the reported case: a stale "📦 no tracking" package holding products
+    # that each got their own GWD later, plus an empty untracked package ──
+    oA = order("#61068")
+    p1 = pkg(oA)
+    a, b = item(p1, "5 Watch", "GWD-1"), item(p1, "13 Watch", "GWD-2")
+    c_ = item(p1, "15 Watch", "GWD-2")
+    p2 = pkg(oA, tid="cu-empty")                   # empty untracked, pushed
+    p3 = pkg(oA, tn="GWD-9")                       # empty TRACKED → real parcel
+    out = leluxe.regroup_order(oA)
+    check("regroup: moved=3 created=2 swept=2",
+          out == {"moved": 3, "backfilled": 0, "created": 2, "swept": 2})
+    with db.connect() as c:
+        ps = {leluxe._row_tn(row(r["id"]), SF): row(r["id"]) for r in
+              c.execute("SELECT id FROM leluxe_orders WHERE parent_local_id=? "
+                        "AND kind='package' AND deleted=0", (oA,))}
+    check("per-GWD packages exist, tracked shell kept",
+          sorted(ps) == ["GWD-1", "GWD-2", "GWD-9"])
+    check("products re-homed to their GWD's package",
+          row(a)["parent_local_id"] == ps["GWD-1"]["id"]
+          and row(b)["parent_local_id"] == ps["GWD-2"]["id"]
+          == row(c_)["parent_local_id"] and row(a)["sync_state"] == "dirty")
+    check("stale + empty untracked pkgs swept (with marker)",
+          row(p1)["deleted"] == 1 and row(p1)["data"].get("swept")
+          and row(p2)["deleted"] == 1 and row(p3)["deleted"] == 0)
+    check("empty pushed pkg's ClickUp twin queued (nothing can cascade)",
+          queued() == ["cu-empty"])
+    check("created package carries the Tracking Number field",
+          ps["GWD-1"]["data"]["fields"].get(F) == "GWD-1")
+
+    # ── backfill: every product agrees on ONE new GWD → package becomes it ──
+    oB = order("#B"); p4 = pkg(oB)
+    d1, d2 = item(p4, "d1", "GWD-5"), item(p4, "d2", "GWD-5")
+    out = leluxe.regroup_order(oB)
+    p4r = row(p4)
+    check("backfill in place (no moves, renamed, field set)",
+          out == {"moved": 0, "backfilled": 1, "created": 0, "swept": 0}
+          and p4r["name"] == "📦 GWD-5" and p4r["data"]["tracking_number"] == "GWD-5"
+          and p4r["data"]["fields"].get(F) == "GWD-5"
+          and row(d1)["parent_local_id"] == p4 and row(d2)["parent_local_id"] == p4)
+
+    # ── an untracked product never moves; its package survives ──
+    oC = order("#C"); p5 = pkg(oC)
+    f_, g_ = item(p5, "f"), item(p5, "g", "GWD-7")
+    out = leluxe.regroup_order(oC)
+    check("tracked product splits off, untracked stays, pkg kept",
+          out["moved"] == 1 and row(f_)["parent_local_id"] == p5
+          and row(p5)["deleted"] == 0
+          and leluxe._row_tn(row(row(g_)["parent_local_id"]), SF) == "GWD-7")
+    check("regroup is idempotent",
+          leluxe.regroup_all() == {"moved": 0, "backfilled": 0,
+                                   "created": 0, "swept": 0})
+
+    # ── move_item: validation precedes the new-package destination ──
+    oE = order("#E"); p6 = pkg(oE)
+    h = leluxe._insert_row("item", "5 h", parent_local_id=p6,
+                           fields={"Quantity ordered ": 5})
+    res, err = leluxe.move_item(h, new_package=True, move_qty=0)
+    with db.connect() as c:
+        n = c.execute("SELECT COUNT(*) n FROM leluxe_orders WHERE "
+                      "parent_local_id=? AND kind='package' AND deleted=0",
+                      (oE,)).fetchone()["n"]
+    check("qty=0 split rejected BEFORE creating its destination",
+          res is None and n == 1)
+    res, err = leluxe.move_item(h, new_package=True)
+    check("whole move sweeps the emptied untracked source",
+          err is None and row(p6)["deleted"] == 1
+          and row(res["dest_id"])["deleted"] == 0)
+
+    # ── save_row hook: a changed Tracking Number re-homes the product ──
+    oH = order("#H"); p7 = pkg(oH)
+    i2, i3 = item(p7, "i2"), item(p7, "i3")
+    leluxe.save_row({"id": i2, "kind": "item", "name": "i2", "status": "",
+                     "fields": {F: "GWD-8"}, "parent_local_id": p7})
+    check("save_row(tracking) fires regroup, untracked sibling untouched",
+          leluxe._row_tn(row(row(i2)["parent_local_id"]), SF) == "GWD-8"
+          and row(i2)["parent_local_id"] != p7
+          and row(i3)["parent_local_id"] == p7)
+
+    # ── conflict-parked products are never touched ──
+    oI = order("#I"); p8 = pkg(oI); i4 = item(p8, "i4", "GWD-X")
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='conflict' WHERE id=?", (i4,))
+    out = leluxe.regroup_order(oI)
+    res, err = leluxe.move_item(i4, new_package=True)
+    check("conflict row: regroup skips, move refuses",
+          out["moved"] == 0 and row(i4)["parent_local_id"] == p8
+          and res is None and "review" in (err or ""))
+
+    # ── pull-born row: pushed.parent seeded; CU delete deferred until safe ──
+    oJ = order("#J"); pJ = pkg(oJ, tid="cu-p1")
+    iJ = item(pJ, "iJ", "GWD-Z"); item(pJ, "iJ2", "GWD-Y")
+    with db.connect() as c:                        # as upsert_from_clickup left it
+        c.execute("""UPDATE leluxe_orders SET clickup_task_id='cu-i1',
+                     parent_task_id='cu-p1', sync_state='synced' WHERE id=?""", (iJ,))
+    leluxe.regroup_order(oJ)
+    rJ = row(iJ)
+    check("pull-born move seeds pushed.parent (PUT will really fire)",
+          rJ["sync_state"] == "dirty"
+          and (rJ["data"].get("pushed") or {}).get("parent") == "cu-p1")
+    check("swept pkg's CU twin NOT queued while the re-parent is unpushed",
+          row(pJ)["deleted"] == 1 and "cu-p1" not in queued())
+    with db.connect() as c:                        # simulate the push landing
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?", (iJ,)).fetchone()
+        dd = json.loads(r["data_json"]); dd["pushed"]["parent"] = "cu-new"
+        c.execute("UPDATE leluxe_orders SET sync_state='synced', data_json=? "
+                  "WHERE id=?", (json.dumps(dd), iJ))
+    leluxe.regroup_order(oJ)
+    check("…and queued once it landed", "cu-p1" in queued())
+
+    # ── a just-made empty package gets an hour's grace ──
+    oK = order("#K"); pK = pkg(oK, fresh=True)
+    out = leluxe.regroup_order(oK)
+    check("fresh hand-made empty pkg survives the sweep",
+          out["swept"] == 0 and row(pK)["deleted"] == 0)
+
+    # ── a user-hidden child keeps blocking its parent's CU delete ──
+    oM = order("#M"); pM = pkg(oM, tid="cu-pm"); iM = item(pM, "iM")
+    with db.connect() as c:                        # lxDelete: local hide only
+        c.execute("UPDATE leluxe_orders SET clickup_task_id='cu-im', deleted=1 "
+                  "WHERE id=?", (iM,))
+    leluxe.regroup_order(oM)
+    check("hidden child's task blocks the swept pkg's CU delete",
+          row(pM)["deleted"] == 1 and "cu-pm" not in queued())
+
+
 def main():
     db.init_db()
     setup_config()
@@ -748,6 +1046,9 @@ def main():
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
     print("move packages:");     move_between_packages()
+    print("regroup + sweep:");   regroup_and_sweep()
+    print("sync kept report:");  sync_kept_report()
+    print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
     print()
     if fails:

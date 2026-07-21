@@ -186,6 +186,21 @@ CREATE TABLE IF NOT EXISTS leluxe_cu_deletes (
   updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_leluxe_cudel_state ON leluxe_cu_deletes(state);
+CREATE TABLE IF NOT EXISTS az2_pushes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  row_id INTEGER,                       -- local leluxe_orders.id (may outlive it)
+  task_id TEXT NOT NULL,                -- the AZ (2) task written to
+  field TEXT NOT NULL,                  -- 'status' (v1 allowlist)
+  old_value TEXT,                       -- AZ (2) value at push time (CAS-verified)
+  new_value TEXT,                       -- what we wrote
+  snapshot_json TEXT,                   -- full AZ (2) task JSON BEFORE the write
+  ts TEXT NOT NULL,
+  user TEXT,
+  state TEXT NOT NULL DEFAULT 'pushed', -- pushed | undone | undo
+  undo_of INTEGER                       -- for state='undo': the push it reverts
+);
+CREATE INDEX IF NOT EXISTS ix_az2p_task ON az2_pushes(task_id);
+CREATE INDEX IF NOT EXISTS ix_az2p_ts ON az2_pushes(ts);
 CREATE TABLE IF NOT EXISTS leluxe_status_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   row_id INTEGER NOT NULL,              -- leluxe_orders.id

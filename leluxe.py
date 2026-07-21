@@ -423,6 +423,7 @@ def save_row(payload, config=None):
             if not r:
                 return None, "row not found"
             d = _row(r)["data"]
+            old_fields = dict(d.get("fields") or {})
             d.update({"description": desc, "tags": tags, "fields": fields})
             d.pop("pending_fields", None)   # a real edit → full push takes over
             if kind == "package":
@@ -436,12 +437,28 @@ def save_row(payload, config=None):
                        json.dumps(d, ensure_ascii=False), payload["id"]))
             db.log_leluxe_status(payload["id"], r["status"], status, "app", c=c)
         row_id = payload["id"]
+        # a product's Tracking Number changed → its 📦 must follow the GWD
+        if kind == "item":
+            ok_ = str(old_fields.get(_field_key(old_fields, "Tracking Number",
+                                                fields_def)) or "").strip()
+            nk_ = str(fields.get(_field_key(fields, "Tracking Number",
+                                            fields_def)) or "").strip()
+            if ok_ != nk_:
+                top = _top_order_of(get_row(row_id))
+                if top:
+                    regroup_order(top["id"], config)
     else:
         extra = {"tracking_number": tn} if tn else {}
         row_id = _insert_row(
             kind, name, status=status, due_date=due_ms, fields=fields,
             desc=desc, tags=tags, parent_local_id=parent_local,
             parent_task_id=(parent or {}).get("clickup_task_id"), extra=extra)
+        # a brand-new product born WITH a GWD lands in that parcel's package
+        if kind == "item" and str(fields.get(_field_key(fields, "Tracking Number",
+                                                        fields_def)) or "").strip():
+            top = _top_order_of(get_row(row_id))
+            if top:
+                regroup_order(top["id"], config)
     kick()
     return get_row(row_id), None
 
@@ -571,11 +588,26 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
         return None, "row not found"
     if row["kind"] != "item":
         return None, "only a product can be moved"
+    if row.get("sync_state") == "conflict":     # dirty would silently un-park it
+        return None, "this product is parked for sync review — resolve it first"
     order = _top_order_of(row)
     if not order:
         return None, "this product isn't inside an order"
 
-    # ── resolve the destination package ──
+    sch = schema(config)
+    sfields = sch.get("fields") or {}
+    data = dict(row["data"])
+    fields = dict(data.get("fields") or {})
+    qk = _field_key(fields, "Quantity ordered", sfields)
+    ak = _field_key(fields, "Total Amount", sfields)
+    Q = _as_num(fields.get(qk))
+    mq = _as_num(move_qty)
+    whole = mq is None or Q is None or mq >= Q
+    if not whole and mq <= 0:       # validated BEFORE new_package creates its
+        return None, "quantity to move must be at least 1"   # (empty) destination
+
+    # ── resolve the destination package (only after validation, so a rejected
+    # split can never strand a just-created empty package) ──
     if new_package:
         dest_id = _insert_row("package", "📦 no tracking",
                               parent_local_id=order["id"],
@@ -593,28 +625,19 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
         if dest["id"] == row.get("parent_local_id"):
             return None, "already in that package"
 
-    sch = schema(config)
-    sfields = sch.get("fields") or {}
-    data = dict(row["data"])
-    fields = dict(data.get("fields") or {})
-    qk = _field_key(fields, "Quantity ordered", sfields)
-    ak = _field_key(fields, "Total Amount", sfields)
-    Q = _as_num(fields.get(qk))
-    mq = _as_num(move_qty)
-
-    # ── whole move: re-parent the row (both ids → dirty → pusher re-parents) ──
-    if mq is None or Q is None or mq >= Q:
-        with db.connect() as c:
-            c.execute("""UPDATE leluxe_orders SET parent_local_id=?, parent_task_id=?,
-                         sync_state='dirty', sync_error=NULL, sync_attempts=0,
-                         updated_at=? WHERE id=?""",
-                      (dest["id"], dest.get("clickup_task_id"), db.now_iso(), row_id))
-        _clear_pending(row_id)      # a leftover field-only marker would skip the re-parent push
+    # ── whole move: re-parent the row (both ids → dirty → pusher re-parents;
+    # _reparent_item also seeds pushed.parent so pull-born rows really move) ──
+    if whole:
+        if not _reparent_item(row, dest):
+            return None, "row not found"
+        # the move may have emptied its source package — an untracked empty is
+        # pure noise (the "no tracking" leftovers the owner keeps hiding), so
+        # sweep it right away; a tracked one is a real parcel and stays.
+        if row.get("parent_local_id"):
+            _sweep_order_packages(order["id"], sfields)
         kick()
         return {"mode": "move", "row_id": row_id, "dest_id": dest["id"],
                 "qty": Q, "new_package": bool(new_package)}, None
-    if mq <= 0:
-        return None, "quantity to move must be at least 1"
 
     # ── partial split: reduce the source's QTY only, clone the moved units into
     # dest. The Total Amount is NOT divided — the full original ₪ stays on the
@@ -656,6 +679,248 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
     return {"mode": "split", "row_id": row_id, "new_id": new_id,
             "dest_id": dest["id"], "moved_qty": mq, "left_qty": Q - mq,
             "new_package": bool(new_package)}, None
+
+
+# --------------------------------------------------------------------------- #
+# Auto-regroup: a product's own Tracking Number decides which 📦 it lives in.
+# Packages are frozen at import-time grouping (all-untracked → one shared
+# "📦 no tracking"), but products receive their real GWD later — via the AZ (2)
+# merge or 🚚 set-tracking — and used to stay stuck under the stale package.
+# regroup_order() restores the invariant after every sync/pull/tracking edit.
+# --------------------------------------------------------------------------- #
+_SWEEP_GRACE_MS = 3_600_000     # a hand-made empty package survives an hour
+
+
+def _row_tn(row, sfields):
+    """The row's own GAASH tracking number ('' when untracked). Same precedence
+    the board uses: packages read the JSON mirror key first, items their
+    ClickUp custom field first."""
+    d = row.get("data") or {}
+    fields = d.get("fields") or {}
+    fv = str(fields.get(_field_key(fields, "Tracking Number", sfields)) or "").strip()
+    jv = str(d.get("tracking_number") or "").strip()
+    return (jv or fv) if row.get("kind") == "package" else (fv or jv)
+
+
+def _reparent_item(row, dest):
+    """Whole-move re-parent shared by move_item + regroup_order: flip both
+    parent ids, mark dirty, drop field-only markers. Pull-born rows get their
+    OLD parent seeded into data.pushed.parent first — their push snapshot never
+    recorded a parent, and push_one's legacy-adopt branch would otherwise
+    swallow the move (no ClickUp PUT), the next Pull would snap the product
+    back, and the boards would ping-pong forever. Conflict-parked rows are
+    refused (going dirty would silently un-park the review). Returns True when
+    the row was re-parented."""
+    old_tid = _parent_task_id(row)
+    with db.connect() as c:
+        r = c.execute("SELECT sync_state, data_json FROM leluxe_orders "
+                      "WHERE id=? AND deleted=0", (row["id"],)).fetchone()
+        if not r or r["sync_state"] == "conflict":
+            return False
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        if row.get("clickup_task_id") and old_tid and \
+                (d.get("pushed") or {}).get("parent") is None:
+            d.setdefault("pushed", {})["parent"] = old_tid
+        c.execute("""UPDATE leluxe_orders SET parent_local_id=?, parent_task_id=?,
+                     data_json=?, sync_state='dirty', sync_error=NULL,
+                     sync_attempts=0, updated_at=? WHERE id=?""",
+                  (dest["id"], dest.get("clickup_task_id"),
+                   json.dumps(d, ensure_ascii=False), db.now_iso(), row["id"]))
+    _clear_pending(row["id"])   # a field-only marker would skip the re-parent push
+    return True
+
+
+def _sweep_order_packages(order_id, sfields):
+    """Two-phase janitor for one order's dead packages. Phase 1 soft-deletes
+    (with a data.swept stamp) every package that has ZERO live children — the
+    emptiness re-check lives INSIDE the UPDATE, so a package holding any
+    product can never be swept — and is untracked (or a non-canonical duplicate
+    of another live package's tracking; a unique tracked shell is a real parcel
+    awaiting products and stays, owner's call 2026-07-21). Fresh packages get
+    an hour's grace so "＋ Add package" isn't vacuumed mid-arrangement, and
+    mid-push rows are left alone (their task id may not be persisted yet).
+
+    Phase 2 queues the ClickUp working-list twin of ALREADY-swept packages —
+    but only once NOTHING can cascade: ClickUp deletes subtasks with their
+    parent, so the twin must survive while any row still maps a task under it
+    (user-hidden children keep their "hide never touches ClickUp" promise) or
+    any unpushed re-parent still references it (a moved product whose PUT
+    hasn't landed). run_delete_pass re-verifies the list; AZ (2) untouchable.
+    Returns the number of phase-1 sweeps."""
+    swept = 0
+    now_ms = int(time.time() * 1000)
+    with db.connect() as c:
+        pkgs = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND "
+            "kind='package' AND deleted=0 ORDER BY id", (order_id,))]
+        canon = {}                      # tn → lowest live package id
+        for p in pkgs:
+            t = _row_tn(p, sfields)
+            if t:
+                canon.setdefault(t, p["id"])
+        for p in pkgs:
+            t = _row_tn(p, sfields)
+            if t and canon.get(t) == p["id"]:
+                continue                # the parcel's canonical package stays
+            try:
+                born = int(p.get("date_created") or 0)
+            except (TypeError, ValueError):
+                born = 0
+            if born and now_ms - born < _SWEEP_GRACE_MS:
+                continue
+            d = dict(p.get("data") or {})
+            d["swept"] = db.now_iso()   # sweep-vs-hide marker (phase 2 + audit)
+            n = c.execute("""UPDATE leluxe_orders SET deleted=1, data_json=?,
+                             updated_at=? WHERE id=? AND deleted=0
+                               AND sync_state!='pushing'
+                               AND NOT EXISTS (SELECT 1 FROM leluxe_orders k
+                                               WHERE k.parent_local_id=leluxe_orders.id
+                                                 AND k.deleted=0)""",
+                          (json.dumps(d, ensure_ascii=False), db.now_iso(),
+                           p["id"])).rowcount
+            swept += n
+        # phase 2 — previously (or just) swept twins whose deletion is now safe
+        for s in c.execute(
+                """SELECT id, clickup_task_id, name, data_json FROM leluxe_orders
+                   WHERE parent_local_id=? AND kind='package' AND deleted=1
+                     AND clickup_task_id IS NOT NULL""", (order_id,)).fetchall():
+            try:
+                sd = json.loads(s["data_json"] or "{}")
+            except ValueError:
+                sd = {}
+            if not sd.get("swept"):
+                continue                # user-hidden → its ClickUp task must stay
+            blocked = c.execute(
+                """SELECT 1 FROM leluxe_orders
+                   WHERE (parent_local_id=? AND clickup_task_id IS NOT NULL)
+                      OR (deleted=0 AND sync_state!='synced'
+                          AND json_extract(data_json,'$.pushed.parent')=?)
+                   LIMIT 1""", (s["id"], s["clickup_task_id"])).fetchone()
+            if not blocked:
+                _queue_cu_delete(c, s["clickup_task_id"], s["id"], s["name"])
+    return swept
+
+
+def regroup_order(order_id, config=None):
+    """Re-home every tracked product of one order into the package whose
+    tracking matches its own GWD (created on demand), then sweep untracked
+    packages left with zero products. Cheapest fix first: an untracked package
+    whose products ALL share one new GWD simply BECOMES that parcel (backfill +
+    rename) instead of re-parenting every row. Untracked products never move,
+    conflict-parked rows are skipped, and loose items (hanging off the order)
+    keep their display-only visual grouping. All writes are local dirty rows —
+    the pusher mirrors them to the WORKING list only; AZ (2) is never written.
+    Idempotent and SQLite-only, so sync/pull/edit tails can call it freely."""
+    config = config or cfg.load()
+    out = {"moved": 0, "backfilled": 0, "created": 0, "swept": 0}
+    order = get_row(order_id)
+    if not order or order.get("deleted") or order["kind"] not in TOP_KINDS:
+        return out
+    sfields = (schema(config) or {}).get("fields") or {}
+    known = set(sfields.keys())
+    with db.connect() as c:
+        pkgs = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND "
+            "kind='package' AND deleted=0 ORDER BY id", (order_id,))]
+        items = []
+        if pkgs:
+            ph = ",".join("?" * len(pkgs))
+            items = [_row(r) for r in c.execute(
+                f"SELECT * FROM leluxe_orders WHERE parent_local_id IN ({ph}) "
+                f"AND kind='item' AND deleted=0", [p["id"] for p in pkgs])]
+    if not pkgs:
+        return out
+    pkg_tn = {p["id"]: _row_tn(p, sfields) for p in pkgs}
+    by_tn = {}                          # tn → canonical package (oldest wins)
+    for p in pkgs:
+        if pkg_tn[p["id"]]:
+            by_tn.setdefault(pkg_tn[p["id"]], p)
+    kids = {}
+    for it in items:
+        kids.setdefault(it["parent_local_id"], []).append(it)
+
+    # 1) backfill: untracked package, every product agrees on ONE new GWD and
+    #    no other package owns it → the package becomes that parcel in place.
+    for p in pkgs:
+        if pkg_tn[p["id"]] or not kids.get(p["id"]):
+            continue
+        tns = {_row_tn(it, sfields) for it in kids[p["id"]]}
+        tn = next(iter(tns)) if len(tns) == 1 else ""
+        if not tn or tn in by_tn:
+            continue
+        with db.connect() as c:
+            r = c.execute("SELECT name, data_json FROM leluxe_orders "
+                          "WHERE id=? AND deleted=0", (p["id"],)).fetchone()
+            if not r:
+                continue
+            d = json.loads(r["data_json"] or "{}")
+            d["tracking_number"] = tn
+            if "Tracking Number" in known:
+                f = d.get("fields") or {}
+                f[_field_key(f, "Tracking Number", sfields)] = tn
+                d["fields"] = f
+            d.pop("pending_fields", None)          # a real edit → full push
+            name = f"📦 {tn}" if (r["name"] or "").strip() in \
+                ("📦 no tracking", "📦", "") else r["name"]
+            c.execute("""UPDATE leluxe_orders SET name=?, data_json=?,
+                         sync_state='dirty', sync_error=NULL, sync_attempts=0,
+                         updated_at=? WHERE id=?""",
+                      (name, json.dumps(d, ensure_ascii=False), db.now_iso(),
+                       p["id"]))
+        pkg_tn[p["id"]] = tn
+        by_tn[tn] = p
+        out["backfilled"] += 1
+
+    # 2) re-home: a tracked product under a package with a DIFFERENT tracking
+    #    moves to its own parcel's package (same mechanics as move_item).
+    for p in pkgs:
+        for it in kids.get(p["id"], []):
+            tn = _row_tn(it, sfields)
+            if not tn or tn == pkg_tn[p["id"]] or it["sync_state"] == "conflict":
+                continue
+            dest = by_tn.get(tn)
+            if dest is None:
+                ifields = (it["data"] or {}).get("fields") or {}
+                pkg_fields = {k: ifields[k] for k in _PKG_FIELDS
+                              if k in known and ifields.get(k) is not None}
+                if "Tracking Number" in known:
+                    pkg_fields["Tracking Number"] = tn
+                did = _insert_row("package", f"📦 {tn}", fields=pkg_fields,
+                                  parent_local_id=order_id,
+                                  parent_task_id=order.get("clickup_task_id"),
+                                  date_created=order.get("date_created"),
+                                  extra={"tracking_number": tn})
+                dest = get_row(did)
+                by_tn[tn] = dest
+                out["created"] += 1
+            if _reparent_item(it, dest):
+                out["moved"] += 1
+
+    # 3) sweep dead packages (empty + untracked/duplicate-tn) and, once safe,
+    #    their ClickUp twins — see _sweep_order_packages.
+    out["swept"] = _sweep_order_packages(order_id, sfields)
+    if any(out.values()):
+        kick()
+    return out
+
+
+def regroup_all(config=None):
+    """regroup_order over every live order — pure SQLite, so the pull/sync
+    tails run it to heal historical orders (stale '📦 no tracking' groups from
+    before tracking numbers existed) in the same pass."""
+    config = config or cfg.load()
+    out = {"moved": 0, "backfilled": 0, "created": 0, "swept": 0}
+    with db.connect() as c:
+        ids = [r["id"] for r in c.execute(
+            "SELECT id FROM leluxe_orders WHERE deleted=0 AND kind IN (?,?)",
+            TOP_KINDS)]
+    for oid in ids:
+        for k, v in regroup_order(oid, config).items():
+            out[k] += v
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -796,6 +1061,7 @@ def pull_tasks(config=None):
             break
         page += 1
     _relink()
+    stats["regroup"] = regroup_all(config)   # tracked products follow their GWD
     return stats
 
 
@@ -1493,15 +1759,16 @@ def _insert_new_item(order_id, ch, sch, known, keep, made):
                              date_created=ccols["date_created"],
                              extra={"tracking_number": tn or None})
         made["packages"] += 1
-    _insert_row("item", ccols["name"], status=ccols["status"],
-                due_date=ccols["due_date"], fields=keep(cdata["fields"]),
-                desc=cdata["description"], parent_local_id=pkg_id,
-                date_created=ccols["date_created"],
-                extra={"source_task_id": ch["id"],
-                       "source_cu_updated": str(ch.get("date_updated") or ""),
-                       "source_base": _snapshot(ccols, cdata, keep)})
+    iid = _insert_row("item", ccols["name"], status=ccols["status"],
+                      due_date=ccols["due_date"], fields=keep(cdata["fields"]),
+                      desc=cdata["description"], parent_local_id=pkg_id,
+                      date_created=ccols["date_created"],
+                      extra={"source_task_id": ch["id"],
+                             "source_cu_updated": str(ch.get("date_updated") or ""),
+                             "source_base": _snapshot(ccols, cdata, keep)})
     made["items"] += 1
     made["new_items"] += 1
+    return iid
 
 
 def _adopt_child_source(row_id, src_task, sch, keep):
@@ -1524,6 +1791,57 @@ def _adopt_child_source(row_id, src_task, sch, keep):
                   (json.dumps(d, ensure_ascii=False), row_id))
 
 
+def _trim_val(field, v):
+    """Report-friendly value: long text (descriptions) clipped so the sync
+    report stays readable/small."""
+    if isinstance(v, str) and len(v) > 120:
+        return v[:120] + "…"
+    return v
+
+
+def _kept_diffs(row_id, src_task, sch, keep, report, oname, order_id):
+    """Owner-visible comparison: current LOCAL row vs AZ (2) RIGHT NOW — run for
+    every matched row regardless of the merge's skips (source_cu_updated
+    unchanged, dirty-wins, base-equal 'keep'). Any field where the app kept a
+    value different from AZ (2) lands in report['kept'], so 'Sync from AZ (2)'
+    always SHOWS the comparison even when it changes nothing. Conflict-parked
+    rows are skipped (they're surfaced in the review panel already)."""
+    if report is None or len(report.get("kept") or []) >= 400:
+        return
+    row = get_row(row_id)
+    if not row or row.get("deleted") or row["sync_state"] == "conflict":
+        return
+    rcols, rdata = _decode_task(src_task, sch)
+    remote = _snapshot(rcols, rdata, keep)
+    data = row["data"]
+    local = {"name": row["name"], "status": row["status"] or "",
+             "due_date": row["due_date"],
+             "description": data.get("description") or "",
+             "tags": list(data.get("tags") or []),
+             "fields": dict(data.get("fields") or {})}
+    diffs = []
+    for field in _SCALARS:
+        if field == "fields":
+            continue
+        if not _vals_equal(field, remote.get(field), local.get(field)):
+            diffs.append({"field": field, "label": _FIELD_LABELS.get(field, field),
+                          "local": _trim_val(field, local.get(field)),
+                          "remote": _trim_val(field, remote.get(field))})
+    rf, lf = remote.get("fields") or {}, local.get("fields") or {}
+    for fname in sorted(set(rf) | set(lf)):
+        if not _vals_equal(fname, rf.get(fname), lf.get(fname)):
+            diffs.append({"field": fname, "label": fname,
+                          "local": _trim_val(fname, lf.get(fname)),
+                          "remote": _trim_val(fname, rf.get(fname))})
+    if diffs:
+        report.setdefault("kept", []).append({
+            "id": row_id, "kind": row["kind"], "name": row["name"] or "",
+            "order": oname, "order_id": order_id,
+            "task_id": data.get("source_task_id"),   # → enables ⤴ Push to AZ (2)
+            "syncing": row["sync_state"] in ("dirty", "pushing"),
+            "diffs": diffs})
+
+
 def _merge_order(rid, src_order, kids, sch, known, keep, made,
                  review_all=False, report=None):
     """Merge an existing order + its AZ (2) children (merge matched items, insert
@@ -1536,10 +1854,12 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
             return
         if res == "updated" and chs:
             report["applied"].append({"id": row_id, "kind": kind, "name": name,
-                                      "order": oname, "changes": chs})
+                                      "order": oname, "order_id": rid,
+                                      "changes": chs})
         elif res == "conflict":
             report["conflict_rows"].append({"id": row_id, "kind": kind,
-                                            "name": name, "order": oname})
+                                            "name": name, "order": oname,
+                                            "order_id": rid})
 
     chs = []
     res = _merge_row(rid, src_order, sch, known, keep, review_all, chs)
@@ -1548,6 +1868,7 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
     elif res == "updated":
         made["updated"] += 1
     _record(rid, "order", oname, res, chs)
+    _kept_diffs(rid, src_order, sch, keep, report, oname, rid)
     # name-key adoption for CHILDREN too: originals from the list-duplication
     # carry no source_task_id — match by name so we never twin a product.
     with db.connect() as c:
@@ -1574,10 +1895,12 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
             elif r2 == "updated":
                 made["updated"] += 1
             _record(crid, "item", ch.get("name") or "", r2, chs2)
+            _kept_diffs(crid, ch, sch, keep, report, oname, rid)
         else:
-            _insert_new_item(rid, ch, sch, known, keep, made)
+            iid = _insert_new_item(rid, ch, sch, known, keep, made)
             if report is not None:
-                report["new_items"].append({"name": ch.get("name") or "",
+                report["new_items"].append({"id": iid, "order_id": rid,
+                                            "name": ch.get("name") or "",
                                             "order": oname})
 
 
@@ -1674,10 +1997,11 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
     tops.sort(key=lambda t: int(t.get("date_created") or 0), reverse=True)
     made = {"orders": 0, "updated": 0, "conflicts": 0, "packages": 0,
             "items": 0, "new_items": 0, "skipped": 0, "scanned": len(tops),
-            "order_ids": []}
+            "order_ids": [],
+            "regroup": {"moved": 0, "backfilled": 0, "created": 0, "swept": 0}}
     snap = _presync_snapshot()              # safety net BEFORE any write
     report = {"ts": db.now_iso(), "review_all": bool(review_all), "applied": [],
-              "new_orders": [], "new_items": [], "conflict_rows": []}
+              "new_orders": [], "new_items": [], "conflict_rows": [], "kept": []}
     okeys = _existing_order_keys()          # name-key fallback for pre-feature rows
     inserted = 0
     for src_order in tops:
@@ -1691,6 +2015,9 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
         if rid:
             _merge_order(rid, src_order, kids, sch, known, keep, made,
                          review_all, report)
+            if not review_all:            # review mode: nothing moves un-approved
+                for k, v in regroup_order(rid, config).items():
+                    made["regroup"][k] += v   # merged GWDs → products follow them
         elif int(src_order.get("date_created") or 0) >= since_ms and inserted < limit:
             oid = _insert_order_tree(src_order, kids, sch, known, keep, made)
             inserted += 1
@@ -1703,9 +2030,139 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
             made["skipped"] += 1
     write_json_atomic(data_path("leluxe_sync_report.json"), report)
     made["report_changes"] = len(report["applied"])
+    made["kept"] = len(report["kept"])
     made["presync"] = snap
     kick()
     return made
+
+
+# --------------------------------------------------------------------------- #
+# Selective push INTO AZ (2) — the one deliberate exception to "AZ (2) is
+# read-only". Safety layers: manual per-row action only (the automatic pusher
+# still can never touch AZ (2)); STATUS-only allowlist; compare-and-set against
+# the value the owner reviewed; a before-image journal (az2_pushes) enabling
+# undo; and a ClickUp-visible trail (tag + comment) so pushed tasks are
+# filterable inside ClickUp.
+# --------------------------------------------------------------------------- #
+def _az2_settings():
+    st = {"enabled": True, "tag": "otl-push"}
+    saved = db.get_setting("leluxe:az2")
+    if isinstance(saved, dict):
+        st.update({k: saved[k] for k in st if k in saved})
+    return st
+
+
+def _az2_comment(task_id, text):
+    """Soft-fail comment on an AZ (2) task — the trail matters, but a failed
+    comment must never fail a push that already landed."""
+    try:
+        _http(f"{CLICKUP_API}/task/{task_id}/comment", "POST",
+              {"comment_text": text})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def az2_push_status(row_id, expected_remote=None, user=""):
+    """Write ONE row's status to its AZ (2) source task. Returns (entry, error)."""
+    st = _az2_settings()
+    if not st["enabled"]:
+        return None, "AZ (2) push is disabled (leluxe:az2 setting)"
+    row = get_row(row_id)
+    if not row or row.get("deleted"):
+        return None, "row not found"
+    src_tid = (row["data"] or {}).get("source_task_id")
+    if not src_tid:
+        return None, "this row has no AZ (2) link (no source task)"
+    new_status = (row.get("status") or "").strip()
+    if not new_status:
+        return None, "the row has no status to push"
+    code, task = _http(f"{CLICKUP_API}/task/{src_tid}")
+    if code != 200 or not isinstance(task, dict):
+        return None, f"couldn't read the AZ (2) task ({code})"
+    cur = ((task.get("status") or {}).get("status") or "").strip()
+    if expected_remote is not None and cur != (expected_remote or "").strip():
+        return None, (f"AZ (2) changed since you reviewed — it now says "
+                      f"{cur!r}. Run Sync from AZ (2) and review again.")
+    if cur == new_status:
+        return {"noop": True, "task_id": src_tid, "status": cur}, None
+    time.sleep(_pace())
+    code, resp = _http(f"{CLICKUP_API}/task/{src_tid}", "PUT",
+                       {"status": new_status})
+    if code != 200:
+        return None, (f"AZ (2) refused the status ({code}): "
+                      f"{(resp or {}).get('_error') or resp}")
+    now = db.now_iso()
+    with db.connect() as c:
+        cur_id = c.execute(
+            """INSERT INTO az2_pushes (row_id, task_id, field, old_value,
+               new_value, snapshot_json, ts, user, state)
+               VALUES (?,?,?,?,?,?,?,?,'pushed')""",
+            (row_id, src_tid, "status", cur, new_status,
+             json.dumps(task, ensure_ascii=False), now, user)).lastrowid
+    time.sleep(_pace())
+    stcode, _r = _http(f"{CLICKUP_API}/task/{src_tid}/tag/{urlquote(st['tag'])}",
+                       "POST", {})
+    _az2_comment(src_tid, f"🔁 Otlobly push: Status '{cur}' → '{new_status}'"
+                          f" · by {user or 'admin'} · {now[:16].replace('T', ' ')}"
+                          f" (undo available in Otlobly)")
+    return {"id": cur_id, "task_id": src_tid, "old": cur, "new": new_status,
+            "tagged": stcode in (200, 201)}, None
+
+
+def az2_undo(push_id, user=""):
+    """Revert one journalled push — CAS-guarded: AZ (2) must still hold the
+    value we wrote, else the undo aborts untouched. Returns (entry, error)."""
+    with db.connect() as c:
+        p = c.execute("SELECT * FROM az2_pushes WHERE id=?", (push_id,)).fetchone()
+    if not p:
+        return None, "push not found"
+    p = dict(p)
+    if p["state"] != "pushed" or p["field"] != "status":
+        return None, "this entry can't be undone"
+    code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}")
+    if code != 200 or not isinstance(task, dict):
+        return None, f"couldn't read the AZ (2) task ({code})"
+    cur = ((task.get("status") or {}).get("status") or "").strip()
+    if cur != (p["new_value"] or "").strip():
+        return None, (f"AZ (2) changed after this push — it now says {cur!r}, "
+                      f"so the undo was aborted. Review it in ClickUp.")
+    time.sleep(_pace())
+    code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}", "PUT",
+                       {"status": p["old_value"]})
+    if code != 200:
+        return None, (f"AZ (2) refused the revert ({code}): "
+                      f"{(resp or {}).get('_error') or resp}")
+    now = db.now_iso()
+    with db.connect() as c:
+        c.execute("UPDATE az2_pushes SET state='undone' WHERE id=?", (push_id,))
+        c.execute("""INSERT INTO az2_pushes (row_id, task_id, field, old_value,
+                     new_value, ts, user, state, undo_of)
+                     VALUES (?,?,?,?,?,?,?,'undo',?)""",
+                  (p["row_id"], p["task_id"], "status", p["new_value"],
+                   p["old_value"], now, user, push_id))
+        others = c.execute("SELECT COUNT(*) n FROM az2_pushes WHERE task_id=? "
+                           "AND state='pushed'", (p["task_id"],)).fetchone()["n"]
+    _az2_comment(p["task_id"], f"↩️ Otlobly undo: Status back to "
+                               f"'{p['old_value']}' · by {user or 'admin'}"
+                               f" · {now[:16].replace('T', ' ')}")
+    if others == 0:                     # last active push undone → drop the marker
+        time.sleep(_pace())
+        _http(f"{CLICKUP_API}/task/{p['task_id']}/tag/"
+              f"{urlquote(_az2_settings()['tag'])}", "DELETE")
+    return {"id": push_id, "task_id": p["task_id"],
+            "restored": p["old_value"]}, None
+
+
+def az2_push_history(limit=200):
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT id, row_id, task_id, field, old_value, new_value, ts, user, "
+            "state, undo_of FROM az2_pushes ORDER BY id DESC LIMIT ?", (limit,))]
+        names = {r["id"]: r["name"] for r in c.execute(
+            "SELECT id, name FROM leluxe_orders")}
+    for r in rows:
+        r["name"] = names.get(r["row_id"]) or f"#{r['row_id']}"
+    return rows
 
 
 def list_conflicts():
@@ -1781,6 +2238,14 @@ def resolve_conflict(row_id, choices=None, choice=None):
                        reset_sync=True, log_source="app")
     if not remaining:
         kick()
+        # an approved Tracking Number lands NOW — the product follows its GWD
+        # right away instead of waiting for the next full sync
+        if d["kind"] == "item" and any(
+                str(cf.get("field") or "").strip().lower() == "tracking number"
+                for cf in confs):
+            top = _top_order_of(get_row(row_id))
+            if top:
+                regroup_order(top["id"])
     return get_row(row_id), None
 
 

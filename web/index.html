@@ -552,6 +552,7 @@
     <button id="catalogBtn" onclick="setView('catalog')" title="products the public /catalog page sells — paste an Amazon link to add"><span class="ic">🏬</span>Catalog</button>
     <button id="leluxeBtn" style="display:none" onclick="setView('leluxe')" title="Leluxe — Amazon bulk (AZ) orders, mirrored live to ClickUp"><span class="ic">⌚</span>Leluxe</button>
     <button id="pickBtn" onclick="setView('picking')"><span class="ic">🧾</span>Picking list</button>
+    <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span>Package prep</button>
     <div class="nav-sec">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span>P&amp;L</button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span>Activity</button>
@@ -859,6 +860,7 @@
       <div class="form-grid">
         <div><label class="fld">Markup %</label><input id="s_markup" type="number" step="0.5" style="width:100%" placeholder="10"></div>
         <div><label class="fld">ILS per USD (₪ → $ for deposits)</label><input id="s_ils" type="number" step="0.01" style="width:100%" placeholder="3.7"></div>
+        <div><label class="fld">Package prep ₪ rate ($ → ₪ in the customer message)</label><input id="s_pkg_ils" type="number" step="0.01" style="width:100%" placeholder="3.1"></div>
         <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
         <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
         <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
@@ -1152,8 +1154,9 @@
         <div class="pop-menu" style="min-width:230px">
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
-          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 مزامنة من AZ (2) · Sync from AZ (2)</button>
-          <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة، حقلاً بحقل (قبل ← بعد) · everything the last sync changed, field by field (before → after)">👁 آخر مزامنة · Last sync changes</button>
+          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
+          <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
+          <button class="pop-item" id="lxAz2HistBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2HistoryOpen()" title="كل دفعة رفعتها إلى AZ (2) — مع تراجع · every push you made INTO AZ (2), with undo">⤴ AZ (2) push history</button>
           <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
@@ -1189,6 +1192,20 @@
       <div id="lxEmpty" class="muted2" style="display:none;padding:14px;text-align:center;font-size:13px"></div>
     </div>
   </div>
+
+  <!-- Package prep (تجهيز الطرود): crosses customer orders with received PO packages
+       (استلمتها اطلبلي) — who can we pack & ship right now vs who's still missing pieces. -->
+  <div id="pkgprepView" class="hidden">
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🎁 Package prep · تجهيز الطرود</h2>
+      <span class="muted2" id="ppSub" style="font-size:12px"></span>
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="loadPkgprep()">↻ Refresh</button>
+    </div>
+    <div id="ppReady"></div>
+    <div id="ppWaiting" style="margin-top:14px"></div>
+    <div id="ppEmpty" class="muted2" style="display:none;padding:16px;text-align:center;font-size:13px"></div>
+  </div>
 </div>
 
 <!-- ClickUp-style order detail: attachments gallery (paste Cmd+V) + products + fields -->
@@ -1210,7 +1227,7 @@
 <!-- Last-sync report: every change the sync applied, old → new -->
 <div id="lxSyncReportModal" class="az-modal hidden" onclick="if(event.target===this)lxSyncReportClose()">
   <div class="az-box" style="width:760px;max-width:96vw;max-height:90vh;overflow:auto;display:flex;flex-direction:column">
-    <div class="az-head"><b>👁 تغييرات آخر مزامنة · Last sync changes</b><span class="az-x" onclick="lxSyncReportClose()">✕</span></div>
+    <div class="az-head"><b>👁 Last sync changes</b><span class="az-x" onclick="lxSyncReportClose()">✕</span></div>
     <div id="lxSyncReportBody" style="padding:12px 16px"></div>
   </div>
 </div>
@@ -1390,6 +1407,14 @@
   <div class="az-box" style="width:780px;max-width:96vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="lxEditTitle">⌚ Leluxe order</b><span class="az-x" onclick="lxEditClose()">✕</span></div>
     <div style="padding:14px 16px" id="lxEditBody"></div>
+  </div>
+</div>
+
+<!-- ⤴ AZ (2) push history: every manual write into Faisal's list, with undo -->
+<div id="lxAz2HistModal" class="az-modal hidden" onclick="if(event.target===this)lxAz2HistoryClose()">
+  <div class="az-box" style="width:640px;max-width:96vw;max-height:90vh;overflow:auto">
+    <div class="az-head"><b>⤴ AZ (2) push history</b><span class="az-x" onclick="lxAz2HistoryClose()">✕</span></div>
+    <div id="lxAz2HistBody" style="padding:12px 16px"></div>
   </div>
 </div>
 
@@ -1785,7 +1810,7 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -1813,15 +1838,16 @@ function setView(v){
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   $("leluxeView").classList.toggle("hidden",v!=="leluxe");
+  $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
     brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn"};
+    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn"};
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -1846,9 +1872,126 @@ function setView(v){
   if(v==="deposits"){ loadDeposits(); }
   if(v==="catalog"){ loadCatalog(); }
   if(v==="leluxe"){ loadLeluxe(); }
+  if(v==="pkgprep"){ loadPkgprep(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
+// ---- Package prep (تجهيز الطرود): who can we pack & ship right now? --------- //
+// Crosses orders with received PO packages (استلمتها اطلبلي). READY = every live
+// piece in hand; WAITING = part received, part still on the way.
+let PKGPREP=null; const PP_OPEN=new Set();
+async function loadPkgprep(){
+  let d; try{ d=await (await fetch("/api/pkgprep")).json(); }catch(e){ d=null; }
+  PKGPREP=d; renderPkgprep();
+}
+function ppToggle(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
+  if(PP_OPEN.has(c.key)) PP_OPEN.delete(c.key); else PP_OPEN.add(c.key); renderPkgprep(); }
+function ppCopy(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
+  (navigator.clipboard?navigator.clipboard.writeText(c.wa_text):Promise.reject())
+    .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
+function ppUsd(x){ return "$"+(+x).toFixed(2).replace(/\.00$/,""); }
+function ppItemRow(it){
+  const img=it.image?`<img src="${poEsc(it.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border:1px solid var(--line);border-radius:7px;background:#fff;flex:none">`
+    :`<span style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:7px;background:var(--bg2);flex:none">📦</span>`;
+  const t=poEsc(it.title||it.asin||"—");
+  const nm=it.url?`<a href="${poEsc(it.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${t}</a>`:t;
+  const chips=[];
+  if(it.received_qty) chips.push(tonePill("green","✓ وصلت"+(it.qty>1?` ${it.received_qty}/${it.qty}`:"")));
+  if(it.missing_qty) chips.push(tonePill("amber","⏳ ناقصة"+(it.qty>1?` ${it.missing_qty}/${it.qty}`:"")));
+  if(it.sent_qty) chips.push(tonePill("gray","✈ أُرسلت سابقاً"));
+  if(it.exception_qty) chips.push(tonePill("red","⚠ "+(it.exceptions||[]).join(" / "),"هذه القطعة لن تصل — الطرد يُشحن بدونها"));
+  return `<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-top:1px solid var(--line)">
+    ${img}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px">${nm}</span>
+    ${it.qty>1?`<span class="muted" style="font-size:11px;flex:none">×${it.qty}</span>`:""}<span style="flex:none;display:inline-flex;gap:5px">${chips.join("")}</span></div>`;
+}
+function ppCanEdit(){ return (typeof ME==='undefined'||!ME) ? true
+  : (ME.local || (ME.perms&&ME.perms.includes('edit_fulfillment'))); }
+// Change a PO package's Otlobly status straight from the card, then reload
+// (the customer may switch buckets or drop off once marked sent/complete).
+async function ppSetStatus(poId,pno,status){
+  const r=await post("/api/pkgprep/status",{po_id:poId,package_no:pno,otlobly_status:status});
+  if(r&&r.ok){ toast("الحالة تغيّرت ✓"); loadPkgprep(); } else { toast((r&&r.error)||"تعذّر التغيير"); }
+}
+// ClickUp-style status picker (reuses CU_STATUSES + the global .cu-menu/popToggle/cuFilter).
+function ppStatusPicker(pkg){
+  const cur=pkg.otlobly_status||"", c=CU_COLOR[cur]||"#8d8d8d";
+  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur||'—',"#8d8d8d"]].concat(CU_STATUSES));
+  const rows=opts.map(([s,h])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
+      onclick="ppSetStatus('${poEsc(pkg.po_id)}',${JSON.stringify(pkg.package_no)},'${poEsc(s)}')">
+      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(s)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
+    </button>`).join("");
+  return `<span class="pop" style="flex:0 0 auto" onclick="event.stopPropagation()">
+    <button class="statussel" title="حالة أوطلبلي — غيّرها من هنا · Otlobly status"
+      style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cur||'—')} ▾</button>
+    <div class="pop-menu cu-menu">
+      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+      ${rows}
+    </div></span>`;
+}
+function ppPkgRow(pkg){
+  const shared=pkg.shared?tonePill("amber","⚠ مشترك","هذا الطرد يحوي أغراض زبائن آخرين — تغيير الحالة يغيّرها لهم أيضاً"):"";
+  const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",pkg.otlobly_status||"—");
+  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap">
+    <b style="font-size:12px">📦 ${poEsc(pkg.po_id)}</b>
+    <span class="muted" style="font-size:11px">طرد ${poEsc(pkg.package_no)} · ${pkg.n_items} قطعة${pkg.tracking_number?` · ${poEsc(pkg.tracking_number)}`:""}</span>
+    ${shared}<span class="spacer"></span>${ctrl}</div>`;
+}
+function ppCard(c,bucket,i){
+  const open=PP_OPEN.has(c.key), t=c.totals||{}, money=t.usd!=null;
+  const wa=c.wa_url?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب برسالة جاهزة — الحالة + المبلغ">📱 واتساب</a>`
+    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم هاتف — انسخ الرسالة 📋">☎ بلا رقم</span>`;
+  const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
+  const flds=[`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`];
+  if(money){
+    flds.push(`<span class="field"><span class="lbl">Total</span><b>${ppUsd(t.usd)}</b><span class="unit">≈ ₪${t.ils}</span></span>`);
+    if(t.deposit_usd>0){
+      flds.push(`<span class="field"><span class="lbl">عربون</span><b>${ppUsd(t.deposit_usd)}</b></span>`);
+      flds.push(`<span class="field"><span class="lbl">المتبقي</span><b>${ppUsd(t.remaining_usd)}</b><span class="unit">≈ ₪${t.remaining_ils}</span></span>`);
+    }
+    if(t.unpriced) flds.push(tonePill("amber","فيه طلب بدون تسعير","المجموع لا يشمل الطلب غير المسعّر"));
+  }
+  const head=`<div class="po-head">
+    <div class="po-title" onclick="ppToggle('${bucket}',${i})" style="cursor:pointer">
+      <span class="caret">${open?"▾":"▸"}</span>
+      <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
+      <span class="muted" style="font-size:12px">${c.orders.length>1?`${c.orders.length} orders · `:""}${poEsc(c.phone||"")}</span>
+      ${state}
+      <span class="spacer"></span>
+      ${wa}
+      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopy('${bucket}',${i})" title="نسخ الرسالة">📋</button>
+    </div>
+    <div class="po-meta">${flds.join("")}</div>
+  </div>`;
+  if(!open) return `<div class="po-card">${head}</div>`;
+  const pkgs=(c.packages||[]);
+  const pkgsHtml=pkgs.length?`<div style="margin-top:8px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px">
+    <div class="lbl" style="margin-bottom:2px">حالة الطرد · package status${ppCanEdit()?" — غيّرها من هنا":""}</div>
+    ${pkgs.map(ppPkgRow).join("")}</div>`:"";
+  const body=pkgsHtml+(c.orders||[]).map(o=>{
+    const amt=o.amount_to_collect_usd!=null?`<span class="muted" style="font-size:11.5px">${ppUsd(o.amount_to_collect_usd)}</span>`:"";
+    return `<div style="padding:7px 12px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:9px 9px 0 0;display:flex;align-items:center;gap:8px">
+      <b style="font-size:12px">${poEsc(o.order_id)}</b>${statusPill(o.status)}${amt}</div>
+    <div style="border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;overflow:hidden">${(o.items||[]).map(ppItemRow).join("")||`<div class="muted2" style="padding:8px 10px;font-size:12px">لا توجد منتجات</div>`}</div>`;
+  }).join("");
+  return `<div class="po-card open">${head}<div class="po-body">${body}</div></div>`;
+}
+function ppSection(emoji,label,count,sub,tone){
+  return `<div style="display:flex;align-items:center;gap:9px;margin:4px 0 10px">
+    <h2 style="margin:0;font-size:15px;font-weight:800">${emoji} ${label}</h2>
+    <span class="pill" style="${tone};font-weight:700">${count}</span>
+    <span class="muted2" style="font-size:12px">${sub}</span></div>`;
+}
+function renderPkgprep(){
+  const d=PKGPREP, R=$("ppReady"), W=$("ppWaiting"), E=$("ppEmpty");
+  if(!d){ R.innerHTML=""; W.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
+  $("ppSub").textContent=`1$ = ${d.rate} ₪ · تتغيّر من الإعدادات`;
+  const ready=d.ready||[], waiting=d.waiting||[];
+  R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي",TONE.green)+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
+  W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع",TONE.amber)+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
+  E.style.display=(ready.length||waiting.length)?"none":"";
+  if(!(ready.length||waiting.length)) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
+}
 // ---- Catalog: products the public /catalog page sells ----------------------- //
 let CATALOG=[];
 async function loadCatalog(){
@@ -3665,21 +3808,26 @@ async function lxSync(btn){
   let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,review_all:!!LX_SYNC_REVIEW,source_list_id:(LX_MIG_SRC||(LX&&LX.source_list_id)||"")}); }catch(e){ r={}; }
   if(!r.ok){ pr.textContent="❌ "+(r.error||"sync failed"); btn.disabled=false; return; }
   LX_LAST_MIGRATED=Array.isArray(r.order_ids)?r.order_ids:[];
-  const head=`+${r.orders||0} جديد·new · ${r.updated||0} محدّث·updated`
-    +(r.conflicts?` · ⚠ ${r.conflicts} تعارض·conflict${r.conflicts===1?'':'s'}`:"")
-    +(r.new_items?` · +${r.new_items} منتج·product${r.new_items===1?'':'s'}`:"");
+  const head=`+${r.orders||0} new · ${r.updated||0} updated`
+    +(r.conflicts?` · ⚠ ${r.conflicts} conflict${r.conflicts===1?'':'s'}`:"")
+    +(r.new_items?` · +${r.new_items} product${r.new_items===1?'':'s'} added`:"")
+    +(r.kept?` · 🕔 ${r.kept} of your edits kept`:"");
+  // the details button exists from the FIRST repaint — the photo/tracking phases
+  // can run for minutes, and the owner must be able to open the report during them
+  const total=(r.report_changes||0)+(r.new_items||0)+(r.orders||0)+(r.kept||0);
+  const seeBtn=total?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 See details (${total})</button>`:"";
   let done=0,rem=1;
-  while(rem>0){ pr.textContent=`✓ ${head} · fetching Amazon photos… ${done}`;
+  while(rem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · fetching product photos… ${done}`;
     let ir; try{ ir=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
     if(!ir.ok) break; done+=ir.done; rem=ir.remaining; if(ir.done===0&&rem>0) break; }
   let tc=0,trem=1;
-  while(trem>0){ pr.textContent=`✓ ${head} · live GAASH tracking… ${tc}`;
+  while(trem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · updating live GAASH tracking… ${tc}`;
     let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
     if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
-  pr.innerHTML=`✅ مزامنة · Synced — ${poEsc(head)}.`
-    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 اعتمد التغييرات · Approve changes":"⚠ راجع التعارض · Review conflicts"} (${r.conflicts})</button>`:"")
-    +(r.report_changes?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 ما الذي تغيّر · What changed (${r.report_changes})</button>`:"")
-    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new (${LX_LAST_MIGRATED.length})</button>`:"");
+  pr.innerHTML=`✅ Synced — ${poEsc(head)}.`
+    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 Approve changes":"⚠ Review conflicts"} (${r.conflicts})</button>`:"")
+    +seeBtn
+    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new orders (${LX_LAST_MIGRATED.length})</button>`:"");
   btn.disabled=false; await loadLeluxe(); lxPollStart();
   if(LX_SYNC_REVIEW&&r.conflicts) lxConflictsOpen();   // 🛡 straight to approve/deny
 }
@@ -3693,28 +3841,90 @@ async function lxSyncReportOpen(){
   if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">تعذّر التحميل · could not load</div>'; return; }
   const sec=(t,html)=>html?`<div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px">${t}</div>${html}`:"";
   const kindIcon={order:"⌚",parent:"⌚",package:"📦",item:"🛍"};
-  const applied=(r.applied||[]).map(row=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+  // backend field labels are bilingual ("الحالة · Status") — show the English half here
+  const enLbl=s=>String(s||"").split("·").pop().trim();
+  // every entry carries order_id (or its own id for orders) → click = jump to the order on the board
+  const jump=id=>id?` style="cursor:pointer" title="click to open this order" onclick="lxSyncReportClose();lxJumpOrder(${id})"`:"";
+  const appliedHtml=(r.applied||[]).map(row=>`<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
       <div style="font-weight:800;font-size:12.5px;margin-bottom:5px">${kindIcon[row.kind]||"⌚"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}</div>
       ${(row.changes||[]).map(ch=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
-        <span class="muted2" style="min-width:120px">${poEsc(ch.label||ch.field)}</span>
+        <span class="muted2" style="min-width:120px">${poEsc(enLbl(ch.label||ch.field))}</span>
         <span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(ch.old)}</span>
         <span>→</span><b dir="auto">${lxCVal(ch.new)}</b></div>`).join("")}
-    </div>`).join("");
-  const newOrders=(r.new_orders||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⌚ ${poEsc(o.name||"")}</div>`).join("");
-  const newItems=(r.new_items||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
-  const parked=(r.conflict_rows||[]).map(o=>`<div style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
-  const when=r.ts?`<div class="muted2" style="font-size:11.5px">آخر مزامنة · last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
+    </div></div>`).join("");
+  // 🕔 your newer edits kept — the app value differs from AZ (2) and the app won.
+  // Status rows with an AZ (2) link get ⤴ Push: the ONE manual write path into
+  // AZ (2) (CAS-guarded server-side against the value shown here).
+  const keptHtml=(r.kept||[]).map(row=>{
+    const sd=(row.diffs||[]).find(d=>d.field==="status");
+    const pushBtn=(sd&&row.task_id)?`<button class="minibtn" id="az2p_${row.id}" onclick="event.stopPropagation();lxAz2Push(${row.id},'${poEsc(String(sd.remote??""))}','${poEsc(String(sd.local??""))}')" title="write YOUR status into the AZ (2) task — tagged + commented there, undo in AZ (2) push history">⤴ Push to AZ (2)</button>`:"";
+    return `<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
+      <div style="font-weight:800;font-size:12.5px;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
+        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ UPLOADING TO CLICKUP</span>`:""}<span style="flex:1"></span>${pushBtn}</div>
+      ${(row.diffs||[]).map(d=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
+        <span class="muted2" style="min-width:120px">${poEsc(enLbl(d.label||d.field))}</span>
+        <span class="muted2">ClickUp:</span><span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(d.remote)}</span>
+        <span>→</span><span class="muted2">yours:</span><b dir="auto">${lxCVal(d.local)}</b></div>`).join("")}
+    </div></div>`;}).join("");
+  const keptHint=(r.kept||[]).length?`<div class="muted2" style="font-size:11.5px;margin:2px 0 6px">These values are newer in the app than in AZ (2), so your version was kept. They upload to ClickUp automatically — rows marked ⏳ are still uploading.</div>`:"";
+  const newOrders=(r.new_orders||[]).map(o=>`<div${jump(o.id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.id?'pointer':'default'}">⌚ ${poEsc(o.name||"")}</div>`).join("");
+  const newItems=(r.new_items||[]).map(o=>`<div${jump(o.order_id)} class="lx-repline" style="font-size:12.5px;padding:3px 0;cursor:${o.order_id?'pointer':'default'}">🛍 ${poEsc(o.name||"")} <span class="muted2">· ${poEsc(o.order||"")}</span></div>`).join("");
+  const parked=(r.conflict_rows||[]).map(o=>`<div${jump(o.order_id)} style="font-size:12.5px;padding:3px 0">⚖ ${poEsc(o.name||o.order||"")}</div>`).join("");
+  const when=r.ts?`<div class="muted2" style="font-size:11.5px">Last sync: ${poEsc(String(r.ts).slice(0,16).replace("T"," "))}${r.review_all?" · 🛡 review-all":""}</div>`:"";
   body.innerHTML=(when
-    +sec(`✏️ تغييرات مطبّقة · applied changes (${(r.applied||[]).length})`,applied)
-    +sec(`＋ طلبات جديدة · new orders (${(r.new_orders||[]).length})`,newOrders)
-    +sec(`＋ منتجات جديدة · new products (${(r.new_items||[]).length})`,newItems)
-    +sec(`⚖ بانتظار موافقتك · awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ افتح المراجعة · open review</button>`:""))
-    ||'<div style="padding:24px;text-align:center">لا تغييرات مسجّلة بعد — شغّل مزامنة أولاً · no sync recorded yet</div>';
+    +sec(`✏️ Applied changes (${(r.applied||[]).length})`,appliedHtml)
+    +sec(`＋ New orders (${(r.new_orders||[]).length})`,newOrders)
+    +sec(`＋ New products (${(r.new_items||[]).length})`,newItems)
+    +sec(`🕔 Your newer edits — kept (${(r.kept||[]).length})`,keptHtml?keptHint+keptHtml:"")
+    +sec(`⚖ Awaiting your approval (${(r.conflict_rows||[]).length})`,parked?parked+`<button class="po-btn" style="margin-top:8px" onclick="lxSyncReportClose();lxConflictsOpen()">⚖ Open review</button>`:""))
+    ||'<div style="padding:24px;text-align:center">No sync recorded yet — run Sync from AZ (2) first.</div>';
+}
+// ── ⤴ Push to AZ (2): the one manual write path into Faisal's list. One row,
+//    one field (status), CAS-guarded server-side, journalled, undoable. ──
+async function lxAz2Push(rowId,remoteNow,mine){
+  if(!confirm(`Push YOUR status to AZ (2)?\n\nClickUp now: ${remoteNow||"—"}\nYours:        ${mine||"—"}\n\nThe AZ (2) task gets the "otl-push" tag + a comment, and you can undo this from Tools → AZ (2) push history.`)) return;
+  const b=$("az2p_"+rowId); if(b){ b.disabled=true; b.textContent="⤴ pushing…"; }
+  let r; try{ r=await post("/api/leluxe/az2_push",{row_id:rowId,expected_remote:remoteNow}); }catch(e){ r={}; }
+  if(!r.ok){ if(b){ b.disabled=false; b.textContent="⤴ Push to AZ (2)"; } toast(r.error||"Push failed"); return; }
+  if(b){ b.textContent=r.noop?"✅ already matched":"✅ Pushed to AZ (2)"; b.disabled=true; }
+  toast(r.noop?"AZ (2) already has this value":"✅ Pushed to AZ (2) — undo available in push history");
+}
+function lxAz2HistoryClose(){ $("lxAz2HistModal").classList.add("hidden"); }
+async function lxAz2HistoryOpen(){
+  $("lxAz2HistModal").classList.remove("hidden");
+  const body=$("lxAz2HistBody");
+  body.innerHTML='<div class="muted2" style="padding:16px">⏳ Loading…</div>';
+  let r; try{ r=await (await fetch("/api/leluxe/az2_pushes")).json(); }catch(e){ r=null; }
+  if(!r||!r.ok){ body.innerHTML='<div class="muted2" style="padding:16px">Could not load.</div>'; return; }
+  const rows=(r.pushes||[]).map(p=>{
+    const when=String(p.ts||"").slice(0,16).replace("T"," ");
+    const icon=p.state==="undo"?"↩️":p.state==="undone"?"🚫":"🔁";
+    const dim=p.state==="undone"?"opacity:.55;":"";
+    const label=p.state==="undo"?`reverted push #${p.undo_of}`:`${poEsc(p.old_value??"—")} → <b>${poEsc(p.new_value??"—")}</b>`;
+    const undoBtn=p.state==="pushed"?`<button class="minibtn" onclick="lxAz2Undo(${p.id},this)" title="write the old value back to AZ (2) — aborts safely if AZ (2) changed meanwhile">↩ Undo</button>`:
+      (p.state==="undone"?`<span class="muted2" style="font-size:11px">undone</span>`:"");
+    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 11px;margin-bottom:7px;${dim}">
+      <span>${icon}</span>
+      <span style="min-width:0;flex:1">
+        <div style="font-weight:700;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:${p.row_id?'pointer':'default'}"${p.row_id?` onclick="lxAz2HistoryClose();lxJumpOrder(${p.row_id})" title="open on the board"`:""}>${poEsc(p.name||("#"+p.row_id))}</div>
+        <div class="muted2" style="font-size:11.5px">${enLblGlobal(p.field)} · ${label} · ${poEsc(when)}${p.user?` · ${poEsc(p.user)}`:""}</div>
+      </span>${undoBtn}</div>`;
+  }).join("");
+  body.innerHTML=rows||'<div style="padding:24px;text-align:center" class="muted2">No pushes to AZ (2) yet — use ⤴ Push to AZ (2) on a kept edit in Last sync changes.</div>';
+}
+function enLblGlobal(s){ return String(s||"").split("·").pop().trim(); }
+async function lxAz2Undo(pushId,btn){
+  if(!confirm("Undo this push? The old value is written back to AZ (2).\n(Aborts safely if AZ (2) changed since the push.)")) return;
+  btn.disabled=true; btn.textContent="↩ undoing…";
+  let r; try{ r=await post("/api/leluxe/az2_undo",{push_id:pushId}); }catch(e){ r={}; }
+  if(!r.ok){ btn.disabled=false; btn.textContent="↩ Undo"; toast(r.error||"Undo failed"); return; }
+  toast(`✅ Reverted — AZ (2) is back to "${r.restored}"`);
+  lxAz2HistoryOpen();
 }
 // ── Conflict review — Otlobly value vs ClickUp (AZ 2) value, per field ────────
 let LX_CONF=[];
 function lxCVal(v){
-  if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— (فارغ · empty)</span>';
+  if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— empty</span>';
   if(Array.isArray(v)) return v.map(x=>`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">${poEsc(String(x))}</span>`).join(" ");
   if(v===true) return "✓ نعم · yes";
   if(v===false) return "✗ لا · no";
@@ -5202,6 +5412,7 @@ async function loadSettings(){
   const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
   const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
   if($("s_ils")) $("s_ils").value=s.ils_per_usd||3.7;
+  if($("s_pkg_ils")) $("s_pkg_ils").value=s.pkg_ils_per_usd||3.1;
   $("s_wa").value=s.business_whatsapp||""; $("s_dest").value=s.destination.shipping_location||"";
   $("s_destlabel").value=s.destination.label||"";
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
@@ -5340,7 +5551,8 @@ function msCollect(){ const out={};
 async function saveSettings(b){
   b.disabled=true;
   const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100,
-    ils_per_usd:parseFloat($("s_ils").value)||3.7, business_whatsapp:$("s_wa").value,
+    ils_per_usd:parseFloat($("s_ils").value)||3.7,
+    pkg_ils_per_usd:parseFloat($("s_pkg_ils").value)||3.1, business_whatsapp:$("s_wa").value,
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
