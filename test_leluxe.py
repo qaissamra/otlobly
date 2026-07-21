@@ -138,6 +138,54 @@ def pull_and_dirty_wins():
           and leluxe.get_by_task("P1")["name"] == "LOCAL EDIT")
 
 
+def relink_reclaims_ghost_packages():
+    """A package that lost its last product (in ClickUp or here) has no children
+    to prove it's a package by depth, so a pull's blind kind= overwrite
+    (upsert_from_clickup) permanently demotes it to a fake 'item' — invisible to
+    regroup_order/_sweep_order_packages. _relink() must reclaim it by name
+    ("📦 …" is a naming convention only OUR OWN code ever uses), and a real
+    product must NEVER be reclassified just because a name loosely resembles
+    one — only the exact "📦 " prefix qualifies. Once reclaimed, the ghost
+    flows through the SAME regroup/sweep policy as any other package: swept if
+    untracked, kept if it still carries a tracking number (a real parcel)."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    leluxe.upsert_from_clickup(_task("GO", "Order # GHOST", "order number",
+                                     fields=[("NAME", 37)]), SCHEMA)
+    leluxe.upsert_from_clickup(_task("GG1", "📦 no tracking", "sent rd",
+                                     parent="GO"), SCHEMA)
+    leluxe.upsert_from_clickup(_task("GG2", "📦 GWD-GHOST", "sent rd", parent="GO",
+                                     fields=[("Tracking Number", "GWD-GHOST")]), SCHEMA)
+    leluxe.upsert_from_clickup(_task("GP", "5 Real Watch, not a package", "sent rd",
+                                     parent="GO"), SCHEMA)
+    leluxe.upsert_from_clickup(_task("GPK", "📦 GWD-REAL", "sent rd", parent="GO",
+                                     fields=[("Tracking Number", "GWD-REAL")]), SCHEMA)
+    leluxe.upsert_from_clickup(_task("GC", "2 Real product under a real package",
+                                     "sent rd", parent="GPK",
+                                     fields=[("Quantity ordered ", "2")]), SCHEMA)
+    leluxe._relink()
+    check("childless untracked ghost reclaimed to package",
+          leluxe.get_by_task("GG1")["kind"] == "package")
+    check("childless TRACKED ghost also reclaimed to package",
+          leluxe.get_by_task("GG2")["kind"] == "package")
+    check("a real product is NEVER reclassified by name",
+          leluxe.get_by_task("GP")["kind"] == "item")
+    check("a real package with a live child still promotes by depth (unaffected)",
+          leluxe.get_by_task("GPK")["kind"] == "package"
+          and leluxe.get_by_task("GC")["kind"] == "item")
+
+    order_id = leluxe.get_by_task("GO")["id"]
+    out = leluxe.regroup_order(order_id)
+    check("reclaimed untracked ghost is swept like any dead package",
+          leluxe.get_by_task("GG1")["deleted"] == 1)
+    check("reclaimed TRACKED ghost is kept — a real parcel awaiting products",
+          leluxe.get_by_task("GG2")["deleted"] == 0)
+    check("real package + its product untouched",
+          leluxe.get_by_task("GPK")["deleted"] == 0
+          and leluxe.get_by_task("GC")["deleted"] == 0)
+    check("real loose product untouched", leluxe.get_by_task("GP")["deleted"] == 0)
+
+
 def save_row_validation():
     row, err = leluxe.save_row({"kind": "parent", "name": "X", "status": "nope"})
     check("unknown status rejected", row is None and "status" in (err or ""))
@@ -1036,6 +1084,7 @@ def main():
     setup_config()
     print("codecs:");            codecs()
     print("pull / dirty-wins:"); pull_and_dirty_wins()
+    print("ghost reclaim:");     relink_reclaims_ghost_packages()
     print("save validation:");   save_row_validation()
     print("claim race:");        claim_race()
     print("push ordering:");     push_ordering()

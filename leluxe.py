@@ -1030,6 +1030,25 @@ def _relink():
                        AND id IN (
                          SELECT parent_local_id FROM leluxe_orders
                          WHERE parent_local_id IS NOT NULL)""")
+        # _decode_task labels EVERY child "item" first; a package that lost its
+        # last product (moved/deleted, here or in ClickUp) has NO children to
+        # prove it's a package by depth, so upsert_from_clickup's blind kind=
+        # overwrite (fired whenever the task's own date_updated ever changes)
+        # permanently demotes it to a fake "item" — invisible to regroup_order/
+        # _sweep_order_packages (which only scan kind='package'), so it renders
+        # on the board as a bogus product literally named "📦 no tracking" /
+        # "📦 GWD…" forever. Reclaim it by the one signal depth can't erase:
+        # only OUR OWN code ever names a row with that exact "📦 " prefix.
+        ghosts = [r["id"] for r in c.execute(
+            """SELECT id, name FROM leluxe_orders
+               WHERE kind='item' AND deleted=0
+                 AND parent_local_id IN (
+                   SELECT id FROM leluxe_orders WHERE parent_task_id IS NULL)""")
+            if str(r["name"] or "").startswith("📦 ")]
+        if ghosts:
+            ph = ",".join("?" * len(ghosts))
+            c.execute(f"UPDATE leluxe_orders SET kind='package' WHERE id IN ({ph})",
+                     ghosts)
 
 
 def pull_tasks(config=None):
