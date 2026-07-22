@@ -445,7 +445,12 @@
      right edge (never h-scrolls away); its panel opens position:FIXED via
      popToggle (a normal dropdown would be clipped by the header strip).
      Rows are toggle switches; the panel stays open while toggling. */
-  .fld-anchor{position:absolute;top:3px;inset-inline-end:6px;z-index:7}
+  /* the ⊕ sits in a full-height RAIL glued to the header's right edge (like
+     ClickUp's fixed + cell): solid bg + separator border, so column labels
+     scroll cleanly underneath instead of the button floating mid-columns */
+  .fld-anchor{position:absolute;top:0;bottom:0;inset-inline-end:0;z-index:7;display:flex;align-items:center;
+    padding-inline:4px;background:var(--bg);border-inline-start:1px solid var(--line)}
+  .fld-anchor .iconbtn{background:transparent !important}
   .fld-menu{min-width:238px;max-height:390px;overflow:auto}
   .fld-head{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:800;color:var(--muted);padding:5px 9px 2px;text-transform:uppercase;letter-spacing:.05em}
   .fld-row{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border:none;background:transparent;border-radius:8px;font-size:12.5px;cursor:pointer;text-align:start;color:var(--ink)}
