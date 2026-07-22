@@ -460,6 +460,21 @@
   .tglsw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:inset-inline-start .15s;box-shadow:0 1px 2px rgba(16,24,40,.25)}
   .tglsw.on{background:var(--accent)}
   .tglsw.on::after{inset-inline-start:15px}
+  .fld-row .cf-edit{opacity:.5;cursor:pointer;font-size:12px;padding:0 4px}
+  .fld-row:hover .cf-edit{opacity:1}
+  .fld-new{color:var(--accent);font-weight:700;border-top:1px solid var(--line);border-radius:0;margin-top:2px}
+  /* ＋ New field create card (ClickUp-style) */
+  .cf-types{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .cf-type{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:12.5px;cursor:pointer;text-align:start}
+  .cf-type:hover{border-color:#d0d5dd;background:var(--bg2)}
+  .cf-type.on{border-color:var(--accent);background:#fff4ee;font-weight:700}
+  .cf-type .cf-ic{width:18px;text-align:center;flex:0 0 auto;color:var(--muted)}
+  .cf-cfg{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px}
+  .cf-cfg label{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+  .cf-cfg select,.cf-cfg input[type=number]{border:1px solid var(--line);border-radius:7px;padding:3px 7px;font:inherit;background:#fff}
+  .cf-sw{width:20px;height:20px;border-radius:6px;border:1px solid rgba(0,0,0,.12);cursor:pointer;flex:0 0 auto;padding:0}
+  .cf-list-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-top:1px solid var(--line);font-size:13px}
+  .cf-list-row .cf-badge{font-size:10px;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
   .bt-wrap{overflow-x:auto}
   .bt-wrap.pin-lg,.bt-clip.pin-lg{--btpin:380px}
   .bt-wrap.pin-md,.bt-clip.pin-md{--btpin:360px}
@@ -1010,12 +1025,9 @@
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">🧩 حقول مخصصة · Custom fields (Purchases)</h3>
-      <div class="muted2" style="font-size:12px;margin-bottom:9px">أعمدة تضيفها بنفسك لجدول المشتريات — مثل ClickUp تماماً: نص، رقم، قائمة، أو تاريخ · your own columns on the Purchases board (text / number / dropdown / date). They appear in the ⊕ column picker; values are edited by clicking the cell.</div>
-      <div class="tbl-scroll"><table style="width:100%;font-size:12.5px;border-collapse:collapse">
-        <thead><tr style="text-align:left;color:var(--muted)"><th>Label</th><th>Type</th><th>Options (for dropdown, comma-separated)</th><th></th></tr></thead>
-        <tbody id="cfRows"></tbody></table></div>
-      <button class="po-btn" style="margin-top:8px" onclick="cfAddRow()">＋ Add field</button>
-      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save custom fields</button></div>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">أعمدة تضيفها بنفسك لجدول المشتريات — مثل ClickUp: قائمة، وسوم، نص، رقم، مبلغ، تاريخ، تقييم، تقدّم، رابط… لكل نوع خياراته · your own columns (13 types, each with its own options). Also addable from the ⊕ button on the board. They appear in the ⊕ picker; click a cell to edit its value.</div>
+      <div id="cfList"></div>
+      <button class="po-btn" style="margin-top:8px" onclick="poCfFieldOpen()">＋ حقل جديد · New field</button>
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 تنبيهات تيليجرام · Telegram alerts</h3>
@@ -3169,7 +3181,13 @@ function lxtHead(tbl,pinLabel,pinSortKey){
     :`<span class="bt-pin lbl">${pinLabel}${pinRsz}</span>`;
   const hidden=LXT_HIDDEN[tbl];
   const shown=lxtCols(tbl).filter(c=>!c.locked&&!hidden.has(c.key)).length;
-  const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>`<button class="fld-row cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b><span class="tglsw${hidden.has(c.key)?"":" on"}"></span></button>`).join("");
+  // custom fields (create / edit inline) live on the Purchases po + pok tables
+  const canCf=(tbl==="po"||tbl==="pok")&&(typeof CAN_ADMIN==="undefined"||CAN_ADMIN);
+  const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>{
+    const iscf=c.key.startsWith("cf_");
+    return `<button class="fld-row cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b>${iscf&&canCf?`<span class="cf-edit" title="تعديل الحقل · edit field" onclick="event.stopPropagation();poCfFieldOpen('${c.key.slice(3)}')">✎</span>`:""}<span class="tglsw${hidden.has(c.key)?"":" on"}"></span></button>`;
+  }).join("");
+  const newField=canCf?`<button class="fld-row fld-new" onclick="event.stopPropagation();poCfFieldOpen()"><b>＋ حقل جديد · New field</b></button>`:"";
   // the ⊕ Fields button is ANCHORED at the header's right edge (never scrolls
   // away with the columns); its panel opens position:fixed via popToggle
   const picker=`<span class="pop fld-anchor" onclick="event.stopPropagation()">
@@ -3177,7 +3195,7 @@ function lxtHead(tbl,pinLabel,pinSortKey){
       <div class="pop-menu fld-menu">
         <div class="fld-head"><span>الأعمدة · fields</span><span>${shown} shown</span></div>
         <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
-        ${pick}
+        ${pick}${newField}
       </div></span>`;
   const lbl=(c,i)=>{
     if(c.key==="menu") return `<span class="lbl">${lxtRsz(tbl,i)}</span>`;
@@ -6012,7 +6030,7 @@ async function loadSettings(){
   lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
   otlRender(s.tracking_otlobly_map);
   esmRender(s.employee_status_map||[]);
-  cfRender((s.custom_fields&&s.custom_fields.po)||[]);
+  cfRender();
   const al=s.alerts||{};
   if($("al_token")) $("al_token").value=al.telegram_token||"";
   if($("al_chat")) $("al_chat").value=al.telegram_chat||"";
@@ -6131,22 +6149,23 @@ function esmAddRow(){ $("esmRows").insertAdjacentHTML('beforeend', esmRowHtml({}
 function esmCollect(){ return [...document.querySelectorAll('#esmRows tr')].map(tr=>({
   status:tr.querySelector('.e-status').value.trim(), label:tr.querySelector('.e-label').value.trim(),
   pick:tr.querySelector('.e-pick').checked })).filter(r=>r.status&&r.label); }
-// --- Custom fields editor (Settings → 🧩) — ClickUp-style add-your-own columns --- //
-function cfRowHtml(f){ f=f||{};
-  const types=["text","number","select","date"].map(t=>`<option${t===(f.type||"text")?" selected":""}>${t}</option>`).join("");
-  return `<tr data-key="${poEsc(f.key||"")}">
-    <td style="padding:3px 4px"><input class="c-label" value="${poEsc(f.label||"")}" style="width:100%" dir="auto" placeholder="e.g. Supplier"></td>
-    <td style="padding:3px 4px"><select class="c-type" style="font-size:12px" onchange="this.closest('tr').querySelector('.c-opts').style.display=this.value==='select'?'':'none'">${types}</select></td>
-    <td style="padding:3px 4px"><input class="c-opts" value="${poEsc((f.options||[]).join(", "))}" style="width:100%;display:${(f.type||"text")==="select"?"":"none"}" placeholder="a, b, c"></td>
-    <td style="padding:3px 4px"><button class="iconbtn" title="حذف الحقل (القيم المخزنة تبقى) · remove field (stored values kept)" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
-function cfRender(fields){ if(!$("cfRows")) return;
-  $("cfRows").innerHTML=(fields||[]).map(cfRowHtml).join(""); }
-function cfAddRow(){ $("cfRows").insertAdjacentHTML('beforeend', cfRowHtml({})); }
-function cfCollect(){ return [...document.querySelectorAll('#cfRows tr')].map(tr=>({
-  key:tr.dataset.key||"", label:tr.querySelector('.c-label').value.trim(),
-  type:tr.querySelector('.c-type').value,
-  options:tr.querySelector('.c-opts').value.split(",").map(s=>s.trim()).filter(Boolean)
-})).filter(f=>f.label); }
+// --- Custom fields list (Settings → 🧩) — each row opens the shared create card
+// (poCfFieldOpen), which saves via /api/settings directly. No collect on the
+// generic saveSettings, so saving other panels never wipes custom fields. ---
+function cfRender(){ const el=$("cfList"); if(!el) return;
+  const list=cfList();
+  el.innerHTML=list.length?list.map(f=>{
+    const m=cfMeta(f.type), extra=(f.type==="select"||f.type==="labels")?` · ${(f.options||[]).length} options`
+      :f.type==="money"?` · ${f.currency||"USD"}`:f.type==="date"&&f.include_time?" · +time":"";
+    return `<div class="cf-list-row">
+        <span class="cf-ic" style="width:18px;text-align:center">${m.icon}</span>
+        <b style="flex:0 0 auto">${poEsc(f.label)}</b>
+        <span class="cf-badge">${poEsc(m.label.split(" · ")[0])}${extra}</span>
+        <span class="muted2" style="font-size:10.5px">key: ${poEsc(f.key)}</span>
+        <span class="spacer" style="flex:1"></span>
+        <button class="minibtn" onclick="poCfFieldOpen('${poEsc(f.key)}')">✏️ Edit</button></div>`;
+  }).join(""):`<div class="muted2" style="font-size:12.5px;padding:8px 2px">لا حقول بعد · no custom fields yet.</div>`;
+}
 // --- Telegram alerts (Settings) --- //
 async function alDetect(b){ b.disabled=true; $("alOut").textContent="Looking for your chat…";
   const r=await post("/api/alerts/telegram_test",{detect:true,token:($("al_token")||{}).value||""});
@@ -6204,7 +6223,6 @@ async function saveSettings(b){
       landing_how:!!($("s_sec_how")||{}).checked, landing_why:!!($("s_sec_why")||{}).checked } };
   if($("metaSpendRows")) body.meta_manual=msCollect();   // only when the rows are rendered (never wipe blindly)
   if($("esmRows")) body.employee_status_map=esmCollect();
-  if($("cfRows")) body.custom_fields={po:cfCollect()};
   const r=await post("/api/settings",body); b.disabled=false;
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; QSETTINGS=r.settings; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
 }
@@ -6869,9 +6887,12 @@ function poSearchMatch(p,q){
 // sort value for the po/pok tables — cf_<key> reads the PO's custom-field value
 function poSortVal(p,key){
   if(key.startsWith("cf_")){
-    const f=(((QSETTINGS||{}).custom_fields||{}).po||[]).find(x=>"cf_"+x.key===key);
-    const v=(p.custom||{})[key.slice(3)];
-    return (f&&f.type==="number")?(Number(v)||0):String(v==null?"~":v).toLowerCase();
+    const f=cfDef(key.slice(3)), v=(p.custom||{})[key.slice(3)];
+    if(!f) return "~";
+    if(["number","money","progress","rating"].includes(f.type)) return v==null?-Infinity:(Number(v)||0);
+    if(f.type==="date") return v?Date.parse(String(v).length<=10?v+"T00:00":v)||Infinity:Infinity;
+    if(f.type==="checkbox") return (v===true||v==="1"||v==="true")?0:1;
+    return String(v==null?"~":(Array.isArray(v)?v.join(","):v)).toLowerCase();
   }
   if(key==="total") return Number(p.total_usd)||0;
   return String((p.packages||[]).map(pk=>pk.arrival).filter(Boolean).sort()[0]||"~");  // arrival: earliest, blanks last
@@ -7090,37 +7111,192 @@ function poRenderCustomers(mount,list){
   lxColwApply(); lxtGridApply("pop",mount);
 }
 // ── Custom-field cells (ClickUp-style): value display + inline editor ──
-function poCfCells(p){
-  const out={};
-  (((QSETTINGS||{}).custom_fields||{}).po||[]).forEach(f=>{ out["cf_"+f.key]=poCfCell(p,f); });
-  return out;
+// ── ClickUp-style custom fields v2 — 13 types, each rendered + edited by type.
+// Definitions live in QSETTINGS.custom_fields.po (Settings/⊕ create card); values
+// on p.custom[key]. ──
+const CF_CATALOG=[
+  {type:"select",  icon:"▾", label:"Dropdown · قائمة",  grp:"popular", opts:true},
+  {type:"labels",  icon:"🏷", label:"Labels · وسوم",     grp:"popular", opts:true},
+  {type:"text",    icon:"T", label:"Text · نص",          grp:"popular"},
+  {type:"longtext",icon:"¶", label:"Long text · نص طويل",grp:"popular"},
+  {type:"number",  icon:"#", label:"Number · رقم",       grp:"popular"},
+  {type:"money",   icon:"$", label:"Money · مبلغ",       grp:"popular"},
+  {type:"date",    icon:"📅",label:"Date · تاريخ",        grp:"popular"},
+  {type:"checkbox",icon:"☑", label:"Checkbox · مربع",    grp:"more"},
+  {type:"rating",  icon:"★", label:"Rating · تقييم",     grp:"more"},
+  {type:"progress",icon:"▰", label:"Progress · تقدّم",   grp:"more"},
+  {type:"url",     icon:"🌐",label:"Website · رابط",      grp:"more"},
+  {type:"email",   icon:"@", label:"Email · بريد",       grp:"more"},
+  {type:"phone",   icon:"☎", label:"Phone · هاتف",       grp:"more"},
+];
+const CF_CURRENCIES=["USD","ILS","EUR","AED","JOD","GBP","SAR","EGP","TRY"];
+const CF_CURSYM={USD:"$",ILS:"₪",EUR:"€",AED:"AED ",JOD:"JD ",GBP:"£",SAR:"SAR ",EGP:"E£",TRY:"₺"};
+const CF_PALETTE=["#e5484d","#f76808","#ffc53d","#30a46c","#12a594","#0091ff","#3e63dd","#6647f0","#e93d82","#ab4aba","#a18072","#8d8d8d"];
+function cfList(){ return ((QSETTINGS||{}).custom_fields||{}).po||[]; }
+function cfDef(key){ return cfList().find(x=>x.key===key); }
+function cfMeta(type){ return CF_CATALOG.find(c=>c.type===type)||CF_CATALOG[2]; }
+function cfUrl(v){ v=String(v||"").trim(); return /^https?:\/\//i.test(v)?v:("https://"+v); }
+function cfFmtDate(v,withTime){ if(!v) return ""; const d=new Date(String(v).length<=10?v+"T00:00":v);
+  if(isNaN(d)) return String(v);
+  let s=d.toLocaleDateString(undefined,{day:"numeric",month:"short"});
+  if(withTime) s+=" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); return s; }
+function cfNum(v,prec){ const n=Number(v); return isNaN(n)?String(v):n.toLocaleString(undefined,{minimumFractionDigits:prec||0,maximumFractionDigits:prec||0}); }
+function poCfCells(p){ const out={}; cfList().forEach(f=>{ out["cf_"+f.key]=poCfCell(p,f); }); return out; }
+function poCfDisp(f,v){   // value → cell HTML (no wrapper)
+  const empty=(v==null||v===""||(Array.isArray(v)&&!v.length));
+  if(f.type==="checkbox") return (v===true||v==="1"||v==="true")?'<span style="color:var(--good)">☑</span>':'<span class="muted2" style="opacity:.5">☐</span>';
+  if(empty) return CAN_EDIT?'<span class="muted2" style="opacity:.45">—</span>':"";
+  switch(f.type){
+    case "select":{ const o=(f.options||[]).find(o=>o.name===v); return hexPill((o&&o.color)||"#8d8d8d",v); }
+    case "labels":{ const arr=Array.isArray(v)?v:[v]; return arr.map(x=>{const o=(f.options||[]).find(o=>o.name===x); return hexPill((o&&o.color)||"#8d8d8d",x);}).join(" "); }
+    case "money":{ const sym=CF_CURSYM[f.currency||"USD"]||"$"; return `<b style="color:var(--accent)">${sym}${cfNum(v,f.precision==null?2:f.precision)}</b>`; }
+    case "number": return cfNum(v,f.precision||0);
+    case "date": return `<span class="muted2">${cfFmtDate(v,f.include_time)}</span>`;
+    case "rating":{ const n=Math.max(0,Math.min(f.count||5,parseInt(v)||0)); const on=f.icon==="heart"?"❤":"★",off=f.icon==="heart"?"🤍":"☆"; return `<span style="letter-spacing:1px;color:#f5a623">${on.repeat(n)}<span style="opacity:.35">${off.repeat((f.count||5)-n)}</span></span>`; }
+    case "progress":{ const lo=f.min||0,hi=(f.max||100)>lo?(f.max||100):lo+100; const pc=Math.max(0,Math.min(100,Math.round(((Number(v)-lo)/(hi-lo))*100))); return `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:40px;height:6px;border-radius:99px;background:var(--bg3);display:inline-block;overflow:hidden"><span style="display:block;height:100%;width:${pc}%;background:var(--accent)"></span></span><span class="muted2" style="font-size:10px">${poEsc(String(v))}</span></span>`; }
+    case "url": return `<a href="${poEsc(cfUrl(v))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">${poEsc(v)} ↗</a>`;
+    case "email": return `<a href="mailto:${poEsc(v)}" onclick="event.stopPropagation()" style="color:var(--accent)">${poEsc(v)}</a>`;
+    case "phone": return `<a href="tel:${poEsc(v)}" onclick="event.stopPropagation()">${poEsc(v)}</a>`;
+    default: return poEsc(String(v));
+  }
 }
 function poCfCell(p,f){
   const v=(p.custom||{})[f.key];
-  const disp=(v==null||v==="")?"":poEsc(String(v));
-  return `<span style="min-width:30px;min-height:16px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:${CAN_EDIT?'text':'default'}" title="${poEsc(f.label)}${CAN_EDIT?' — انقر للتعديل · click to edit':''}"
-    ${CAN_EDIT?`onclick="event.stopPropagation();poCfEdit(this,'${p.po_id}','${poEsc(f.key)}')"`:""}>${disp||(CAN_EDIT?'<span class="muted2" style="opacity:.5">—</span>':'')}</span>`;
+  const click=!CAN_EDIT?"":(f.type==="checkbox"
+    ?`event.stopPropagation();poCfSet('${p.po_id}','${poEsc(f.key)}',${(v===true||v==="1"||v==="true")?"false":"true"})`
+    :`event.stopPropagation();poCfEdit(this,'${p.po_id}','${poEsc(f.key)}')`);
+  return `<span class="cf-cell" style="flex:1;min-width:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:${CAN_EDIT?'pointer':'default'}" title="${poEsc(f.label)}${CAN_EDIT?' — انقر للتعديل · click to edit':''}"
+    ${click?`onclick="${click}"`:""}>${poCfDisp(f,v)}</span>`;
+}
+async function poCfSet(poId,key,value){
+  const p=poFind(poId); if(!p) return;
+  p.custom=p.custom||{};
+  const empty=(value==null||value===""||(Array.isArray(value)&&!value.length));
+  if(empty) delete p.custom[key]; else p.custom[key]=value;
+  await poSave(p); renderPurchases();
 }
 function poCfEdit(el,poId,key){
-  const p=poFind(poId), f=(((QSETTINGS||{}).custom_fields||{}).po||[]).find(x=>x.key===key);
-  if(!p||!f) return;
-  const cur=(p.custom||{})[key]??"";
-  let inp;
-  if(f.type==="select"){ inp=document.createElement("select");
-    inp.innerHTML=`<option value=""></option>`+(f.options||[]).map(o=>`<option${o===cur?" selected":""}>${poEsc(o)}</option>`).join(""); }
-  else{ inp=document.createElement("input");
-    inp.type=f.type==="number"?"number":f.type==="date"?"date":"text"; inp.value=cur; }
-  inp.style.cssText="width:100%;min-width:70px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
+  const p=poFind(poId), f=cfDef(key); if(!p||!f) return;
+  const cur=(p.custom||{})[key];
+  if(f.type==="select"||f.type==="labels") return poCfPickOpen(el,poId,f,cur);
+  if(f.type==="rating"){                     // inline ★ row — click a star to set
+    const n=f.count||5, box=document.createElement("span"); box.style.cssText="font-size:15px;cursor:pointer;color:#f5a623;white-space:nowrap";
+    box.innerHTML=Array.from({length:n},(_,i)=>`<span data-r="${i+1}">${i<(+cur||0)?(f.icon==="heart"?"❤":"★"):(f.icon==="heart"?"🤍":"☆")}</span>`).join("")+`<span data-r="0" class="muted2" style="font-size:11px;margin-inline-start:4px">✕</span>`;
+    box.onclick=e=>{ e.stopPropagation(); const r=e.target.dataset.r; if(r==null) return; poCfSet(poId,key,+r?+r:""); };
+    el.replaceWith(box); return;
+  }
+  const inp=document.createElement("input");
+  inp.type=f.type==="number"||f.type==="money"||f.type==="progress"?"number"
+    :f.type==="date"?(f.include_time?"datetime-local":"date")
+    :f.type==="email"?"email":f.type==="url"?"url":f.type==="phone"?"tel":"text";
+  if(f.type==="money"||f.type==="number") inp.step=f.precision?String(1/Math.pow(10,f.precision)):"1";
+  if(f.type==="progress"){ inp.min=f.min||0; inp.max=(f.max||100); }
+  inp.value=(cur==null?"":cur);
+  inp.style.cssText="width:100%;min-width:64px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
   inp.onclick=e=>e.stopPropagation();
   let done=false;
-  const save=async()=>{ if(done) return; done=true;
-    const v=String(inp.value||"").trim();
-    p.custom=p.custom||{};
-    if(v==="") delete p.custom[key]; else p.custom[key]=f.type==="number"?(parseFloat(v)||0):v;
-    await poSave(p); renderPurchases(); };
+  const save=()=>{ if(done) return; done=true;
+    let v=String(inp.value||"").trim();
+    if(v!==""&&(f.type==="number"||f.type==="money"||f.type==="progress")) v=parseFloat(v)||0;
+    poCfSet(poId,key,v); };
   inp.onblur=save;
   inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPurchases(); } };
   el.replaceWith(inp); inp.focus();
+}
+// dropdown / labels value picker — colored option rows in a pop-menu at the cell
+function poCfPickOpen(el,poId,f,cur){
+  const multi=f.type==="labels", sel=multi?(Array.isArray(cur)?cur.slice():(cur?[cur]:[])):(cur?[cur]:[]);
+  const rows=(f.options||[]).map(o=>`<button class="pop-item cu-item" onclick="event.stopPropagation();poCfPick('${poId}','${poEsc(f.key)}','${poEsc(o.name)}',${multi})">
+      <span class="cu-ring" style="border-color:${o.color||'#8d8d8d'}"></span><b>${poEsc(o.name)}</b>${sel.includes(o.name)?'<span style="color:var(--accent)">✓</span>':''}</button>`).join("");
+  const host=document.createElement("span"); host.className="pop"; host.onclick=e=>e.stopPropagation();
+  host.innerHTML=`<span class="pop-menu cu-menu open" style="position:fixed">
+      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+      ${rows||'<div class="muted2" style="padding:8px 10px;font-size:12px">no options — add them in the field settings</div>'}
+      ${multi?`<button class="pop-item" style="justify-content:center;color:var(--muted)" onclick="event.stopPropagation();document.querySelectorAll('.pop-menu.open').forEach(x=>x.classList.remove('open'))">تم · done</button>`:""}
+    </span>`;
+  el.replaceWith(host);
+  const m=host.querySelector(".pop-menu"), r=el.getBoundingClientRect();
+  m.style.top=Math.min(r.bottom+4,innerHeight-320)+"px"; m.style.left=Math.max(8,Math.min(r.left,innerWidth-230))+"px"; m.style.zIndex=99;
+  const inp=host.querySelector(".cu-search"); if(inp) inp.focus();
+}
+async function poCfPick(poId,key,name,multi){
+  const p=poFind(poId); if(!p) return; p.custom=p.custom||{};
+  if(multi){ const arr=Array.isArray(p.custom[key])?p.custom[key].slice():(p.custom[key]?[p.custom[key]]:[]);
+    const i=arr.indexOf(name); if(i>=0) arr.splice(i,1); else arr.push(name);
+    if(arr.length) p.custom[key]=arr; else delete p.custom[key];
+    poSave(p);
+    // keep the menu open: just repaint the board underneath after a tick
+    clearTimeout(poCfPick._t); poCfPick._t=setTimeout(()=>renderPurchases(),400);
+  } else { if(p.custom[key]===name) delete p.custom[key]; else p.custom[key]=name;
+    document.querySelectorAll(".pop-menu.open").forEach(x=>x.classList.remove("open"));
+    await poSave(p); renderPurchases(); }
+}
+// ── ＋ New field / edit field — the ClickUp-style create card (bulk modal),
+// opened from the ⊕ Fields panel or Settings → 🧩. Admin only; saves the whole
+// custom_fields.po list via /api/settings (server slugs the key + validates). ──
+let CF_DRAFT=null;
+function poCfFieldOpen(key){
+  if(!CAN_ADMIN){ toast("للمشرف فقط · admins only"); return; }
+  document.querySelectorAll(".pop-menu.open").forEach(x=>x.classList.remove("open"));
+  const f=key?cfDef(key):null;
+  CF_DRAFT=f?JSON.parse(JSON.stringify(f)):{label:"",type:"select",options:[]};
+  bulkOpen(f?`✏️ ${f.label}`:"＋ حقل جديد · New field");
+  cfDraftRender();
+  $("bulkFoot").innerHTML=`<div style="display:flex;gap:8px;width:100%;align-items:center">
+    ${f?`<button class="po-btn danger" onclick="poCfFieldDelete('${poEsc(f.key)}')">🗑 حذف · Delete</button>`:""}
+    <span class="spacer" style="flex:1"></span>
+    <button class="minibtn" onclick="bulkClose()">إلغاء · Cancel</button>
+    <button class="accent" onclick="poCfFieldSave()">${f?"حفظ · Save":"إنشاء · Create"}</button></div>`;
+}
+function cfDraftRender(){
+  const d=CF_DRAFT;
+  const tbtn=grp=>CF_CATALOG.filter(c=>c.grp===grp).map(c=>`<button class="cf-type${c.type===d.type?' on':''}" onclick="poCfDraftType('${c.type}')"><span class="cf-ic">${c.icon}</span>${poEsc(c.label)}</button>`).join("");
+  let cfg="";
+  if(d.type==="select"||d.type==="labels") cfg=cfOptEditor(d);
+  else if(d.type==="money") cfg=`<div class="cf-cfg"><label>العملة · Currency <select id="cfcCur">${CF_CURRENCIES.map(c=>`<option${c===(d.currency||'USD')?' selected':''}>${c}</option>`).join("")}</select></label><label>خانات عشرية · Decimals <select id="cfcPrec">${[0,1,2].map(n=>`<option${n===(d.precision==null?2:d.precision)?' selected':''}>${n}</option>`).join("")}</select></label></div>`;
+  else if(d.type==="number") cfg=`<div class="cf-cfg"><label>خانات عشرية · Decimals <select id="cfcPrec">${[0,1,2,3,4].map(n=>`<option${n===(d.precision||0)?' selected':''}>${n}</option>`).join("")}</select></label></div>`;
+  else if(d.type==="date") cfg=`<div class="cf-cfg"><label><input type="checkbox" id="cfcTime" ${d.include_time?'checked':''}> يشمل الوقت · include time</label></div>`;
+  else if(d.type==="rating") cfg=`<div class="cf-cfg"><label>الأيقونة · Icon <select id="cfcIcon"><option value="star"${d.icon!=='heart'?' selected':''}>★ star</option><option value="heart"${d.icon==='heart'?' selected':''}>❤ heart</option></select></label><label>العدد · Count <select id="cfcCount">${[3,4,5,6,7,8,9,10].map(n=>`<option${n===(d.count||5)?' selected':''}>${n}</option>`).join("")}</select></label></div>`;
+  else if(d.type==="progress") cfg=`<div class="cf-cfg"><label>من · Min <input id="cfcMin" type="number" value="${d.min||0}" style="width:64px"></label><label>إلى · Max <input id="cfcMax" type="number" value="${d.max==null?100:d.max}" style="width:64px"></label></div>`;
+  $("bulkBody").innerHTML=`
+    <label class="fld" style="display:block;margin-bottom:9px"><span class="lbl">الاسم · Field name</span>
+      <input id="cfName" value="${poEsc(d.label||'')}" placeholder="e.g. Supplier · تاريخ الاستحقاق" style="width:100%" oninput="CF_DRAFT.label=this.value">
+      ${d.key?`<span class="muted2" style="font-size:10.5px">key: <b>${poEsc(d.key)}</b> — لا يتغيّر · immutable</span>`:""}</label>
+    <div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;margin:0 0 4px">النوع · type</div>
+    <div class="cf-types">${tbtn("popular")}${tbtn("more")}</div>
+    <div id="cfCfg" style="margin-top:11px">${cfg}</div>`;
+}
+function cfOptEditor(d){
+  d.options=d.options||[];
+  const rows=d.options.map((o,i)=>`<div style="display:flex;align-items:center;gap:6px;margin:3px 0">
+      <button class="cf-sw" style="background:${o.color||'#8d8d8d'}" title="انقر لتغيير اللون · click to change colour" onclick="poCfOptColor(${i})"></button>
+      <input value="${poEsc(o.name)}" oninput="CF_DRAFT.options[${i}].name=this.value" placeholder="خيار · option" style="flex:1">
+      <button class="iconbtn" title="حذف · remove" onclick="CF_DRAFT.options.splice(${i},1);cfDraftRender()">✕</button></div>`).join("");
+  return `<div class="cf-cfg" style="display:block"><div class="muted2" style="font-size:10.5px;font-weight:800;margin-bottom:3px">الخيارات · options</div>
+    ${rows}<button class="po-btn" style="margin-top:5px" onclick="poCfOptAdd()">＋ خيار · Add option</button></div>`;
+}
+function poCfOptAdd(){ CF_DRAFT.options=CF_DRAFT.options||[]; CF_DRAFT.options.push({name:"",color:CF_PALETTE[CF_DRAFT.options.length%CF_PALETTE.length]}); cfDraftRender(); const inps=$("bulkBody").querySelectorAll('input[placeholder="خيار · option"]'); if(inps.length) inps[inps.length-1].focus(); }
+function poCfOptColor(i){ const o=CF_DRAFT.options[i]; const idx=CF_PALETTE.indexOf(o.color); o.color=CF_PALETTE[(idx+1)%CF_PALETTE.length]; cfDraftRender(); }
+function poCfDraftType(t){ CF_DRAFT.type=t; if((t==="select"||t==="labels")&&!CF_DRAFT.options) CF_DRAFT.options=[]; cfDraftRender(); }
+async function poCfFieldSave(){
+  const d=CF_DRAFT; d.label=($("cfName").value||"").trim();
+  if(!d.label){ toast("اكتب اسم الحقل · name the field"); return; }
+  if(d.type==="money"){ d.currency=$("cfcCur").value; d.precision=+$("cfcPrec").value; }
+  else if(d.type==="number"){ d.precision=+$("cfcPrec").value; }
+  else if(d.type==="date"){ d.include_time=$("cfcTime").checked; }
+  else if(d.type==="rating"){ d.icon=$("cfcIcon").value; d.count=+$("cfcCount").value; }
+  else if(d.type==="progress"){ d.min=+$("cfcMin").value; d.max=+$("cfcMax").value; }
+  if(d.type==="select"||d.type==="labels") d.options=(d.options||[]).filter(o=>(o.name||"").trim());
+  const list=cfList().slice();
+  if(d.key){ const i=list.findIndex(x=>x.key===d.key); i>=0?list[i]=d:list.push(d); } else list.push(d);
+  const r=await post("/api/settings",{custom_fields:{po:list}});
+  if(r&&r.ok){ QSETTINGS=r.settings; bulkClose(); renderPurchases(); if($("cfList")) cfRender(); toast("تم الحفظ · saved ✓"); }
+  else toast((r&&r.error)||"save failed");
+}
+async function poCfFieldDelete(key){
+  if(!confirm("حذف هذا الحقل؟ (القيم المخزنة على الطلبات تبقى) · delete this field? (values stored on orders are kept)")) return;
+  const r=await post("/api/settings",{custom_fields:{po:cfList().filter(x=>x.key!==key)}});
+  if(r&&r.ok){ QSETTINGS=r.settings; bulkClose(); renderPurchases(); if($("cfList")) cfRender(); toast("حُذف · deleted"); }
 }
 function poTrkCounts(p){   // products still missing a tracking # (item's own OR its package's)
   let tot=0,need=0;

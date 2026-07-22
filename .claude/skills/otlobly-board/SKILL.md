@@ -82,13 +82,25 @@ Later additions to the system:
 - **Purchases views**: `PO_BOARD_VIEW` (`po_board_view`) — orders tree ·
   packages flat (table `"pok"`) · products flat (`"pop"`); `poSearch` free-text
   filter (`poSearchMatch`); `poJumpOrder` = back to tree + open that card.
-- **Custom fields (ClickUp-style, sellable core)**: definitions per business in
-  Settings → 🧩 (`custom_fields.po`: key/label/type text|number|select|date/
-  options; settings.py validates + slugs keys); values in `po.custom{}`
-  (purchases.save_full preserves them; a custom-less POST never wipes).
-  `lxtCols(tbl)` appends `cf_<key>` columns to "po"/"pok" before the menu col;
-  cells via `poCfCells(p)` → `poCfCell/poCfEdit` (inline input/select, saves
-  through the debounced `poSave` — 700ms). Sort handled in `poSortVal`.
+- **Custom fields v2 (ClickUp-style, sellable core)**: 13 types — select
+  (dropdown), labels (multi), text, longtext, number, money, date, checkbox,
+  phone, url, email, rating, progress. Defs per business `custom_fields.po`
+  (settings.py `_clean_custom_fields` validates per-type config + slugs the
+  immutable key + 20 cap): select/labels→`options:[{name,color}]`, money→
+  `currency`+`precision`, number→`precision`, date→`include_time`, rating→
+  `icon`+`count`, progress→`min`/`max`. Values in `po.custom{}` (save_full
+  preserves; custom-less POST never wipes). Client catalog `CF_CATALOG`;
+  `lxtCols(tbl)` appends `cf_<key>` cols to "po"/"pok"; render by type in
+  `poCfDisp` (colored pills via hexPill, money currency sym, ★ rating, progress
+  bar, url/email/phone links), edit in `poCfEdit` (select/labels→`poCfPickOpen`
+  colored pop-menu, checkbox→direct `poCfSet` toggle, rating→inline stars, rest→
+  typed input) → saves via debounced `poSave`. Sort typed in `poSortVal`.
+  **Creation**: `poCfFieldOpen()` (admin only) = the ClickUp create card
+  (bulk modal: name + `CF_CATALOG` type picker + per-type options editor with
+  color swatches) → POSTs the whole `custom_fields.po` list to `/api/settings`.
+  Entry points: ＋ New field row + ✎ pencils in the ⊕ Fields panel (`lxtHead`,
+  gated `canCf`), and the Settings → 🧩 list (`cfRender`). Never send
+  custom_fields from generic `saveSettings` — the card owns that key.
 
 ## Role-based visibility (employee-safe by design)
 

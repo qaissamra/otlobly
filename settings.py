@@ -167,6 +167,70 @@ def _rule(d):
     return {"type": "pct" if t == "pct" else "flat", "value": round(_f(d.get("value"), 0), 2)}
 
 
+# ClickUp-style custom-field types (v2). Config values users may NOT set are
+# dropped; unknown types fall back to a plain text column so a bad payload can
+# never break the board.
+CF_TYPES = ("text", "longtext", "number", "money", "date", "checkbox",
+            "phone", "url", "email", "select", "labels", "rating", "progress")
+CF_CURRENCIES = ("USD", "ILS", "EUR", "AED", "JOD", "GBP", "SAR", "EGP", "TRY")
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _cf_options(raw):
+    """[{name,color}] for dropdown/labels — name required, color hex-validated."""
+    out = []
+    for o in (raw or []):
+        if isinstance(o, dict):
+            name, color = str(o.get("name", "")).strip(), str(o.get("color", "")).strip()
+        else:
+            name, color = str(o).strip(), ""
+        if not name:
+            continue
+        out.append({"name": name, "color": color if _HEX.match(color) else "#8d8d8d"})
+        if len(out) >= 30:
+            break
+    return out
+
+
+def _clean_custom_fields(raw):
+    """Validate the per-business custom-field DEFINITIONS (Purchases board).
+    One def per field: key (immutable slug) + label + type + type-specific config."""
+    fields, seen = [], set()
+    for f in (raw or []):
+        if not isinstance(f, dict):
+            continue
+        label = str(f.get("label", "")).strip()
+        key = re.sub(r"[^a-z0-9_]+", "_", str(f.get("key") or label).strip().lower()).strip("_")
+        typ = str(f.get("type", "text")).strip().lower()
+        if typ == "dropdown":
+            typ = "select"
+        if not key or not label or key in seen:
+            continue
+        seen.add(key)
+        d = {"key": key, "label": label, "type": typ if typ in CF_TYPES else "text"}
+        if d["type"] in ("select", "labels"):
+            d["options"] = _cf_options(f.get("options"))
+        elif d["type"] == "money":
+            cur = str(f.get("currency", "USD")).strip().upper()
+            d["currency"] = cur if cur in CF_CURRENCIES else "USD"
+            d["precision"] = min(2, max(0, int(_f(f.get("precision"), 2))))
+        elif d["type"] == "number":
+            d["precision"] = min(4, max(0, int(_f(f.get("precision"), 0))))
+        elif d["type"] == "date":
+            d["include_time"] = bool(f.get("include_time"))
+        elif d["type"] == "rating":
+            d["icon"] = "heart" if str(f.get("icon", "")).strip().lower() == "heart" else "star"
+            d["count"] = min(10, max(3, int(_f(f.get("count"), 5))))
+        elif d["type"] == "progress":
+            lo = int(_f(f.get("min"), 0))
+            hi = int(_f(f.get("max"), 100))
+            d["min"], d["max"] = lo, (hi if hi > lo else lo + 100)
+        fields.append(d)
+        if len(fields) >= 20:
+            break
+    return fields
+
+
 def apply(body, config=None, persist=True):
     config = config or cfg.load()
     if "markup_pct" in body:
@@ -241,21 +305,7 @@ def apply(body, config=None, persist=True):
         cfg.set_path(config, "staff.employee_status_map", rows)
     cf = body.get("custom_fields")
     if isinstance(cf, dict) and isinstance(cf.get("po"), list):
-        fields, seen = [], set()
-        for f in cf["po"]:
-            if not isinstance(f, dict):
-                continue
-            label = str(f.get("label", "")).strip()
-            key = re.sub(r"[^a-z0-9_]+", "_", str(f.get("key") or label).strip().lower()).strip("_")
-            typ = str(f.get("type", "text")).strip().lower()
-            if not key or not label or key in seen:
-                continue
-            seen.add(key)
-            fields.append({"key": key, "label": label,
-                           "type": typ if typ in ("text", "number", "select", "date") else "text",
-                           "options": [str(o).strip() for o in (f.get("options") or [])
-                                       if str(o).strip()][:30]})
-        cfg.set_path(config, "custom_fields.po", fields[:20])
+        cfg.set_path(config, "custom_fields.po", _clean_custom_fields(cf["po"]))
     cl = body.get("clearance")
     if isinstance(cl, dict):
         for k in ("email_to", "email_cc"):

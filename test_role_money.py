@@ -101,16 +101,33 @@ def main():
           any(r.get("pick") for r in s["employee_status_map"])
           and any(r["status"] == "recieved no rd" for r in s["employee_status_map"]))
 
-    # custom fields: define → snapshot → value round-trip on the PO
+    # custom fields v2: the 13 typed defs with per-type config
     r = adm.post("/api/settings", json={"custom_fields": {"po": [
-        {"label": "Supplier", "type": "select", "options": ["Amazon", "eBay"]},
-        {"label": "Batch no", "type": "number"}]}}).get_json()
-    cf = r["settings"]["custom_fields"]["po"]
-    check("custom fields saved with slug keys", len(cf) == 2
-          and cf[0]["key"] == "supplier" and cf[0]["options"] == ["Amazon", "eBay"]
-          and cf[1]["key"] == "batch_no" and cf[1]["type"] == "number")
+        {"label": "Supplier", "type": "dropdown",
+         "options": [{"name": "Amazon", "color": "#12a594"}, {"name": "eBay", "color": "bad"}]},
+        {"label": "Tags", "type": "labels", "options": [{"name": "urgent", "color": "#e5484d"}]},
+        {"label": "Paid ILS", "type": "money", "currency": "ils", "precision": 2},
+        {"label": "Due Date", "type": "date", "include_time": True},
+        {"label": "Quality", "type": "rating", "icon": "heart", "count": 99},
+        {"label": "Prep", "type": "progress", "min": 0, "max": 50},
+        {"label": "Batch no", "type": "number"},
+        {"label": "Junk", "type": "nonsense"}]}}).get_json()
+    cf = {f["key"]: f for f in r["settings"]["custom_fields"]["po"]}
+    check("dropdown slug + colored options (bad hex fixed)",
+          cf["supplier"]["type"] == "select"
+          and cf["supplier"]["options"][0] == {"name": "Amazon", "color": "#12a594"}
+          and cf["supplier"]["options"][1]["color"] == "#8d8d8d")
+    check("labels type kept", cf["tags"]["type"] == "labels")
+    check("money currency+precision validated",
+          cf["paid_ils"]["type"] == "money" and cf["paid_ils"]["currency"] == "ILS"
+          and cf["paid_ils"]["precision"] == 2)
+    check("date include_time", cf["due_date"].get("include_time") is True)
+    check("rating icon + count clamped", cf["quality"]["icon"] == "heart"
+          and cf["quality"]["count"] == 10)
+    check("progress min/max", cf["prep"]["min"] == 0 and cf["prep"]["max"] == 50)
+    check("unknown type falls back to text", cf["junk"]["type"] == "text")
     full_po = adm.get(f"/api/purchase?id={po_id}").get_json()
-    full_po["custom"] = {"supplier": "Amazon", "batch_no": 7}
+    full_po["custom"] = {"supplier": "Amazon", "batch_no": 7, "tags": ["urgent"], "prep": 30}
     r = adm.post("/api/purchase", json=full_po).get_json()
     check("PO save keeps custom values", r.get("ok") is True)
     back = adm.get(f"/api/purchase?id={po_id}").get_json()
