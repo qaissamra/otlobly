@@ -424,7 +424,7 @@
   .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 86px 104px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
   .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
@@ -441,6 +441,20 @@
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
+  /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
+     right edge (never h-scrolls away); its panel opens position:FIXED via
+     popToggle (a normal dropdown would be clipped by the header strip).
+     Rows are toggle switches; the panel stays open while toggling. */
+  .fld-anchor{position:absolute;top:3px;inset-inline-end:6px;z-index:7}
+  .fld-menu{min-width:238px;max-height:390px;overflow:auto}
+  .fld-head{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:800;color:var(--muted);padding:5px 9px 2px;text-transform:uppercase;letter-spacing:.05em}
+  .fld-row{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border:none;background:transparent;border-radius:8px;font-size:12.5px;cursor:pointer;text-align:start;color:var(--ink)}
+  .fld-row:hover{background:var(--bg2)}
+  .fld-row b{flex:1;font-weight:600;text-align:start;text-transform:none;letter-spacing:0}
+  .tglsw{flex:0 0 auto;width:30px;height:17px;border-radius:999px;background:#cfd4dc;position:relative;transition:background .15s}
+  .tglsw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:inset-inline-start .15s;box-shadow:0 1px 2px rgba(16,24,40,.25)}
+  .tglsw.on{background:var(--accent)}
+  .tglsw.on::after{inset-inline-start:15px}
   .bt-wrap{overflow-x:auto}
   .bt-wrap.pin-lg,.bt-clip.pin-lg{--btpin:380px}
   .bt-wrap.pin-md,.bt-clip.pin-md{--btpin:360px}
@@ -3038,6 +3052,7 @@ const LXT_COLS={
     {key:"package",   label:"package",     w:120},
     {key:"pkgstatus", label:"pkg status",  w:120},
     {key:"customer",  label:"customer",    w:112, sortable:true},
+    {key:"collect",   label:"💵 collect",  w:96,  sortable:true},
     {key:"qty",       label:"qty",         w:40,  sortable:true},
     {key:"status",    label:"exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
@@ -3068,6 +3083,12 @@ function lxtColToggle(tbl,key){
   try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}
   lxColwSet(tbl,null);              // saved widths are keyed to the visible set — reset
   lxtRender(tbl);
+  // the re-render rebuilt the header — keep the Fields panel open (ClickUp
+  // behavior: toggle several columns in one visit), re-placed at its ⊕
+  // (the anchor is the header div's SIBLING inside the same .bt-clip)
+  const head=document.querySelector(`.${LXT_CLS[tbl][0]}`);
+  const m=head&&head.closest(".bt-clip")?head.closest(".bt-clip").querySelector(".fld-menu"):null;
+  if(m){ m.classList.add("open"); if(m.previousElementSibling) fldPlace(m.previousElementSibling,m); }
 }
 function lxtSortClick(tbl,key){     // none → ↑ → ↓ → none
   const s=LXT_SORT[tbl];
@@ -3137,12 +3158,20 @@ function lxtHead(tbl,pinLabel,pinSortKey){
   const pin=pinSortKey&&tbl===""
     ?`<span class="bt-pin lbl lx-sort" title="sort by ${pinLabel}" onclick="lxSortClick('${pinSortKey}')">${lxSortArrow(pinSortKey)}${pinLabel}${pinRsz}</span>`
     :`<span class="bt-pin lbl">${pinLabel}${pinRsz}</span>`;
-  const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>`<button class="pop-item cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b>${LXT_HIDDEN[tbl].has(c.key)?"":'<span style="color:var(--accent)">✓</span>'}</button>`).join("");
-  const picker=`<span class="pop" onclick="event.stopPropagation()">
-      <button class="iconbtn" style="font-size:14px;padding:0 3px" title="إظهار / إخفاء الأعمدة · show / hide columns" onclick="popToggle(this)">⊕</button>
-      <div class="pop-menu">${pick}</div></span>`;
+  const hidden=LXT_HIDDEN[tbl];
+  const shown=lxtCols(tbl).filter(c=>!c.locked&&!hidden.has(c.key)).length;
+  const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>`<button class="fld-row cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b><span class="tglsw${hidden.has(c.key)?"":" on"}"></span></button>`).join("");
+  // the ⊕ Fields button is ANCHORED at the header's right edge (never scrolls
+  // away with the columns); its panel opens position:fixed via popToggle
+  const picker=`<span class="pop fld-anchor" onclick="event.stopPropagation()">
+      <button class="iconbtn" style="font-size:14px;padding:0 4px;background:var(--bg)" title="الأعمدة — أظهر أو أخفِ ما تريد · Fields — show / hide columns" onclick="popToggle(this)">⊕</button>
+      <div class="pop-menu fld-menu">
+        <div class="fld-head"><span>الأعمدة · fields</span><span>${shown} shown</span></div>
+        <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+        ${pick}
+      </div></span>`;
   const lbl=(c,i)=>{
-    if(c.key==="menu") return `<span class="lbl">${picker}${lxtRsz(tbl,i)}</span>`;
+    if(c.key==="menu") return `<span class="lbl">${lxtRsz(tbl,i)}</span>`;
     if(tbl===""&&c.sort){ const k=c.sortKey||c.sort;
       return `<span class="lbl lx-sort" title="sort by ${c.sort}" onclick="lxSortClick('${k}')">${lxSortArrow(k)}${c.label}${lxtRsz(tbl,i)}</span>`; }
     if(c.sortable){ const a=(s&&s.key===c.key)?(s.dir===1?"↑ ":"↓ "):"";
@@ -3152,7 +3181,7 @@ function lxtHead(tbl,pinLabel,pinSortKey){
   return `<div class="bt-clip${LXT_PINCLS[tbl]}"><div class="${headCls}">
       ${pin}
       <span class="${colsCls}">${lxtVisible(tbl).map(lbl).join("")}</span>
-    </div></div>`;
+    </div>${picker}</div>`;
 }
 function lxtCells(tbl,cells){
   const colsCls=LXT_CLS[tbl][1];
@@ -6814,6 +6843,14 @@ let PO_BOARD_VIEW=localStorage.getItem("po_board_view")||"orders";
 function poSetView(v){ PO_BOARD_VIEW=v; try{ localStorage.setItem("po_board_view",v); }catch(e){} renderPurchases(); }
 function poJumpOrder(id){ PO_BOARD_VIEW="orders"; try{ localStorage.setItem("po_board_view","orders"); }catch(e){}
   PO_VIEW[id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
+// customer-order lookup (order_id → report row): the quoted amount lives on the
+// CUSTOMER order (DATA.orders — already money-redacted per role server-side)
+let PO_OMAP=null, PO_OMAP_N=-1;
+function poOrderMap(){
+  const os=(typeof DATA!=="undefined"&&DATA&&DATA.orders)||[];
+  if(!PO_OMAP||PO_OMAP_N!==os.length){ PO_OMAP={}; os.forEach(o=>PO_OMAP[o.order_id]=o); PO_OMAP_N=os.length; }
+  return PO_OMAP;
+}
 function poSearchMatch(p,q){
   if([p.po_id,p.amazon_order_number,p.ship_to,p.profile_box].some(v=>v&&String(v).toLowerCase().includes(q))) return true;
   return (p.packages||[]).some(pk=>String(pk.tracking_number||"").toLowerCase().includes(q)
@@ -6926,6 +6963,8 @@ function poRenderProdsFlat(mount,list){
     if(key==="order") return String(p.po_id||"").toLowerCase();
     if(key==="customer") return String(it.customer_name||"~").toLowerCase();
     if(key==="qty") return Number(it.qty)||1;
+    if(key==="collect"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
+      return (co&&co.amount_to_collect_usd)||0; }
     return String(it.title||it.asin||"").toLowerCase();
   });
   const totQty=rows.reduce((a,[,,,it])=>a+(Number(it.qty)||1),0);
@@ -6944,11 +6983,20 @@ function poItFlatRow(p,pk,pi,it,ii){
         return `<span class="pill" style="color:${c};background:${bg}">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`; })():"";
   const gaash=(pk.tracking_number||'').trim();
   const pst=(pk.otlobly_status||"").trim();
+  // 💵 collect = the matched customer ORDER's quoted amount (what we take from
+  // the customer) — order-level, so every row of that order shows the same $
+  const co=poOrderMap()[(it.customer_order_id||"").trim()];
+  const collect=co
+    ?(co.amount_to_collect_usd!=null
+      ?`<b style="font-size:12px;color:var(--accent)" title="${poEsc(co.order_id)} — المطلوب من العميل · quoted total of this customer's order · عربون ${money(co.deposit_usd||0)} · المتبقي ${money(Math.round(((co.amount_to_collect_usd||0)-(co.deposit_usd||0))*100)/100)}">${money(co.amount_to_collect_usd)}</b>`
+      :"")
+    :`<span class="muted2" style="opacity:.5" title="غير مرتبط بطلب زبون بعد · not linked to a customer order yet">—</span>`;
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
     package:`<span class="muted2" style="font-size:11px">📦${pk.package_no}${gaash?` · ${poTn4(gaash,'10px')}`:""}</span>`,
     pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
     customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
+    collect,
     qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
     status: exc,
     menu:`<button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>`,
@@ -7640,10 +7688,27 @@ function poToggleCard(id){ const p=poFind(id); PO_VIEW[id]=poIsOpen(p)?"closed":
 function poViewAll(open){ (POS||[]).forEach(p=>PO_VIEW[p.po_id]=open?"open":"closed"); localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
 // ── ⋯ overflow menu (the only home for row actions; one open at a time) ──
 let PO_FILTER="all";
+// keep every board's sticky header aligned with its rows (safety re-sync)
+function popResync(){ document.querySelectorAll(".bt-wrap").forEach(w=>{ try{ lxtSync(w); }catch(e){} }); }
+// the Fields panel opens position:FIXED at its ⊕ button — its home cell sits in
+// the overflow-hidden header clip (often h-scrolled off-screen), so a normal
+// absolute dropdown would be invisible there
+function fldPlace(btn,m){
+  const r=btn.getBoundingClientRect();
+  m.style.position="fixed"; m.style.zIndex=99; m.style.insetInlineEnd="auto";
+  m.style.top=Math.max(8,Math.min(r.bottom+4,innerHeight-400))+"px";
+  m.style.left=Math.max(8,Math.min(r.left-205,innerWidth-262))+"px";
+}
+function popClose(x){ x.classList.remove("open"); if(x.classList.contains("fld-menu")) x.style.cssText=""; }
 function popToggle(btn){ const m=btn.nextElementSibling; const wasOpen=m.classList.contains("open");
-  document.querySelectorAll(".pop-menu.open").forEach(x=>x.classList.remove("open"));
-  if(!wasOpen) m.classList.add("open"); event.stopPropagation(); }
-document.addEventListener("click",e=>{ if(!e.target.closest(".pop")) document.querySelectorAll(".pop-menu.open").forEach(x=>x.classList.remove("open")); });
+  document.querySelectorAll(".pop-menu.open").forEach(popClose);
+  if(!wasOpen){ m.classList.add("open"); if(m.classList.contains("fld-menu")) fldPlace(btn,m); }
+  event.stopPropagation();
+  if(wasOpen) popResync(); }
+document.addEventListener("click",e=>{ if(!e.target.closest(".pop")){
+  const had=document.querySelector(".pop-menu.open");
+  document.querySelectorAll(".pop-menu.open").forEach(popClose);
+  if(had) popResync(); } });
 function popMenu(items){   // items: [ [icon+label, onclick, danger?], … | null to skip ]
   const rows=items.filter(Boolean).map(([lab,fn,danger])=>`<button class="pop-item${danger?' danger':''}" onclick="${fn};this.closest('.pop-menu').classList.remove('open')">${lab}</button>`).join("");
   return `<span class="pop"><button class="iconbtn" title="more actions" onclick="popToggle(this)">⋯</button><div class="pop-menu">${rows}</div></span>`;
