@@ -198,8 +198,8 @@
      got the same grid cells (806c25f): clicking a package row's status button
      opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
      white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -367,6 +367,9 @@
   a.po-btn{display:inline-flex;align-items:center;text-decoration:none}
   .need-order{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:11px;background:var(--card)}
   .need-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  /* Any wide plain table sits in a .tbl-scroll wrapper: it H-SCROLLS on narrow
+     screens instead of clipping (the .ne-wrap precedent, app-wide consistency) */
+  .tbl-scroll{overflow-x:auto}
   /* To-order expandable table (order row → products as sub-rows) */
   .ne-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--shadow);margin-bottom:8px}
   .ne-tbl{width:100%;border-collapse:collapse;background:transparent;border:none;box-shadow:none;border-radius:0;table-layout:fixed}
@@ -408,70 +411,71 @@
   .lx-hash{opacity:.45;margin-inline-end:2px}
   /* Leluxe ClickUp-style columns: the order card's right-side chips share one
      fixed grid, and a sticky label row above the list names each column. */
-  /* ClickUp-style columns, sized by the BOARD's real width (container query —
-     a viewport media query can't account for the 285px sidebar). Fallback =
-     today's flowing chips; ≥940px of board → compact grid; ≥1060px → roomy. */
-  #lxRows{container-type:inline-size;container-name:lxboard}
-  #poTree{container-type:inline-size;container-name:poboard}
-  .lx-cols,.lx-pcols,.lx-kcols,.po-cols{display:contents}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  /* the STATUS cell must never crush: in the display:contents fallback each .lxc
-     is a shrinkable flex item — keep the one holding the status control at content
-     width (the flex-wrap row wraps instead). Inert in grid mode. */
-  .lx-cols .lxc:has(.statussel),.lx-pcols .lxc:has(.statussel),.po-cols .lxc:has(.statussel){flex-shrink:0}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead{display:none;position:sticky;top:70px;z-index:20;align-items:center;gap:10px;background:var(--bg);padding:6px 15px 5px 9px;margin-bottom:4px;border-bottom:1px solid var(--line)}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .po-colhead .lbl{position:relative;padding-inline-end:8px}
-  /* product rows sit inside .pkg-body (8px) + .poc-row (2px); shift the header's
-     right inset to 11px so its grid right edge lines up with the rows' */
-  .lx-pcolhead,.lx-kcolhead{padding-inline-end:11px}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover{color:var(--ink)}
+  /* ═══ ClickUp-style board tables — ONE system for ALL boards (Leluxe
+     orders/products/packages + Purchases): fixed-width column grids that
+     H-SCROLL inside .bt-wrap (never squeeze or collapse, at every width),
+     a PINNED left column (.bt-pin, sticky-left, shadow once scrolled), and
+     a header that stays visible on page scroll (.bt-clip, sticky) whose
+     scrollLeft lxtSync keeps in step with the body. Grid vars per table:
+     --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
+     (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
+  .lx-cols{display:grid;grid-template-columns:var(--lxgrid,100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 86px 104px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
+     borders compensating the cards' real borders so full-scroll never lags */
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl{position:relative;padding-inline-end:8px}
+  .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
   .pkg-title-row:hover .lx-copy{opacity:.7}
-  @container lxboard (min-width:940px){
-    .lx-cols{display:grid;grid-template-columns:var(--lxgrid,86px 54px 96px 150px 66px 48px 60px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,70px 44px 96px 34px 100px 118px 90px 56px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,90px 78px 96px 118px 54px 100px 56px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .lx-colhead,.lx-pcolhead,.lx-kcolhead{display:flex}
-    .lx-krow{flex-wrap:nowrap}
-    /* one line per order: the left name/meta ellipsize instead of wrapping the grid */
-    #lxRows>.po-card>.po-head>.po-title{flex-wrap:nowrap}
-    #lxRows>.po-card>.po-head>.po-title>.muted2,
-    #lxRows>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .lx-prow{flex-wrap:nowrap}
-    /* expanded-order sub-rows join the same column grid: cancel the extra nesting
-       insets (po-body 12 + pkg border 1 + row pads) so each sub-row's .lx-cols
-       right edge lands on the header's 15px — order row = 1(card)+14(po-title) */
-    #lxRows .po-body .pkg-title-row{flex-wrap:nowrap;padding-inline-end:1px}
-    #lxRows .po-body .pkg-body{padding-inline-end:0}
-    #lxRows .po-body .poc-row{flex-wrap:nowrap;padding-inline-end:1px}
-  }
-  @container lxboard (min-width:1060px){
-    .lx-cols{grid-template-columns:var(--lxgrid,104px 56px 98px 160px 80px 50px 78px 28px);gap:6px}
-    .lx-pcols{grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px}
-    .lx-kcols{grid-template-columns:var(--lxkgrid,100px 86px 104px 128px 60px 110px 78px 28px);gap:6px}
-  }
-  /* Purchases board: same column system, its own container + widths (po_colw / --pogrid) */
-  @container poboard (min-width:940px){
-    .po-cols{display:grid;grid-template-columns:var(--pogrid,108px 82px 118px 90px 68px 110px 122px 26px);gap:5px;align-items:center;flex:0 0 auto}
-    .po-colhead{display:flex}
-    #poTree>.po-card>.po-head>.po-title{flex-wrap:nowrap}
-    #poTree>.po-card>.po-head>.po-title>.muted,
-    #poTree>.po-card>.po-head>.po-title>.po-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    #poTree .po-body .pkg-title-row{flex-wrap:nowrap;padding-inline-end:1px}
-    #poTree .po-body .pkg-body{padding-inline-end:0}
-    #poTree .po-body .poc-group{padding-inline-end:0}
-    #poTree .po-body .poc-row{flex-wrap:nowrap;padding-inline-end:1px}
-  }
-  @container poboard (min-width:1060px){
-    .po-cols{grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px}
-  }
+  .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .bt-wrap{overflow-x:auto}
+  .bt-wrap.pin-lg,.bt-clip.pin-lg{--btpin:380px}
+  .bt-wrap.pin-md,.bt-clip.pin-md{--btpin:360px}
+  @media(max-width:560px){.bt-wrap,.bt-clip,.bt-wrap.pin-lg,.bt-clip.pin-lg,.bt-wrap.pin-md,.bt-clip.pin-md{--btpin:200px}}
+  .bt-wrap:has(.pop-menu.open){overflow:visible}
+  /* the cards' overflow:hidden would hijack the pin's sticky scroll box — undo
+     it inside the scroll wrap; rows/cards size to content but never narrower
+     than the viewport, so every grid at every nesting level scrolls as one */
+  .bt-wrap .po-card,.bt-wrap .pkg{width:max-content;min-width:100%;overflow:visible}
+  .bt-wrap>.pkg{margin-top:0}
+  .bt-wrap .po-body{padding-inline:0}
+  .bt-wrap .pkg-body{padding-inline:0;overflow-x:visible}
+  .bt-wrap .poc-group{padding-inline:0}
+  .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}
+  .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
+  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
+  /* the pin floats over scrolled content → its background must mirror every
+     row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
+  .bt-wrap .po-card.open .po-title>.bt-pin{background:#fff4ee}
+  .bt-wrap .pkg-title-row>.bt-pin{background:var(--bg2)}
+  .bt-wrap .pkg-title-row:hover>.bt-pin{background:#efede8}
+  .bt-wrap .pkg.open>.pkg-head>.pkg-title-row>.bt-pin{background:#fff4ee}
+  .bt-wrap .pkg.open>.pkg-head>.pkg-title-row:hover>.bt-pin{background:#ffeadf}
+  .bt-wrap .poc-row.lx-tied>.bt-pin{background:var(--bg2);box-shadow:inset 3px 0 0 #f7680866}
+  .btscrolled .poc-row.lx-tied>.bt-pin{box-shadow:inset 3px 0 0 #f7680866,6px 0 10px -6px rgba(16,24,40,.28)}
+  /* nested tree levels indent INSIDE the pin so all grids stay column-aligned */
+  .bt-wrap .po-body .pkg-title-row>.bt-pin{padding-inline-start:24px}
+  .bt-wrap .po-body .poc-row>.bt-pin{padding-inline-start:34px}
+  .bt-wrap .poc-cust{position:sticky;inset-inline-start:0;max-width:var(--btpin,320px);padding-inline-start:34px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bt-total{background:var(--bg2);border-top:2px solid var(--line);font-variant-numeric:tabular-nums}
+  .bt-total>.bt-pin{background:var(--bg2);font-weight:800;font-size:11.5px}
+  /* Leluxe brings its own ＋ New order / ↻ Refresh bar — hide the topbar
+     duplicates there (topbar ＋ Add order creates an OTLOBLY order: a trap) */
+  body.view-leluxe #addOrderBtn,body.view-leluxe #refreshBtn{display:none}
   /* Leluxe dashboard: KPI card grid + horizontal breakdown bars */
   .lx-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:2px}
   .lx-sec{color:var(--muted);font-size:11px;font-weight:800;margin:15px 0 8px;text-transform:uppercase;letter-spacing:.05em}
@@ -671,7 +675,7 @@
       <button class="po-btn" onclick="clearOrderSel()">Clear</button>
       <span class="muted2" style="font-size:11.5px">deleted orders move to 🗑 Trash — you can restore them</span>
     </div>
-    <table id="tbl">
+    <div class="tbl-scroll"><table id="tbl">
       <thead><tr>
         <th style="width:26px"><input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)" title="select all shown"></th>
         <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th><th>Deposit</th><th>Remaining</th>
@@ -679,7 +683,7 @@
       </tr></thead>
       <tbody id="rows"></tbody>
       <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td class="amt" id="footDep"></td><td class="amt" id="footRem"></td><td colspan="6"></td></tr></tfoot>
-    </table>
+    </table></div>
   </div>
 
   <!-- Profit / P&L -->
@@ -720,10 +724,10 @@
       <div class="panel">
         <h2>Revenue by bulk order (batch)</h2>
         <div id="pnlChart"></div>
-        <table style="margin-top:6px"><thead><tr>
+        <div class="tbl-scroll"><table style="margin-top:6px"><thead><tr>
           <th>Batch</th><th style="text-align:right">Revenue</th>
           <th style="text-align:right">% of revenue</th></tr></thead>
-          <tbody id="pnlRows"></tbody></table>
+          <tbody id="pnlRows"></tbody></table></div>
         <div id="pnlNote" style="color:var(--muted);font-size:12px;margin-top:10px"></div>
       </div>
     </div>
@@ -757,10 +761,10 @@
       </div>
     </div>
     <div class="grid2" id="custGrid" style="display:grid;grid-template-columns:1.3fr .7fr;gap:14px">
-      <table class="cust-tbl"><thead><tr><th>Customer</th><th>City</th>
+      <div class="tbl-scroll" style="min-width:0"><table class="cust-tbl"><thead><tr><th>Customer</th><th>City</th>
         <th style="text-align:right">Orders</th><th style="text-align:right">Total spent</th>
         <th style="text-align:center">ID</th><th style="text-align:center">VIP</th></tr></thead>
-        <tbody id="custRows"></tbody></table>
+        <tbody id="custRows"></tbody></table></div>
       <div class="panel" id="custProfile" style="align-self:start">
         <h2>Profile</h2>
         <div style="color:var(--muted);font-size:13px">Click a customer to see their profile &amp; order history.</div>
@@ -799,6 +803,15 @@
       <span class="hk">↗ Send to ClickUp</span> when the order is ready.
       Click <b>▾</b> next to a row to fold it away.
       <a class="dismiss" onclick="document.getElementById('poHelp').style.display='none'">✕ hide</a>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 8px">
+      <span style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden" title="طريقة العرض · view">
+        <button class="minibtn" id="poSegOrders" style="border:0;border-radius:0" onclick="poSetView('orders')">🧾 Orders</button>
+        <button class="minibtn" id="poSegPkgs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('packages')" title="كل الطرود في جدول واحد · every package as one flat row">📦 Packages</button>
+        <button class="minibtn" id="poSegProds" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('products')" title="كل المنتجات في جدول واحد · every product as one flat row">⫶ Products</button>
+        <button class="minibtn" id="poSegCust" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('customers')" title="كل عميل مع منتجاته — الطلبات المنفصلة تبقى منفصلة · each customer with their products; separate orders stay separated">👤 Customers</button>
+      </span>
+      <input id="poSearch" placeholder="search PO #, amazon #, customer, product, GWD…" oninput="renderPurchases()" style="width:280px;padding:4px 8px;font-size:12px">
     </div>
     <div class="po-filters" id="poFilters"></div>
     <!-- ClickUp-style filter builder: field · operator · values, rows AND-ed -->
@@ -962,6 +975,24 @@
         <tbody id="otlRows"></tbody></table>
       <button class="po-btn" style="margin-top:8px" onclick="otlAddRow()">＋ Add stage</button>
       <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save stages</button></div>
+    </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">👷 حالات الموظف · Employee status labels</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">أنت ترى حالات ClickUp الخام (rd / no rd…) — موظفوك يرون هذه التسميات المبسطة بدلاً منها، ويستطيعون تعيين الحالات المؤشَّر عليها ✔ فقط · YOU see the raw statuses; staff see these labels instead, and can only SET the ✔-checked ones. Display-only — the stored value never changes.</div>
+      <div class="tbl-scroll"><table style="width:100%;font-size:12.5px;border-collapse:collapse">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>Raw status (you)</th><th>Employee sees</th><th title="الموظف يستطيع اختيارها · employee can set it">✔ pick</th><th></th></tr></thead>
+        <tbody id="esmRows"></tbody></table></div>
+      <button class="po-btn" style="margin-top:8px" onclick="esmAddRow()">＋ Add row</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save employee labels</button></div>
+    </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">🧩 حقول مخصصة · Custom fields (Purchases)</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">أعمدة تضيفها بنفسك لجدول المشتريات — مثل ClickUp تماماً: نص، رقم، قائمة، أو تاريخ · your own columns on the Purchases board (text / number / dropdown / date). They appear in the ⊕ column picker; values are edited by clicking the cell.</div>
+      <div class="tbl-scroll"><table style="width:100%;font-size:12.5px;border-collapse:collapse">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>Label</th><th>Type</th><th>Options (for dropdown, comma-separated)</th><th></th></tr></thead>
+        <tbody id="cfRows"></tbody></table></div>
+      <button class="po-btn" style="margin-top:8px" onclick="cfAddRow()">＋ Add field</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="accent" onclick="saveSettings(this)">Save custom fields</button></div>
     </div>
     <div class="panel" style="max-width:760px;margin-top:14px">
       <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📣 تنبيهات تيليجرام · Telegram alerts</h3>
@@ -1137,10 +1168,10 @@
         <span class="spacer"></span>
         <input id="depFilter" placeholder="filter by customer / order…" oninput="renderDeposits()" style="width:220px;padding:4px 8px;font-size:12px">
       </div>
-      <table id="depTbl">
+      <div class="tbl-scroll"><table id="depTbl">
         <thead><tr><th>Date</th><th>Customer</th><th>Order</th><th>Entered</th><th>Rate</th><th>USD</th><th>Kind</th><th>Note</th><th>By</th><th></th></tr></thead>
         <tbody id="depRows"></tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 
@@ -1170,10 +1201,10 @@
         <span class="muted2" id="catCount" style="font-size:12px"></span>
         <span class="spacer"></span>
       </div>
-      <table id="catTbl">
+      <div class="tbl-scroll"><table id="catTbl">
         <thead><tr><th></th><th>Title</th><th>Base $</th><th>Display $</th><th>Category</th><th>Note</th><th>Live</th><th></th></tr></thead>
         <tbody id="catRows"></tbody>
-      </table>
+      </table></div>
       <div id="catEmpty" class="muted2" style="display:none;padding:14px;text-align:center;font-size:13px">
         No products yet — paste an Amazon link above to add the first one.</div>
     </div>
@@ -1533,6 +1564,9 @@ async function applyRole(){
   // buyer accounts) and Otlobly-only via the feature flag.
   hide("leluxeBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
   hide("depositsBtn", p.includes("view_money"));
+  // employees (fulfillment) work money-free: no cart profit page, no settings
+  hide("cartBtn", p.includes("view_money"));
+  hide("settingsBtn", p.includes("admin_actions"));
   RESTRICTED = RESTRICTED_NAV[ME.role] || null;
   if(RESTRICTED){                                  // limited console: keep only the allowed nav buttons
     const keep=new Set(RESTRICTED.nav);
@@ -1963,6 +1997,7 @@ function setView(v){
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
   document.body.classList.remove("nav-open");        // picking a page closes the mobile drawer
+  document.body.classList.toggle("view-leluxe",v==="leluxe");  // Leluxe has its own bar → hide topbar dupes
   if(v==="brain"){ loadBrain(); }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
@@ -2024,17 +2059,33 @@ async function ppSetStatus(poId,pno,status){
   if(r&&r.ok){ toast("الحالة تغيّرت ✓"); loadPkgprep(); } else { toast((r&&r.error)||"تعذّر التغيير"); }
 }
 // ClickUp-style status picker (reuses CU_STATUSES + the global .cu-menu/popToggle/cuFilter).
+// ── Role-remapped status labels: the OWNER (admin_actions) sees the raw
+// ClickUp vocabulary (recieved rd / sent no rd …); other staff see the
+// simplified labels from Settings → employee_status_map — display-level only,
+// the stored status value never changes. Employees may only SET the curated
+// pick:true statuses. ──
+function cuMapRow(s){ return ((QSETTINGS&&QSETTINGS.employee_status_map)||[])
+  .find(r=>r.status===String(s||"").toLowerCase()); }
+function cuLabel(s){ if(CAN_ADMIN) return s||"—";
+  const m=cuMapRow(s); return (m&&m.label)||s||"—"; }
+function cuPickRows(cur){   // dropdown rows for a NON-admin: curated picks, mapped labels
+  const picks=((QSETTINGS&&QSETTINGS.employee_status_map)||[]).filter(r=>r.pick);
+  return picks.map(r=>[r.status, CU_COLOR[r.status]||"#8d8d8d", r.label])
+    .concat(cur&&!picks.some(r=>r.status===cur)?[[cur,CU_COLOR[cur]||"#8d8d8d",cuLabel(cur)]]:[]);
+}
 function ppStatusPicker(pkg){
   const cur=pkg.otlobly_status||"", c=CU_COLOR[cur]||"#8d8d8d";
-  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur||'—',"#8d8d8d"]].concat(CU_STATUSES));
-  const rows=opts.map(([s,h])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
+  const opts=CAN_ADMIN
+    ?(CU_COLOR[cur]?CU_STATUSES:[[cur||'—',"#8d8d8d"]].concat(CU_STATUSES)).map(([s,h])=>[s,h,s])
+    :cuPickRows(cur);
+  const rows=opts.map(([s,h,lbl])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
       onclick="ppSetStatus('${poEsc(pkg.po_id)}',${JSON.stringify(pkg.package_no)},'${poEsc(s)}')">
-      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(s)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
+      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(lbl)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
     </button>`).join("");
   return `<span class="pop" style="flex:0 0 auto" onclick="event.stopPropagation()">
     <button class="statussel" title="حالة أوطلبلي — غيّرها من هنا · Otlobly status"
       style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
-      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cur||'—')} ▾</button>
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cuLabel(cur)||'—')} ▾</button>
     <div class="pop-menu cu-menu">
       <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
       ${rows}
@@ -2042,7 +2093,7 @@ function ppStatusPicker(pkg){
 }
 function ppPkgRow(pkg){
   const shared=pkg.shared?tonePill("amber","⚠ مشترك","هذا الطرد يحوي أغراض زبائن آخرين — تغيير الحالة يغيّرها لهم أيضاً"):"";
-  const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",pkg.otlobly_status||"—");
+  const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",cuLabel(pkg.otlobly_status)||"—");
   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap">
     <b style="font-size:12px">📦 ${poEsc(pkg.po_id)}</b>
     <span class="muted" style="font-size:11px">طرد ${poEsc(pkg.package_no)} · ${pkg.n_items} قطعة${pkg.tracking_number?` · ${poEsc(pkg.tracking_number)}`:""}</span>
@@ -2504,6 +2555,8 @@ const LX_TABLES={
   "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows", mins:{2:84}},
   "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows", mins:{}},
   "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
+  "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree", mins:{7:84}},
+  "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -2809,12 +2862,15 @@ function renderLeluxe(){
     $("lxEmpty").style.display=shown.length?"none":"block";
     $("lxEmpty").textContent="No products match the filter.";
     if(!shown.length){ $("lxRows").innerHTML=""; return; }
-    // product-view column header — same resizable machinery as the orders header
-    // (table id "p"). Left: image spacer + PRODUCT; then the fixed product grid.
-    const PHCOLS=["order","profile","status","qty","tracking","gaash status","rd status","due",""];
-    const prsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'p')" ondblclick="lxRszReset(event,'p')"></span>`;
-    const pcolHead=`<div class="lx-pcolhead"><span class="lbl" style="width:32px;flex:0 0 auto"></span><span class="lbl" style="flex:1">product</span>
-      <span class="lx-pcols">${PHCOLS.map((l,i)=>`<span class="lbl">${l}${prsz(i)}</span>`).join("")}</span></div>`;
+    // generic per-column sort (order/profile/qty/due) — sorted BEFORE grouping,
+    // so groups keep the sorted order inside; the same-order tie runs follow
+    // adjacency and simply don't show under a scattering sort (correct).
+    lxtSortApply("p",shown,([it,o],key)=>{
+      if(key==="qty") return Number(lxF(it,"quantity ordered"))||0;
+      if(key==="due") return Number(it.due_date)||Infinity;
+      if(key==="profile") return String(lxF(it,"name")||(o&&lxF(o,"name"))||"").toLowerCase();
+      return ((o&&o.name)||"").toLowerCase();                  // order
+    });
     // rows with same-order ties: consecutive rows sharing a parent order render
     // as one visual run — pill+×N on the first, └ marker + stripe on the rest
     const prodRows=pairs=>pairs.map(([it,o],i)=>{
@@ -2825,9 +2881,16 @@ function renderLeluxe(){
         if(tie==="start"){ tieN=1; for(let j=i+1;j<pairs.length&&pairs[j][1]&&pairs[j][1].id===oid;j++) tieN++; } }
       return lxItemRow(it,o,{cols:true,tie,tieN});
     }).join("");
+    // Σ totals footer: product count + Σ quantity in the qty column
+    const totQty=shown.reduce((a,[it])=>a+(Number(lxF(it,"quantity ordered"))||0),0);
+    const pTotals=`<div class="poc-row bt-total">
+        <div class="bt-pin">Σ ${shown.length} منتج · products</div>
+        ${lxtCells("p",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
+      </div>`;
+    const pcolHead=lxtHead("p","product");
     if(!gfdef){
-      $("lxRows").innerHTML=pcolHead+`<div class="pkg open"><div class="pkg-body">${prodRows(shown)}</div></div>`;
-      lxColwApply();
+      $("lxRows").innerHTML=pcolHead+lxtWrap("p",`<div class="pkg open"><div class="pkg-body">${prodRows(shown)}${pTotals}</div></div>`);
+      lxColwApply(); lxtGridApply("p");
       return;
     }
     // group into sections by the chosen field
@@ -2841,15 +2904,15 @@ function renderLeluxe(){
       else c=String(a).localeCompare(String(b),undefined,{numeric:true});
       return LX_GROUP_DIR==="asc"?c:-c;
     });
-    $("lxRows").innerHTML=pcolHead+keys.map(v=>{
+    $("lxRows").innerHTML=pcolHead+lxtWrap("p",keys.map(v=>{
       const gk=`g:${LX_GROUP}:${v}`, collapsed=LX_PCOL.has(gk), rows=groups.get(v);
       return `<div class="pkg${collapsed?"":" open"}"><div class="pkg-head"><div class="pkg-title-row" onclick="lxGroupToggle('${poEsc(gk)}')" style="cursor:pointer">
-          <span class="caret">${collapsed?"▸":"▾"}</span>
+          <span class="bt-pin"><span class="caret">${collapsed?"▸":"▾"}</span>
           ${lxGroupChip(gfdef,v)}
-          <span class="muted2" style="font-size:11px">${rows.length} product${rows.length===1?"":"s"}</span>
+          <span class="muted2" style="font-size:11px">${rows.length} product${rows.length===1?"":"s"}</span></span>
         </div></div>${collapsed?"":`<div class="pkg-body">${prodRows(rows)}</div>`}</div>`;
-    }).join("");
-    lxColwApply();
+    }).join("")+pTotals);
+    lxColwApply(); lxtGridApply("p");
     return;
   }
   // group semantics: EACH filter must be satisfied by at least one row of the
@@ -2870,17 +2933,18 @@ function renderLeluxe(){
     orders.sort((a,b)=>{ const va=lxSortVal(a,key), vb=lxSortVal(b,key);
       return (typeof va==="string"?va.localeCompare(vb,undefined,{numeric:true}):va-vb)*dir; });
   }
-  // ClickUp-style column labels — same fixed grid as each card's right side;
-  // click a label to sort by that column
-  const HCOLS=[["status","status"],["total","total"],["tracking","tracking"],["gash","gaash status"],
-               ["deadline","gaash deadline"],["created","created"],["due","due date"],["",""]];
-  const rsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i})" ondblclick="lxRszReset(event)"></span>`;
-  const hl=(key,label,i,style)=>`<span class="${key?"lbl lx-sort":"lbl"}"${style?` style="${style}"`:""}${key?` title="sort by ${label}" onclick="lxSortClick('${key}')"`:""}>${key?lxSortArrow(key)+label:""}${i!=null?rsz(i):""}</span>`;
-  const colHead=orders.length?`<div class="lx-colhead">${hl("name","order",null,"flex:1")}
-    <span class="lx-cols">${HCOLS.map(([k,l],i)=>hl(k,l,i)).join("")}</span></div>`:"";
   const onlyBanner=LX_ONLY?`<div class="panel" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">👁 <b>Showing ${LX_ONLY.size} just-migrated order${LX_ONLY.size===1?"":"s"}</b><span class="spacer" style="flex:1"></span><button class="minibtn" onclick="LX_ONLY=null;renderLeluxe()">✕ show all</button></div>`:"";
-  $("lxRows").innerHTML=onlyBanner+colHead+orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("");
-  lxColwApply();
+  // Σ totals footer — order count + product count + Σ Total Amount (₪)
+  const totAmt=orders.reduce((a,o)=>{ const v=Number(lxF(o,"total amount")); return a+(isNaN(v)?0:v); },0);
+  const totItems=orders.reduce((a,o)=>a+lxItemsOf(o).length,0);
+  const oTotals=orders.length?`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${orders.length} طلب · ${totItems} منتج</div>
+      ${lxtCells("",{total:`<b style="font-size:12px" title="مجموع Total Amount لكل الطلبات المعروضة · total of all shown orders">₪${Math.round(totAmt).toLocaleString()}</b>`})}
+    </div>`:"";
+  $("lxRows").innerHTML=onlyBanner
+    +(orders.length?lxtHead("","order","name"):"")
+    +lxtWrap("",orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("")+oTotals);
+  lxColwApply(); lxtGridApply("");
 }
 // ── Packages view: every package as ONE flat row — real 📦 subtasks plus loose
 // products grouped by their GWD (same grouping the orders view shows) — with the
@@ -2909,6 +2973,198 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
   if(!p&&r.pk){ const v=lxAmtOf(r.pk); if(v!=null){ s=v; p=1; } }
   r.est={items:s,priced:p,unpriced:(r.items||[]).length-p,share:0,total:null,n:1,sum:s};
 }
+// ── Shared ClickUp-table machinery — ALL four boards (Leluxe orders "" /
+// products "p" / packages "k" + Purchases "po"): fixed-width H-SCROLLING
+// columns with a pinned left column (.bt-pin) + scroll-synced sticky header
+// (.bt-clip, lxtSync), per-column sort, an ⊕ show/hide-columns picker, and Σ
+// totals footers. Column registry per table; hidden/sort state per table in
+// localStorage. The ORDERS table keeps its richer LX_SORT (lxSortClick) — its
+// col.sort carries that key; other tables use the generic LXT_SORT. ──
+const LXT_COLS={
+  "":[
+    {key:"status",  label:"status",  w:100, sort:"status"},
+    {key:"total",   label:"total",   w:66,  sort:"total"},
+    {key:"tracking",label:"tracking",w:98,  sort:"tracking"},
+    {key:"gash",    label:"gash",    w:160, sort:"gash"},
+    {key:"deadline",label:"deadline",w:112, sort:"gaash deadline", sortKey:"deadline"},
+    {key:"created", label:"created", w:78,  sort:"created"},
+    {key:"due",     label:"due date",w:78,  sort:"due"},
+    {key:"menu",    label:"",        w:28,  locked:true},
+  ],
+  "p":[
+    {key:"order",     label:"order",       w:84,  sortable:true},
+    {key:"profile",   label:"profile",     w:52,  sortable:true},
+    {key:"status",    label:"status",      w:104},
+    {key:"qty",       label:"qty",         w:40,  sortable:true},
+    {key:"tracking",  label:"tracking",    w:104},
+    {key:"gashstatus",label:"gaash status",w:128},
+    {key:"rdstatus",  label:"rd status",   w:100},
+    {key:"due",       label:"due",         w:78,  sortable:true},
+    {key:"menu",      label:"",            w:28,  locked:true},
+  ],
+  "k":[
+    {key:"order",   label:"order",   w:100, sortable:true},
+    {key:"value",   label:"≈ value", w:86,  sortable:true},
+    {key:"status",  label:"status",  w:104},
+    {key:"gash",    label:"gash",    w:128},
+    {key:"mail",    label:"✉ mail",  w:60},
+    {key:"deadline",label:"deadline",w:110},
+    {key:"due",     label:"due",     w:78,  sortable:true},
+    {key:"menu",    label:"",        w:28,  locked:true},
+  ],
+  "po":[
+    {key:"total",     label:"total",       w:118, sortable:true},
+    {key:"arrival",   label:"arrival",     w:88,  sortable:true},
+    {key:"gashstatus",label:"gaash status",w:128},
+    {key:"deadline",  label:"deadline",    w:98},
+    {key:"docs",      label:"docs",        w:74},
+    {key:"gerizim",   label:"جيرزيم",       w:118},
+    {key:"status",    label:"status",      w:134},
+    {key:"menu",      label:"",            w:28,  locked:true},
+  ],
+  "pok":[   // Purchases → 📦 Packages flat view
+    {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"total",     label:"≈ est",       w:96,  sortable:true},
+    {key:"arrival",   label:"arrival",     w:88,  sortable:true},
+    {key:"gashstatus",label:"gaash status",w:128},
+    {key:"deadline",  label:"deadline",    w:98},
+    {key:"docs",      label:"docs",        w:74},
+    {key:"gerizim",   label:"جيرزيم",       w:118},
+    {key:"status",    label:"status",      w:134},
+    {key:"menu",      label:"",            w:28,  locked:true},
+  ],
+  "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
+    {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"package",   label:"package",     w:120},
+    {key:"pkgstatus", label:"pkg status",  w:120},
+    {key:"customer",  label:"customer",    w:112, sortable:true},
+    {key:"qty",       label:"qty",         w:40,  sortable:true},
+    {key:"status",    label:"exception",   w:110},
+    {key:"menu",      label:"",            w:28,  locked:true},
+  ],
+};
+const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
+               "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
+               "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":""};
+const LXT_HIDDEN={}, LXT_SORT={};
+["","p","k","po","pok","pop"].forEach(t=>{
+  try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
+  try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
+});
+// the PO tables carry the business's ClickUp-style CUSTOM FIELDS as extra
+// columns (defined in Settings → 🧩), inserted before the ⋯ menu column
+function lxtCols(tbl){
+  const base=LXT_COLS[tbl]||[];
+  if(tbl!=="po"&&tbl!=="pok") return base;
+  const cf=(((QSETTINGS||{}).custom_fields||{}).po||[])
+    .map(f=>({key:"cf_"+f.key,label:f.label,w:110,sortable:true,cf:f}));
+  return cf.length?base.slice(0,-1).concat(cf,base.slice(-1)):base;
+}
+function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
+function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():renderLeluxe(); }
+function lxtColToggle(tbl,key){
+  const h=LXT_HIDDEN[tbl]; h.has(key)?h.delete(key):h.add(key);
+  try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}
+  lxColwSet(tbl,null);              // saved widths are keyed to the visible set — reset
+  lxtRender(tbl);
+}
+function lxtSortClick(tbl,key){     // none → ↑ → ↓ → none
+  const s=LXT_SORT[tbl];
+  LXT_SORT[tbl]=(!s||s.key!==key)?{key,dir:1}:(s.dir===1?{key,dir:-1}:null);
+  try{ localStorage.setItem("lxt_sort_"+tbl,JSON.stringify(LXT_SORT[tbl])); }catch(e){}
+  lxtRender(tbl);
+}
+function lxtSortApply(tbl,arr,valFn){   // generic sort for p/k/po (orders keeps LX_SORT)
+  const s=LXT_SORT[tbl]; if(!s) return arr;
+  arr.sort((a,b)=>{ const va=valFn(a,s.key), vb=valFn(b,s.key);
+    return (typeof va==="string"?va.localeCompare(vb,undefined,{numeric:true}):va-vb)*s.dir; });
+  return arr;
+}
+// widths: the saved per-table array (when it matches the visible column count),
+// else each visible column's default — written as the table's grid CSS var
+function lxtGridApply(tbl,mount){
+  const el=mount||$(LX_TABLES[tbl].rows); if(!el) return;
+  const vis=lxtVisible(tbl), saved=lxColwGet(tbl);
+  const use=(Array.isArray(saved)&&saved.length===vis.length)?saved:vis.map(c=>c.w);
+  el.style.setProperty(LX_TABLES[tbl].varn,use.map(w=>Math.max(30,w)+"px").join(" "));
+  // re-apply the user's pinned-column width (inline var on clip+wrap beats the
+  // pin-lg/pin-md class defaults); phones keep the 200px media cap
+  const pinw=lxtPinW(tbl);
+  if(pinw&&!matchMedia("(max-width:560px)").matches)
+    el.querySelectorAll(".bt-clip,.bt-wrap").forEach(x=>x.style.setProperty("--btpin",pinw+"px"));
+}
+function lxtPinW(tbl){ const v=parseInt(localStorage.getItem("lxt_pin_"+tbl)||"",10);
+  return (v>=220&&v<=560)?v:null; }
+function lxtPinDown(ev,tbl){
+  ev.preventDefault(); ev.stopPropagation();
+  const clip=ev.target.closest(".bt-clip"), wrap=clip&&clip.nextElementSibling;
+  if(!clip) return;
+  const start=ev.clientX, w0=ev.target.closest(".bt-pin").getBoundingClientRect().width;
+  const handle=ev.target; handle.classList.add("dragging");
+  let cur=null;
+  const move=e=>{ cur=Math.max(220,Math.min(560,Math.round(w0+e.clientX-start)));
+    [clip,wrap].forEach(x=>x&&x.style.setProperty("--btpin",cur+"px")); };
+  const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+    handle.classList.remove("dragging");
+    if(cur){ try{ localStorage.setItem("lxt_pin_"+tbl,cur); }catch(e){} } };
+  window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+}
+function lxtPinReset(ev,tbl){
+  ev.preventDefault(); ev.stopPropagation();
+  try{ localStorage.removeItem("lxt_pin_"+tbl); }catch(e){}
+  const clip=ev.target.closest(".bt-clip"), wrap=clip&&clip.nextElementSibling;
+  [clip,wrap].forEach(x=>x&&x.style.removeProperty("--btpin"));
+  toast("عرض العمود المثبت أُعيد · pinned column width reset");
+}
+function lxtSync(el){               // keep the sticky header + shadow in step with the body
+  const clip=el.previousElementSibling;
+  if(clip&&clip.classList.contains("bt-clip")){
+    // snap to the clip's own end at full scroll — card borders/rounding can
+    // differ by 1-2px between header and rows, which would leave a visible lag
+    const max=el.scrollWidth-el.clientWidth;
+    clip.scrollLeft=(max>0&&el.scrollLeft>=max-2)?clip.scrollWidth:el.scrollLeft;
+  }
+  const on=el.scrollLeft>2;
+  el.classList.toggle("btscrolled",on);
+  if(clip) clip.classList.toggle("btscrolled",on);
+}
+function lxtRsz(tbl,i){ return `<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'${tbl}')" ondblclick="lxRszReset(event,'${tbl}')"></span>`; }
+function lxtHead(tbl,pinLabel,pinSortKey){
+  const [headCls,colsCls]=LXT_CLS[tbl], s=LXT_SORT[tbl];
+  // the pin's end edge is a drag handle: resize the pinned column (dblclick resets)
+  const pinRsz=`<span class="lx-rsz" title="drag to resize the pinned column · double-click to reset" onclick="event.stopPropagation()" onpointerdown="lxtPinDown(event,'${tbl}')" ondblclick="lxtPinReset(event,'${tbl}')"></span>`;
+  const pin=pinSortKey&&tbl===""
+    ?`<span class="bt-pin lbl lx-sort" title="sort by ${pinLabel}" onclick="lxSortClick('${pinSortKey}')">${lxSortArrow(pinSortKey)}${pinLabel}${pinRsz}</span>`
+    :`<span class="bt-pin lbl">${pinLabel}${pinRsz}</span>`;
+  const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>`<button class="pop-item cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b>${LXT_HIDDEN[tbl].has(c.key)?"":'<span style="color:var(--accent)">✓</span>'}</button>`).join("");
+  const picker=`<span class="pop" onclick="event.stopPropagation()">
+      <button class="iconbtn" style="font-size:14px;padding:0 3px" title="إظهار / إخفاء الأعمدة · show / hide columns" onclick="popToggle(this)">⊕</button>
+      <div class="pop-menu">${pick}</div></span>`;
+  const lbl=(c,i)=>{
+    if(c.key==="menu") return `<span class="lbl">${picker}${lxtRsz(tbl,i)}</span>`;
+    if(tbl===""&&c.sort){ const k=c.sortKey||c.sort;
+      return `<span class="lbl lx-sort" title="sort by ${c.sort}" onclick="lxSortClick('${k}')">${lxSortArrow(k)}${c.label}${lxtRsz(tbl,i)}</span>`; }
+    if(c.sortable){ const a=(s&&s.key===c.key)?(s.dir===1?"↑ ":"↓ "):"";
+      return `<span class="lbl lx-sort" title="sort by ${c.label}" onclick="lxtSortClick('${tbl}','${c.key}')">${a}${c.label}${lxtRsz(tbl,i)}</span>`; }
+    return `<span class="lbl">${c.label}${lxtRsz(tbl,i)}</span>`;
+  };
+  return `<div class="bt-clip${LXT_PINCLS[tbl]}"><div class="${headCls}">
+      ${pin}
+      <span class="${colsCls}">${lxtVisible(tbl).map(lbl).join("")}</span>
+    </div></div>`;
+}
+function lxtCells(tbl,cells){
+  const colsCls=LXT_CLS[tbl][1];
+  return `<span class="${colsCls}">${lxtVisible(tbl).map(c=>`<span class="lxc">${cells[c.key]||""}</span>`).join("")}</span>`;
+}
+function lxtWrap(tbl,inner){ return `<div class="bt-wrap${LXT_PINCLS[tbl]}" onscroll="lxtSync(this)">${inner}</div>`; }
+function lxKDue(r){ return (r.pk&&r.pk.due_date)||(r.items||[]).map(i=>i.due_date).find(Boolean)||null; }
+function lxKSortVal(r,key){
+  if(key==="value") return r.est?r.est.sum:0;
+  if(key==="due"){ const d=lxKDue(r); return d?(Number(d)||0):Infinity; }
+  return ((r.o&&r.o.name)||(r.pk&&r.pk.name)||"").toLowerCase();
+}
 function lxRenderPackages(){
   const q=($("lxSearch").value||"").trim().toLowerCase();
   const {orders,orphans}=lxFilteredOrders();
@@ -2932,12 +3188,16 @@ function lxRenderPackages(){
   $("lxEmpty").style.display=rows.length?"none":"block";
   $("lxEmpty").textContent=(LX.orders||[]).length?"No packages match the filter.":"No orders yet — ＋ New order, or ⬇ Migrate from AZ (2).";
   if(!rows.length){ $("lxRows").innerHTML=""; return; }
-  const KHCOLS=["order","≈ value","status","gash","✉ mail","deadline","due",""];
-  const krsz=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'k')" ondblclick="lxRszReset(event,'k')"></span>`;
-  const kHead=`<div class="lx-kcolhead"><span class="lbl" style="flex:1">package</span>
-    <span class="lx-kcols">${KHCOLS.map((l,i)=>`<span class="lbl">${l}${krsz(i)}</span>`).join("")}</span></div>`;
-  $("lxRows").innerHTML=kHead+`<div class="pkg open"><div class="pkg-body">${rows.map(lxKRow).join("")}</div></div>`;
+  lxtSortApply("k",rows,lxKSortVal);
+  // Σ totals footer — ClickUp's group rollup row
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${rows.length} طرد · ${nItems} منتج</div>
+      ${lxtCells("k",{value:`<b style="font-size:12px" title="مجموع قيمة كل الطرود المعروضة · total of all shown packages">₪${(Math.round(tot*100)/100).toLocaleString()}</b>`})}
+    </div>`;
+  $("lxRows").innerHTML=lxtHead("k","package")
+    +lxtWrap("k",`<div class="pkg open"><div class="pkg-body">${rows.map(lxKRow).join("")}${totals}</div></div>`);
   lxColwApply();
+  lxtGridApply("k");
 }
 function lxKRow(r){
   const o=r.o, pk=r.pk, its=r.items||[], tn=r.tn, e=r.est;
@@ -2955,7 +3215,7 @@ function lxKRow(r){
   const gashDate=(pk&&lxF(pk,"gash date"))||its.map(it=>lxF(it,"gash date")).find(Boolean);
   const gashStatus=(pk&&lxF(pk,"gash status"))||its.map(it=>lxF(it,"gash status")).find(Boolean);
   const done=lxGzDone(en), doneSt=its.length&&u.length===1?lxIsDone(its[0]):false;
-  const due=(pk&&pk.due_date)||its.map(i=>i.due_date).find(Boolean);
+  const due=lxKDue(r);
   const ordTn=o?String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim():"";
   const gIds=its.map(it=>it.id).join(",");
   const menu=pk?popMenu([
@@ -2974,23 +3234,26 @@ function lxKRow(r){
       tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
     ]);
   const click=pk?`lxInfoOpen('package',${pk.id})`:(o?`lxJumpOrder(${o.id})`:"");
+  const cells={
+    order: o?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(o.name)}" onclick="event.stopPropagation();lxJumpOrder(${o.id})">${lxShortName(o.name)}</button>`
+      :(pk?`<span class="pill" style="background:#fef3c7;color:#92400e;font-size:10px" title="its parent order isn't in this list">w/o parent</span>`:""),
+    value: estCell,
+    status: statusBit,
+    gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+    mail: lxMailPill(tn),
+    deadline: `${en?lxDeadlinePill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
+    due: done?"":lxDueChip(due,doneSt),
+    menu,
+  };
   return `<div class="poc-row lx-krow" title="${pk?"انقر لعرض كل التفاصيل · click for full package details":"انقر للانتقال إلى الطلب · click to jump to the order"}"
     ${click?`onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${click}"`:""} style="cursor:pointer">
-    ${pk?lxDot(pk):""}
-    <b class="pkg-title" style="font-size:12.5px">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
-    <span class="muted2" style="font-size:11px;flex:0 0 auto">${its.length} product${its.length===1?"":"s"}</span>
-    ${lxThumbs(its)}
-    <span class="spacer" style="flex:1"></span>
-    <span class="lx-kcols">
-      <span class="lxc">${o?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(o.name)}" onclick="event.stopPropagation();lxJumpOrder(${o.id})">${lxShortName(o.name)}</button>`:(pk?`<span class="pill" style="background:#fef3c7;color:#92400e;font-size:10px" title="its parent order isn't in this list">w/o parent</span>`:"")}</span>
-      <span class="lxc">${estCell}</span>
-      <span class="lxc">${statusBit}</span>
-      <span class="lxc">${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}</span>
-      <span class="lxc">${lxMailPill(tn)}</span>
-      <span class="lxc">${en?lxDeadlinePill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}</span>
-      <span class="lxc">${done?"":lxDueChip(due,doneSt)}</span>
-      <span class="lxc">${menu}</span>
-    </span>
+    <div class="bt-pin">
+      ${pk?lxDot(pk):""}
+      <b class="pkg-title" style="font-size:12.5px">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
+      <span class="muted2" style="font-size:11px;flex:0 0 auto">${its.length} product${its.length===1?"":"s"}</span>
+      ${lxThumbs(its)}
+    </div>
+    ${lxtCells("k",cells)}
   </div>`;
 }
 // ── Clearance email per package + hand-marked reply tracking (✉ pills). One
@@ -3403,34 +3666,36 @@ function lxCardHtml(o){
   ]);
   const head=`<div class="po-head"><div class="po-title" title="انقر لعرض كل التفاصيل · click for full order details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('order',${o.id})" style="cursor:pointer">
-      <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
-      ${lxDot(o)}
-      <b class="po-name" style="font-family:ui-monospace,Menlo,monospace" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
-      ${lxCopyBtn(o.name)}
-      ${acct?`<span class="muted2" style="font-size:11.5px">${poEsc(acct)}</span>`:""}
-      ${lxThumbs(lxItemsOf(o))}
-      ${gzRollup(lxOrderGwds(o))}
-      <span class="spacer" style="flex:1"></span>
-      <span class="lx-cols">
-        <span class="lxc">${headStatus}</span>
-        <span class="lxc">${amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:""}</span>
-        <span class="lxc">${headTn}</span>
-        <span class="lxc">${lxMergedStatusPill(tr)}</span>
-        <span class="lxc">${tr?lxDeadlinePill(tr,true):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}</span>
-        <span class="lxc">${o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:""}</span>
-        <span class="lxc">${delivered?"":lxDueChip(o.due_date,lxIsDone(o))}</span>
-        <span class="lxc">${oMenu}</span>
-      </span>
+      <div class="bt-pin">
+        <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
+        ${lxDot(o)}
+        <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
+        ${lxCopyBtn(o.name)}
+        ${acct?`<span class="muted2" style="font-size:11.5px;flex:0 0 auto">${poEsc(acct)}</span>`:""}
+        ${lxThumbs(lxItemsOf(o))}
+        ${gzRollup(lxOrderGwds(o))}
+      </div>
+      ${lxtCells("",{
+        status: headStatus,
+        total: amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:"",
+        tracking: headTn,
+        gash: lxMergedStatusPill(tr),
+        deadline: `${tr?lxDeadlinePill(tr,true):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}`,
+        created: o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:"",
+        due: delivered?"":lxDueChip(o.due_date,lxIsDone(o)),
+        menu: oMenu,
+      })}
     </div></div>`;
   if(!open) return `<div class="po-card" id="lxo${o.id}">${head}</div>`;
   const vgroups=lxVisualPkgs(o);
   // all-untracked flat list still gets a one-shot "set tracking" bar (the visual
   // "no tracking" group only exists once at least one product is tracked)
   const looseBar=loose.length?`<div class="pkg-head"><div class="pkg-title-row" style="cursor:default">
-      <span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>
-      <span class="muted2" style="font-size:11px">${loose.length} product${loose.length===1?"":"s"}</span>
-      <span class="spacer" style="flex:1"></span>
-      <button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${loose.map(it=>it.id).join(",")}],'','${poEsc(ordTn)}')">🚚 set tracking</button>
+      <span class="bt-pin">
+        <span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>
+        <span class="muted2" style="font-size:11px">${loose.length} product${loose.length===1?"":"s"}</span>
+        <button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${loose.map(it=>it.id).join(",")}],'','${poEsc(ordTn)}')">🚚 set tracking</button>
+      </span>
     </div></div>`:"";
   const body=`<div class="po-body">
     ${pkgs.map(p=>lxPkgHtml(o,p)).join("")}
@@ -3470,54 +3735,49 @@ function lxVPkgHtml(o,g){
     const it=g.items[0], qty=lxF(it,"quantity ordered");
     return `<div class="pkg open"><div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full product details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-      ${lxThumb(lxAmz(it),44)}
-      ${g.tn?`<b class="pkg-title" style="font-size:12.5px">📦 ${poEsc(g.tn)}</b>${lxCopyRawBtn(g.tn)}`:`<span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`}
-      <div class="poc-name" style="flex:1;min-width:160px;display:flex;align-items:center;gap:4px">
-        <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
-        <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
+      <div class="bt-pin">
+        ${lxThumb(lxAmz(it),44)}
+        ${g.tn?`<b class="pkg-title" style="font-size:12.5px;flex:0 0 auto">📦 ${poEsc(g.tn)}</b>${lxCopyRawBtn(g.tn)}`:`<span class="muted2" style="font-size:11px;opacity:.7;flex:0 0 auto" title="no GAASH tracking number yet">📦 no tracking</span>`}
+        <div class="poc-name" style="flex:1;min-width:0;display:flex;align-items:center;gap:4px">
+          <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
+          <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
+        </div>
+        ${qty!=null?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
+        ${lxCfPill("rd status",lxF(it,"rd status"))}
       </div>
-      ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-      ${lxCfPill("rd status",lxF(it,"rd status"))}
-      <span class="lx-cols">
-        <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}</span>
-        <span class="lxc">${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}</span>
-        <span class="lxc"></span>
-        <span class="lxc">${lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
-        <span class="lxc">${popMenu([
+      ${lxtCells("",{
+        status: `${lxDot(it)}${lxStatusSelect(it)}`,
+        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
+        due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
+        menu: popMenu([
           [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
           [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
           g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
           g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
           [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
-        ])}</span>
-      </span>
+        ]),
+      })}
     </div></div></div>`;
   }
   const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;lxVPkgToggle('${poEsc(key)}')" style="cursor:pointer">
-      <span class="caret">${collapsed?"▸":"▾"}</span>
-      <b class="pkg-title">📦 ${g.tn?poEsc(g.tn):"no tracking"}</b>${g.tn?lxCopyRawBtn(g.tn):""}
-      <span class="muted2" style="font-size:11px">${g.items.length} product${g.items.length===1?"":"s"}</span>
-      ${lxThumbs(g.items)}
-      ${g.tn?"":`<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
-      <span class="spacer" style="flex:1"></span>
-      <span class="lx-cols">
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}</span>
-        <span class="lxc">${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}</span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${popMenu([
+      <div class="bt-pin">
+        <span class="caret">${collapsed?"▸":"▾"}</span>
+        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${g.tn?poEsc(g.tn):"no tracking"}</b>${g.tn?lxCopyRawBtn(g.tn):""}
+        <span class="muted2" style="font-size:11px;flex:0 0 auto">${g.items.length} product${g.items.length===1?"":"s"}</span>
+        ${lxThumbs(g.items)}
+        ${g.tn?"":`<button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
+      </div>
+      ${lxtCells("",{
+        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
+        menu: popMenu([
           [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
           g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
           g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
-        ])}</span>
-      </span>
+        ]),
+      })}
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">${g.items.map(it=>lxItemRow(it,null,{inPkg:true})).join("")}</div>`;
   return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
@@ -3527,21 +3787,17 @@ function lxPkgHtml(o,pk){
   const tn=(pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"";
   const head=`<div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('package',${pk.id})" style="cursor:pointer">
-      <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
-      ${lxDot(pk)}
-      <b class="pkg-title">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
-      <span class="muted2" style="font-size:11px">${items.length} product${items.length===1?"":"s"}</span>
-      ${lxThumbs(items)}
-      <span class="spacer" style="flex:1"></span>
-      <span class="lx-cols">
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${gzBadge(tn)}${lxMergedStatusPill(pk)||lxCfPill("gash status",lxF(pk,"gash status"))}</span>
-        <span class="lxc">${lxDeadlinePill(pk)}${lxDueChip(lxF(pk,"gash date"),false)}</span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${popMenu([
+      <div class="bt-pin">
+        <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
+        ${lxDot(pk)}
+        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
+        <span class="muted2" style="font-size:11px;flex:0 0 auto">${items.length} product${items.length===1?"":"s"}</span>
+        ${lxThumbs(items)}
+      </div>
+      ${lxtCells("",{
+        gash: `${gzBadge(tn)}${lxMergedStatusPill(pk)||lxCfPill("gash status",lxF(pk,"gash status"))}`,
+        deadline: `${lxDeadlinePill(pk)}${lxDueChip(lxF(pk,"gash date"),false)}`,
+        menu: popMenu([
           [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
           tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
@@ -3549,8 +3805,8 @@ function lxPkgHtml(o,pk){
           tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
           [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
           [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
-        ])}</span>
-      </span>
+        ]),
+      })}
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">
     ${items.map(it=>lxItemRow(it)).join("")||`<div class="muted2" style="padding:6px 10px;font-size:12px">no products yet</div>`}
@@ -3594,41 +3850,39 @@ function lxItemRow(it,parentO,opts){
     const profile=lxF(it,"name")||(parentO&&lxF(parentO,"name"))||"";
     return `<div class="poc-row lx-prow${tie?" lx-tied":""}" title="انقر لعرض كل التفاصيل · click for full product details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-      ${lxThumb(img,32)}
-      ${nameCell}
-      <span class="lx-pcols">
-        <span class="lxc">${orderCell}</span>
-        <span class="lxc">${profile?`<b style="font-size:11px" title="profile / account (NAME)">${poEsc(profile)}</b>`:""}</span>
-        <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
-        <span class="lxc">${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}</span>
-        <span class="lxc">${tnCell}</span>
-        <span class="lxc">${lxCfPill("gash status",lxF(it,"gash status"))}</span>
-        <span class="lxc">${lxCfPill("rd status",lxF(it,"rd status"))}</span>
-        <span class="lxc">${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
-        <span class="lxc">${itMenu}</span>
-      </span>
+      <div class="bt-pin">${lxThumb(img,32)}${nameCell}</div>
+      ${lxtCells("p",{
+        order: orderCell,
+        profile: profile?`<b style="font-size:11px" title="profile / account (NAME)">${poEsc(profile)}</b>`:"",
+        status: `${lxDot(it)}${lxStatusSelect(it)}`,
+        qty: qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:"",
+        tracking: tnCell,
+        gashstatus: lxCfPill("gash status",lxF(it,"gash status")),
+        rdstatus: lxCfPill("rd status",lxF(it,"rd status")),
+        due: lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it)),
+        menu: itMenu,
+      })}
     </div>`;
   }
   return `<div class="poc-row" title="انقر لعرض كل التفاصيل · click for full product details"
     onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-    ${lxThumb(img,44)}
-    <div class="poc-name" style="flex:1;min-width:180px;display:flex;align-items:center;gap:4px">
-      <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
-      <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
+    <div class="bt-pin">
+      ${lxThumb(img,44)}
+      <div class="poc-name" style="flex:1;min-width:0;display:flex;align-items:center;gap:4px">
+        <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
+        <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
+      </div>
+      ${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line);flex:0 0 auto" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}
+      ${qty!=null?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
+      ${lxCfPill("rd status",lxF(it,"rd status"))}
     </div>
-    ${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}
-    ${qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-    ${lxCfPill("rd status",lxF(it,"rd status"))}
-    <span class="lx-cols">
-      <span class="lxc">${lxDot(it)}${lxStatusSelect(it)}</span>
-      <span class="lxc"></span>
-      <span class="lxc">${opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`)}</span>
-      <span class="lxc">${opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status"))}</span>
-      <span class="lxc"></span>
-      <span class="lxc"></span>
-      <span class="lxc">${lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it))}</span>
-      <span class="lxc">${itMenu}</span>
-    </span>
+    ${lxtCells("",{
+      status: `${lxDot(it)}${lxStatusSelect(it)}`,
+      tracking: opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`),
+      gash: opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status")),
+      due: lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it)),
+      menu: itMenu,
+    })}
   </div>`;
 }
 function lxOrphanRow(r){
@@ -4452,8 +4706,8 @@ async function loadDeposits(){
     ["Customers",(d.by_customer||[]).length]]
     .map(k=>`<div class="card" style="min-width:130px"><div class="n money">${k[1]}</div><div class="l">${k[0]}</div></div>`).join("");
   $("depByCust").innerHTML=(d.by_customer||[]).length
-    ? `<table><thead><tr><th>Customer</th><th>Phone</th><th>Entries</th><th>Deposited (USD)</th></tr></thead><tbody>${
-       d.by_customer.map(c=>`<tr><td><b>${poEsc(c.name||'—')}</b></td><td class="mono">${poEsc(c.phone||'')}</td><td>${c.count}</td><td class="amt" style="color:var(--good)"><b>${money(c.deposited_usd||0)}</b></td></tr>`).join("")}</tbody></table>`
+    ? `<div class="tbl-scroll"><table><thead><tr><th>Customer</th><th>Phone</th><th>Entries</th><th>Deposited (USD)</th></tr></thead><tbody>${
+       d.by_customer.map(c=>`<tr><td><b>${poEsc(c.name||'—')}</b></td><td class="mono">${poEsc(c.phone||'')}</td><td>${c.count}</td><td class="amt" style="color:var(--good)"><b>${money(c.deposited_usd||0)}</b></td></tr>`).join("")}</tbody></table></div>`
     : `<div class="empty">No deposits yet.</div>`;
   renderDeposits();
 }
@@ -4704,9 +4958,9 @@ async function loadPlans(){
         <span class="muted2" style="font-size:12px">limits are fixed per tier · set your monthly price</span>
         <span class="spacer" style="flex:1"></span>
         <b style="font-size:14px">Total MRR: ${money0(d.mrr)}</b></div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <div class="tbl-scroll"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr><th style="padding:8px 10px;text-align:left"></th>${th}</tr></thead>
-        <tbody>${limRows}${priceRow}${mrrRow}</tbody></table>
+        <tbody>${limRows}${priceRow}${mrrRow}</tbody></table></div>
       <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="accent" onclick="savePrices(this)">Save prices</button></div>
       <div id="plans_out" style="margin-top:8px;font-size:12.5px"></div>
     </div>`;
@@ -4874,10 +5128,10 @@ async function loadTeam(){
         <button class="po-btn" onclick="$('pwrow_${u.id}').style.display='none'">✕</button>
         <span id="pwout_${u.id}" style="font-size:12.5px"></span>
       </div></td></tr>`).join("");
-  $("teamList").innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+  $("teamList").innerHTML=`<div class="tbl-scroll"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line)">
       <th style="padding:6px">Name</th><th style="padding:6px">Username</th><th style="padding:6px">Role</th><th style="padding:6px">Status</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No staff yet.</td></tr>'}</tbody></table>
+    <tbody>${rows||'<tr><td colspan="5" style="padding:14px;color:var(--muted)">No staff yet.</td></tr>'}</tbody></table></div>
     <div style="font-size:11.5px;color:var(--muted);margin-top:9px">🔒 كلمات المرور مشفّرة ولا يمكن عرضها لاحقًا · passwords are stored encrypted and can never be viewed later — use <b>🔑 reset password</b> to set a new one and share it.</div>`;
 }
 async function addStaff(btn){
@@ -4996,7 +5250,7 @@ async function loadTrash(){
   const d=await (await fetch("/api/trash")).json(); const rows=d.trash||[];
   $("emptyTrashBtn").style.display=rows.length?"":"none";
   if(!rows.length){ $("trashList").innerHTML=`<div class="empty">🗑 Trash is empty. Anything you delete will land here so you can restore it.</div>`; return; }
-  $("trashList").innerHTML=`<table class="trash-tbl"><thead><tr>
+  $("trashList").innerHTML=`<div class="tbl-scroll"><table class="trash-tbl"><thead><tr>
     <th>Type</th><th>Item</th><th>Deleted</th><th>By</th><th></th></tr></thead><tbody>`+
     rows.map(r=>`<tr>
       <td><span class="ttype">${TRASH_ICON[r.kind]||"•"} ${poEsc(r.kind_label)}</span></td>
@@ -5006,7 +5260,7 @@ async function loadTrash(){
       <td class="trash-act">
         <button class="po-btn" onclick="restoreTrash(this,'${r.trash_id}')">♻️ Restore</button>
         <button class="po-btn danger" onclick="purgeTrash(this,'${r.trash_id}')">✕ Delete permanently</button>
-      </td></tr>`).join("")+`</tbody></table>`;
+      </td></tr>`).join("")+`</tbody></table></div>`;
 }
 async function restoreTrash(btn,id){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Restoring…';
   const r=await post("/api/trash/restore",{id});
@@ -5236,7 +5490,8 @@ function renderIncart(){
   const d=CART_DATA; if(!d) return;
   $("cartSub").innerHTML=`${d.count||0} order(s) · ${d.products||0} product(s)`;
   const rev=d.total_usd||0, cost=d.cost_usd||0, profit=rev-cost;
-  $("cartCards").innerHTML=
+  // money-free roles (server redacts): counts only, no revenue/cost/profit cards
+  $("cartCards").innerHTML=(d.money===false||d.cost_usd==null&&d.total_usd==null)?"":
     `<div class="card"><div class="n money" id="cartRevN">${money(rev)}</div><div class="l">إجمالي الإيراد · Total revenue</div></div>`+
     `<div class="card"><div style="display:flex;align-items:baseline;gap:3px"><span style="font-size:23px;font-weight:800;color:var(--muted)">$</span>`+
       `<input id="cartCostIn" type="number" min="0" step="0.01" value="${cost||''}" placeholder="0.00" oninput="cartCostInput(this.value)" style="width:130px;font-size:22px;font-weight:800;border:1px solid var(--line);border-radius:8px;padding:2px 7px;background:#fff"></div>`+
@@ -5262,7 +5517,7 @@ function cartTable(rows){
         <button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="cartRemove('${poEsc(o.order_id)}')">↩</button>
       </td></tr>`;
   }).join("");
-  return `<table style="width:100%"><thead><tr><th>العميل · Customer</th><th>المنتجات · Products</th><th class="amt">الإيراد · Revenue</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<div class="tbl-scroll"><table style="width:100%"><thead><tr><th>العميل · Customer</th><th>المنتجات · Products</th><th class="amt">الإيراد · Revenue</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function cartCostInput(v){
   const cost=Math.max(0,parseFloat(v||0)||0), rev=(CART_DATA&&CART_DATA.total_usd)||0;
@@ -5717,6 +5972,8 @@ async function loadSettings(){
   $("s_custmode").value=s.customer_mode?"1":"";
   lblRender(s.tracking_status_map); if($("s_deflabel"))$("s_deflabel").value=s.tracking_default_label||"";
   otlRender(s.tracking_otlobly_map);
+  esmRender(s.employee_status_map||[]);
+  cfRender((s.custom_fields&&s.custom_fields.po)||[]);
   const al=s.alerts||{};
   if($("al_token")) $("al_token").value=al.telegram_token||"";
   if($("al_chat")) $("al_chat").value=al.telegram_chat||"";
@@ -5821,6 +6078,36 @@ function otlAddRow(){ $("otlRows").insertAdjacentHTML('beforeend', otlRowHtml({}
 function otlCollect(){ return [...document.querySelectorAll('#otlRows tr')].map(tr=>({
   status:tr.querySelector('.o-status').value.trim(), label:tr.querySelector('.o-label').value.trim(),
   bucket:tr.querySelector('.o-bucket').value })).filter(r=>r.status&&r.label); }
+// --- Employee status labels editor (Settings → 👷) --- //
+function esmRowHtml(r){ r=r||{};
+  const opts=CU_STATUSES.map(([s])=>`<option${s===(r.status||"")?" selected":""}>${poEsc(s)}</option>`).join("");
+  return `<tr>
+    <td style="padding:3px 4px"><select class="e-status" style="width:100%;font-size:12px">${opts}</select></td>
+    <td style="padding:3px 4px"><input class="e-label" value="${poEsc(r.label||"")}" style="width:100%" dir="auto"></td>
+    <td style="padding:3px 4px;text-align:center"><input type="checkbox" class="e-pick"${r.pick?" checked":""}></td>
+    <td style="padding:3px 4px"><button class="iconbtn" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
+function esmRender(map){ if(!$("esmRows")) return;
+  $("esmRows").innerHTML=(map||[]).map(esmRowHtml).join(""); }
+function esmAddRow(){ $("esmRows").insertAdjacentHTML('beforeend', esmRowHtml({})); }
+function esmCollect(){ return [...document.querySelectorAll('#esmRows tr')].map(tr=>({
+  status:tr.querySelector('.e-status').value.trim(), label:tr.querySelector('.e-label').value.trim(),
+  pick:tr.querySelector('.e-pick').checked })).filter(r=>r.status&&r.label); }
+// --- Custom fields editor (Settings → 🧩) — ClickUp-style add-your-own columns --- //
+function cfRowHtml(f){ f=f||{};
+  const types=["text","number","select","date"].map(t=>`<option${t===(f.type||"text")?" selected":""}>${t}</option>`).join("");
+  return `<tr data-key="${poEsc(f.key||"")}">
+    <td style="padding:3px 4px"><input class="c-label" value="${poEsc(f.label||"")}" style="width:100%" dir="auto" placeholder="e.g. Supplier"></td>
+    <td style="padding:3px 4px"><select class="c-type" style="font-size:12px" onchange="this.closest('tr').querySelector('.c-opts').style.display=this.value==='select'?'':'none'">${types}</select></td>
+    <td style="padding:3px 4px"><input class="c-opts" value="${poEsc((f.options||[]).join(", "))}" style="width:100%;display:${(f.type||"text")==="select"?"":"none"}" placeholder="a, b, c"></td>
+    <td style="padding:3px 4px"><button class="iconbtn" title="حذف الحقل (القيم المخزنة تبقى) · remove field (stored values kept)" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
+function cfRender(fields){ if(!$("cfRows")) return;
+  $("cfRows").innerHTML=(fields||[]).map(cfRowHtml).join(""); }
+function cfAddRow(){ $("cfRows").insertAdjacentHTML('beforeend', cfRowHtml({})); }
+function cfCollect(){ return [...document.querySelectorAll('#cfRows tr')].map(tr=>({
+  key:tr.dataset.key||"", label:tr.querySelector('.c-label').value.trim(),
+  type:tr.querySelector('.c-type').value,
+  options:tr.querySelector('.c-opts').value.split(",").map(s=>s.trim()).filter(Boolean)
+})).filter(f=>f.label); }
 // --- Telegram alerts (Settings) --- //
 async function alDetect(b){ b.disabled=true; $("alOut").textContent="Looking for your chat…";
   const r=await post("/api/alerts/telegram_test",{detect:true,token:($("al_token")||{}).value||""});
@@ -5877,11 +6164,13 @@ async function saveSettings(b){
       pricing_compare:!!($("s_sec_compare")||{}).checked, landing_track:!!($("s_sec_track")||{}).checked,
       landing_how:!!($("s_sec_how")||{}).checked, landing_why:!!($("s_sec_why")||{}).checked } };
   if($("metaSpendRows")) body.meta_manual=msCollect();   // only when the rows are rendered (never wipe blindly)
+  if($("esmRows")) body.employee_status_map=esmCollect();
+  if($("cfRows")) body.custom_fields={po:cfCollect()};
   const r=await post("/api/settings",body); b.disabled=false;
   if(r.ok){ MARKUP_PCT=r.settings.markup_pct; QSETTINGS=r.settings; toast("Settings saved ✓"); } else toast("Save failed: "+(r.error||""));
 }
 
-let POS=null, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
+let POS=null, PO_MONEY=true, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
 let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
 let PO_CUSTNAMES=[], PO_CUSTORDERS={}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -5981,6 +6270,7 @@ async function loadPurchases(){
   if(!QSETTINGS){ try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){} }  // white-label flags/labels for the card
   const d=await (await fetch("/api/purchases")).json();
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
+  PO_MONEY=d.money!==false;                     // false = COGS redacted for this role
   try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
   // The demand queue: customer → their pending (To-order + In-cart) products, plus
   // ORDERED orders (rescue: flipped by hand, still attachable — never SHIPPED+),
@@ -6519,6 +6809,26 @@ function poFSelAll(i,el){
   const btn=el.closest(".pop").querySelector("button.po-btn");
   if(btn) btn.innerHTML=lxFValLabel(PO_FLT[i].val)+" ▾";
 }
+// Purchases view switcher: 🧾 Orders tree · 📦 Packages flat · ⫶ Products flat
+let PO_BOARD_VIEW=localStorage.getItem("po_board_view")||"orders";
+function poSetView(v){ PO_BOARD_VIEW=v; try{ localStorage.setItem("po_board_view",v); }catch(e){} renderPurchases(); }
+function poJumpOrder(id){ PO_BOARD_VIEW="orders"; try{ localStorage.setItem("po_board_view","orders"); }catch(e){}
+  PO_VIEW[id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
+function poSearchMatch(p,q){
+  if([p.po_id,p.amazon_order_number,p.ship_to,p.profile_box].some(v=>v&&String(v).toLowerCase().includes(q))) return true;
+  return (p.packages||[]).some(pk=>String(pk.tracking_number||"").toLowerCase().includes(q)
+    ||(pk.items||[]).some(it=>[it.customer_name,it.title,it.asin].some(v=>v&&String(v).toLowerCase().includes(q))));
+}
+// sort value for the po/pok tables — cf_<key> reads the PO's custom-field value
+function poSortVal(p,key){
+  if(key.startsWith("cf_")){
+    const f=(((QSETTINGS||{}).custom_fields||{}).po||[]).find(x=>"cf_"+x.key===key);
+    const v=(p.custom||{})[key.slice(3)];
+    return (f&&f.type==="number")?(Number(v)||0):String(v==null?"~":v).toLowerCase();
+  }
+  if(key==="total") return Number(p.total_usd)||0;
+  return String((p.packages||[]).map(pk=>pk.arrival).filter(Boolean).sort()[0]||"~");  // arrival: earliest, blanks last
+}
 function renderPurchases(){
   if(!POS) return;
   const mount=$(PO_MOUNT); if(!mount) return;
@@ -6527,22 +6837,239 @@ function renderPurchases(){
   // Filter tabs (main Purchases page only, not the add-order card).
   const ftab=$("poFilters");
   if(ftab && !inAddCard){
+    [["poSegOrders","orders"],["poSegPkgs","packages"],["poSegProds","products"],["poSegCust","customers"]].forEach(([bid,v])=>{
+      const b=$(bid); if(b) b.classList.toggle("accent",PO_BOARD_VIEW===v); });
     ftab.innerHTML=["all","late","soon","notrk"].map(k=>{ const f=PO_FILTERS[k], n=POS.filter(f.test).length;
       return `<span class="po-tab ${f.tone||''} ${PO_FILTER===k?'on':''}" onclick="PO_FILTER='${k}';renderPurchases()">${f.lab} · ${n}</span>`; }).join("");
     list=list.filter(PO_FILTERS[PO_FILTER].test);
     if(!$("poFilterBuilder").innerHTML) poRenderFilters();   // first paint (kept across list re-renders)
     const act=poFActive();
     if(act.length) list=list.filter(p=>act.every(f=>poFMatch(p,f)));
+    const q=(($("poSearch")||{}).value||"").trim().toLowerCase();
+    if(q) list=list.filter(p=>poSearchMatch(p,q));
   }
   if(!list.length){ mount.innerHTML=`<div class="panel" style="color:var(--muted)">${inAddCard?'':'No orders match this filter.'}${inAddCard?'No purchase orders yet.':''}</div>`; return; }
-  // Leluxe-style sticky column header (main page only; labels + resize, no sort)
-  const rszP=i=>`<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'po')" ondblclick="lxRszReset(event,'po')"></span>`;
-  const colHead=(!inAddCard&&list.length)?`<div class="po-colhead"><span class="lbl" style="flex:1">order</span>
-    <span class="po-cols">${PO_HCOLS.map((l,i)=>`<span class="lbl">${l}${rszP(i)}</span>`).join("")}</span></div>`:"";
-  mount.innerHTML=boxDatalist()+custDatalist()+colHead+list.map(poCardHtml).join("");
-  lxColwApply();
+  if(!inAddCard&&PO_BOARD_VIEW==="packages") return poRenderPkgsFlat(mount,list);
+  if(!inAddCard&&PO_BOARD_VIEW==="products") return poRenderProdsFlat(mount,list);
+  if(!inAddCard&&PO_BOARD_VIEW==="customers") return poRenderCustomers(mount,list);
+  // generic per-column sort (total / arrival / custom fields)
+  if(!inAddCard) lxtSortApply("po",list=list.slice(),poSortVal);
+  // Σ totals footer — order/item counts + (money roles only) Σ paid + Σ est
+  const totUsd=list.reduce((a,p)=>a+(Number(p.total_usd)||0),0);
+  const totEst=list.reduce((a,p)=>a+(p.packages||[]).reduce((s,pk)=>s+pkgEstTotal(pk).sum,0),0);
+  const totItems=list.reduce((a,p)=>a+(p.n_items||0),0);
+  const poTotals=(!inAddCard&&list.length)?`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${list.length} orders · ${totItems} items</div>
+      ${lxtCells("po",{total:PO_MONEY?`<b style="font-size:12px" title="مجموع المدفوع + التقدير · Σ paid totals + Σ estimated cost">${money(totUsd)}${totEst>0?` <span class="muted2" style="font-weight:600">· ≈ ${money(totEst)} est</span>`:""}</b>`:""})}
+    </div>`:"";
+  const colHead=(!inAddCard&&list.length)?lxtHead("po","order"):"";
+  mount.innerHTML=boxDatalist()+custDatalist()+colHead
+    +lxtWrap("po",list.map(poCardHtml).join("")+poTotals);
+  lxColwApply(); lxtGridApply("po",mount);
 }
-const PO_HCOLS=["total","arrival","gaash status","deadline","docs","جيرزيم","status",""];
+// ── 📦 Packages flat view: one row per package across every PO ──
+function poRenderPkgsFlat(mount,list){
+  const rows=[];
+  list.forEach(p=>(p.packages||[]).forEach((pk,pi)=>rows.push([p,pk,pi])));
+  lxtSortApply("pok",rows,([p,pk],key)=>{
+    if(key==="order") return String(p.po_id||"").toLowerCase();
+    if(key==="total") return pkgEstTotal(pk).sum;
+    if(key==="arrival") return String(pk.arrival||"~");
+    return poSortVal(p,key);
+  });
+  const totEst=rows.reduce((a,[,pk])=>a+pkgEstTotal(pk).sum,0);
+  const nItems=rows.reduce((a,[,pk])=>a+(pk.items||[]).length,0);
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${rows.length} packages · ${nItems} products</div>
+      ${lxtCells("pok",{total:(PO_MONEY&&totEst>0)?`<b style="font-size:12px" title="Σ تقدير التكلفة · total estimated cost">≈ ${money(totEst)}</b>`:""})}
+    </div>`;
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pok","package")
+    +lxtWrap("pok",`<div class="pkg open"><div class="pkg-body">${rows.map(([p,pk,pi])=>poPkFlatRow(p,pk,pi)).join("")}${totals}</div></div>`);
+  lxColwApply(); lxtGridApply("pok",mount);
+}
+function poPkFlatRow(p,pk,pi){
+  const gaash=(pk.tracking_number||'').trim(), est=pkgEstTotal(pk);
+  const menu=popMenu([
+    [`✏️ تعديل الطرد · Edit package`, `pkgEditOpen('${p.po_id}',${pi})`],
+    [`📱 إشعار العملاء · Notify customers`, `pkgNotifyOpen('${p.po_id}',${pi})`],
+    [`🔎 تتبع الشحنة · Check shipping`, `trackPkg(this,'${p.po_id}',${pi})`],
+    gaash?[`🪪 رفع مستندات لغاش · Upload docs to GAASH`, `gaashUploadOpen('${p.po_id}',${pi})`]:null,
+    [`＋ إضافة منتج · Add product`, `poAddItem('${p.po_id}',${pi})`],
+  ]);
+  const cells={
+    order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
+    total: est.priced?`<span class="muted" title="تقدير تكلفة المنتجات · estimated cost">≈ <b style="color:var(--ink)">${money(est.sum)}</b></span>`:'',
+    arrival: pkgDatePill(pk),
+    gashstatus: pkgGaashPill(pk),
+    deadline: pkgDeadlinePill(p,pk,pi),
+    docs: pkgDocsPill(p,pk,pi),
+    gerizim: `${gzBadge(gaash)}${pkgGerizimPill(pk)}`,
+    status: pkgCuSelect(p,pk,pi),
+    menu,
+    ...poCfCells(p),
+  };
+  return `<div class="poc-row" title="انقر لعرض كل التفاصيل · click for full package details" style="cursor:pointer"
+    onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label'))return;pkgInfoOpen('${p.po_id}',${pi})">
+    <div class="bt-pin">
+      <span class="pkg-title" style="flex:0 0 auto">📦${pk.package_no}</span>
+      ${poThumbStrip(pk.items)}
+      <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+    </div>
+    ${lxtCells("pok",cells)}
+  </div>`;
+}
+// ── ⫶ Products flat view: one row per product across every PO ──
+function poRenderProdsFlat(mount,list){
+  const rows=[];
+  list.forEach(p=>(p.packages||[]).forEach((pk,pi)=>(pk.items||[]).forEach((it,ii)=>rows.push([p,pk,pi,it,ii]))));
+  lxtSortApply("pop",rows,([p,pk,,it],key)=>{
+    if(key==="order") return String(p.po_id||"").toLowerCase();
+    if(key==="customer") return String(it.customer_name||"~").toLowerCase();
+    if(key==="qty") return Number(it.qty)||1;
+    return String(it.title||it.asin||"").toLowerCase();
+  });
+  const totQty=rows.reduce((a,[,,,it])=>a+(Number(it.qty)||1),0);
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${rows.length} products</div>
+      ${lxtCells("pop",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
+    </div>`;
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","product")
+    +lxtWrap("pop",`<div class="pkg open"><div class="pkg-body">${rows.map(([p,pk,pi,it,ii])=>poItFlatRow(p,pk,pi,it,ii)).join("")}${totals}</div></div>`);
+  lxColwApply(); lxtGridApply("pop",mount);
+}
+function poItFlatRow(p,pk,pi,it,ii){
+  const short3=s=>{ const w=(s||'').trim().split(/\s+/); return w.length<=3?(s||'').trim():w.slice(0,3).join(' ')+'…'; };
+  const exc=PO_STATUSES.includes(it.status)
+    ?(()=>{ const[c,bg]=STATUS_COLOR[it.status]||["#b42318","#fee2e2"];
+        return `<span class="pill" style="color:${c};background:${bg}">${poEsc((EXC_LABEL[it.status]||it.status).split(' · ')[0])}</span>`; })():"";
+  const gaash=(pk.tracking_number||'').trim();
+  const pst=(pk.otlobly_status||"").trim();
+  const cells={
+    order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
+    package:`<span class="muted2" style="font-size:11px">📦${pk.package_no}${gaash?` · ${poTn4(gaash,'10px')}`:""}</span>`,
+    pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
+    customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
+    qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
+    status: exc,
+    menu:`<button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>`,
+  };
+  return `<div class="poc-row" title="انقر لعرض تفاصيل الطرد · click for the package details" style="cursor:pointer"
+    onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label'))return;pkgInfoOpen('${p.po_id}',${pi})">
+    <div class="bt-pin">
+      ${it.image?`<img class="thumb" src="${poEsc(it.image)}" style="width:32px;height:32px">`:'<div class="thumb" style="width:32px;height:32px"></div>'}
+      <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(short3(it.title)||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
+    </div>
+    ${lxtCells("pop",cells)}
+  </div>`;
+}
+// ── 👤 Customers view: one collapsible section per customer; a customer whose
+// products span SEPARATE purchase orders keeps them separated — a sticky
+// PO sub-label per order, never merged. Rows reuse poItFlatRow on "pop". ──
+let PO_CCOL=new Set(); try{ PO_CCOL=new Set(JSON.parse(localStorage.getItem("po_ccol")||"[]")); }catch(e){}
+function poCustToggle(name){
+  PO_CCOL.has(name)?PO_CCOL.delete(name):PO_CCOL.add(name);
+  try{ localStorage.setItem("po_ccol",JSON.stringify([...PO_CCOL])); }catch(e){}
+  renderPurchases();
+}
+function poRenderCustomers(mount,list){
+  const NOCUST="⚠ غير مرتبط بعميل · no customer yet";
+  const groups=new Map();                           // customer → Map(po_id → tuples)
+  list.forEach(p=>(p.packages||[]).forEach((pk,pi)=>(pk.items||[]).forEach((it,ii)=>{
+    const cust=(it.customer_name||"").trim()||NOCUST;
+    if(!groups.has(cust)) groups.set(cust,new Map());
+    const byPo=groups.get(cust);
+    if(!byPo.has(p.po_id)) byPo.set(p.po_id,[]);
+    byPo.get(p.po_id).push([p,pk,pi,it,ii]);
+  })));
+  // the customer-side view of a PO item: its matched customer ORDER carries the
+  // quoted price + status (DATA.orders — already money-redacted per role)
+  const OMAP={}; ((DATA&&DATA.orders)||[]).forEach(o=>{ OMAP[o.order_id]=o; });
+  const ordersOf=tuples=>{ const ids=new Set();
+    tuples.forEach(([,,,it])=>{ const id=(it.customer_order_id||"").trim(); if(id) ids.add(id); });
+    return [...ids].map(id=>({id,o:OMAP[id]})); };
+  const names=[...groups.keys()].sort((a,b)=>a===NOCUST?1:b===NOCUST?-1
+    :a.localeCompare(b,undefined,{numeric:true}));
+  let totProds=0,totQty=0;
+  const sections=names.map(cust=>{
+    const byPo=groups.get(cust), collapsed=PO_CCOL.has(cust);
+    let n=0,est=0; const allTuples=[];
+    byPo.forEach(tuples=>tuples.forEach(t=>{ const it=t[3]; n++; totQty+=Number(it.qty)||1;
+      allTuples.push(t);
+      if(it.est_cost_usd!=null) est+=it.est_cost_usd*(it.qty||1); }));
+    totProds+=n;
+    const estChip=(PO_MONEY&&est>0)?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Σ تقدير تكلفة منتجات هذا العميل · estimated cost of this customer's products">≈ ${money(Math.round(est*100)/100)}</span>`:"";
+    const ords=ordersOf(allTuples);
+    const anyQuoted=ords.some(x=>x.o&&x.o.amount_to_collect_usd!=null);
+    const quoted=ords.reduce((a,x)=>a+((x.o&&x.o.amount_to_collect_usd)||0),0);
+    const dep=ords.reduce((a,x)=>a+((x.o&&x.o.deposit_usd)||0),0);
+    const quotedChip=anyQuoted?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="السعر المعروض على العميل — مجموع طلباته · quoted price (Σ their matched orders)">💵 <b style="color:var(--ink)">${money(Math.round(quoted*100)/100)}</b></span>`:"";
+    const depChip=(anyQuoted&&dep>0)?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="العربون المدفوع · deposit paid">عربون ${money(Math.round(dep*100)/100)}</span>`:"";
+    const stChip=(ords.length===1&&ords[0].o)?statusPill(ords[0].o.status):"";
+    const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;poCustToggle('${poEsc(cust)}')" style="cursor:pointer">
+        <div class="bt-pin">
+          <span class="caret">${collapsed?"▸":"▾"}</span>
+          <b class="pkg-title${cust===NOCUST?'" style="color:#b45309':''}" >👤 ${poEsc(cust)}</b>
+          <span class="muted2" style="font-size:11px;flex:0 0 auto">${n} product${n===1?"":"s"} · ${byPo.size} order${byPo.size===1?"":"s"}</span>
+          ${stChip}${quotedChip}${depChip}${estChip}
+        </div>
+      </div></div>`;
+    if(collapsed) return `<div class="pkg">${head}</div>`;
+    const body=[...byPo.keys()].sort().map(poId=>{
+      const tuples=byPo.get(poId), p=tuples[0][0];
+      const amz=(p.amazon_order_number||"").trim();
+      const pkNos=[...new Set(tuples.map(([,pk])=>pk.package_no))];
+      // this PO block's matched customer order(s): id · status · quoted $
+      const bOrds=ordersOf(tuples);
+      const ordChips=bOrds.map(x=>` <span style="opacity:.6">→</span> <span class="mono" style="font-size:10.5px">${poEsc(x.id)}</span>${x.o?` ${statusPill(x.o.status)}${x.o.amount_to_collect_usd!=null?` · <b>${money(x.o.amount_to_collect_usd)}</b>`:""}`:""}`).join(" ");
+      // one order = one sub-block; a second PO for the same customer starts a new one
+      return `<div class="poc-group">
+        <div class="poc-cust" style="cursor:pointer" title="فتح الطلب في عرض الشجرة · open this order in the tree view" onclick="poJumpOrder('${poEsc(poId)}')">🧾 ${poEsc(poId)}${amz?` · #…${poEsc(amz.slice(-4))}`:""} · 📦${pkNos.join(", 📦")}${ordChips}</div>
+        ${tuples.map(([p2,pk,pi,it,ii])=>poItFlatRow(p2,pk,pi,it,ii)).join("")}
+      </div>`;
+    }).join("");
+    return `<div class="pkg open">${head}<div class="pkg-body">${body}</div></div>`;
+  }).join("");
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${names.length} customer${names.length===1?"":"s"} · ${totProds} products</div>
+      ${lxtCells("pop",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
+    </div>`;
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","product")
+    +lxtWrap("pop",sections+totals);
+  lxColwApply(); lxtGridApply("pop",mount);
+}
+// ── Custom-field cells (ClickUp-style): value display + inline editor ──
+function poCfCells(p){
+  const out={};
+  (((QSETTINGS||{}).custom_fields||{}).po||[]).forEach(f=>{ out["cf_"+f.key]=poCfCell(p,f); });
+  return out;
+}
+function poCfCell(p,f){
+  const v=(p.custom||{})[f.key];
+  const disp=(v==null||v==="")?"":poEsc(String(v));
+  return `<span style="min-width:30px;min-height:16px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:${CAN_EDIT?'text':'default'}" title="${poEsc(f.label)}${CAN_EDIT?' — انقر للتعديل · click to edit':''}"
+    ${CAN_EDIT?`onclick="event.stopPropagation();poCfEdit(this,'${p.po_id}','${poEsc(f.key)}')"`:""}>${disp||(CAN_EDIT?'<span class="muted2" style="opacity:.5">—</span>':'')}</span>`;
+}
+function poCfEdit(el,poId,key){
+  const p=poFind(poId), f=(((QSETTINGS||{}).custom_fields||{}).po||[]).find(x=>x.key===key);
+  if(!p||!f) return;
+  const cur=(p.custom||{})[key]??"";
+  let inp;
+  if(f.type==="select"){ inp=document.createElement("select");
+    inp.innerHTML=`<option value=""></option>`+(f.options||[]).map(o=>`<option${o===cur?" selected":""}>${poEsc(o)}</option>`).join(""); }
+  else{ inp=document.createElement("input");
+    inp.type=f.type==="number"?"number":f.type==="date"?"date":"text"; inp.value=cur; }
+  inp.style.cssText="width:100%;min-width:70px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
+  inp.onclick=e=>e.stopPropagation();
+  let done=false;
+  const save=async()=>{ if(done) return; done=true;
+    const v=String(inp.value||"").trim();
+    p.custom=p.custom||{};
+    if(v==="") delete p.custom[key]; else p.custom[key]=f.type==="number"?(parseFloat(v)||0):v;
+    await poSave(p); renderPurchases(); };
+  inp.onblur=save;
+  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPurchases(); } };
+  el.replaceWith(inp); inp.focus();
+}
 function poTrkCounts(p){   // products still missing a tracking # (item's own OR its package's)
   let tot=0,need=0;
   (p.packages||[]).forEach(pk=>(pk.items||[]).forEach(it=>{ tot++;
@@ -7167,22 +7694,20 @@ function poCardHtml(p){
   const poGwds=(p.packages||[]).map(pk=>(pk.tracking_number||'').trim()).filter(Boolean);
   const head=`<div class="po-head">
     <div class="po-title">
-      <span class="caret" onclick="poToggleCard('${p.po_id}')">${open?'▾':'▸'}</span>
-      <b class="po-name" onclick="poToggleCard('${p.po_id}')" style="cursor:pointer">${poEsc(p.po_id)}</b>
-      ${(p.amazon_order_number||'').trim()?`<span class="mono muted2" style="font-size:11px;flex:0 0 auto" title="Amazon order # ${poEsc(p.amazon_order_number)}">#…${poEsc(p.amazon_order_number.trim().slice(-4))}</span>${lxCopyRawBtn(p.amazon_order_number.trim())}`:''}
-      <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(who)||'—'} · ${p.n_items} item${p.n_items===1?'':'s'}${npk>1?` · ${npk} packages`:''}</span>
-      ${profChip}
-      <span class="spacer"></span>
-      <span class="po-cols">
-        <span class="lxc"><span class="muted2">${total}${estChip}</span></span>
-        <span class="lxc"></span>
-        <span class="lxc">${poSummaryPill(p)}</span>
-        <span class="lxc"></span>
-        <span class="lxc"></span>
-        <span class="lxc">${gzRollup(poGwds)}</span>
-        <span class="lxc"></span>
-        <span class="lxc">${menu}</span>
-      </span>
+      <div class="bt-pin">
+        <span class="caret" onclick="poToggleCard('${p.po_id}')">${open?'▾':'▸'}</span>
+        <b class="po-name" onclick="poToggleCard('${p.po_id}')" style="cursor:pointer;flex:0 0 auto">${poEsc(p.po_id)}</b>
+        ${(p.amazon_order_number||'').trim()?`<span class="mono muted2" style="font-size:11px;flex:0 0 auto" title="Amazon order # ${poEsc(p.amazon_order_number)}">#…${poEsc(p.amazon_order_number.trim().slice(-4))}</span>${lxCopyRawBtn(p.amazon_order_number.trim())}`:''}
+        <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(who)||'—'} · ${p.n_items} item${p.n_items===1?'':'s'}${npk>1?` · ${npk} packages`:''}</span>
+        ${profChip}
+      </div>
+      ${lxtCells("po",{
+        total: `<span class="muted2">${total}${estChip}</span>`,
+        gashstatus: poSummaryPill(p),
+        gerizim: gzRollup(poGwds),
+        menu,
+        ...poCfCells(p),
+      })}
     </div></div>`;
   if(!open) return `<div class="po-card">${head}</div>`;
   const pkgs=(p.packages||[]).map((pk,pi)=>poPkgHtml(p,pk,pi)).join("");
@@ -7209,15 +7734,19 @@ const CU_COLOR=Object.fromEntries(CU_STATUSES);
 // .pop-menu — search box + one row per status with its coloured dashed ring.
 function pkgCuSelect(p,pk,pi){
   const cur=pk.otlobly_status||CU_STATUSES[0][0], c=CU_COLOR[cur]||"#8d8d8d";
-  const opts=(CU_COLOR[cur]?CU_STATUSES:[[cur,"#8d8d8d"]].concat(CU_STATUSES));   // keep a renamed/legacy value visible
-  const rows=opts.map(([s,h])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
+  // owner sees the raw ClickUp vocabulary; other staff see the remapped labels
+  // and may only pick the curated employee statuses (cuLabel/cuPickRows)
+  const opts=CAN_ADMIN
+    ?(CU_COLOR[cur]?CU_STATUSES:[[cur,"#8d8d8d"]].concat(CU_STATUSES)).map(([s,h])=>[s,h,s])
+    :cuPickRows(cur);
+  const rows=opts.map(([s,h,lbl])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
       onclick="poPkgSet('${p.po_id}',${pi},'otlobly_status','${poEsc(s)}');renderPurchases()">
-      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(s)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
+      <span class="cu-ring" style="border-color:${h||"#8d8d8d"}"></span><b>${poEsc(lbl)}</b>${s===cur?'<span style="color:var(--accent)">✓</span>':''}
     </button>`).join("");
   return `<span class="pop" style="flex:0 0 auto">
     <button class="statussel" title="حالة أوطلبلي — أنت تحددها · Otlobly status (set by you)"
       style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
-      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cur)} ▾</button>
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cuLabel(cur))} ▾</button>
     <div class="pop-menu cu-menu">
       <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
       ${rows}
@@ -7329,21 +7858,22 @@ function poPkgHtml(p,pk,pi){
   const head=`<div class="pkg-head">
     <div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label'))return;pkgInfoOpen('${p.po_id}',${pi})">
-      <span class="caret" onclick="event.stopPropagation();poToggle('${k}')">${collapsed?'▸':'▾'}</span>
-      <span class="pkg-title">📦${pk.package_no}</span>
-      ${poThumbStrip(pk.items)}
-      <span class="muted">· ${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
-      <span class="spacer"></span>
-      <span class="po-cols">
-        <span class="lxc">${est.priced?`<span class="muted" title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced})</span>`:''}</span>`:''}</span>
-        <span class="lxc">${pkgDatePill(pk)}</span>
-        <span class="lxc">${pkgGaashPill(pk)}</span>
-        <span class="lxc">${pkgDeadlinePill(p,pk,pi)}</span>
-        <span class="lxc">${pkgDocsPill(p,pk,pi)}</span>
-        <span class="lxc">${gzBadge(gaash)}${pkgGerizimPill(pk)}</span>
-        <span class="lxc">${pkgCuSelect(p,pk,pi)}</span>
-        <span class="lxc">${menu}</span>
-      </span>
+      <div class="bt-pin">
+        <span class="caret" onclick="event.stopPropagation();poToggle('${k}')">${collapsed?'▸':'▾'}</span>
+        <span class="pkg-title" style="flex:0 0 auto">📦${pk.package_no}</span>
+        ${poThumbStrip(pk.items)}
+        <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· ${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+      </div>
+      ${lxtCells("po",{
+        total: est.priced?`<span class="muted" title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced})</span>`:''}</span>`:'',
+        arrival: pkgDatePill(pk),
+        gashstatus: pkgGaashPill(pk),
+        deadline: pkgDeadlinePill(p,pk,pi),
+        docs: pkgDocsPill(p,pk,pi),
+        gerizim: `${gzBadge(gaash)}${pkgGerizimPill(pk)}`,
+        status: pkgCuSelect(p,pk,pi),
+        menu,
+      })}
     </div></div>`;
   if(collapsed) return `<div class="pkg">${head}</div>`;
   // Read view: items grouped by customer — photo · name · ×qty · exception chip · ✏️.
@@ -7360,14 +7890,15 @@ function poPkgHtml(p,pk,pi){
   const rows=Object.entries(groups).map(([cust,arr])=>`<div class="poc-group">
       <div class="poc-cust${cust==='—'?' nocust':''}">${cust==='—'?'⚠ غير مرتبط بعميل · no customer yet':poEsc(cust)}</div>
       ${arr.map(([it,ii])=>`<div class="poc-row">
-        ${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}
-        <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(short3(it.title)||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
-        <span class="muted2" style="flex:0 0 auto">×${it.qty||1}</span>
-        <span class="po-cols">
-          <span class="lxc"></span><span class="lxc"></span><span class="lxc"></span><span class="lxc"></span><span class="lxc"></span><span class="lxc"></span>
-          <span class="lxc">${exChip(it)}</span>
-          <span class="lxc"><button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج (رابط، ASIN، صورة، ملاحظات…) · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button></span>
-        </span>
+        <div class="bt-pin">
+          ${it.image?`<img class="thumb" src="${poEsc(it.image)}">`:'<div class="thumb"></div>'}
+          <span class="poc-name" title="${poEsc(it.title||it.asin||'')}">${poEsc(short3(it.title)||it.asin||'(unnamed product)')}${it.clean_url?` <a href="${poEsc(it.clean_url)}" target="_blank" rel="noopener" title="افتح على أمازون · open on Amazon">↗</a>`:''}</span>
+          <span class="muted2" style="flex:0 0 auto">×${it.qty||1}</span>
+        </div>
+        ${lxtCells("po",{
+          status: exChip(it),
+          menu: `<button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج (رابط، ASIN، صورة، ملاحظات…) · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>`,
+        })}
       </div>`).join("")}
     </div>`).join("");
   return `<div class="pkg open">${head}<div class="pkg-body">${rows||'<div class="empty">لا منتجات · no products</div>'}
@@ -7950,11 +8481,11 @@ function renderActivity(){
         <div style="width:60%;max-width:56px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
         <div style="font-size:10px;color:var(--muted)">${r.month.slice(2)}</div></div>`;}).join("")
       :`<div class="empty" style="width:100%">لا بيانات · no data yet.</div>`;
-    $("actTable").innerHTML=rows.length?`<table style="margin-top:4px"><thead><tr>
+    $("actTable").innerHTML=rows.length?`<div class="tbl-scroll"><table style="margin-top:4px"><thead><tr>
         <th>Month</th><th class="amt">Revenue</th><th class="amt">Cost</th><th class="amt">Ads</th><th class="amt">Net</th></tr></thead><tbody>`+
       rows.map(r=>`<tr><td class="mono">${r.month}</td><td class="amt">${money(r.revenue)}</td>
         <td class="amt">${money(r.cogs)}</td><td class="amt">${money(r.meta)}</td>
-        <td class="amt" style="color:${(r.net||0)>=0?'var(--good)':'var(--bad)'}"><b>${money(r.net)}</b></td></tr>`).join("")+`</tbody></table>`:'';
+        <td class="amt" style="color:${(r.net||0)>=0?'var(--good)':'var(--bad)'}"><b>${money(r.net)}</b></td></tr>`).join("")+`</tbody></table></div>`:'';
     return;
   }
   // day view — the selected window; all-time shows the most recent 30 days with data

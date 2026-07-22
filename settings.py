@@ -45,6 +45,35 @@ def public_sections(config=None):
             for k, d in PUBLIC_SECTIONS.items()}
 
 
+# Employee-facing status labels: the OWNER keeps the raw ClickUp vocabulary
+# (recieved rd / sent no rd …); staff without admin_actions see these simplified
+# labels instead — same idea as the customer remap, but for employees. `pick`
+# marks the statuses an employee may SET from the dropdown (curated so the
+# RD/financial distinctions stay the owner's job). Display-level only — the
+# underlying status values never change.
+DEFAULT_EMPLOYEE_STATUS_MAP = [
+    {"status": "oredered",           "label": "مطلوبة من أمازون · ordered",      "pick": False},
+    {"status": "shipped",            "label": "شُحنت من أمازون · shipped",        "pick": False},
+    {"status": "doc sent to gash",   "label": "أُرسلت المستندات لغاش · docs sent", "pick": True},
+    {"status": "in clearance",       "label": "في التخليص · in clearance",       "pick": True},
+    {"status": "waiting verification", "label": "بانتظار التحقق · verification", "pick": False},
+    {"status": "recieved rd",        "label": "استلمناها بالمكتب · received",     "pick": False},
+    {"status": "recieved no rd",     "label": "استلمناها بالمكتب · received ✓",   "pick": True},
+    {"status": "sent rd",            "label": "أُرسلت للعميل · sent",             "pick": False},
+    {"status": "sent no rd",         "label": "أُرسلت للعميل · sent ✓",           "pick": True},
+    {"status": "delievered rd",      "label": "سُلّمت للعميل · delivered",        "pick": False},
+    {"status": "delievered no rd",   "label": "سُلّمت للعميل · delivered ✓",      "pick": True},
+    {"status": "not recieved rd",    "label": "لم تصل بعد · not arrived",        "pick": False},
+    {"status": "not recieved no rd", "label": "لم تصل بعد · not arrived ",       "pick": False},
+    {"status": "picked up by ger",   "label": "استلمها جيرزيم · with Gerizim",    "pick": True},
+    {"status": "ariived at destnation", "label": "وصلت الوجهة · arrived",        "pick": False},
+    {"status": "delivered",          "label": "سُلّمت · delivered",              "pick": True},
+    {"status": "rd",                 "label": "قيد المتابعة · in progress",      "pick": False},
+    {"status": "refund request",     "label": "قيد المتابعة · in progress ",     "pick": False},
+    {"status": "cancelled",          "label": "أُلغيت · cancelled",              "pick": False},
+    {"status": "complete",           "label": "مكتملة · complete",               "pick": True},
+]
+
 # Leluxe clearance-email compose defaults (Settings-editable). One GWD per email
 # on purpose — GAASH replies then map 1:1 to packages on the board.
 DEFAULT_CLEARANCE_SUBJECT = "تخليص جمركي · Customs clearance — {gwd}"
@@ -91,6 +120,13 @@ def read(config=None):
             "gaash_days": cfg.get(config, "alerts.gaash_days", _alerts.GAASH_DAYS_DEFAULT),
             "arrival_days": cfg.get(config, "alerts.arrival_days", _alerts.ARRIVAL_DAYS_DEFAULT),
         },
+        # Employee status labels (display remap for non-admin staff) + the
+        # statuses an employee may set (pick).
+        "employee_status_map": cfg.get(config, "staff.employee_status_map",
+                                       DEFAULT_EMPLOYEE_STATUS_MAP),
+        # ClickUp-style custom fields, per business: today `po` (Purchases board
+        # columns) — [{key,label,type:text|number|select|date,options[]}].
+        "custom_fields": {"po": cfg.get(config, "custom_fields.po", [])},
         # Leluxe per-package clearance email (mailto: compose defaults). The
         # placeholders {gwd}, {upload_link}, {customer} are filled per package —
         # each email carries exactly ONE GWD so GAASH replies map to packages.
@@ -192,6 +228,34 @@ def apply(body, config=None, persist=True):
                                if str(x).strip().lstrip("-").isdigit() and int(x) > 0})
                 if vals:
                     cfg.set_path(config, f"alerts.{k}", vals)
+    if isinstance(body.get("employee_status_map"), list):
+        rows = []
+        for r in body["employee_status_map"]:
+            if not isinstance(r, dict):
+                continue
+            status = str(r.get("status", "")).strip().lower()
+            label = str(r.get("label", "")).strip()
+            if not status or not label:
+                continue
+            rows.append({"status": status, "label": label, "pick": bool(r.get("pick"))})
+        cfg.set_path(config, "staff.employee_status_map", rows)
+    cf = body.get("custom_fields")
+    if isinstance(cf, dict) and isinstance(cf.get("po"), list):
+        fields, seen = [], set()
+        for f in cf["po"]:
+            if not isinstance(f, dict):
+                continue
+            label = str(f.get("label", "")).strip()
+            key = re.sub(r"[^a-z0-9_]+", "_", str(f.get("key") or label).strip().lower()).strip("_")
+            typ = str(f.get("type", "text")).strip().lower()
+            if not key or not label or key in seen:
+                continue
+            seen.add(key)
+            fields.append({"key": key, "label": label,
+                           "type": typ if typ in ("text", "number", "select", "date") else "text",
+                           "options": [str(o).strip() for o in (f.get("options") or [])
+                                       if str(o).strip()][:30]})
+        cfg.set_path(config, "custom_fields.po", fields[:20])
     cl = body.get("clearance")
     if isinstance(cl, dict):
         for k in ("email_to", "email_cc"):

@@ -27,32 +27,85 @@ token-served via `branding.render_shell` (a stale server leaks raw `__BRAND_` to
 - Row click opens the info popup (`lxInfoOpen`/`pkgInfoOpen`) — guard with
   `if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;`.
 
-## 2. Column-grid system (how to add a view or a column)
+## 2. ClickUp-table system (ALL boards — the `.bt-*` chrome + LXT registry)
 
-Registry `LX_TABLES` in web/index.html — one entry per board table:
+Every board is a ClickUp-style table at EVERY width: fixed-width column grids
+that H-SCROLL inside `.bt-wrap` (they never squeeze or collapse), a PINNED left
+column (`.bt-pin`, sticky-left, shadow via `.btscrolled`), a sticky header in a
+clipped strip (`.bt-clip`) whose scrollLeft `lxtSync(wrap)` mirrors (clip =
+`wrap.previousElementSibling`, no ids), per-column sort, an ⊕ show/hide-columns
+picker, and Σ totals footers (`.bt-total`). There is NO responsive fallback and
+NO container queries anymore.
 
-| id  | grid CSS var | header class            | storage key |
-|-----|--------------|-------------------------|-------------|
-| ""  | `--lxgrid`   | `.lx-colhead .lx-cols`  | `lx_colw`   |
-| "p" | `--lxpgrid`  | `.lx-pcolhead .lx-pcols`| `lx_pcolw`  |
-| "k" | `--lxkgrid`  | `.lx-kcolhead .lx-kcols`| `lx_kcolw`  | (Packages view)
-| "po"| `--pogrid`   | `.po-colhead .po-cols`  | `po_colw`   |
+Registries (web/index.html): `LX_TABLES` (grid var + header selector + width
+storage key + statussel mins) and `LXT_COLS` (per table: `{key,label,w,
+sortable|sort,locked}`) for ids `""` Leluxe orders · `"p"` products ·
+`"k"` packages · `"po"` Purchases. Per-table localStorage: widths
+(`lx_colw`/`lx_pcolw`/`lx_kcolw`/`po_colw`), hidden set `lxt_hidden_<id>`,
+generic sort `lxt_sort_<id>`. The ORDERS table keeps its richer `LX_SORT`
+(`lxSortClick`/`lxSortVal`; a col's `sort` field carries that key + optional
+`sortKey`), others use `lxtSortClick`/`lxtSortApply`.
 
-Recipe for a NEW column on table X (or a new table):
-1. Row + header markup: cells are `<span class="lxc">…</span>` inside
-   `<span class="lx-Xcols">`; header labels get a resize handle
-   `lxRszDown(event,i,'X')` / `lxRszReset(event,'X')`.
-2. CSS: the `.lx-Xcols` class must appear in FIVE shared selector lists
-   (search for `.lx-pcols` to find them): `display:contents` fallback, `.lxc` base,
-   the `>span` ellipsis rule, the `:has(.pop-menu.open)` escape (else dropdowns
-   clip — "the empty white box" bug), and the colhead display/lbl rules.
-3. Container queries: TWO tiers on `lxboard`/`poboard` — `min-width:940px`
-   (grid on, default widths) and `1060px` (roomier widths). Adding a column =
-   update BOTH `--lxXgrid` default strings AND the header labels array.
-4. `LX_TABLES` entry (mins: floor any cell holding a `.statussel` at 84px).
-5. Saved widths only apply when the array length matches the live column count
-   (`lxColwApply`) — changing the column count safely invalidates old saves.
-6. Below 940px the grid falls back to flowing chips — check that width too.
+View assembly: `lxtHead(tbl, pinLabel[, pinSortKey])` + `lxtWrap(tbl, rowsHtml
++ totals)`; after `mount.innerHTML=` call `lxColwApply()` THEN
+`lxtGridApply(tbl[, mount])` (writes saved widths when the array length matches
+the VISIBLE column count, else per-col defaults).
+
+Row recipe (any nesting level): `<div class="bt-pin">…left content…</div>` then
+`lxtCells(tbl, {colKey: html, …})` — missing keys render empty. Nested tree
+levels indent INSIDE the pin (CSS `.bt-wrap .po-body .pkg-title-row>.bt-pin`
+24px / `.poc-row>.bt-pin` 34px) so every grid stays column-aligned. Pin widths:
+`--btpin` via wrap/clip classes `pin-lg` (orders 380) / `pin-md` (po 360) /
+default 320; capped 200px under 560px viewport.
+
+Pitfalls (all hit us once):
+- ancestor `overflow:hidden` (`.po-card`, `.pkg`) hijacks the pin's sticky
+  scroll box — `.bt-wrap .po-card,.bt-wrap .pkg{overflow:visible}` undoes it;
+- the pin floats over scrolled content → its BACKGROUND must mirror every row
+  state (open `#fff4ee`, pkg strip `bg2`, hovers, `.lx-tied` stripe) — see the
+  `.bt-pin` background rules;
+- header vs rows width can differ 1-2px per nested border level — the header's
+  `border-inline:1px solid transparent` + `lxtSync`'s end-snap absorb it;
+- `.lxc:has(.pop-menu.open)` + `.bt-wrap:has(.pop-menu.open){overflow:visible}`
+  keep dropdowns unclipped;
+- hiding a column resets that table's saved widths (visible-set keyed).
+
+Plain wide `<table>`s elsewhere (staff Orders `#tbl`, Customers, Deposits,
+Catalog, Team, Trash, In cart, Activity, Picking) sit in `.tbl-scroll`
+wrappers (`overflow-x:auto`) — scroll, no pin.
+
+Later additions to the system:
+- **Pin resize**: the header pin carries an `lx-rsz` handle → `lxtPinDown` /
+  `lxtPinReset`, width in `lxt_pin_<tbl>` (clamp 220–560), re-applied by
+  `lxtGridApply` as an inline `--btpin` on `.bt-clip`/`.bt-wrap` (skipped ≤560px
+  so the 200px phone cap wins).
+- **Purchases views**: `PO_BOARD_VIEW` (`po_board_view`) — orders tree ·
+  packages flat (table `"pok"`) · products flat (`"pop"`); `poSearch` free-text
+  filter (`poSearchMatch`); `poJumpOrder` = back to tree + open that card.
+- **Custom fields (ClickUp-style, sellable core)**: definitions per business in
+  Settings → 🧩 (`custom_fields.po`: key/label/type text|number|select|date/
+  options; settings.py validates + slugs keys); values in `po.custom{}`
+  (purchases.save_full preserves them; a custom-less POST never wipes).
+  `lxtCols(tbl)` appends `cf_<key>` columns to "po"/"pok" before the menu col;
+  cells via `poCfCells(p)` → `poCfCell/poCfEdit` (inline input/select, saves
+  through the debounced `poSave` — 700ms). Sort handled in `poSortVal`.
+
+## Role-based visibility (employee-safe by design)
+
+- **Money boundary = `view_cost`** (admin only): /api/purchases, /api/purchase,
+  /api/incart (cost+profit; totals additionally need `view_money`),
+  /api/po_image (checkout screenshots) all redact server-side; payloads carry
+  `money:false` so the UI (PO_MONEY, renderIncart) skips money cells/footers.
+  Settings GET is trimmed for non-`admin_actions` (pricing keys only return
+  when the caller has `view_money` — sales quoting needs them).
+- **Status labels are per-role**: admins see the raw ClickUp vocabulary; other
+  staff see Settings → 👷 `employee_status_map` labels via `cuLabel(s)`, and
+  their dropdowns (`pkgCuSelect`, `ppStatusPicker`) list only `pick:true`
+  statuses via `cuPickRows`. Display-only — stored values never change.
+- Nav for non-money roles: `cartBtn` needs `view_money`, `settingsBtn` needs
+  `admin_actions` (plus the older gates: P&L, Deposits, Leads, Leluxe, Team).
+- Tests: `test_role_money.py` locks all of this — run it after touching any
+  money-bearing endpoint.
 
 ## 3. Leluxe data model
 
@@ -119,6 +172,15 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
    stop the preview server. NEVER commit `.env`, `otlobly.db*`, `config.json`,
    `purchases.json`. Worktree gotcha: Read/Edit with absolute paths — always
    `…/.claude/worktrees/<name>/…`, never the main repo path (same relative layout).
+
+## "Two versions" of the app — already answered by feature flags
+
+The owner may resell the app (Tatabu). There is NO code fork: per-business
+feature flags (`ME.business.features` — `FEAT.leluxe`, `FEAT.clickup`, …) gate
+the Otlobly-customized parts (ClickUp mirror, Leluxe) to business #1, while the
+board/table system, columns, notifications etc. are CORE product for every
+tenant. New customized features → gate behind a flag; new general features →
+build for all tenants. Never fork.
 
 ## Pitfalls that already bit us
 

@@ -584,6 +584,14 @@ def api_incart():
     cost = _incart_cost()
     data["cost_usd"] = cost
     data["profit_usd"] = round((data.get("total_usd") or 0) - cost, 2)
+    # COGS/profit are admin-only; sale amounts need view_money (fulfillment: none)
+    if not current_user.has("view_cost"):
+        data["cost_usd"] = data["profit_usd"] = None
+    if not current_user.has("view_money"):
+        data["total_usd"] = data["deposits_usd"] = None
+        data["money"] = False
+        for o in data.get("orders", []):
+            o["amount_to_collect_usd"] = o["deposit_usd"] = None
     return jsonify(data)
 
 
@@ -691,7 +699,18 @@ def api_settings():
     if request.method == "GET":
         if not current_user.has("view_orders"):
             abort(403)
-        return jsonify(settings_mod.read())
+        full = settings_mod.read()
+        if not current_user.has("admin_actions"):
+            # employees never see markup/fx/clearance/alerts config; sales
+            # (view_money) keeps the pricing keys its quote tool computes with
+            keep = {"card_flags", "card_labels", "customer_mode", "custom_fields",
+                    "tracking_status_map", "tracking_default_label",
+                    "tracking_otlobly_map", "employee_status_map", "public_sections"}
+            if current_user.has("view_money"):
+                keep |= {"markup_pct", "ils_per_usd", "pkg_ils_per_usd",
+                         "destination", "shipping_rule", "import_rule"}
+            full = {k: v for k, v in full.items() if k in keep}
+        return jsonify(full)
     if not current_user.has("admin_actions"):
         abort(403)
     body = request.get_json(force=True, silent=True) or {}
@@ -1634,7 +1653,10 @@ def api_meta_lead_convert():
 def api_purchases():
     import purchases
     pdb = purchases.load()
-    return jsonify({"purchase_orders": [purchases.summary(p) for p in pdb["purchase_orders"]],
+    show_cost = current_user.has("view_cost")   # COGS boundary — admin only
+    return jsonify({"purchase_orders": [purchases.summary(p, include_money=show_cost)
+                                        for p in pdb["purchase_orders"]],
+                    "money": show_cost,
                     "statuses": purchases.ITEM_STATUSES})
 
 
@@ -1821,7 +1843,8 @@ def api_purchase():
         if not current_user.has("view_orders"):
             abort(403)
         p = purchases.find(purchases.load(), request.args.get("id", ""))
-        return jsonify(purchases.summary(p) if p else {"error": "not found"})
+        return jsonify(purchases.summary(p, include_money=current_user.has("view_cost"))
+                       if p else {"error": "not found"})
     if not current_user.has("edit_order"):
         abort(403)
     import cfg
@@ -2126,7 +2149,8 @@ def api_po_image():
     import base64
     import purchases
     if request.method == "GET":
-        if not current_user.has("view_orders"):
+        # checkout screenshots show the paid Amazon totals → COGS boundary
+        if not current_user.has("view_cost"):
             abort(403)
         fn = request.args.get("file", "")
         p = purchases.IMAGE_DIR / fn

@@ -351,6 +351,10 @@ def save_full(db, po_dict, orders):
         "total_usd": _num(po_dict.get("total_usd")),
         "status": po_dict.get("status") or "PLACED",
         "packages": _norm_packages(po_dict.get("packages")),
+        # ClickUp-style custom-field values {key: value} — posted whole; an
+        # older client that omits the dict must not wipe saved values
+        "custom": (po_dict.get("custom") if isinstance(po_dict.get("custom"), dict)
+                   else (existing or {}).get("custom")) or {},
         "clickup_task_id": (existing or {}).get("clickup_task_id"),
         "screenshot": (existing or {}).get("screenshot"),
         "attachments": ((existing or {}).get("attachments")
@@ -410,15 +414,28 @@ def all_items(po):
     return [it for pkg in po.get("packages", []) for it in pkg.get("items", [])]
 
 
-def summary(po):
+def _redact_po_money(po):
+    """Cost-free copy for roles without view_cost (the employee view): the paid
+    Amazon totals and the per-item cost estimates are the business's COGS —
+    fulfillment can pack and track without ever seeing them. money:False tells
+    the UI to skip the money cells/footers entirely."""
+    po = {**po, "total_usd": None, "total_aed": None, "money": False}
+    po["packages"] = [{**pk, "items": [{**it, "est_cost_usd": None}
+                                       for it in pk.get("items", [])]}
+                      for pk in po.get("packages", [])]
+    return po
+
+
+def summary(po, include_money=True):
     items = all_items(po)
-    return {
+    out = {
         **po,
         "n_packages": len(po.get("packages", [])),
         "n_items": len(items),
         "n_matched": sum(1 for it in items if it.get("matched")),
         "n_unmatched": sum(1 for it in items if not it.get("matched")),
     }
+    return out if include_money else _redact_po_money(out)
 
 
 # --------------------------------------------------------------------------- #
