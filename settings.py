@@ -45,6 +45,18 @@ def public_sections(config=None):
             for k, d in PUBLIC_SECTIONS.items()}
 
 
+# Leluxe clearance-email compose defaults (Settings-editable). One GWD per email
+# on purpose — GAASH replies then map 1:1 to packages on the board.
+DEFAULT_CLEARANCE_SUBJECT = "تخليص جمركي · Customs clearance — {gwd}"
+DEFAULT_CLEARANCE_BODY = (
+    "مرحباً،\n\n"
+    "بخصوص التخليص الجمركي للطرد رقم:\n{gwd}\n\n"
+    "مستندات العميل ({customer}) مرفوعة عبر رابط غاش:\n{upload_link}\n\n"
+    "نرجو إعلامنا إذا لزم أي مستند إضافي.\n"
+    "Please advise on customs clearance for the package above — the requested "
+    "documents were uploaded via the GAASH link.\n\nشكراً جزيلاً")
+
+
 def read(config=None):
     config = config or cfg.load()
     return {
@@ -78,6 +90,17 @@ def read(config=None):
             "stop_statuses": cfg.get(config, "alerts.stop_statuses", _alerts.STOP_DEFAULT),
             "gaash_days": cfg.get(config, "alerts.gaash_days", _alerts.GAASH_DAYS_DEFAULT),
             "arrival_days": cfg.get(config, "alerts.arrival_days", _alerts.ARRIVAL_DAYS_DEFAULT),
+        },
+        # Leluxe per-package clearance email (mailto: compose defaults). The
+        # placeholders {gwd}, {upload_link}, {customer} are filled per package —
+        # each email carries exactly ONE GWD so GAASH replies map to packages.
+        "clearance": {
+            "email_to": cfg.get(config, "clearance.email_to", ""),
+            "email_cc": cfg.get(config, "clearance.email_cc", ""),
+            "subject_tpl": cfg.get(config, "clearance.subject_tpl",
+                                   DEFAULT_CLEARANCE_SUBJECT),
+            "body_tpl": cfg.get(config, "clearance.body_tpl",
+                                DEFAULT_CLEARANCE_BODY),
         },
         # White-label the order card per business. Internal/region-specific features
         # default OFF so a fresh tenant gets a clean, generic card. (Roadmap #2.)
@@ -169,6 +192,15 @@ def apply(body, config=None, persist=True):
                                if str(x).strip().lstrip("-").isdigit() and int(x) > 0})
                 if vals:
                     cfg.set_path(config, f"alerts.{k}", vals)
+    cl = body.get("clearance")
+    if isinstance(cl, dict):
+        for k in ("email_to", "email_cc"):
+            if k in cl:
+                cfg.set_path(config, f"clearance.{k}", str(cl[k] or "").strip())
+        for k in ("subject_tpl", "body_tpl"):
+            # a cleared template falls back to the code default, never to ""
+            if str(cl.get(k) or "").strip():
+                cfg.set_path(config, f"clearance.{k}", str(cl[k]).strip())
     flags = body.get("card_flags")
     if isinstance(flags, dict):
         for k in ("multilogin", "clickup", "screenshot", "second_currency"):

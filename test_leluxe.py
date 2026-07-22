@@ -792,6 +792,53 @@ def endpoints_gated():
           and sales.get("/api/leluxe/az2_pushes").status_code == 403)
 
 
+def pkgmail_tracking():
+    """Per-package clearance-mail log (one GWD per email): a send stamps the
+    cycle, a resend bumps sent_count AND clears the hand-marked reply, and the
+    endpoints are admin-only + Otlobly-only like the rest of Leluxe."""
+    import app as appmod
+    import auth
+    db.create_user("pm-otlo", auth.hash_pw("secret1"), "admin", "O", business_id=1)
+    c = appmod.app.test_client()
+    c.post("/login", data={"username": "pm-otlo", "password": "secret1"})
+    r = c.get("/api/leluxe/pkgmail").get_json()
+    check("pkgmail starts empty", r["ok"] and r["mail"] == {})
+    r = c.post("/api/leluxe/pkgmail/sent",
+               json={"gwd": "GWD001", "to": "clear@gaash.com",
+                     "subject": "clearance — GWD001"}).get_json()
+    check("sent stamps count 1", r["ok"] and r["rec"]["sent_count"] == 1
+          and bool(r["rec"]["sent_at"]) and r["rec"]["replied_at"] is None)
+    r = c.post("/api/leluxe/pkgmail/reply",
+               json={"gwd": "GWD001", "replied": True}).get_json()
+    check("reply marked by hand", r["ok"] and bool(r["rec"]["replied_at"]))
+    r = c.post("/api/leluxe/pkgmail/reply",
+               json={"gwd": "GWD001", "replied": False}).get_json()
+    check("reply unmarked", r["ok"] and r["rec"]["replied_at"] is None)
+    c.post("/api/leluxe/pkgmail/reply", json={"gwd": "GWD001", "replied": True})
+    r = c.post("/api/leluxe/pkgmail/sent",
+               json={"gwd": "GWD001", "to": "clear@gaash.com",
+                     "subject": "reminder — GWD001"}).get_json()
+    check("resend bumps count + restarts the cycle (reply cleared)",
+          r["ok"] and r["rec"]["sent_count"] == 2 and r["rec"]["replied_at"] is None)
+    r = c.get("/api/leluxe/pkgmail").get_json()
+    check("GET lists the record", "GWD001" in r["mail"]
+          and r["mail"]["GWD001"]["sent_count"] == 2
+          and r["mail"]["GWD001"]["to_email"] == "clear@gaash.com")
+    check("sent without gwd is 400",
+          c.post("/api/leluxe/pkgmail/sent", json={}).status_code == 400)
+    check("reply for an unlogged gwd is 400",
+          c.post("/api/leluxe/pkgmail/reply",
+                 json={"gwd": "GWD-NOPE"}).status_code == 400)
+    bid = db.create_business("PM Broker")
+    db.create_user("pm-brk", auth.hash_pw("secret1"), "admin", "B", business_id=bid)
+    b = appmod.app.test_client()
+    b.post("/login", data={"username": "pm-brk", "password": "secret1"})
+    check("broker blocked from pkgmail (feature off)",
+          b.get("/api/leluxe/pkgmail").status_code == 403
+          and b.post("/api/leluxe/pkgmail/sent",
+                     json={"gwd": "GWD001"}).status_code == 403)
+
+
 def move_between_packages():
     """Move a product to another package: a partial quantity splits off a new
     row (fresh subtask, no re-parent); a whole move re-parents the ClickUp
@@ -1099,6 +1146,7 @@ def main():
     print("sync kept report:");  sync_kept_report()
     print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
+    print("pkg mail:");          pkgmail_tracking()
     print()
     if fails:
         raise SystemExit(f"{len(fails)} check(s) failed: {fails}")

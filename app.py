@@ -2061,6 +2061,65 @@ def api_activity():
     return jsonify({"activity": activity.recent(lim, ent, entity_id=eid)})
 
 
+# The staff bell 🔔 — customer-driven moments only (form submissions, quote
+# confirmations, new Meta leads) + the standing "waiting for YOUR quote" count.
+# Built from the existing activity feed + tables; no new storage — the client
+# keeps its own last-seen cursor, so this endpoint is a pure read.
+def _notif_from_activity(ev):
+    """Map one customer activity event → a bell notification (or None)."""
+    act, detail = ev.get("action") or "", (ev.get("detail") or "").lower()
+    label = ev.get("label") or ev.get("entity_id") or ""
+    if act == "confirmed":
+        icon, title = "✅", "أكّد العميل عرض السعر · quote confirmed"
+    elif "catalog" in detail:
+        icon, title = "🛒", "طلب جديد من الكتالوج · new catalog order"
+    elif "plan chosen" in detail:
+        plan = ev.get("new") or ""
+        icon = "🛍"
+        title = ("أكمل طلبه واختار الخطة · completed the order form"
+                 + (f" — {plan}" if plan else ""))
+    elif "quote request" in detail:
+        icon, title = "🛍", "طلب تسعير من الموقع · website quote request"
+    elif "no plan yet" in detail:
+        icon, title = "✍️", "بدأ طلباً من الموقع · started an order"
+    elif "self-intake" in detail:
+        icon, title = "🛍", "عبّأ نموذج الطلب · filled the order form"
+    elif "lead edited" in detail:
+        icon, title = "✍️", "عدّل طلبه · updated their request"
+    else:
+        icon, title = "🔔", (ev.get("detail") or act or "event")
+    return {"ts": ev.get("ts") or "", "type": "quote_ok" if act == "confirmed" else "order_form",
+            "icon": icon, "title": title, "sub": label, "view": "needorder"}
+
+
+@app.route("/api/notifications")
+@auth.require("view_orders")
+def api_notifications():
+    events, seen_order = [], set()
+    for ev in activity.recent(200):
+        if ev.get("user") != "customer":
+            continue
+        # a wizard run logs 2-3 events for the same order (lead → plan → edit):
+        # keep only the newest per order so one submission = one notification
+        key = (ev.get("action") == "confirmed", ev.get("entity_id"))
+        if key in seen_order:
+            continue
+        seen_order.add(key)
+        n = _notif_from_activity(ev)
+        if n:
+            events.append(n)
+    for lead in db.list_leads(status="new"):
+        events.append({"ts": lead.get("created_time") or lead.get("synced_at") or "",
+                       "type": "lead", "icon": "📣",
+                       "title": "عميل محتمل جديد · new lead",
+                       "sub": lead.get("name") or lead.get("source") or lead["lead_id"],
+                       "view": "metaleads"})
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    needs_quote = sum(1 for o in db.list_orders()
+                      if o.get("status") == "REQUESTED" and not o.get("quoted_at"))
+    return jsonify({"ok": True, "needs_quote": needs_quote, "events": events[:30]})
+
+
 @app.route("/api/po_image", methods=["GET", "POST"])
 @login_required
 def api_po_image():
@@ -2515,6 +2574,39 @@ def api_leluxe_status():
                  detail=f"status → {row['status']} (board) → syncing to ClickUp",
                  user=_user())
     return jsonify({"ok": True, "row": row})
+
+
+# ── Per-package clearance mail (one GWD per email; replies marked by hand) ──
+@app.route("/api/leluxe/pkgmail")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_pkgmail():
+    return jsonify({"ok": True, "mail": db.pkg_mail_all()})
+
+
+@app.route("/api/leluxe/pkgmail/sent", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_pkgmail_sent():
+    b = request.get_json(force=True, silent=True) or {}
+    rec = db.pkg_mail_sent(b.get("gwd"), b.get("to"), b.get("subject"))
+    if not rec:
+        return jsonify({"ok": False, "error": "gwd required"}), 400
+    activity.log("send", "leluxe", 0, rec["gwd"],
+                 detail=f"clearance email #{rec['sent_count']} → {rec.get('to_email') or '?'}",
+                 user=_user())
+    return jsonify({"ok": True, "rec": rec})
+
+
+@app.route("/api/leluxe/pkgmail/reply", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_pkgmail_reply():
+    b = request.get_json(force=True, silent=True) or {}
+    rec = db.pkg_mail_reply(b.get("gwd"), bool(b.get("replied", True)))
+    if not rec:
+        return jsonify({"ok": False, "error": "no clearance email logged for this GWD"}), 400
+    return jsonify({"ok": True, "rec": rec})
 
 
 @app.route("/api/leluxe/order/delete", methods=["POST"])

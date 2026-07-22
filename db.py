@@ -211,6 +211,14 @@ CREATE TABLE IF NOT EXISTS leluxe_status_log (
 );
 CREATE INDEX IF NOT EXISTS ix_lxlog_row ON leluxe_status_log(row_id, ts);
 CREATE INDEX IF NOT EXISTS ix_lxlog_new ON leluxe_status_log(new_status);
+CREATE TABLE IF NOT EXISTS leluxe_pkg_mail (
+  gwd TEXT PRIMARY KEY,                 -- one clearance-email thread per GWD package
+  to_email TEXT,
+  subject TEXT,
+  sent_at TEXT,                         -- last send (a resend restarts the cycle)
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  replied_at TEXT                       -- owner marks the reply by hand (no inbox hookup)
+);
 """
 
 
@@ -986,6 +994,52 @@ def sync_gerizim_registered(rows):
                    registered_at=excluded.registered_at, ok=excluded.ok,
                    business_id=excluded.business_id, updated_at=excluded.updated_at""",
                 (t, r.get("registered_at"), 1 if r.get("ok", 1) else 0, biz, now_iso()))
+
+
+# --------------------------------------------------------------------------- #
+# Leluxe per-package clearance mail — "did GAASH answer about this GWD yet?"
+# One row per GWD: last send + a hand-set replied stamp (mailto: flow, so the
+# app never sees the inbox). A resend restarts the cycle (clears replied_at).
+# Owner-only like the rest of the leluxe_* tables — no business_id.
+# --------------------------------------------------------------------------- #
+def pkg_mail_all():
+    with connect() as c:
+        return {r["gwd"]: dict(r) for r in c.execute(
+            "SELECT gwd, to_email, subject, sent_at, sent_count, replied_at "
+            "FROM leluxe_pkg_mail")}
+
+
+def pkg_mail_sent(gwd, to_email=None, subject=None):
+    """Stamp one send for this GWD (insert or restart the cycle)."""
+    gwd = str(gwd or "").strip()
+    if not gwd:
+        return None
+    with connect() as c:
+        c.execute("""INSERT INTO leluxe_pkg_mail
+             (gwd, to_email, subject, sent_at, sent_count, replied_at)
+             VALUES (?,?,?,?,1,NULL)
+             ON CONFLICT(gwd) DO UPDATE SET
+               to_email=excluded.to_email, subject=excluded.subject,
+               sent_at=excluded.sent_at, sent_count=leluxe_pkg_mail.sent_count+1,
+               replied_at=NULL""", (gwd, to_email, subject, now_iso()))
+        return dict(c.execute("SELECT gwd, to_email, subject, sent_at, sent_count, "
+                              "replied_at FROM leluxe_pkg_mail WHERE gwd=?",
+                              (gwd,)).fetchone())
+
+
+def pkg_mail_reply(gwd, replied=True):
+    """Owner marks (or unmarks) the GAASH reply for this GWD by hand."""
+    gwd = str(gwd or "").strip()
+    if not gwd:
+        return None
+    with connect() as c:
+        cur = c.execute("UPDATE leluxe_pkg_mail SET replied_at=? WHERE gwd=?",
+                        (now_iso() if replied else None, gwd))
+        if not cur.rowcount:
+            return None
+        return dict(c.execute("SELECT gwd, to_email, subject, sent_at, sent_count, "
+                              "replied_at FROM leluxe_pkg_mail WHERE gwd=?",
+                              (gwd,)).fetchone())
 
 
 def set_payment_order(pid, order_code):
