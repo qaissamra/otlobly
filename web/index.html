@@ -473,6 +473,10 @@
   .bt-wrap .po-body{padding-inline:0}
   .bt-wrap .pkg-body{padding-inline:0;overflow-x:visible}
   .bt-wrap .poc-group{padding-inline:0}
+  /* 👤 Customers view (pop table = no pin class; the tree view is .pin-md):
+     a customer's SEPARATE orders stay visually separated by an accent divider
+     between consecutive order-groups — no redundant label row */
+  .bt-wrap:not(.pin-md):not(.pin-lg) .pkg-body>.poc-group+.poc-group{border-top:2px solid #f7680833}
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
   .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin{background:var(--bg);align-self:auto}
@@ -7067,19 +7071,13 @@ function poRenderCustomers(mount,list){
         </div>
       </div></div>`;
     if(collapsed) return `<div class="pkg">${head}</div>`;
-    const body=[...byPo.keys()].sort().map(poId=>{
-      const tuples=byPo.get(poId), p=tuples[0][0];
-      const amz=(p.amazon_order_number||"").trim();
-      const pkNos=[...new Set(tuples.map(([,pk])=>pk.package_no))];
-      // this PO block's matched customer order(s): id · status · quoted $
-      const bOrds=ordersOf(tuples);
-      const ordChips=bOrds.map(x=>` <span style="opacity:.6">→</span> <span class="mono" style="font-size:10.5px">${poEsc(x.id)}</span>${x.o?` ${statusPill(x.o.status)}${x.o.amount_to_collect_usd!=null?` · <b>${money(x.o.amount_to_collect_usd)}</b>`:""}`:""}`).join(" ");
-      // one order = one sub-block; a second PO for the same customer starts a new one
-      return `<div class="poc-group">
-        <div class="poc-cust" style="cursor:pointer" title="فتح الطلب في عرض الشجرة · open this order in the tree view" onclick="poJumpOrder('${poEsc(poId)}')">🧾 ${poEsc(poId)}${amz?` · #…${poEsc(amz.slice(-4))}`:""} · 📦${pkNos.join(", 📦")}${ordChips}</div>
-        ${tuples.map(([p2,pk,pi,it,ii])=>poItFlatRow(p2,pk,pi,it,ii)).join("")}
-      </div>`;
-    }).join("");
+    // one order = one sub-block (separated by a hairline via CSS); NO redundant
+    // label row — the order / package / pkg-status / 💵 collect columns on each
+    // row already carry the PO, package, status and quoted amount. Jump-to-order
+    // stays on each row's order-column pill.
+    const body=[...byPo.keys()].sort().map(poId=>
+      `<div class="poc-group">${byPo.get(poId).map(([p2,pk,pi,it,ii])=>poItFlatRow(p2,pk,pi,it,ii)).join("")}</div>`
+    ).join("");
     return `<div class="pkg open">${head}<div class="pkg-body">${body}</div></div>`;
   }).join("");
   const totals=`<div class="poc-row bt-total">
