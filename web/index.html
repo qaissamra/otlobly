@@ -445,11 +445,11 @@
      right edge (never h-scrolls away); its panel opens position:FIXED via
      popToggle (a normal dropdown would be clipped by the header strip).
      Rows are toggle switches; the panel stays open while toggling. */
-  /* the ⊕ sits in a full-height RAIL glued to the header's right edge (like
-     ClickUp's fixed + cell): solid bg + separator border, so column labels
-     scroll cleanly underneath instead of the button floating mid-columns */
-  .fld-anchor{position:absolute;top:0;bottom:0;inset-inline-end:0;z-index:7;display:flex;align-items:center;
-    padding-inline:4px;background:var(--bg);border-inline-start:1px solid var(--line)}
+  /* the ⊕ sits INLINE right after the last column (a full-height cell with a
+     separator, like ClickUp's + header) — flush against the columns whether
+     they fill the width or overflow, never floating in the trailing gap */
+  .fld-anchor{flex:0 0 auto;align-self:stretch;display:flex;align-items:center;
+    padding-inline:5px;background:var(--bg);border-inline-start:1px solid var(--line);position:relative;z-index:7}
   .fld-anchor .iconbtn{background:transparent !important}
   .fld-menu{min-width:238px;max-height:390px;overflow:auto}
   .fld-head{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:800;color:var(--muted);padding:5px 9px 2px;text-transform:uppercase;letter-spacing:.05em}
@@ -3190,7 +3190,8 @@ function lxtHead(tbl,pinLabel,pinSortKey){
   return `<div class="bt-clip${LXT_PINCLS[tbl]}"><div class="${headCls}">
       ${pin}
       <span class="${colsCls}">${lxtVisible(tbl).map(lbl).join("")}</span>
-    </div>${picker}</div>`;
+      ${picker}
+    </div></div>`;
 }
 function lxtCells(tbl,cells){
   const colsCls=LXT_CLS[tbl][1];
