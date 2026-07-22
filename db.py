@@ -332,15 +332,19 @@ def init_db():
         if attempt:
             time.sleep(0.5 * attempt)
         try:
+            # executescript AND migrate both run under the corruption guard: a
+            # malformed table (e.g. leluxe_orders) raised by migrate's ALTER/PRAGMA
+            # is quarantined + rebuilt too, instead of crashing every worker at boot.
             try:
                 with connect() as c:
                     c.executescript(SCHEMA)
+                migrate()
             except sqlite3.DatabaseError as e:
                 if not _quarantine_corrupt_db(e):
                     raise
                 with connect() as c:
                     c.executescript(SCHEMA)
-            migrate()
+                migrate()
             return
         except sqlite3.OperationalError as e:
             if not any(m in str(e).lower() for m in ("locked", "busy", "duplicate column")):

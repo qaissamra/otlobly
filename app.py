@@ -354,6 +354,19 @@ def index():
                            sections=settings_mod.public_sections())
 
 
+# web/index.html is a static, deploy-time file (~587 KB); the process restarts on
+# every deploy, so read + decode it ONCE and reuse — not on every /app request,
+# where the per-request disk read + decode was a needless memory/latency tax.
+_INDEX_HTML = None
+
+
+def _index_html():
+    global _INDEX_HTML
+    if _INDEX_HTML is None:
+        _INDEX_HTML = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    return _INDEX_HTML
+
+
 @app.route("/app")
 @login_required
 def staff_app():
@@ -362,7 +375,7 @@ def staff_app():
     favicon, sidebar wordmark) is stitched in SERVER-SIDE so a broker never sees
     the Otlobly mark — not even a first-paint flash."""
     import branding
-    html_text = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    html_text = _index_html()
     # db.current_business() (not the user's own id) so a Tatabu support view renders
     # the impersonated broker's shell — the owner sees exactly what the broker sees.
     brand = branding.resolve(db.current_business())
