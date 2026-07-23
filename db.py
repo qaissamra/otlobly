@@ -219,6 +219,63 @@ CREATE TABLE IF NOT EXISTS leluxe_pkg_mail (
   sent_count INTEGER NOT NULL DEFAULT 0,
   replied_at TEXT                       -- owner marks the reply by hand (no inbox hookup)
 );
+
+-- 📧 GAASH Mail (gaash_mail.py): automated clearance-email sequences.
+-- Owner-scoped like the rest of the leluxe_* family — no business_id.
+CREATE TABLE IF NOT EXISTS gaash_accounts (
+  id TEXT PRIMARY KEY,                  -- acct_<ms>
+  email TEXT NOT NULL,
+  label TEXT,
+  app_password TEXT,                    -- Gmail app password (data disk only, never in git)
+  added_at TEXT,
+  last_check TEXT,
+  last_error TEXT,
+  imap_uidvalidity INTEGER,
+  imap_last_uid INTEGER,                -- IMAP cursor: only mail AFTER this is read
+  seen_ids_json TEXT                    -- Message-ID dedupe ring
+);
+CREATE TABLE IF NOT EXISTS gaash_ids (
+  id TEXT PRIMARY KEY,                  -- id_<ms> — the reusable ID-document library
+  name TEXT NOT NULL,
+  filename TEXT NOT NULL,               -- under data/gaash_ids/
+  uploaded_at TEXT
+);
+CREATE TABLE IF NOT EXISTS gaash_threads (
+  gwd TEXT PRIMARY KEY,                 -- one email conversation per GWD package
+  account_id TEXT,
+  state TEXT NOT NULL DEFAULT 'active', -- active|waiting_reply|missing_docs|paused|cleared|exhausted|done
+  step INTEGER NOT NULL DEFAULT 0,      -- sequence emails already sent (0..4)
+  next_send_at TEXT,
+  id_doc_id TEXT,                       -- gaash_ids.id attached to email 1
+  subject TEXT,
+  unread INTEGER NOT NULL DEFAULT 0,
+  missing_docs INTEGER NOT NULL DEFAULT 0,
+  missing_note TEXT,
+  pending_files_json TEXT,              -- files queued for the NEXT send (e.g. a KMT)
+  resend_json TEXT,                     -- office-closed retry marker {due_at,...}
+  last_error TEXT,
+  created_at TEXT,
+  last_activity TEXT
+);
+CREATE TABLE IF NOT EXISTS gaash_msgs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gwd TEXT NOT NULL,
+  dir TEXT NOT NULL,                    -- out | in
+  kind TEXT NOT NULL,                   -- sent|resent|reply|auto_ack|closed
+  step INTEGER,
+  at TEXT NOT NULL,
+  from_addr TEXT,
+  to_addr TEXT,
+  subject TEXT,
+  message_id TEXT,
+  in_reply_to TEXT,
+  body TEXT,
+  attachments_json TEXT,
+  imap_uid INTEGER,
+  notified INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_gaashmsgs_gwd ON gaash_msgs(gwd, at);
+CREATE INDEX IF NOT EXISTS ix_gaashmsgs_mid ON gaash_msgs(message_id);
 """
 
 

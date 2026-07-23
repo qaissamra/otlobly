@@ -450,6 +450,31 @@
   .lxt-ctx{min-width:210px}
   .lxt-ctx .pop-item{white-space:nowrap}
   .pop-sep{height:1px;background:var(--line);margin:5px 6px}
+  /* 📧 GAASH mail: two-pane chat — thread list + conversation bubbles */
+  .gm-wrap{display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start}
+  @media (max-width:900px){.gm-wrap{grid-template-columns:1fr}.gm-chat{min-height:300px}}
+  .gm-list{padding:6px;max-height:calc(100vh - 210px);overflow:auto}
+  .gm-row{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+  .gm-row:hover{background:var(--bg2)}
+  .gm-row.on{background:#fff4ee;border-color:#f7680855}
+  .gm-row .gm-top{display:flex;align-items:center;gap:7px}
+  .gm-row .gm-gwd{font-family:ui-monospace,monospace;font-size:12px;font-weight:700}
+  .gm-dots{display:inline-flex;gap:2px;flex:0 0 auto}
+  .gm-dot{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .gm-dot.on{background:#f76808}
+  .gm-unread{background:#e5484d;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 6px}
+  .gm-prev{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gm-chat{padding:0;display:flex;flex-direction:column;max-height:calc(100vh - 210px)}
+  .gm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .gm-msgs{flex:1;overflow:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+  .gm-msg{max-width:82%;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+  .gm-msg.out{align-self:flex-end;background:#fff4ee;border-color:#f7680833;border-bottom-right-radius:4px}
+  .gm-msg.in{align-self:flex-start;background:var(--card);border-bottom-left-radius:4px}
+  .gm-msg.auto{opacity:.55}
+  .gm-msg .gm-meta{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+  .gm-att{display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:11px;margin-top:5px;margin-inline-end:4px;text-decoration:none;color:var(--ink)}
+  .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
+  .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
   /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
@@ -631,6 +656,7 @@
     <button id="custBtn" onclick="setView('customers')"><span class="ic">👤</span><span data-en="Customers" data-ar="العملاء">Customers</span></button>
     <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span><span data-en="Package prep" data-ar="تجهيز الطرود">Package prep</span></button>
     <button id="bulkSearchBtn" onclick="setView('bulksearch')" title="الصق مجموعة أرقام تتبع GWD ودفعة وحدة شوف وين كل طرد — مشتريات أو ليلوكس، الحالة والقيمة · paste many GWD tracking numbers, see where each package lives (Purchases or Leluxe), its status and value"><span class="ic">🔎</span><span data-en="Bulk search" data-ar="بحث جماعي">Bulk search</span></button>
+    <button id="gaashMailBtn" onclick="setView('gaashmail')" title="سلاسل إيميلات التخليص الجمركي — محادثة لكل طرد، ٤ إيميلات تلقائية، تتبع الردود · automated GAASH clearance email sequences — one chat per package, 4 templated emails, reply tracking"><span class="ic">📧</span><span data-en="GAASH mail" data-ar="بريد جمارك">GAASH mail</span></button>
     <div class="nav-sec" data-en="Insights" data-ar="التحليلات">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span><span data-en="P&amp;L" data-ar="الأرباح والخسائر">P&amp;L</span></button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span><span data-en="Activity" data-ar="النشاط">Activity</span></button>
@@ -1341,6 +1367,23 @@
     </div>
     <div id="bsResults" style="margin-top:14px"></div>
   </div>
+
+  <!-- 📧 GAASH mail: automated clearance-email sequences — one chat per GWD -->
+  <div id="gmView" class="hidden">
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:17px;font-weight:800">📧 <span data-en="GAASH mail" data-ar="بريد الجمارك">GAASH mail</span></h2>
+      <span class="muted2" id="gmSub" style="font-size:12px"></span>
+      <span class="spacer"></span>
+      <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
+      <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
+      <button class="accent" onclick="gmNewOpen()" data-en="＋ New sequence" data-ar="＋ تسلسل جديد">＋ New sequence</button>
+    </div>
+    <div id="gmBanner"></div>
+    <div class="gm-wrap">
+      <div class="gm-list panel" id="gmList"></div>
+      <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new sequence." data-ar="اختر محادثة — أو ابدأ تسلسلاً جديداً.">Pick a conversation — or start a new sequence.</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ClickUp-style order detail: attachments gallery (paste Cmd+V) + products + fields -->
@@ -1665,6 +1708,8 @@ async function applyRole(){
   // Leluxe: the owner's Amazon-bulk side business — admin-only (VISA labels,
   // buyer accounts) and Otlobly-only via the feature flag.
   hide("leluxeBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
+  // GAASH mail: clearance chasing is fulfillment work (edit_fulfillment), Otlobly-only.
+  hide("gaashMailBtn", p.includes("edit_fulfillment") && FEAT.leluxe!==false);
   hide("depositsBtn", p.includes("view_money"));
   // employees (fulfillment) work money-free: no cart profit page, no settings
   hide("cartBtn", p.includes("view_money"));
@@ -2057,7 +2102,7 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep"||v==="bulksearch");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -2087,15 +2132,16 @@ function setView(v){
   $("leluxeView").classList.toggle("hidden",v!=="leluxe");
   $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
   $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
+  $("gmView").classList.toggle("hidden",v!=="gaashmail");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
     brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn"};
+    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep",bulksearch:"Bulk search"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -2123,6 +2169,7 @@ function setView(v){
   if(v==="leluxe"){ loadLeluxe(); }
   if(v==="pkgprep"){ loadPkgprep(); }
   if(v==="bulksearch"){ bsInit(); }
+  if(v==="gaashmail"){ gmLoad(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
@@ -9319,6 +9366,264 @@ function bsRender(){
     +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${rows}${totals}</div></div>`);
   lxColwApply(); lxtGridApply("bs",res);
   $("bsInfo").textContent=`${nTok} ${T("رقم · numbers")} · ${found} ${T("موجود · found")}`;
+}
+
+// ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
+let GM={ov:null, cur:null, detail:null, timer:null};
+const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
+  missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
+  cleared:["#30a46c","تخلّص · cleared"], exhausted:["#f76808","٤ بلا رد · 4 no reply"],
+  done:["#8d8d8d","منجز · done"]};
+function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
+  return hexPill(c,T(l)); }
+function gmDots(step){ return `<span class="gm-dots" title="${step}/4">${[1,2,3,4]
+  .map(i=>`<span class="gm-dot${i<=step?' on':''}"></span>`).join("")}</span>`; }
+function gmAgo(iso){ if(!iso) return ""; const ms=Date.parse(iso); if(!ms) return "";
+  const d=Math.floor((Date.now()-ms)/864e5); return d<=0?T("اليوم · today"):`${d}d`; }
+async function gmLoad(){
+  let d; try{ d=await (await fetch("/api/gaash/overview")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  GM.ov=d;
+  const s=d.settings||{};
+  const warn=[];
+  if(!(d.accounts||[]).length) warn.push(T("لا يوجد حساب Gmail بعد — أضِف واحداً من ⚙ · no Gmail account yet — add one via ⚙"));
+  if(s.dry_run) warn.push(T("وضع التجربة مفعّل — لن يُرسل أي إيميل حتى تطفئه من ⚙ · dry-run is ON — nothing is emailed until you turn it off in ⚙"));
+  if(!d.mailer_env) warn.push(T("المُرسِل التلقائي غير مفعّل على هذا الخادم (GAASH_MAILER) · the auto-sequencer is not enabled on this server (GAASH_MAILER)"));
+  $("gmBanner").innerHTML=warn.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${warn.join(" · ")}</div>`:"";
+  const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
+  $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
+  gmRenderList();
+  if(GM.cur) gmOpen(GM.cur,true);
+  clearInterval(GM.timer);
+  GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
+}
+function gmRenderList(){
+  const ths=(GM.ov&&GM.ov.threads)||[];
+  if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — ＋ تسلسل جديد · no conversations yet — ＋ New sequence")}</div>`; return; }
+  $("gmList").innerHTML=ths.map(t=>{
+    const last=t.last_msg||{};
+    const prev=last.body?poEsc(last.body):(t.last_error?`⚠ ${poEsc(t.last_error)}`:"");
+    return `<div class="gm-row${GM.cur===t.gwd?' on':''}" onclick="gmOpen('${t.gwd}')">
+      <div class="gm-top">
+        <span class="gm-gwd">${poEsc(t.gwd)}</span>
+        ${gmDots(t.step||0)}
+        ${t.missing_docs?'<span title="'+T('ناقص مستندات · missing documents')+'">⚠️</span>':''}
+        <span class="spacer"></span>
+        ${t.unread?`<span class="gm-unread">${t.unread}</span>`:''}
+        <span class="muted2" style="font-size:10.5px">${gmAgo(t.last_activity)}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">${gmChip(t.state)}
+        ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
+      ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
+    </div>`;
+  }).join("");
+}
+async function gmOpen(gwd,keep){
+  GM.cur=gwd;
+  if(!keep) gmRenderList();
+  let d; try{ d=await (await fetch("/api/gaash/thread_detail?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
+  if(!d||!d.ok) return;
+  GM.detail=d;
+  gmRenderChat();
+  const th=d.thread;
+  if(th&&th.unread) post("/api/gaash/thread",{gwd,action:"mark_read"}).then(()=>{ th.unread=0; gmLoad(); });
+}
+function gmRenderChat(){
+  const d=GM.detail; if(!d) return;
+  const th=d.thread, msgs=d.messages||[];
+  const idDoc=((GM.ov&&GM.ov.ids)||[]).find(x=>x.id===th.id_doc_id);
+  const KIND={sent:T("مُرسل · sent"),resent:T("أُعيد إرساله · resent"),reply:T("رد · reply"),
+    auto_ack:T("رد آلي · auto-reply"),closed:T("المكتب مغلق · office closed")};
+  const bubbles=msgs.map(m=>{
+    const auto=(m.kind==="auto_ack"||m.kind==="closed");
+    const atts=(m.attachments||[]).map(a=>`<a class="gm-att" target="_blank" href="/api/gaash/attachment?gwd=${encodeURIComponent(th.gwd)}&file=${encodeURIComponent(a.file)}">📎 ${poEsc(a.name)}</a>`).join("");
+    return `<div class="gm-msg ${m.dir==="out"?"out":"in"}${auto?" auto":""}">
+      <div class="gm-meta"><span>${m.dir==="out"?"→":"←"} ${KIND[m.kind]||m.kind}${m.step?` #${m.step}`:""}</span><span>${poEsc(String(m.at||"").slice(0,16).replace("T"," "))}</span></div>
+      ${poEsc(m.body||"")}${atts?`<div>${atts}</div>`:""}</div>`;
+  }).join("")||`<div class="muted2" style="text-align:center;padding:20px">${T("لا رسائل بعد · no messages yet")}</div>`;
+  const resend=JSON.parse(th.resend_json||"null");
+  $("gmChat").innerHTML=`
+    <div class="gm-head">
+      <b class="mono">${poEsc(th.gwd)}</b> ${gmChip(th.state)} ${gmDots(th.step||0)}
+      ${idDoc?`<span class="gm-att">🪪 ${poEsc(idDoc.name)}</span>`:""}
+      ${th.missing_docs?`<span class="pill" style="background:#fee2e2;color:#b42318">⚠ ${poEsc(th.missing_note||T("ناقص مستندات · missing docs"))}</span>`:""}
+      ${resend?`<span class="pill" style="background:#fffbeb;color:#b45309" title="${T('المكتب كان مغلقاً — سيُعاد الإرسال · office was closed — will resend')}">⏰ ${poEsc(String(resend.due_at||"").slice(5,16).replace("T"," "))}</span>`:""}
+      <span class="spacer"></span>
+      ${th.state==="active"?`<button class="minibtn" onclick="gmAct('pause')">⏸ ${T("إيقاف · pause")}</button>
+        <button class="minibtn" onclick="gmAct('send_next_now')" ${Number(th.step||0)>=4?"disabled":""}>⏭ ${T("أرسل التالي الآن · send next now")}</button>`
+       :`<button class="minibtn" onclick="gmAct('resume')">▶ ${T("استئناف · resume")}</button>`}
+      ${th.missing_docs?`<button class="minibtn" onclick="gmAct('clear_missing')">✓ ${T("اكتملت المستندات · docs complete")}</button>`
+       :`<button class="minibtn" onclick="gmMissing()">⚠ ${T("ناقص مستندات · missing docs")}</button>`}
+      <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
+      <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
+    </div>
+    <div class="gm-msgs" id="gmMsgs">${bubbles}</div>
+    <div class="gm-compose">
+      <textarea id="gmBody" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
+      <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
+    </div>`;
+  const box=$("gmMsgs"); if(box) box.scrollTop=box.scrollHeight;
+}
+async function gmAct(action,extra){
+  const r=await post("/api/gaash/thread",{gwd:GM.cur,action,...(extra||{})});
+  if(r&&r.ok===false&&r.error) toast(r.error);
+  await gmLoad(); if(GM.cur) gmOpen(GM.cur,true);
+}
+function gmMissing(){
+  const note=prompt(T("ما المستند الناقص؟ (مثل KMT) · which document is missing? (e.g. KMT)"),"KMT");
+  if(note===null) return;
+  gmAct("missing_docs",{note});
+}
+function gmFileB64(file){ return new Promise(res=>{ const r=new FileReader();
+  r.onload=()=>res({name:file.name, ctype:file.type||"application/octet-stream",
+    data_base64:String(r.result).split(",")[1]||""});
+  r.readAsDataURL(file); }); }
+function gmAttachPick(){
+  const inp=document.createElement("input"); inp.type="file"; inp.multiple=true;
+  inp.onchange=async()=>{
+    const files=await Promise.all([...inp.files].slice(0,6).map(gmFileB64));
+    await gmAct("attach",{files});
+    toast(T("سيُرفق مع الإيميل القادم · will be attached to the next email"));
+  };
+  inp.click();
+}
+async function gmSend(btn){
+  const body=($("gmBody")||{}).value||"";
+  if(!body.trim()){ toast(T("اكتب رسالة أولاً · write a message first")); return; }
+  btn.disabled=true;
+  const r=await post("/api/gaash/send",{gwd:GM.cur, body});
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  $("gmBody").value="";
+  await gmLoad(); gmOpen(GM.cur,true);
+}
+async function gmCheck(btn){
+  btn.disabled=true; btn.textContent="…";
+  const r=await post("/api/gaash/check",{});
+  btn.disabled=false; localizeStatic();
+  toast(r&&r.ok?`${T("ردود جديدة · new replies")}: ${r.new||0}`:(r&&r.errors?JSON.stringify(r.errors).slice(0,120):"failed"));
+  gmLoad();
+}
+// ── ＋ New sequence: pick packages → ID → account → start ──
+function gmNewOpen(){
+  const ov=GM.ov||{}; const cands=ov.candidates||[], ids=ov.ids||[], accts=ov.accounts||[];
+  bulkOpen("📧 "+T("تسلسل جديد · New sequence"));
+  $("bulkBody").innerHTML=`
+    <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
+    <div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px">
+      ${cands.length?cands.map(c=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
+        <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}">
+        <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
+        ${c.gash_status?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status)}</span>`:""}
+        <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||"")}</span></label>`).join("")
+      :`<div class="muted2" style="padding:8px">${T("لا مرشحين من ليلوكس — الصق أرقاماً · no Leluxe candidates — paste numbers")}</div>`}
+    </div>
+    <input id="gmNewPaste" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
+    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("الهوية المرفقة مع الإيميل الأول · ID attached to email #1")}</b>
+      <div id="gmNewIds" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        ${ids.map(x=>`<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px">
+          <input type="radio" name="gmNewId" value="${poEsc(x.id)}">
+          <img src="/api/gaash/idfile?file=${encodeURIComponent(x.filename)}" style="width:74px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
+          ${poEsc(x.name)}</label>`).join("")||`<span class="muted2" style="font-size:12px">${T("المكتبة فارغة · library is empty")}</span>`}
+        ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
+      </div></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <b style="font-size:13px">✉ ${T("الحساب المُرسِل · sending account")}</b>
+      <select id="gmNewAcct">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ التسلسل · Start sequence")}</button></div>`;
+}
+async function gmIdUpload(){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
+  inp.onchange=async()=>{
+    const f=inp.files[0]; if(!f) return;
+    const name=prompt(T("اسم الهوية (مثل: جواز قيس) · ID name (e.g. Qais passport)"),f.name.replace(/\.[^.]+$/,""));
+    if(name===null) return;
+    const b=await gmFileB64(f);
+    const r=await post("/api/gaash/ids",{name, filename:f.name, data_base64:b.data_base64});
+    if(!r.ok){ toast(r.error||"upload failed"); return; }
+    await gmLoad(); gmNewOpen();
+  };
+  inp.click();
+}
+async function gmNewStart(btn){
+  const gwds=[...document.querySelectorAll(".gmNewGwd:checked")].map(x=>x.value)
+    .concat((($("gmNewPaste")||{}).value||"").split(/[\s,;،]+/).filter(t=>/^GWD\d+$/i.test(t)));
+  if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
+  const idSel=document.querySelector('input[name="gmNewId"]:checked');
+  const acct=($("gmNewAcct")||{}).value||"";
+  btn.disabled=true;
+  const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null});
+  btn.disabled=false;
+  bulkClose();
+  const res=(r&&r.results)||[];
+  const bad=res.filter(x=>x.send_error&&!x.dry_run);
+  toast(`${res.filter(x=>x.ok).length} ${T("تسلسل بدأ · sequences started")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
+  gmLoad();
+}
+// ── ⚙ Accounts + templates + behavior ──
+function gmSettingsOpen(){
+  const ov=GM.ov||{}; const s=ov.settings||{}, accts=ov.accounts||[], steps=s.steps||[];
+  bulkOpen("⚙ "+T("حسابات وقوالب غاش · GAASH accounts & templates"));
+  $("bulkBody").innerHTML=`
+    <div style="margin:6px 0"><b style="font-size:13px">✉ ${T("حسابات Gmail · Gmail accounts")}</b>
+      ${accts.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
+        <b>${poEsc(a.email)}</b>${a.last_error?`<span style="color:#b42318;font-size:11px">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
+        <span class="spacer"></span>
+        ${CAN_ADMIN?`<button class="minibtn" onclick="gmTestSend('${poEsc(a.id)}',this)">${T("إرسال تجريبي لنفسي · test to myself")}</button>
+        <button class="minibtn" onclick="gmAcctRemove('${poEsc(a.id)}')">🗑</button>`:""}</div>`).join("")||`<div class="muted2" style="font-size:12px;padding:4px 0">${T("لا حسابات بعد · none yet")}</div>`}
+      ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <input id="gmAcEmail" placeholder="email@gmail.com" style="flex:1;min-width:150px">
+        <input id="gmAcPw" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
+        <button class="minibtn" onclick="gmAcctAdd(this)">＋ ${T("أضف · Add")}</button></div>
+      <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")}</div>`:""}
+    </div>
+    ${CAN_ADMIN?`<hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px">
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="gmSetDry" ${s.dry_run?"checked":""}> <b>${T("وضع التجربة (لا إرسال) · dry-run (no sends)")}</b></label>
+      <label>${T("إلى · to")}: <input id="gmSetTo" value="${poEsc(s.to_address||"")}" style="width:210px"></label>
+      <label>${T("الأيام بين الإيميلات · days between emails")}: <input id="gmSetCad" value="${(s.cadence_days||[2,2,2]).join(",")}" style="width:70px"></label>
+    </div>
+    <div style="margin-top:10px"><b style="font-size:13px">📝 ${T("القوالب الأربعة · the 4 templates")}</b>
+      <div class="muted2" style="font-size:11px">{gwd} {customer} {upload_link} {id_name} {days_waiting} {step}</div>
+      ${[0,1,2,3].map(i=>{const st=steps[i]||{};return `
+        <div style="margin-top:8px;font-size:12px"><b>#${i+1}</b>
+          <input id="gmStS${i}" value="${poEsc(st.subject_tpl||"")}" style="width:100%;margin:3px 0" placeholder="subject">
+          <textarea id="gmStB${i}" rows="4" style="width:100%;font-size:12px">${poEsc(st.body_tpl||"")}</textarea></div>`;}).join("")}
+    </div>`:""}`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>
+    ${CAN_ADMIN?`<button class="accent" onclick="gmSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
+}
+async function gmAcctAdd(btn){
+  btn.disabled=true; btn.textContent="…";
+  const r=await post("/api/gaash/account/add",{email:($("gmAcEmail")||{}).value, app_password:($("gmAcPw")||{}).value});
+  btn.disabled=false; btn.textContent="＋ "+T("أضف · Add");
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  toast("✓ "+r.email); await gmLoad(); gmSettingsOpen();
+}
+async function gmAcctRemove(id){
+  if(!confirm(T("حذف هذا الحساب؟ · remove this account?"))) return;
+  await post("/api/gaash/account/remove",{id}); await gmLoad(); gmSettingsOpen();
+}
+async function gmTestSend(id,btn){
+  btn.disabled=true; btn.textContent="…";
+  const r=await post("/api/gaash/test_send",{account_id:id});
+  btn.disabled=false; btn.textContent=T("إرسال تجريبي لنفسي · test to myself");
+  toast(r.ok?`✓ ${T("أُرسل إلى · sent to")} ${r.sent_to}`:(r.error||"failed"));
+}
+async function gmSettingsSave(btn){
+  const cad=(($("gmSetCad")||{}).value||"").split(",").map(x=>parseFloat(x)).filter(x=>x>0);
+  const gm={dry_run:!!($("gmSetDry")||{}).checked, to_address:($("gmSetTo")||{}).value,
+    steps:[0,1,2,3].map(i=>({subject_tpl:($("gmStS"+i)||{}).value, body_tpl:($("gmStB"+i)||{}).value}))};
+  if(cad.length===3) gm.cadence_days=cad;
+  btn.disabled=true;
+  const r=await post("/api/settings",{gaash_mail:gm});
+  btn.disabled=false;
+  toast(r&&r.ok?T("حُفظ · saved"):"failed");
+  bulkClose(); gmLoad();
 }
 
 localizeStatic();   // apply the saved UI language (default English) to the static chrome

@@ -85,6 +85,54 @@ DEFAULT_CLEARANCE_BODY = (
     "Please advise on customs clearance for the package above — the requested "
     "documents were uploaded via the GAASH link.\n\nشكراً جزيلاً")
 
+# 📧 GAASH Mail sequences (gaash_mail.py): the 4 step templates, escalating in
+# firmness. All Settings-editable — the owner replaces these with his real
+# wording. Placeholders: {gwd} {customer} {upload_link} {id_name}
+# {days_waiting} {step}.
+DEFAULT_GAASH_STEPS = [
+    {"subject_tpl": "Customs clearance request — {gwd}",
+     "body_tpl": ("Hello GAASH team,\n\n"
+                  "Please proceed with the customs clearance of package {gwd}.\n"
+                  "The ID document ({id_name}) is attached to this email, and the "
+                  "documents were also uploaded via your portal:\n{upload_link}\n\n"
+                  "Please confirm receipt and let us know if anything else is "
+                  "needed.\n\nThank you,\nOtlobly")},
+    {"subject_tpl": "Follow-up — customs clearance {gwd}",
+     "body_tpl": ("Hello,\n\n"
+                  "Following up on package {gwd} — we sent the clearance request "
+                  "with the ID attached {days_waiting} days ago and have not "
+                  "received an update yet.\n\n"
+                  "Could you please check its status and confirm?\n\nThank you")},
+    {"subject_tpl": "2nd follow-up — {gwd} still not cleared",
+     "body_tpl": ("Hello,\n\n"
+                  "This is our second follow-up on package {gwd} "
+                  "({days_waiting} days now). The required documents were "
+                  "provided; the package is still not cleared.\n\n"
+                  "Please treat this as urgent and reply with the current "
+                  "status today.\n\nThank you")},
+    {"subject_tpl": "URGENT — package {gwd} stuck {days_waiting} days, please escalate",
+     "body_tpl": ("Hello,\n\n"
+                  "Package {gwd} has been stuck for {days_waiting} days despite "
+                  "complete documents and three previous emails with no "
+                  "resolution.\n\n"
+                  "Please escalate this to a supervisor and reply TODAY with a "
+                  "concrete clearance date. If we do not hear back we will have "
+                  "to raise a formal complaint.\n\nOtlobly")},
+]
+
+DEFAULT_GAASH_MAIL = {
+    "to_address": "GaashWW@glassix.support",
+    "dry_run": True,                 # nothing is ever emailed until the owner flips this
+    "ack_window_min": 3,             # incoming within N min of our send = auto-ack
+    "poll_interval_min": 5,
+    "cadence_days": [2, 2, 2],       # gaps after emails 1, 2, 3
+    "auto_resend": True,             # office-closed bounce → resend at resend_hour
+    "resend_phrases": ["closed now"],
+    "resend_hour": 9,                # Israel time
+    "missing_doc_keywords": ["kmt", "missing document", "additional document"],
+    "daily_send_cap": 40,
+}
+
 
 def read(config=None):
     config = config or cfg.load()
@@ -137,6 +185,13 @@ def read(config=None):
                                    DEFAULT_CLEARANCE_SUBJECT),
             "body_tpl": cfg.get(config, "clearance.body_tpl",
                                 DEFAULT_CLEARANCE_BODY),
+        },
+        # 📧 GAASH Mail sequences (gaash_mail.py) — templates + cadence + guards.
+        "gaash_mail": {
+            **DEFAULT_GAASH_MAIL,
+            **{k: cfg.get(config, f"gaash_mail.{k}", DEFAULT_GAASH_MAIL[k])
+               for k in DEFAULT_GAASH_MAIL},
+            "steps": cfg.get(config, "gaash_mail.steps", DEFAULT_GAASH_STEPS),
         },
         # White-label the order card per business. Internal/region-specific features
         # default OFF so a fresh tenant gets a clean, generic card. (Roadmap #2.)
@@ -315,6 +370,52 @@ def apply(body, config=None, persist=True):
             # a cleared template falls back to the code default, never to ""
             if str(cl.get(k) or "").strip():
                 cfg.set_path(config, f"clearance.{k}", str(cl[k]).strip())
+    gm = body.get("gaash_mail")
+    if isinstance(gm, dict):
+        if "to_address" in gm:
+            cfg.set_path(config, "gaash_mail.to_address",
+                         str(gm["to_address"] or "").strip())
+        for k in ("dry_run", "auto_resend"):
+            if k in gm:
+                cfg.set_path(config, f"gaash_mail.{k}", bool(gm[k]))
+        for k, lo, hi in (("ack_window_min", 0, 60), ("poll_interval_min", 1, 120),
+                          ("resend_hour", 0, 23), ("daily_send_cap", 1, 500)):
+            if k in gm:
+                try:
+                    cfg.set_path(config, f"gaash_mail.{k}",
+                                 min(hi, max(lo, int(gm[k]))))
+                except (TypeError, ValueError):
+                    pass
+        if isinstance(gm.get("cadence_days"), list):
+            days = []
+            for v in gm["cadence_days"][:3]:
+                try:
+                    days.append(min(30, max(0.5, float(v))))
+                except (TypeError, ValueError):
+                    pass
+            if len(days) == 3:
+                cfg.set_path(config, "gaash_mail.cadence_days", days)
+        for k in ("resend_phrases", "missing_doc_keywords"):
+            if isinstance(gm.get(k), list):
+                vals = [str(x).strip().lower() for x in gm[k]
+                        if str(x or "").strip()][:15]
+                if vals:
+                    cfg.set_path(config, f"gaash_mail.{k}", vals)
+        if isinstance(gm.get("steps"), list):
+            steps = []
+            for i, s in enumerate(gm["steps"][:4]):
+                if not isinstance(s, dict):
+                    s = {}
+                base = (DEFAULT_GAASH_STEPS[i] if i < len(DEFAULT_GAASH_STEPS)
+                        else DEFAULT_GAASH_STEPS[-1])
+                steps.append({
+                    "subject_tpl": str(s.get("subject_tpl") or "").strip()
+                    or base["subject_tpl"],
+                    "body_tpl": str(s.get("body_tpl") or "").strip()
+                    or base["body_tpl"],
+                })
+            if len(steps) == 4:
+                cfg.set_path(config, "gaash_mail.steps", steps)
     flags = body.get("card_flags")
     if isinstance(flags, dict):
         for k in ("multilogin", "clickup", "screenshot", "second_currency"):

@@ -13,6 +13,7 @@ stdlib server.
 First run with no users redirects to /setup to create the first admin.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -105,6 +106,10 @@ leluxe_goal.start()        # daily goal digest — no-op unless env LELUXE_DIGES
 leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Render's all-NULL copy)
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
+import gaash_mail
+gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
+                           # (set ONLY on Render: the live DB is the single truth; the Mac's
+                           #  local app has a stale copy and must never send)
 
 app = Flask(__name__, template_folder="templates")
 # Behind Render's single proxy hop: trust ONE X-Forwarded-For entry so the rate
@@ -2137,6 +2142,39 @@ def api_notifications():
                        "title": "عميل محتمل جديد · new lead",
                        "sub": lead.get("name") or lead.get("source") or lead["lead_id"],
                        "view": "metaleads"})
+    # 📧 GAASH-mail events: real replies, missing-docs flags, exhausted/cleared
+    # sequences — read fresh from the gaash tables (client dedupes by ts cursor).
+    try:
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        with db.connect() as _c:
+            for r in _c.execute(
+                    "SELECT gwd, at, subject FROM gaash_msgs WHERE dir='in' "
+                    "AND kind='reply' AND at>=? ORDER BY at DESC LIMIT 10", (cutoff,)):
+                events.append({"ts": r["at"], "type": "gaash_reply", "icon": "📬",
+                               "title": "رد من غاش · GAASH replied",
+                               "sub": r["gwd"], "view": "gaashmail"})
+            for r in _c.execute(
+                    "SELECT gwd, state, missing_docs, missing_note, last_activity "
+                    "FROM gaash_threads WHERE last_activity>=?", (cutoff,)):
+                if r["missing_docs"]:
+                    events.append({"ts": r["last_activity"], "type": "gaash_missing",
+                                   "icon": "⚠️",
+                                   "title": "طرد ناقص مستندات · package missing documents",
+                                   "sub": f"{r['gwd']}" + (f" — {r['missing_note']}"
+                                                           if r["missing_note"] else ""),
+                                   "view": "gaashmail"})
+                elif r["state"] == "exhausted":
+                    events.append({"ts": r["last_activity"], "type": "gaash_exhausted",
+                                   "icon": "📭",
+                                   "title": "٤ إيميلات بلا رد · 4 emails, no reply",
+                                   "sub": r["gwd"], "view": "gaashmail"})
+                elif r["state"] == "cleared":
+                    events.append({"ts": r["last_activity"], "type": "gaash_cleared",
+                                   "icon": "✅",
+                                   "title": "تخلّص الطرد — توقف التسلسل · cleared, sequence stopped",
+                                   "sub": r["gwd"], "view": "gaashmail"})
+    except Exception:  # noqa - the bell must never break on a fresh DB
+        pass
     events.sort(key=lambda e: e["ts"], reverse=True)
     needs_quote = sum(1 for o in db.list_orders()
                       if o.get("status") == "REQUESTED" and not o.get("quoted_at"))
@@ -2631,6 +2669,206 @@ def api_leluxe_pkgmail_reply():
     if not rec:
         return jsonify({"ok": False, "error": "no clearance email logged for this GWD"}), 400
     return jsonify({"ok": True, "rec": rec})
+
+
+# ── 📧 GAASH Mail: automated clearance-email sequences (gaash_mail.py) ──────
+# View/send = edit_fulfillment (the fulfillment hire chases GAASH docs); account
+# management + ID-library edits + test sends = admin_actions. Feature-gated
+# like the Leluxe family.
+
+def _gm_files(raw):
+    """[{name,data_base64,ctype}] → [(name, bytes, ctype)] (skip bad entries)."""
+    out = []
+    for f in (raw or [])[:6]:
+        try:
+            data = base64.b64decode(str(f.get("data_base64") or ""), validate=False)
+        except Exception:  # noqa
+            continue
+        if not data or len(data) > 15 * 1024 * 1024:
+            continue
+        out.append((str(f.get("name") or "attachment"), data,
+                    str(f.get("ctype") or "application/octet-stream")))
+    return out
+
+
+@app.route("/api/gaash/overview")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_overview():
+    return jsonify({"ok": True, **gaash_mail.overview(),
+                    "candidates": gaash_mail.candidates()})
+
+
+@app.route("/api/gaash/thread_detail")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_thread_detail():
+    d = gaash_mail.thread_detail((request.args.get("gwd") or "").strip().upper())
+    if not d:
+        return jsonify({"ok": False, "error": "thread not found"}), 404
+    return jsonify({"ok": True, **d})
+
+
+@app.route("/api/gaash/account/add", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_account_add():
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.add_account(b.get("email"), b.get("app_password"),
+                                 b.get("label"))
+    if res.get("ok"):
+        db.audit(auth.actor(), "gaash_account_add", "gaash", res["email"], "")
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/account/remove", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_account_remove():
+    b = request.get_json(force=True, silent=True) or {}
+    ok = gaash_mail.remove_account(b.get("id"))
+    return jsonify({"ok": ok})
+
+
+@app.route("/api/gaash/ids", methods=["GET", "POST", "DELETE"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_ids():
+    if request.method == "GET":
+        return jsonify({"ok": True, "ids": gaash_mail.ids_list()})
+    if not current_user.has("admin_actions"):   # library edits are admin-only
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    if request.method == "DELETE":
+        return jsonify({"ok": gaash_mail.ids_remove(b.get("id"))})
+    try:
+        data = base64.b64decode(str(b.get("data_base64") or ""), validate=False)
+    except Exception:  # noqa
+        data = b""
+    if not data or len(data) > 15 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "bad or oversized file"}), 400
+    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data))
+
+
+@app.route("/api/gaash/idfile")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_idfile():
+    # ID scans are sensitive — served only via this authed route (same rule as
+    # /api/customer_image), never public.
+    p = gaash_mail.id_file_path((request.args.get("file") or "").strip())
+    if not p:
+        abort(404)
+    return send_file(p)
+
+
+@app.route("/api/gaash/attachment")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_attachment():
+    p = gaash_mail.attachment_path((request.args.get("gwd") or "").strip().upper(),
+                                   (request.args.get("file") or "").strip())
+    if not p:
+        abort(404)
+    return send_file(p)
+
+
+@app.route("/api/gaash/start", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_start():
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.start_threads(b.get("gwds") or [], b.get("id_doc_id"),
+                                   b.get("account_id"))
+    started = [r["gwd"] for r in res if r.get("ok")]
+    if started:
+        activity.log("send", "gaash", 0, ",".join(started[:10]),
+                     detail=f"started {len(started)} clearance sequence(s)",
+                     user=_user())
+    return jsonify({"ok": True, "results": res})
+
+
+@app.route("/api/gaash/send", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_send():
+    b = request.get_json(force=True, silent=True) or {}
+    gwd = (b.get("gwd") or "").strip().upper()
+    res = gaash_mail.send_manual(gwd, b.get("body"), _gm_files(b.get("files")))
+    if res.get("ok"):
+        activity.log("send", "gaash", 0, gwd, detail="manual GAASH email",
+                     user=_user())
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/thread", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_thread():
+    b = request.get_json(force=True, silent=True) or {}
+    gwd = (b.get("gwd") or "").strip().upper()
+    action = (b.get("action") or "").strip()
+    th = gaash_mail.thread_get(gwd)
+    if not th:
+        return jsonify({"ok": False, "error": "thread not found"}), 404
+    if action == "pause":
+        gaash_mail._thread_set(gwd, state="paused")
+    elif action == "resume":
+        gaash_mail._thread_set(gwd, state="active", missing_docs=0,
+                               missing_note=None,
+                               next_send_at=db.now_iso())
+    elif action == "done":
+        gaash_mail._thread_set(gwd, state="done")
+    elif action == "mark_read":
+        gaash_mail._thread_set(gwd, unread=0)
+    elif action == "missing_docs":
+        gaash_mail._thread_set(gwd, missing_docs=1, state="missing_docs",
+                               missing_note=str(b.get("note") or "").strip() or None)
+    elif action == "clear_missing":
+        gaash_mail._thread_set(gwd, missing_docs=0, missing_note=None,
+                               state="active", next_send_at=db.now_iso())
+    elif action == "attach":
+        queued = json.loads(th.get("pending_files_json") or "[]")
+        for name, data, ctype in _gm_files(b.get("files")):
+            stored = gaash_mail._store_attachment(gwd, name, data)
+            queued.append({"name": name, "file": stored, "ctype": ctype})
+        gaash_mail._thread_set(gwd, pending_files_json=json.dumps(queued))
+    elif action == "send_next_now":
+        if gaash_mail.package_terminal(gwd):
+            gaash_mail._thread_set(gwd, state="cleared")
+            return jsonify({"ok": False, "error": "package already cleared/delivered"})
+        res = gaash_mail.send_step(gwd)
+        return jsonify(res), (200 if res.get("ok") else 400)
+    else:
+        return jsonify({"ok": False, "error": "unknown action"}), 400
+    return jsonify({"ok": True, "thread": gaash_mail.thread_get(gwd)})
+
+
+@app.route("/api/gaash/check", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_check():
+    return jsonify(gaash_mail.check_replies())
+
+
+@app.route("/api/gaash/test_send", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_test_send():
+    """Send a test email from an account TO ITSELF — proves SMTP works from
+    this host (Render may block outbound 587) without ever touching GAASH."""
+    b = request.get_json(force=True, silent=True) or {}
+    acct = gaash_mail._account(b.get("account_id"))
+    if not acct:
+        return jsonify({"ok": False, "error": "account not found"}), 404
+    msg, _mid = gaash_mail._build_msg(
+        acct, acct["email"], "Otlobly GAASH-mail test",
+        "SMTP from the Otlobly server works. You can enable sequences.", [], [])
+    try:
+        gaash_mail._smtp_send(acct, msg)
+    except Exception as e:  # noqa
+        return jsonify({"ok": False, "error": str(e)[:200]})
+    return jsonify({"ok": True, "sent_to": acct["email"]})
 
 
 @app.route("/api/leluxe/order/delete", methods=["POST"])
@@ -3178,7 +3416,8 @@ def worker_tracking():
 BACKUP_FILES = ("customers.json", "purchases.json", "trash.json", "orders.json",
                 "activity.jsonl", "config.json", "tracking_cache.json",
                 "leluxe_sync_report.json")   # leluxe_presync_* stay out of the zip (short-lived safety snapshots; the DB itself is in every backup)
-BACKUP_DIRS = ("customer_ids", "po_images", "leluxe_images")
+BACKUP_DIRS = ("customer_ids", "po_images", "leluxe_images",
+               "gaash_ids", "gaash_mail")
 
 
 def _backup_ok():

@@ -229,6 +229,24 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   `lxMailPill(tn)` — `✉ Xd` gray <2d / amber ≥2d / red ≥5d no reply, `✉ ✓` green
   replied; click toggles (`POST /api/leluxe/pkgmail/reply`). Resend restarts the
   cycle (clears replied, bumps sent_count). No inbox integration — hand-marked.
+- **📧 GAASH Mail page** (`gaashmail` view, `gaash_mail.py`) — the AUTOMATED
+  version: one chat per GWD, 4-email templated sequence (cadence default 2·2·2d,
+  Settings `gaash_mail`), real Gmail SMTP+IMAP via app-password accounts (engine
+  ported from ~/gaash-clickup-sync/support.py — auto-ack window rule, office-
+  closed resend at 9:00 IL, UID-cursor inbox polling). Tables gaash_accounts/
+  gaash_ids (reusable ID library, files data/gaash_ids)/gaash_threads/gaash_msgs
+  (attachment bytes data/gaash_mail/<gwd>). Sequencer guards in order: package
+  cleared/delivered (mirror `_bucket` — dict OR legacy string values +
+  GASH-STATUS-field DELIVERED) → real reply pauses (waiting_reply) →
+  missing_docs pauses (KMT keyword auto-flag from reply text) → dry_run (default
+  ON, never burns the claim) → daily cap → `db.claim_once("gaashmail:{gwd}:stepN")`
+  (released on failed send). Routes /api/gaash/* — view/send `edit_fulfillment`
+  (NOT edit_order — fulfillment lacks that), accounts/IDs/test_send
+  admin_actions, feature leluxe. Bell events (gaash_reply/missing/exhausted/
+  cleared → view gaashmail) read fresh in api_notifications. ⚠ OPERATIONAL RULE:
+  daemon gated env `GAASH_MAILER=1` set ONLY on Render (live DB) — NEVER in the
+  Mac plist/local .env (stale DB ⇒ double-sends); this is the INVERSE of
+  LELUXE_DIGEST. test_gaash_mail.py locks all of it.
 
 ## 6. Verify everything (run after ANY board change)
 
