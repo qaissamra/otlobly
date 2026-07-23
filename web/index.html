@@ -8162,10 +8162,7 @@ function poCardHtml(p){
   const who=custs.length===1?custs[0]:(custs.length>1?(mainName?`${mainName} · ${custs.length} customers`:`${custs.length} customers`):(mainName||''));
   const npk=(p.packages||[]).length;
   const total=p.total_usd!=null?` · <b>${money(p.total_usd)}</b>`:'';
-  const boxTerm=L.box_term||'Profile';
-  // The Multilogin profile / account the order sits under — needed at a glance.
-  const profChip=(p.profile_box||'').trim()
-    ? `<span class="mono" title="${poEsc(boxTerm)}" style="flex:0 0 auto;font-size:11px;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px">🖥 ${poEsc(p.profile_box)}</span>` : '';
+  // (profile now lives in its own sortable `profile` column, not a header chip)
   // One clean row: chevron · PO# · customer · N items · total · worst-package pill · ⋯
   const menu=popMenu([
     [`✏️ تعديل الطلب · Edit order`, `poEditOpen('${p.po_id}')`],
@@ -8187,7 +8184,6 @@ function poCardHtml(p){
         <b class="po-name" onclick="poToggleCard('${p.po_id}')" style="cursor:pointer;flex:0 0 auto">${poEsc(p.po_id)}</b>
         ${(p.amazon_order_number||'').trim()?`<span class="mono muted2" style="font-size:11px;flex:0 0 auto" title="Amazon order # ${poEsc(p.amazon_order_number)}">#…${poEsc(p.amazon_order_number.trim().slice(-4))}</span>${lxCopyRawBtn(p.amazon_order_number.trim())}`:''}
         <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(who)||'—'} · ${p.n_items} item${p.n_items===1?'':'s'}${npk>1?` · ${npk} packages`:''}</span>
-        ${profChip}
       </div>
       ${lxtCells("po",{
         oname: poNameCell(p.ship_to,true),
