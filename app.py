@@ -107,6 +107,7 @@ leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Ren
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 import gaash_mail
+gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
                            #  local app has a stale copy and must never send)
@@ -2792,7 +2793,8 @@ def api_gaash_attachment():
 def api_gaash_start():
     b = request.get_json(force=True, silent=True) or {}
     res = gaash_mail.start_threads(b.get("gwds") or [], b.get("id_doc_id"),
-                                   b.get("account_id"))
+                                   b.get("account_id"),
+                                   seq_id=(b.get("seq_id") or "").strip() or None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
@@ -2848,10 +2850,26 @@ def api_gaash_thread():
         gaash_mail._thread_set(gwd, pending_files_json=json.dumps(queued))
     elif action == "send_next_now":
         if gaash_mail.package_terminal(gwd):
-            gaash_mail._thread_set(gwd, state="cleared")
+            gaash_mail._thread_set(gwd, state="goal_met")
             return jsonify({"ok": False, "error": "package already cleared/delivered"})
         res = gaash_mail.send_step(gwd)
         return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "task_done":
+        res = gaash_mail.task_done(gwd)
+        return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "approve":       # a trigger-proposed enrollment → real
+        if th.get("state") != "proposed":
+            return jsonify({"ok": False, "error": "not a proposed thread"}), 400
+        res = gaash_mail.start_threads([gwd], b.get("id_doc_id"),
+                                       b.get("account_id"),
+                                       seq_id=th.get("seq_id"))
+        return jsonify({"ok": True, "results": res})
+    elif action == "dismiss":
+        if th.get("state") != "proposed":
+            return jsonify({"ok": False, "error": "not a proposed thread"}), 400
+        with db.connect() as _c:
+            _c.execute("DELETE FROM gaash_threads WHERE gwd=?", (gwd,))
+        return jsonify({"ok": True})
     else:
         return jsonify({"ok": False, "error": "unknown action"}), 400
     return jsonify({"ok": True, "thread": gaash_mail.thread_get(gwd)})
@@ -2882,6 +2900,108 @@ def api_gaash_test_send():
     except Exception as e:  # noqa
         return jsonify({"ok": False, "error": str(e)[:200]})
     return jsonify({"ok": True, "sent_to": acct["email"]})
+
+
+# ── v2: sequences / templates / rules CRUD + dashboard + public tracking ────
+
+@app.route("/api/gaash/sequences", methods=["GET", "POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_sequences():
+    if request.method == "GET":
+        return jsonify({"ok": True, "sequences": gaash_mail.sequences_list()})
+    if not current_user.has("admin_actions"):   # builder edits are admin-only
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.sequence_save(b)
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/sequence/delete", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_sequence_delete():
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.sequence_archive((b.get("id") or "").strip())
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/templates", methods=["GET", "POST", "DELETE"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_templates():
+    if request.method == "GET":
+        return jsonify({"ok": True, "templates": gaash_mail.templates_list()})
+    if not current_user.has("admin_actions"):
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    if request.method == "DELETE":
+        res = gaash_mail.template_remove((b.get("id") or "").strip())
+    else:
+        res = gaash_mail.template_save(b)
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/rules", methods=["GET", "POST", "DELETE"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_rules():
+    if request.method == "GET":
+        return jsonify({"ok": True, "rules": gaash_mail.rules_list()})
+    if not current_user.has("admin_actions"):
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    if request.method == "DELETE":
+        res = gaash_mail.rule_remove((b.get("id") or "").strip())
+    else:
+        res = gaash_mail.rule_save(b)
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/rules/run", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_rules_run():
+    return jsonify({"ok": True, "proposed": gaash_mail.run_rules()})
+
+
+@app.route("/api/gaash/stats")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_stats():
+    return jsonify({"ok": True, **gaash_mail.stats()})
+
+
+# PUBLIC tracking endpoints — the email recipient hits these, no session. The
+# HMAC signature (OTLOBLY_SECRET) is the auth: a bad sig is a plain 404.
+@app.route("/api/gaash/px/<token>.gif")
+@limiter.exempt
+def api_gaash_pixel(token):
+    v = gaash_mail.verify_token(token, "")
+    if v:
+        try:
+            gaash_mail.record_event(v[0], "open",
+                                    ua=request.headers.get("User-Agent"))
+        except Exception:  # noqa - tracking must never 500 at the recipient
+            pass
+    resp = app.response_class(gaash_mail.PIXEL_GIF, mimetype="image/gif")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/api/gaash/r/<token>")
+@limiter.exempt
+def api_gaash_redirect(token):
+    url = request.args.get("u", "")
+    v = gaash_mail.verify_token(token, url)
+    if not v or not re.match(r"^https?://", url):
+        abort(404)
+    try:
+        gaash_mail.record_event(v[0], "click", url=url[:500],
+                                ua=request.headers.get("User-Agent"))
+    except Exception:  # noqa
+        pass
+    return redirect(url, code=302)
 
 
 @app.route("/api/leluxe/order/delete", methods=["POST"])

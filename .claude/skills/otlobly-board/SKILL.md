@@ -247,6 +247,25 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   daemon gated env `GAASH_MAILER=1` set ONLY on Render (live DB) — NEVER in the
   Mac plist/local .env (stale DB ⇒ double-sends); this is the INVERSE of
   LELUXE_DIGEST. test_gaash_mail.py locks all of it.
+  **v2 (HubSpot-style, sequences-as-DATA):** page tabs 💬 Conversations · 🧬
+  Sequences · 📝 Templates · 📊 Dashboard. Tables gaash_templates (library,
+  delete blocked while referenced) / gaash_sequences (per-seq to_address = ANY
+  platform, goal cleared|reply|manual, send_window_json {tz days start end} —
+  default Sun–Thu 09–17 **Asia/Hebron "Palestine time"**) / gaash_steps (pos,
+  kind auto_email|task, template_id, delay_days = BUSINESS days) / gaash_rules
+  (auto-enroll: {gash_status,min_age_days}→seq, mode queue|auto; queue ⇒
+  state='proposed' approval chips) / gaash_events (open/click hits). Engine:
+  `next_allowed`/`add_business_days` window math; `send_step` runs gaash_steps
+  (task ⇒ waiting_task until action=task_done); `migrate_v2` claim_once-seeds
+  "seq_default" from the legacy settings.steps; goal reply ⇒ human reply =
+  goal_met; bounce kind from mailer-daemon/DSN subjects. **Tracking:** sends are
+  multipart w/ `_html_body` — links rewritten to `/api/gaash/r/<msg_id.idx.hmac>`
+  + pixel `/api/gaash/px/<token>.gif` (PUBLIC routes, HMAC(OTLOBLY_SECRET) is
+  the auth, base=PORTAL_BASE_URL, msg row PRE-allocated then deleted on SMTP
+  failure). `stats()` → 📊 (open/click/reply/goal rates + per-step funnel;
+  opens approximate — image proxies). Builder UI mirrors HubSpot: summary card
+  (steps/days/automation %), step cards + delay chips + ＋ "Choose step" panel
+  (email/task), per-seq window editor. A/B testing deliberately DEFERRED.
 
 ## 6. Verify everything (run after ANY board change)
 
