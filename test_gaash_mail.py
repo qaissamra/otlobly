@@ -69,6 +69,14 @@ def main():
     db.create_user("emp", auth.hash_pw("s1"), "fulfillment", "E", business_id=1)
     db.create_user("sal", auth.hash_pw("s1"), "sales", "S", business_id=1)
 
+    print("— v2 seed (legacy settings chain → sequences-as-data) —")
+    gm.migrate_v2()
+    gm.migrate_v2()                                   # idempotent
+    seqs = gm.sequences_list()
+    check("default sequence seeded once", len(seqs) == 1
+          and seqs[0]["id"] == "seq_default" and len(seqs[0]["steps"]) == 4)
+    check("seed templates exist", len(gm.templates_list()) == 4)
+
     print("— auto-ack classification (the owner's Glassix rule) —")
     now = datetime.now(timezone.utc)
     _mk_thread("GWD100")
@@ -196,6 +204,123 @@ def main():
     th = r.get_json().get("thread")
     check("resume clears the flag + reactivates",
           th and th["state"] == "active" and not th["missing_docs"])
+
+    print("— v2: send-window / business-day math (Palestine time) —")
+    win = {"tz": "Asia/Hebron", "days": [6, 0, 1, 2, 3],
+           "start": "09:00", "end": "17:00"}
+    from zoneinfo import ZoneInfo
+    hebron = ZoneInfo("Asia/Hebron")
+    fri = datetime(2026, 7, 24, 12, 0, tzinfo=hebron)         # Friday (weekend)
+    na = gm.next_allowed(fri, win)
+    check("Friday defers to Sunday 09:00",
+          na.weekday() == 6 and na.hour == 9 and na.minute == 0)
+    thu = datetime(2026, 7, 23, 10, 0, tzinfo=hebron)         # Thursday
+    d2 = gm.add_business_days(thu, 2, win)
+    check("+2 business days from Thu skips Fri+Sat → Monday",
+          d2.weekday() == 0 and d2.day == 27)
+    inw = gm.next_allowed(datetime(2026, 7, 26, 11, 0, tzinfo=hebron), win)
+    check("inside the window stays put", inw.hour == 11 and inw.weekday() == 6)
+
+    print("— v2: templates + sequence builder CRUD —")
+    t1 = gm.template_save({"name": "T-Email", "subject_tpl": "s {gwd}",
+                           "body_tpl": "b {gwd}"})
+    check("template created", t1["ok"])
+    bad = gm.sequence_save({"name": "X", "steps": [{"kind": "auto_email",
+                                                    "template_id": "nope"}]})
+    check("step without a real template rejected", bad["ok"] is False)
+    sq = gm.sequence_save({"name": "Two-step", "to_address": "other@platform.com",
+                           "goal": "reply",
+                           "send_window": {"days": [0, 1, 2, 3, 4],
+                                           "start": "08:00", "end": "18:00"},
+                           "steps": [
+                               {"kind": "auto_email", "template_id": t1["id"],
+                                "delay_days": 0},
+                               {"kind": "task", "task_note": "call them",
+                                "delay_days": 1},
+                               {"kind": "auto_email", "template_id": t1["id"],
+                                "delay_days": 2}]})
+    check("sequence saved with email→task→email", sq["ok"])
+    seq = gm.sequence_get(sq["id"])
+    check("steps ordered + window persisted",
+          [s["kind"] for s in seq["steps"]] == ["auto_email", "task", "auto_email"]
+          and json.loads(seq["send_window_json"])["start"] == "08:00")
+    check("used template cannot be deleted",
+          gm.template_remove(t1["id"])["ok"] is False)
+
+    print("— v2: task steps pause until ticked —")
+    _mk_thread("GWD500", step=1, state="active",
+               next_send_at=(now - timedelta(minutes=1)).isoformat(timespec="seconds"))
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET seq_id=? WHERE gwd='GWD500'",
+                  (sq["id"],))
+    res = gm.send_step("GWD500")                       # step 2 = the task
+    th = gm.thread_get("GWD500")
+    check("task step pauses as waiting_task", res.get("task") is True
+          and th["state"] == "waiting_task" and th["next_send_at"] is None)
+    res = gm.task_done("GWD500")
+    th = gm.thread_get("GWD500")
+    check("task_done advances + reschedules", res["ok"] and th["step"] == 2
+          and th["state"] == "active" and th["next_send_at"])
+    check("task bubbles recorded", [m["kind"] for m in gm.msgs_for("GWD500")]
+          == ["task", "task_done"])
+
+    print("— v2: auto-enroll rules —")
+    r1 = gm.rule_save({"name": "stuck on ID",
+                       "cond": {"gash_status": " customer ID", "min_age_days": 0},
+                       "seq_id": sq["id"], "mode": "queue", "enabled": True})
+    check("rule saved", r1["ok"])
+    check("rule listed with parsed cond (trimmed, case kept)",
+          gm.rules_list()[0]["cond"]["gash_status"] == "customer ID")
+
+    print("— v2: open/click tracking tokens + public endpoints —")
+    with db.connect() as c:
+        cur = c.execute("""INSERT INTO gaash_msgs
+            (gwd,dir,kind,step,at,message_id,body,attachments_json,notified,seq_id)
+            VALUES ('GWD500','out','sent',1,?,?,'x','[]',1,?)""",
+                        (db.now_iso(), "<t1@test>", sq["id"]))
+        mrow = cur.lastrowid
+    tok = gm.track_token(mrow, 0, "")
+    check("token verifies", gm.verify_token(tok, "") == (mrow, 0))
+    check("forged token rejected",
+          gm.verify_token(f"{mrow}.0." + "a" * 20, "") is None)
+    anon = appmod.app.test_client()
+    rr = anon.get(f"/api/gaash/px/{tok}.gif")
+    check("pixel is PUBLIC + returns a gif", rr.status_code == 200
+          and rr.data.startswith(b"GIF89a"))
+    url = "https://example.com/x"
+    tok2 = gm.track_token(mrow, 1, url)
+    rr = anon.get(f"/api/gaash/r/{tok2}?u={url}")
+    check("redirect follows the real URL", rr.status_code == 302
+          and rr.headers["Location"] == url)
+    check("forged redirect 404s",
+          anon.get(f"/api/gaash/r/{mrow}.1.{'a' * 20}?u={url}").status_code == 404)
+    with db.connect() as c:
+        m = c.execute("SELECT opens, clicks FROM gaash_msgs WHERE id=?",
+                      (mrow,)).fetchone()
+    check("open + click counters bumped", m["opens"] == 1 and m["clicks"] == 1)
+    html = gm._html_body("see https://example.com/y please", mrow) \
+        if gm._track_base() else None
+    check("html body tracks links + pixel (when base URL set)",
+          html is None or ("/api/gaash/r/" in html and "/api/gaash/px/" in html))
+
+    print("— v2: stats shape —")
+    st = gm.stats()
+    check("stats aggregates", st["overall"]["sent"] >= 1
+          and any(s["seq_id"] == sq["id"] and s["sent"] >= 1
+                  for s in st["sequences"]))
+
+    print("— v2: routes + permissions —")
+    co2, ce2 = client("otlo"), client("emp")
+    check("employee reads sequences",
+          ce2.get("/api/gaash/sequences").get_json().get("ok") is True)
+    check("employee cannot save sequences",
+          ce2.post("/api/gaash/sequences", json={"name": "x"}).status_code == 403)
+    check("employee cannot save templates",
+          ce2.post("/api/gaash/templates", json={"name": "x"}).status_code == 403)
+    check("stats route works", co2.get("/api/gaash/stats").get_json().get("ok") is True)
+    check("archive blocked while threads use the sequence",
+          co2.post("/api/gaash/sequence/delete",
+                   json={"id": sq["id"]}).status_code == 400)
 
     print("— bell notifications —")
     with db.connect() as c:

@@ -475,6 +475,23 @@
   .gm-att{display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:11px;margin-top:5px;margin-inline-end:4px;text-decoration:none;color:var(--ink)}
   .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
   .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
+  /* v2: sequence builder tree (HubSpot-style) + dashboard */
+  .gsq-tree{max-width:640px;margin:0 auto}
+  .gsq-step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:11px;align-items:flex-start}
+  .gsq-ic{width:38px;height:38px;border-radius:50%;border:2px solid #f76808;display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto;background:#fff4ee}
+  .gsq-ic.task{border-color:#12a594;background:#e6f7f4}
+  .gsq-mid{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
+  .gsq-line{width:2px;height:14px;background:var(--line)}
+  .gsq-delay{font-size:11px;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;cursor:pointer}
+  .gsq-delay:hover{color:var(--ink);border-color:var(--muted)}
+  .gsq-add{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:15px;line-height:1;color:var(--muted)}
+  .gsq-add:hover{color:#f76808;border-color:#f76808}
+  .gm-tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:110px}
+  .gm-tile b{font-size:22px;display:block}
+  .gm-tile span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+  .gm-fun{display:flex;align-items:flex-end;gap:6px;height:64px}
+  .gm-fun>div{background:#f76808;border-radius:4px 4px 0 0;min-width:34px;position:relative}
+  .gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;color:var(--muted)}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
   /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
@@ -1379,10 +1396,22 @@
       <button class="accent" onclick="gmNewOpen()" data-en="＋ New sequence" data-ar="＋ تسلسل جديد">＋ New sequence</button>
     </div>
     <div id="gmBanner"></div>
-    <div class="gm-wrap">
-      <div class="gm-list panel" id="gmList"></div>
-      <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new sequence." data-ar="اختر محادثة — أو ابدأ تسلسلاً جديداً.">Pick a conversation — or start a new sequence.</div></div>
+    <div style="display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px" id="gmTabs">
+      <button class="minibtn accent" id="gmTabConv" style="border:0;border-radius:0" onclick="gmTab('conv')" data-en="💬 Conversations" data-ar="💬 المحادثات">💬 Conversations</button>
+      <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="🧬 Sequences" data-ar="🧬 التسلسلات">🧬 Sequences</button>
+      <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
+      <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Dashboard" data-ar="📊 لوحة الأرقام">📊 Dashboard</button>
     </div>
+    <div id="gmProposed"></div>
+    <div id="gmConvPane">
+      <div class="gm-wrap">
+        <div class="gm-list panel" id="gmList"></div>
+        <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new sequence." data-ar="اختر محادثة — أو ابدأ تسلسلاً جديداً.">Pick a conversation — or start a new sequence.</div></div>
+      </div>
+    </div>
+    <div id="gmSeqPane" class="hidden"></div>
+    <div id="gmTplPane" class="hidden"></div>
+    <div id="gmDashPane" class="hidden"></div>
   </div>
 </div>
 
@@ -9369,15 +9398,29 @@ function bsRender(){
 }
 
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
-let GM={ov:null, cur:null, detail:null, timer:null};
+let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null};
 const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
   missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
-  cleared:["#30a46c","تخلّص · cleared"], exhausted:["#f76808","٤ بلا رد · 4 no reply"],
-  done:["#8d8d8d","منجز · done"]};
+  cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
+  waiting_task:["#7c4dff","مهمة معلقة · task waiting"], proposed:["#ffc53d","مقترح · proposed"],
+  exhausted:["#f76808","انتهى بلا رد · no reply"], done:["#8d8d8d","منجز · done"]};
+function gmTab(t){
+  GM.tab=t;
+  [["conv","gmTabConv","gmConvPane"],["seq","gmTabSeq","gmSeqPane"],
+   ["tpl","gmTabTpl","gmTplPane"],["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
+    $(b).classList.toggle("accent",k===t);
+    $(p).classList.toggle("hidden",k!==t);
+  });
+  if(t==="seq") gmRenderSeq();
+  if(t==="tpl") gmRenderTpl();
+  if(t==="dash") gmDashLoad();
+}
 function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
   return hexPill(c,T(l)); }
-function gmDots(step){ return `<span class="gm-dots" title="${step}/4">${[1,2,3,4]
-  .map(i=>`<span class="gm-dot${i<=step?' on':''}"></span>`).join("")}</span>`; }
+function gmSeqOf(th){ return ((GM.ov&&GM.ov.sequences)||[]).find(s=>s.id===th.seq_id)||null; }
+function gmDots(step,total){ total=Math.max(total||4,step||0,1);
+  return `<span class="gm-dots" title="${step}/${total}">${Array.from({length:Math.min(total,10)},(_,i)=>
+    `<span class="gm-dot${i<step?' on':''}"></span>`).join("")}</span>`; }
 function gmAgo(iso){ if(!iso) return ""; const ms=Date.parse(iso); if(!ms) return "";
   const d=Math.floor((Date.now()-ms)/864e5); return d<=0?T("اليوم · today"):`${d}d`; }
 async function gmLoad(){
@@ -9392,10 +9435,26 @@ async function gmLoad(){
   $("gmBanner").innerHTML=warn.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${warn.join(" · ")}</div>`:"";
   const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
   $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
+  // trigger-proposed enrollments → approval chips (any tab)
+  const prop=d.proposed||[];
+  $("gmProposed").innerHTML=prop.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px">
+    ⚡ <b>${T("اقتراحات تسجيل · suggested enrollments")}</b>
+    ${prop.map(p=>`<span class="pill" style="background:#fff;border:1px solid var(--line);display:inline-flex;gap:6px;align-items:center">
+      <span class="mono">${poEsc(p.gwd)}</span>
+      <button class="minibtn" style="padding:0 6px" title="${T("موافقة وبدء · approve & start")}" onclick="gmPropAct('${p.gwd}','approve')">✓</button>
+      <button class="minibtn" style="padding:0 6px" title="${T("تجاهل · dismiss")}" onclick="gmPropAct('${p.gwd}','dismiss')">✕</button></span>`).join("")}
+  </div>`:"";
   gmRenderList();
   if(GM.cur) gmOpen(GM.cur,true);
+  if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
+  if(GM.tab==="tpl") gmRenderTpl();
   clearInterval(GM.timer);
   GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
+}
+async function gmPropAct(gwd,action){
+  const r=await post("/api/gaash/thread",{gwd,action});
+  if(r&&r.ok===false&&r.error) toast(r.error);
+  gmLoad();
 }
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
@@ -9406,7 +9465,7 @@ function gmRenderList(){
     return `<div class="gm-row${GM.cur===t.gwd?' on':''}" onclick="gmOpen('${t.gwd}')">
       <div class="gm-top">
         <span class="gm-gwd">${poEsc(t.gwd)}</span>
-        ${gmDots(t.step||0)}
+        ${gmDots(t.step||0,((gmSeqOf(t)||{}).steps||[]).length)}
         ${t.missing_docs?'<span title="'+T('ناقص مستندات · missing documents')+'">⚠️</span>':''}
         <span class="spacer"></span>
         ${t.unread?`<span class="gm-unread">${t.unread}</span>`:''}
@@ -9433,9 +9492,11 @@ function gmRenderChat(){
   const th=d.thread, msgs=d.messages||[];
   const idDoc=((GM.ov&&GM.ov.ids)||[]).find(x=>x.id===th.id_doc_id);
   const KIND={sent:T("مُرسل · sent"),resent:T("أُعيد إرساله · resent"),reply:T("رد · reply"),
-    auto_ack:T("رد آلي · auto-reply"),closed:T("المكتب مغلق · office closed")};
+    auto_ack:T("رد آلي · auto-reply"),closed:T("المكتب مغلق · office closed"),
+    task:T("📋 مهمة · task"),task_done:T("✓ مهمة منجزة · task done"),
+    bounce:T("⚠ لم يصل · bounced")};
   const bubbles=msgs.map(m=>{
-    const auto=(m.kind==="auto_ack"||m.kind==="closed");
+    const auto=(m.kind==="auto_ack"||m.kind==="closed"||m.kind==="task_done"||m.kind==="bounce");
     const atts=(m.attachments||[]).map(a=>`<a class="gm-att" target="_blank" href="/api/gaash/attachment?gwd=${encodeURIComponent(th.gwd)}&file=${encodeURIComponent(a.file)}">📎 ${poEsc(a.name)}</a>`).join("");
     return `<div class="gm-msg ${m.dir==="out"?"out":"in"}${auto?" auto":""}">
       <div class="gm-meta"><span>${m.dir==="out"?"→":"←"} ${KIND[m.kind]||m.kind}${m.step?` #${m.step}`:""}</span><span>${poEsc(String(m.at||"").slice(0,16).replace("T"," "))}</span></div>
@@ -9444,13 +9505,15 @@ function gmRenderChat(){
   const resend=JSON.parse(th.resend_json||"null");
   $("gmChat").innerHTML=`
     <div class="gm-head">
-      <b class="mono">${poEsc(th.gwd)}</b> ${gmChip(th.state)} ${gmDots(th.step||0)}
+      <b class="mono">${poEsc(th.gwd)}</b> ${gmChip(th.state)} ${gmDots(th.step||0,((gmSeqOf(th)||{}).steps||[]).length)}
+      ${(gmSeqOf(th)||{}).name?`<span class="muted2" style="font-size:11px">🧬 ${poEsc(gmSeqOf(th).name)}</span>`:""}
       ${idDoc?`<span class="gm-att">🪪 ${poEsc(idDoc.name)}</span>`:""}
       ${th.missing_docs?`<span class="pill" style="background:#fee2e2;color:#b42318">⚠ ${poEsc(th.missing_note||T("ناقص مستندات · missing docs"))}</span>`:""}
       ${resend?`<span class="pill" style="background:#fffbeb;color:#b45309" title="${T('المكتب كان مغلقاً — سيُعاد الإرسال · office was closed — will resend')}">⏰ ${poEsc(String(resend.due_at||"").slice(5,16).replace("T"," "))}</span>`:""}
       <span class="spacer"></span>
-      ${th.state==="active"?`<button class="minibtn" onclick="gmAct('pause')">⏸ ${T("إيقاف · pause")}</button>
-        <button class="minibtn" onclick="gmAct('send_next_now')" ${Number(th.step||0)>=4?"disabled":""}>⏭ ${T("أرسل التالي الآن · send next now")}</button>`
+      ${th.state==="waiting_task"?`<button class="accent" style="padding:3px 10px;font-size:12px" onclick="gmAct('task_done')">✓ ${T("المهمة أُنجزت · task done")}</button>`
+       :th.state==="active"?`<button class="minibtn" onclick="gmAct('pause')">⏸ ${T("إيقاف · pause")}</button>
+        <button class="minibtn" onclick="gmAct('send_next_now')">⏭ ${T("أرسل التالي الآن · send next now")}</button>`
        :`<button class="minibtn" onclick="gmAct('resume')">▶ ${T("استئناف · resume")}</button>`}
       ${th.missing_docs?`<button class="minibtn" onclick="gmAct('clear_missing')">✓ ${T("اكتملت المستندات · docs complete")}</button>`
        :`<button class="minibtn" onclick="gmMissing()">⚠ ${T("ناقص مستندات · missing docs")}</button>`}
@@ -9528,6 +9591,8 @@ function gmNewOpen(){
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
       </div></div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <b style="font-size:13px">🧬 ${T("التسلسل · sequence")}</b>
+      <select id="gmNewSeq">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)} (${(s.steps||[]).length} ${T("خطوة · steps")})</option>`).join("")||`<option value="">${T("لا تسلسل — أنشئ واحداً · none — build one first")}</option>`}</select>
       <b style="font-size:13px">✉ ${T("الحساب المُرسِل · sending account")}</b>
       <select id="gmNewAcct">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select>
     </div>`;
@@ -9555,7 +9620,8 @@ async function gmNewStart(btn){
   const idSel=document.querySelector('input[name="gmNewId"]:checked');
   const acct=($("gmNewAcct")||{}).value||"";
   btn.disabled=true;
-  const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null});
+  const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null,
+    seq_id:(($("gmNewSeq")||{}).value||null)});
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];
@@ -9624,6 +9690,285 @@ async function gmSettingsSave(btn){
   btn.disabled=false;
   toast(r&&r.ok?T("حُفظ · saved"):"failed");
   bulkClose(); gmLoad();
+}
+// ── 🧬 Sequences tab: list + HubSpot-style tree builder ──
+const GM_DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];   // python weekday order
+const GM_TZS=[["Asia/Hebron","توقيت فلسطين · Palestine time"],["Asia/Jerusalem","Jerusalem"],
+  ["Asia/Amman","Amman"],["Europe/Istanbul","Istanbul"],["UTC","UTC"]];
+function gmSeqDays(s){ const st=(s.steps||[]); let d=0; st.forEach(x=>d+=Number(x.delay_days)||0); return Math.round(d*10)/10; }
+function gmRenderSeq(){
+  const seqs=(GM.ov&&GM.ov.sequences)||[];
+  if(GM.edit) return gmRenderBuilder();
+  const rules=(GM.ov&&GM.ov.rules)||[];
+  $("gmSeqPane").innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <b style="font-size:14px">🧬 ${T("التسلسلات · Sequences")}</b><span class="spacer"></span>
+      ${CAN_ADMIN?`<button class="accent" onclick="gmSeqNew()">＋ ${T("تسلسل جديد · New sequence")}</button>`:""}
+    </div>
+    ${seqs.map(s=>`<div class="panel" style="display:flex;gap:10px;align-items:center;margin-bottom:8px;cursor:pointer" onclick="gmSeqEdit('${s.id}')">
+      <b>${poEsc(s.name)}</b>
+      <span class="muted2" style="font-size:12px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم عمل · business days")} · 🎯 ${poEsc(s.goal)}</span>
+      <span class="spacer"></span>
+      <span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${s.active_threads||0} ${T("نشط · active")}</span>
+      ${CAN_ADMIN?`<button class="minibtn" onclick="event.stopPropagation();gmSeqDelete('${s.id}')">🗑</button>`:""}
+    </div>`).join("")||`<div class="muted2 panel">${T("لا تسلسلات بعد · no sequences yet")}</div>`}
+    <div style="margin-top:16px"><b style="font-size:14px">⚡ ${T("قواعد التسجيل التلقائي · auto-enroll triggers")}</b>
+      ${rules.map(r=>`<div class="panel" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px">
+        <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
+        <b>${poEsc(r.name)}</b>
+        <span class="muted2">GASH = "${poEsc(r.cond.gash_status||"any")}" ≥ ${r.cond.min_age_days||0}d → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
+        <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
+        <span class="spacer"></span>
+        ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
+      </div>`).join("")}
+      ${CAN_ADMIN?`<button class="minibtn" style="margin-top:8px" onclick="gmRuleNew()">＋ ${T("قاعدة جديدة · New rule")}</button>`:""}
+    </div>`;
+}
+function gmSeqNew(){
+  GM.edit={id:"", name:"", to_address:"", goal:"cleared",
+    send_window:{tz:"Asia/Hebron",days:[6,0,1,2,3],start:"09:00",end:"17:00"}, steps:[]};
+  gmRenderBuilder();
+}
+function gmSeqEdit(id){
+  const s=((GM.ov&&GM.ov.sequences)||[]).find(x=>x.id===id); if(!s) return;
+  let win={}; try{ win=JSON.parse(s.send_window_json||"{}"); }catch(e){}
+  GM.edit={id:s.id, name:s.name, to_address:s.to_address||"", goal:s.goal||"cleared",
+    send_window:{tz:win.tz||"Asia/Hebron",days:win.days||[6,0,1,2,3],start:win.start||"09:00",end:win.end||"17:00"},
+    steps:(s.steps||[]).map(x=>({kind:x.kind,template_id:x.template_id,task_note:x.task_note,delay_days:x.delay_days}))};
+  gmRenderBuilder();
+}
+async function gmSeqDelete(id){
+  if(!confirm(T("أرشفة هذا التسلسل؟ · archive this sequence?"))) return;
+  const r=await post("/api/gaash/sequence/delete",{id});
+  if(!r.ok) toast(r.error||"failed");
+  await gmLoad(); gmRenderSeq();
+}
+function gmTplName(tid){ return (((GM.ov&&GM.ov.templates)||[]).find(t=>t.id===tid)||{}).name||"?"; }
+function gmRenderBuilder(){
+  const e=GM.edit; if(!e) return gmRenderSeq();
+  const emails=e.steps.filter(s=>s.kind==="auto_email").length;
+  const stepCard=(st,i)=>{
+    const email=st.kind==="auto_email";
+    const tpl=email?(((GM.ov&&GM.ov.templates)||[]).find(t=>t.id===st.template_id)||{}):null;
+    return `<div class="gsq-step">
+      <div class="gsq-ic${email?"":" task"}">${email?"✈️":"📋"}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">${i+1}. ${email?T("إيميل تلقائي · Automated Email"):T("مهمة · Task")}</div>
+        <b style="font-size:13px">${email?poEsc(tpl.name||T("اختر قالباً · pick a template")):poEsc(st.task_note||T("مهمة بلا وصف · untitled task"))}</b>
+        ${email&&tpl.subject_tpl?`<div class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(tpl.subject_tpl)}</div>`:""}
+      </div>
+      ${CAN_ADMIN?`<button class="minibtn" onclick="gmStepEdit(${i})">✎</button>
+      <button class="minibtn" onclick="GM.edit.steps.splice(${i},1);gmRenderBuilder()">🗑</button>`:""}
+    </div>`;
+  };
+  const between=i=>`<div class="gsq-mid">
+      <div class="gsq-line"></div>
+      ${i>0?`<span class="gsq-delay" onclick="gmDelayEdit(${i})" title="${T("أيام عمل قبل هذه الخطوة · business days before this step")}">⏱ ${T("تأخير · delay")}: ${GM.edit.steps[i]?Number(GM.edit.steps[i].delay_days)||0:0} ${T("يوم عمل · business days")}</span><div class="gsq-line"></div>`:""}
+      ${CAN_ADMIN?`<button class="gsq-add" onclick="gmStepAdd(${i})" title="${T("أضف خطوة · add step")}">＋</button><div class="gsq-line"></div>`:""}
+    </div>`;
+  const w=e.send_window;
+  $("gmSeqPane").innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <button class="minibtn" onclick="GM.edit=null;gmRenderSeq()">‹ ${T("رجوع · Back")}</button>
+      <input id="gmSeqName" value="${poEsc(e.name)}" placeholder="${T("اسم التسلسل · sequence name")}" style="font-weight:800;font-size:15px;min-width:220px" ${CAN_ADMIN?"":"disabled"}>
+      <span class="spacer"></span>
+      ${CAN_ADMIN?`<button class="accent" onclick="gmSeqSave(this)">💾 ${T("حفظ · Save")}</button>`:""}
+    </div>
+    <div class="panel" style="display:flex;gap:26px;justify-content:center;text-align:center;margin-bottom:12px">
+      <div><b style="font-size:22px">${e.steps.length}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("خطوات · total steps")}</div></div>
+      <div><b style="font-size:22px">${gmSeqDays(e)+1}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("أيام للإكمال · days to complete")}</div></div>
+      <div><b style="font-size:22px">${e.steps.length?Math.round(emails/e.steps.length*100):0}%</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("أتمتة · automation")}</div></div>
+    </div>
+    <div class="gsq-tree">
+      ${e.steps.map((st,i)=>between(i)+stepCard(st,i)).join("")}
+      <div class="gsq-mid"><div class="gsq-line"></div>${CAN_ADMIN?`<button class="gsq-add" onclick="gmStepAdd(${e.steps.length})">＋</button>`:""}</div>
+    </div>
+    <div class="panel" style="margin-top:14px;font-size:12.5px;display:flex;flex-direction:column;gap:10px">
+      <b>⚙ ${T("إعدادات التسلسل · sequence settings")}</b>
+      <label>${T("إلى (أي منصة) · recipient (any platform)")}: <input id="gmSeqTo" value="${poEsc(e.to_address||"")}" placeholder="GaashWW@glassix.support" style="width:260px" ${CAN_ADMIN?"":"disabled"}></label>
+      <label>🎯 ${T("الهدف — متى يُعد ناجحاً · goal — when is it a success")}:
+        <select id="gmSeqGoal" ${CAN_ADMIN?"":"disabled"}>
+          <option value="cleared" ${e.goal==="cleared"?"selected":""}>${T("الطرد تخلّص · package cleared")}</option>
+          <option value="reply" ${e.goal==="reply"?"selected":""}>${T("وصل رد بشري · got a human reply")}</option>
+          <option value="manual" ${e.goal==="manual"?"selected":""}>${T("يدوي فقط · manual only")}</option>
+        </select></label>
+      <div><b>🕘 ${T("نافذة الإرسال · send window")}</b> <span class="pill" style="background:#fff4ee;border:1px solid #f7680833">${T("بتوقيت فلسطين افتراضياً · Palestine time by default")}</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+          ${GM_DAY_LABELS.map((d,i)=>`<label style="display:flex;gap:3px;align-items:center;cursor:pointer;font-size:11.5px"><input type="checkbox" class="gmWinDay" value="${i}" ${w.days.includes(i)?"checked":""} ${CAN_ADMIN?"":"disabled"}>${d}</label>`).join("")}
+          <input id="gmWinStart" type="time" value="${poEsc(w.start)}" ${CAN_ADMIN?"":"disabled"}> →
+          <input id="gmWinEnd" type="time" value="${poEsc(w.end)}" ${CAN_ADMIN?"":"disabled"}>
+          <select id="gmWinTz" ${CAN_ADMIN?"":"disabled"}>${GM_TZS.map(([v,l])=>`<option value="${v}" ${w.tz===v?"selected":""}>${T(l)}</option>`).join("")}</select>
+        </div></div>
+    </div>`;
+}
+function gmStepAdd(i){
+  // the HubSpot "Choose step" panel, minimal: email or task
+  bulkOpen(T("اختر الخطوة · Choose step"));
+  const tpls=(GM.ov&&GM.ov.templates)||[];
+  $("bulkBody").innerHTML=`
+    <button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:8px 0" onclick="gmStepPick(${i},'auto_email')"><span style="font-size:18px">✈️</span><b>${T("إيميل تلقائي · Automated email")}</b><span class="muted2" style="font-size:11.5px">${T("يُرسل تلقائياً من قالب · sends a template automatically")}</span></button>
+    <button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:8px 0" onclick="gmStepPick(${i},'task')"><span style="font-size:18px">📋</span><b>${T("مهمة · Task")}</b><span class="muted2" style="font-size:11.5px">${T("تذكير يوقف التسلسل حتى تنجزه · a to-do that pauses until you tick it")}</span></button>
+    ${tpls.length?"":`<div class="muted2" style="font-size:12px">${T("لا قوالب بعد — أنشئ واحداً في تبويب القوالب · no templates yet — create one in the Templates tab")}</div>`}`;
+  $("bulkFoot").innerHTML=`<button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>`;
+}
+function gmStepPick(i,kind){
+  bulkClose();
+  if(kind==="auto_email"){
+    const tpls=(GM.ov&&GM.ov.templates)||[];
+    if(!tpls.length){ toast(T("أنشئ قالباً أولاً في تبويب القوالب · create a template first (Templates tab)")); return; }
+    GM.edit.steps.splice(i,0,{kind:"auto_email",template_id:tpls[0].id,delay_days:i===0?0:2});
+  }else{
+    const note=prompt(T("وصف المهمة · task description"),T("اتصل بغاش · call GAASH"));
+    if(note===null) return;
+    GM.edit.steps.splice(i,0,{kind:"task",task_note:note,delay_days:i===0?0:2});
+  }
+  gmRenderBuilder();
+}
+function gmStepEdit(i){
+  const st=GM.edit.steps[i];
+  if(st.kind==="task"){
+    const note=prompt(T("وصف المهمة · task description"),st.task_note||"");
+    if(note!==null){ st.task_note=note; gmRenderBuilder(); }
+    return;
+  }
+  const tpls=(GM.ov&&GM.ov.templates)||[];
+  bulkOpen(T("اختر القالب · Pick the template"));
+  $("bulkBody").innerHTML=tpls.map(t=>`<button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:6px 0${t.id===st.template_id?";background:#fff4ee":""}" onclick="GM.edit.steps[${i}].template_id='${t.id}';bulkClose();gmRenderBuilder()"><b>${poEsc(t.name)}</b><span class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis">${poEsc(t.subject_tpl||"")}</span></button>`).join("")
+    ||`<div class="muted2">${T("لا قوالب · no templates")}</div>`;
+  $("bulkFoot").innerHTML=`<button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>`;
+}
+function gmDelayEdit(i){
+  const v=prompt(T("أيام عمل قبل هذه الخطوة · business days before this step"),
+    String(Number(GM.edit.steps[i].delay_days)||0));
+  if(v===null) return;
+  const n=parseFloat(v);
+  if(!isNaN(n)&&n>=0){ GM.edit.steps[i].delay_days=Math.min(60,n); gmRenderBuilder(); }
+}
+async function gmSeqSave(btn){
+  const e=GM.edit;
+  e.name=($("gmSeqName")||{}).value||e.name;
+  e.to_address=($("gmSeqTo")||{}).value||"";
+  e.goal=($("gmSeqGoal")||{}).value||"cleared";
+  e.send_window={tz:($("gmWinTz")||{}).value||"Asia/Hebron",
+    days:[...document.querySelectorAll(".gmWinDay:checked")].map(x=>parseInt(x.value)),
+    start:($("gmWinStart")||{}).value||"09:00", end:($("gmWinEnd")||{}).value||"17:00"};
+  btn.disabled=true;
+  const r=await post("/api/gaash/sequences",e);
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  toast(T("حُفظ · saved")); GM.edit=null;
+  await gmLoad(); gmRenderSeq();
+}
+async function gmRuleToggle(id,on){
+  const r=((GM.ov&&GM.ov.rules)||[]).find(x=>x.id===id); if(!r) return;
+  await post("/api/gaash/rules",{...r, enabled:on});
+  gmLoad();
+}
+async function gmRuleDelete(id){
+  if(!confirm(T("حذف القاعدة؟ · delete this rule?"))) return;
+  await fetch("/api/gaash/rules",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
+  await gmLoad(); gmRenderSeq();
+}
+function gmRuleNew(){
+  const seqs=(GM.ov&&GM.ov.sequences)||[];
+  if(!seqs.length){ toast(T("أنشئ تسلسلاً أولاً · build a sequence first")); return; }
+  bulkOpen("⚡ "+T("قاعدة تسجيل تلقائي · Auto-enroll rule"));
+  $("bulkBody").innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;margin:8px 0">
+      <label>${T("الاسم · name")}: <input id="gmRuleName" style="width:240px" placeholder="${T("عالق على هوية العميل · stuck on customer ID")}"></label>
+      <label>GASH STATUS = <input id="gmRuleStatus" style="width:180px" placeholder="customer ID"></label>
+      <label>${T("منذ · for at least")} <input id="gmRuleAge" type="number" value="3" style="width:60px"> ${T("أيام · days")}</label>
+      <label>${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}">${poEsc(s.name)}</option>`).join("")}</select></label>
+      <label>${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue">${T("بموافقتي أولاً · my approval first")}</option><option value="auto">${T("تلقائي بالكامل · fully automatic")}</option></select></label>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    <button class="accent" onclick="gmRuleSave(this)">💾 ${T("حفظ · Save")}</button></div>`;
+}
+async function gmRuleSave(btn){
+  btn.disabled=true;
+  const r=await post("/api/gaash/rules",{name:($("gmRuleName")||{}).value,
+    cond:{gash_status:($("gmRuleStatus")||{}).value, min_age_days:($("gmRuleAge")||{}).value},
+    seq_id:($("gmRuleSeq")||{}).value, mode:($("gmRuleMode")||{}).value, enabled:true});
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  bulkClose(); await gmLoad(); gmRenderSeq();
+}
+// ── 📝 Templates tab ──
+function gmRenderTpl(editId){
+  const tpls=(GM.ov&&GM.ov.templates)||[];
+  const ed=tpls.find(t=>t.id===editId)||(editId==="new"?{id:"",name:"",subject_tpl:"",body_tpl:""}:null);
+  $("gmTplPane").innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <b style="font-size:14px">📝 ${T("مكتبة القوالب · Template library")}</b>
+      <span class="muted2" style="font-size:11px">{gwd} {customer} {upload_link} {id_name} {days_waiting} {step}</span>
+      <span class="spacer"></span>
+      ${CAN_ADMIN?`<button class="accent" onclick="gmRenderTpl('new')">＋ ${T("قالب جديد · New template")}</button>`:""}
+    </div>
+    ${tpls.map(t=>`<div class="panel" style="display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:13px">
+      <b>${poEsc(t.name)}</b>
+      <span class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${poEsc(t.subject_tpl||"")}</span>
+      <span class="spacer"></span>
+      <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${t.used_by||0} ${T("استخدام · used")}</span>
+      ${CAN_ADMIN?`<button class="minibtn" onclick="gmRenderTpl('${t.id}')">✎</button>
+      <button class="minibtn" onclick="gmTplDelete('${t.id}')">🗑</button>`:""}
+    </div>`).join("")||`<div class="muted2 panel">${T("لا قوالب بعد · no templates yet")}</div>`}
+    ${ed?`<div class="panel" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+      <b>${ed.id?T("تعديل القالب · Edit template"):T("قالب جديد · New template")}</b>
+      <input id="gmTplName" value="${poEsc(ed.name)}" placeholder="${T("اسم القالب · template name")}">
+      <input id="gmTplSubj" value="${poEsc(ed.subject_tpl||"")}" placeholder="subject — e.g. Customs clearance — {gwd}">
+      <textarea id="gmTplBody" rows="8" style="font-size:12.5px">${poEsc(ed.body_tpl||"")}</textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="minibtn" onclick="gmRenderTpl()">${T("إلغاء · Cancel")}</button>
+        <button class="accent" onclick="gmTplSave('${poEsc(ed.id)}',this)">💾 ${T("حفظ · Save")}</button>
+      </div></div>`:""}`;
+}
+async function gmTplSave(id,btn){
+  btn.disabled=true;
+  const r=await post("/api/gaash/templates",{id:id||undefined,
+    name:($("gmTplName")||{}).value, subject_tpl:($("gmTplSubj")||{}).value,
+    body_tpl:($("gmTplBody")||{}).value});
+  btn.disabled=false;
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  toast(T("حُفظ · saved")); await gmLoad(); gmRenderTpl();
+}
+async function gmTplDelete(id){
+  if(!confirm(T("حذف القالب؟ · delete this template?"))) return;
+  const r=await (await fetch("/api/gaash/templates",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})})).json();
+  if(!r.ok){ toast(r.error||"failed"); return; }
+  await gmLoad(); gmRenderTpl();
+}
+// ── 📊 Dashboard tab ──
+async function gmDashLoad(){
+  $("gmDashPane").innerHTML=`<div class="muted2" style="padding:20px">${T("جارِ التحميل… · loading…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/stats")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ $("gmDashPane").innerHTML=`<div class="muted2 panel">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  GM.stats=d;
+  const o=d.overall, pct=(a,b)=>b?Math.round(a/b*100)+"%":"—";
+  const tile=(v,l,tip)=>`<div class="gm-tile" ${tip?`title="${poEsc(tip)}"`:""}><b>${v}</b><span>${l}</span></div>`;
+  const seqRows=(d.sequences||[]).filter(s=>s.enrolled||s.sent).map(s=>{
+    const mx=Math.max(1,...(s.steps.length?s.steps:[0]));
+    return `<tr><td><b>${poEsc(s.name)}</b></td><td>${s.enrolled}</td><td>${s.sent}</td>
+      <td>${pct(s.opened,s.sent)}</td><td>${pct(s.clicked,s.sent)}</td>
+      <td>${pct(s.replied,s.enrolled)}</td><td>${pct(s.goal_met,s.enrolled)}</td><td>${s.bounces}</td>
+      <td><div class="gm-fun">${s.steps.map((n,i)=>`<div style="height:${Math.max(8,n/mx*56)}px" title="${T("إيميل · email")} #${i+1}: ${n}"><i>${n}</i></div>`).join("")||'<span class="muted2" style="font-size:11px">—</span>'}</div></td></tr>`;
+  }).join("");
+  $("gmDashPane").innerHTML=`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${tile(o.enrolled,T("مسجل · enrolled"))}
+      ${tile(o.sent,T("مرسل · emails sent"))}
+      ${tile(pct(o.opened,o.sent),T("فتح · open rate"),T("تقريبي — بعض البرامج تحمّل الصور تلقائياً · approximate — some mail apps auto-load images"))}
+      ${tile(pct(o.clicked,o.sent),T("نقر · click rate"))}
+      ${tile(pct(o.replied,o.enrolled),T("رد · reply rate"))}
+      ${tile(pct(o.goal_met,o.enrolled),T("الهدف · goal rate"))}
+      ${tile(o.bounces,T("ارتداد · bounces"))}
+    </div>
+    <div class="panel" style="padding:0"><div class="tbl-scroll"><table>
+      <thead><tr><th>${T("التسلسل · sequence")}</th><th>${T("مسجل · enrolled")}</th><th>${T("مرسل · sent")}</th>
+        <th>${T("فتح · open")}</th><th>${T("نقر · click")}</th><th>${T("رد · reply")}</th><th>🎯</th>
+        <th>${T("ارتداد · bounce")}</th><th>${T("قمع الخطوات · step funnel")}</th></tr></thead>
+      <tbody>${seqRows||`<tr><td colspan="9" class="muted2">${T("لا بيانات بعد · no data yet")}</td></tr>`}</tbody>
+    </table></div></div>`;
 }
 
 localizeStatic();   // apply the saved UI language (default English) to the static chrome

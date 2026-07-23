@@ -276,6 +276,54 @@ CREATE TABLE IF NOT EXISTS gaash_msgs (
 );
 CREATE INDEX IF NOT EXISTS ix_gaashmsgs_gwd ON gaash_msgs(gwd, at);
 CREATE INDEX IF NOT EXISTS ix_gaashmsgs_mid ON gaash_msgs(message_id);
+
+-- 📧 GAASH Mail v2: HubSpot-style sequences-as-data (builder / templates /
+-- triggers / tracking). Same owner-scoped convention.
+CREATE TABLE IF NOT EXISTS gaash_templates (
+  id TEXT PRIMARY KEY,                  -- tpl_<ms> — the reusable email library
+  name TEXT NOT NULL,
+  subject_tpl TEXT,
+  body_tpl TEXT,
+  updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS gaash_sequences (
+  id TEXT PRIMARY KEY,                  -- seq_<ms>
+  name TEXT NOT NULL,
+  to_address TEXT,                      -- per-sequence recipient (any platform)
+  goal TEXT NOT NULL DEFAULT 'cleared', -- cleared | reply | manual
+  send_window_json TEXT,                -- {tz,days:[weekday ints],start,end}
+  created_at TEXT,
+  updated_at TEXT,
+  archived INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS gaash_steps (
+  id TEXT PRIMARY KEY,                  -- stp_<ms><n>
+  seq_id TEXT NOT NULL,
+  pos INTEGER NOT NULL,                 -- 0-based order in the sequence
+  kind TEXT NOT NULL DEFAULT 'auto_email',  -- auto_email | task
+  template_id TEXT,
+  task_note TEXT,
+  delay_days REAL NOT NULL DEFAULT 0    -- BUSINESS days before this step fires
+);
+CREATE INDEX IF NOT EXISTS ix_gaashsteps_seq ON gaash_steps(seq_id, pos);
+CREATE TABLE IF NOT EXISTS gaash_rules (
+  id TEXT PRIMARY KEY,                  -- rul_<ms> — auto-enroll triggers
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  cond_json TEXT,                       -- {gash_status, min_age_days}
+  seq_id TEXT NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'queue',   -- queue (approval) | auto
+  created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS gaash_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, -- raw open/click tracking hits
+  msg_id INTEGER NOT NULL,              -- gaash_msgs.id
+  kind TEXT NOT NULL,                   -- open | click
+  at TEXT NOT NULL,
+  url TEXT,
+  ua TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_gaashevents_msg ON gaash_events(msg_id);
 """
 
 
@@ -392,6 +440,17 @@ def migrate():
         # import/merge (date_created was reset to migration day on 2026-07-14).
         if "ordered_at" not in _columns(c, "leluxe_orders"):
             c.execute("ALTER TABLE leluxe_orders ADD COLUMN ordered_at TEXT")
+        # 📧 GAASH Mail v2: threads point at a sequence; messages carry the
+        # step + open/click tracking counters (bumped by /api/gaash/px|r).
+        if "seq_id" not in _columns(c, "gaash_threads"):
+            c.execute("ALTER TABLE gaash_threads ADD COLUMN seq_id TEXT")
+        if "seq_id" not in _columns(c, "gaash_msgs"):
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN seq_id TEXT")
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN step_id TEXT")
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN opens INTEGER NOT NULL DEFAULT 0")
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0")
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_open_at TEXT")
+            c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_click_at TEXT")
         # Seed business #1 (owner of all pre-tenancy data) exactly once.
         if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
             c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "

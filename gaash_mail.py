@@ -32,6 +32,9 @@ holds a stale DB copy and would double-send. (This is the INVERSE of the
 LELUXE_DIGEST convention, on purpose.)
 """
 
+import hashlib
+import hmac
+import html as html_mod
 import imaplib
 import json
 import os
@@ -231,6 +234,491 @@ def _id_doc(id_doc_id):
 
 
 # --------------------------------------------------------------------------- #
+# v2: sequences-as-data (HubSpot-style builder) — templates / sequences /
+# steps / rules CRUD, send-window math, open+click tracking, stats.
+# --------------------------------------------------------------------------- #
+# Default window: Sun–Thu 09:00–17:00 Palestine time (GAASH's work week).
+# Fully editable per sequence — days/hours/timezone — so a sequence can target
+# any platform, not just GAASH. (python weekdays: Mon=0 … Sun=6)
+DEFAULT_WINDOW = {"tz": "Asia/Hebron", "days": [6, 0, 1, 2, 3],
+                  "start": "09:00", "end": "17:00"}
+
+
+def _win(seq):
+    w = {}
+    try:
+        w = json.loads((seq or {}).get("send_window_json") or "{}")
+    except Exception:  # noqa
+        pass
+    out = {**DEFAULT_WINDOW, **{k: v for k, v in w.items() if v}}
+    if not isinstance(out.get("days"), list) or not out["days"]:
+        out["days"] = DEFAULT_WINDOW["days"]
+    return out
+
+
+def _hm(s, fallback):
+    m = re.match(r"^(\d{1,2}):(\d{2})$", str(s or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else fallback
+
+
+def next_allowed(dt, win):
+    """The earliest moment ≥ dt inside the window (its tz)."""
+    try:
+        tz = ZoneInfo(win.get("tz") or "Asia/Hebron")
+    except Exception:  # noqa
+        tz = ZoneInfo("Asia/Hebron")
+    days = set(win.get("days") or DEFAULT_WINDOW["days"])
+    sh, sm = _hm(win.get("start"), (9, 0))
+    eh, em = _hm(win.get("end"), (17, 0))
+    d = dt.astimezone(tz)
+    for _ in range(15):                       # ≤ 2 weeks scan — always terminates
+        start = d.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        end = d.replace(hour=eh, minute=em, second=0, microsecond=0)
+        if d.weekday() in days:
+            if d < start:
+                return start
+            if d <= end:
+                return d
+        d = (d + timedelta(days=1)).replace(hour=sh, minute=sm, second=0,
+                                            microsecond=0)
+    return d
+
+
+def add_business_days(dt, n, win):
+    """dt + n BUSINESS days (only the window's allowed weekdays count), then
+    clamped into the window. n may be fractional (0.5 = half a day of clock)."""
+    try:
+        tz = ZoneInfo(win.get("tz") or "Asia/Hebron")
+    except Exception:  # noqa
+        tz = ZoneInfo("Asia/Hebron")
+    days = set(win.get("days") or DEFAULT_WINDOW["days"])
+    d = dt.astimezone(tz)
+    whole = int(n or 0)
+    for _ in range(whole * 7 + 14):
+        if whole <= 0:
+            break
+        d += timedelta(days=1)
+        if d.weekday() in days:
+            whole -= 1
+    frac = float(n or 0) - int(n or 0)
+    if frac > 0:
+        d += timedelta(days=frac)
+    return next_allowed(d, win)
+
+
+# ── CRUD: templates ──
+def templates_list():
+    with db.connect() as c:
+        tpls = [dict(r) for r in c.execute(
+            "SELECT * FROM gaash_templates ORDER BY name")]
+        used = {r["template_id"]: r["n"] for r in c.execute(
+            "SELECT template_id, COUNT(*) n FROM gaash_steps GROUP BY template_id")}
+    for t in tpls:
+        t["used_by"] = used.get(t["id"], 0)
+    return tpls
+
+
+def template_save(t):
+    tid = (t.get("id") or "").strip() or f"tpl_{int(time.time() * 1000)}"
+    name = str(t.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "template name required"}
+    with db.connect() as c:
+        c.execute("""INSERT INTO gaash_templates (id,name,subject_tpl,body_tpl,updated_at)
+            VALUES (?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name,
+              subject_tpl=excluded.subject_tpl, body_tpl=excluded.body_tpl,
+              updated_at=excluded.updated_at""",
+                  (tid, name, str(t.get("subject_tpl") or ""),
+                   str(t.get("body_tpl") or ""), now_iso()))
+    return {"ok": True, "id": tid}
+
+
+def template_remove(tid):
+    with db.connect() as c:
+        if c.execute("SELECT 1 FROM gaash_steps WHERE template_id=?",
+                     (tid,)).fetchone():
+            return {"ok": False, "error": "template is used by a sequence step"}
+        c.execute("DELETE FROM gaash_templates WHERE id=?", (tid,))
+    return {"ok": True}
+
+
+def _template(tid):
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_templates WHERE id=?",
+                      (tid,)).fetchone()
+    return dict(r) if r else None
+
+
+# ── CRUD: sequences + steps ──
+def seq_steps(seq_id):
+    with db.connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM gaash_steps WHERE seq_id=? ORDER BY pos", (seq_id,))]
+
+
+def sequence_get(seq_id):
+    if not seq_id:
+        return None
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_sequences WHERE id=?",
+                      (seq_id,)).fetchone()
+    if not r:
+        return None
+    seq = dict(r)
+    seq["steps"] = seq_steps(seq_id)
+    return seq
+
+
+def sequences_list(include_archived=False):
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM gaash_sequences" +
+            ("" if include_archived else " WHERE archived=0") +
+            " ORDER BY created_at")]
+        active = {r["seq_id"]: r["n"] for r in c.execute(
+            "SELECT seq_id, COUNT(*) n FROM gaash_threads WHERE state IN "
+            "('active','waiting_reply','missing_docs','paused','waiting_task') "
+            "GROUP BY seq_id")}
+    for s in rows:
+        s["steps"] = seq_steps(s["id"])
+        s["active_threads"] = active.get(s["id"], 0)
+    return rows
+
+
+def sequence_save(s):
+    """Save a sequence + its full ordered steps array (replace-all)."""
+    sid = (s.get("id") or "").strip() or f"seq_{int(time.time() * 1000)}"
+    name = str(s.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "sequence name required"}
+    goal = s.get("goal") if s.get("goal") in ("cleared", "reply", "manual") \
+        else "cleared"
+    win = s.get("send_window") if isinstance(s.get("send_window"), dict) else {}
+    win = {**DEFAULT_WINDOW, **{k: win[k] for k in
+                                ("tz", "days", "start", "end") if win.get(k)}}
+    steps_in = s.get("steps") if isinstance(s.get("steps"), list) else []
+    steps = []
+    for i, st in enumerate(steps_in[:20]):
+        if not isinstance(st, dict):
+            continue
+        kind = st.get("kind") if st.get("kind") in ("auto_email", "task") \
+            else "auto_email"
+        if kind == "auto_email" and not _template(st.get("template_id") or ""):
+            return {"ok": False,
+                    "error": f"step {i + 1}: pick a template from the library"}
+        try:
+            delay = min(60.0, max(0.0, float(st.get("delay_days") or 0)))
+        except (TypeError, ValueError):
+            delay = 0.0
+        steps.append({"id": (st.get("id") or "").strip()
+                      or f"stp_{int(time.time() * 1000)}{i}",
+                      "kind": kind,
+                      "template_id": st.get("template_id") if kind == "auto_email" else None,
+                      "task_note": str(st.get("task_note") or "").strip() or None,
+                      "delay_days": delay})
+    if not steps:
+        return {"ok": False, "error": "a sequence needs at least one step"}
+    with db.connect() as c:
+        c.execute("""INSERT INTO gaash_sequences
+            (id,name,to_address,goal,send_window_json,created_at,updated_at,archived)
+            VALUES (?,?,?,?,?,?,?,0)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name,
+              to_address=excluded.to_address, goal=excluded.goal,
+              send_window_json=excluded.send_window_json,
+              updated_at=excluded.updated_at, archived=0""",
+                  (sid, name, str(s.get("to_address") or "").strip() or None,
+                   goal, json.dumps(win), now_iso(), now_iso()))
+        c.execute("DELETE FROM gaash_steps WHERE seq_id=?", (sid,))
+        for i, st in enumerate(steps):
+            c.execute("""INSERT INTO gaash_steps
+                (id,seq_id,pos,kind,template_id,task_note,delay_days)
+                VALUES (?,?,?,?,?,?,?)""",
+                      (st["id"], sid, i, st["kind"], st["template_id"],
+                       st["task_note"], st["delay_days"]))
+    return {"ok": True, "id": sid}
+
+
+def sequence_archive(seq_id):
+    with db.connect() as c:
+        n = c.execute("SELECT COUNT(*) n FROM gaash_threads WHERE seq_id=? AND "
+                      "state IN ('active','waiting_reply','missing_docs',"
+                      "'paused','waiting_task','proposed')",
+                      (seq_id,)).fetchone()["n"]
+        if n:
+            return {"ok": False,
+                    "error": f"{n} open conversation(s) still use this sequence"}
+        c.execute("UPDATE gaash_sequences SET archived=1, updated_at=? WHERE id=?",
+                  (now_iso(), seq_id))
+    return {"ok": True}
+
+
+def default_sequence_id():
+    with db.connect() as c:
+        r = c.execute("SELECT id FROM gaash_sequences WHERE archived=0 "
+                      "ORDER BY created_at LIMIT 1").fetchone()
+    return r["id"] if r else None
+
+
+# ── CRUD: auto-enroll rules ──
+def rules_list():
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM gaash_rules ORDER BY created_at")]
+    for r in rows:
+        try:
+            r["cond"] = json.loads(r.pop("cond_json") or "{}")
+        except Exception:  # noqa
+            r["cond"] = {}
+    return rows
+
+
+def rule_save(r):
+    rid = (r.get("id") or "").strip() or f"rul_{int(time.time() * 1000)}"
+    name = str(r.get("name") or "").strip()
+    seq_id = (r.get("seq_id") or "").strip()
+    if not name or not sequence_get(seq_id):
+        return {"ok": False, "error": "rule needs a name and a valid sequence"}
+    cond = r.get("cond") if isinstance(r.get("cond"), dict) else {}
+    try:
+        min_age = min(90, max(0, int(cond.get("min_age_days") or 0)))
+    except (TypeError, ValueError):
+        min_age = 0
+    cond = {"gash_status": str(cond.get("gash_status") or "").strip(),
+            "min_age_days": min_age}
+    mode = r.get("mode") if r.get("mode") in ("queue", "auto") else "queue"
+    with db.connect() as c:
+        c.execute("""INSERT INTO gaash_rules
+            (id,name,enabled,cond_json,seq_id,mode,created_at)
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name,
+              enabled=excluded.enabled, cond_json=excluded.cond_json,
+              seq_id=excluded.seq_id, mode=excluded.mode""",
+                  (rid, name, 1 if r.get("enabled", True) else 0,
+                   json.dumps(cond), seq_id, mode, now_iso()))
+    return {"ok": True, "id": rid}
+
+
+def rule_remove(rid):
+    with db.connect() as c:
+        c.execute("DELETE FROM gaash_rules WHERE id=?", (rid,))
+    return {"ok": True}
+
+
+def run_rules():
+    """Evaluate enabled auto-enroll rules against the candidates. mode=queue →
+    a 'proposed' thread (approval chip + bell); mode=auto → real enrollment."""
+    rules = [r for r in rules_list() if r.get("enabled")]
+    if not rules:
+        return 0
+    cands = candidates()
+    made = 0
+    now_ms = time.time() * 1000
+    for r in rules:
+        want = re.sub(r"\s+", " ", str(r["cond"].get("gash_status") or "")).strip().lower()
+        min_age = r["cond"].get("min_age_days") or 0
+        for cd in cands:
+            if thread_get(cd["gwd"]):
+                continue
+            have = re.sub(r"\s+", " ", str(cd.get("gash_status") or "")).strip().lower()
+            if want and have != want:
+                continue
+            age_ok = True
+            if min_age:
+                row = _leluxe_row_for(cd["gwd"])
+                created = 0
+                try:
+                    with db.connect() as c:
+                        rr = c.execute("SELECT date_created FROM leluxe_orders "
+                                       "WHERE id=?", (row["id"],)).fetchone() if row else None
+                    created = float(rr["date_created"] or 0) if rr else 0
+                except Exception:  # noqa
+                    created = 0
+                age_ok = created and (now_ms - created) >= min_age * 864e5
+            if not age_ok:
+                continue
+            if r["mode"] == "auto":
+                start_threads([cd["gwd"]], None, None, seq_id=r["seq_id"])
+            else:
+                with db.connect() as c:
+                    c.execute("""INSERT INTO gaash_threads
+                        (gwd,seq_id,state,step,unread,missing_docs,
+                         pending_files_json,created_at,last_activity)
+                        VALUES (?,?, 'proposed',0,0,0,'[]',?,?)""",
+                              (cd["gwd"], r["seq_id"], now_iso(), now_iso()))
+            made += 1
+    return made
+
+
+# ── open + click tracking (self-hosted pixel + redirect) ──
+def _track_base():
+    return (os.environ.get("PORTAL_BASE_URL") or "").rstrip("/")
+
+
+def _track_sig(msg_id, idx, url=""):
+    key = (os.environ.get("OTLOBLY_SECRET") or "dev").encode()
+    return hmac.new(key, f"{msg_id}|{idx}|{url}".encode(),
+                    hashlib.sha256).hexdigest()[:20]
+
+
+def track_token(msg_id, idx, url=""):
+    return f"{msg_id}.{idx}.{_track_sig(msg_id, idx, url)}"
+
+
+def verify_token(token, url=""):
+    """(msg_id, idx) when the signature checks out, else None."""
+    m = re.match(r"^(\d+)\.(\d+)\.([0-9a-f]{20})$", str(token or ""))
+    if not m:
+        return None
+    msg_id, idx, sig = int(m.group(1)), int(m.group(2)), m.group(3)
+    if not hmac.compare_digest(sig, _track_sig(msg_id, idx, url)):
+        return None
+    return msg_id, idx
+
+
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
+
+
+def _html_body(text, msg_db_id):
+    """HTML alternative: escaped text with tracked links + an open pixel.
+    Falls back to None (plain-text only) when no public base URL is set."""
+    base = _track_base()
+    if not base or not msg_db_id:
+        return None
+    urls = []
+
+    def _sub(m):
+        url = m.group(0)
+        idx = len(urls)
+        urls.append(url)
+        t = track_token(msg_db_id, idx, url)
+        return (f'<a href="{base}/api/gaash/r/{t}?u={_uq(url)}">'
+                f"{html_mod.escape(url)}</a>")
+    body = _URL_RE.sub(_sub, html_mod.escape(text or ""))
+    body = body.replace("\n", "<br>\n")
+    px = track_token(msg_db_id, 0, "")
+    return (f'<div style="font-family:Arial,sans-serif;font-size:14px;'
+            f'line-height:1.5">{body}</div>'
+            f'<img src="{base}/api/gaash/px/{px}.gif" width="1" height="1" '
+            f'alt="" style="display:none">')
+
+
+def _uq(s):
+    from urllib.parse import quote
+    return quote(str(s or ""), safe="")
+
+
+def record_event(msg_id, kind, url=None, ua=None):
+    now = now_iso()
+    with db.connect() as c:
+        c.execute("INSERT INTO gaash_events (msg_id,kind,at,url,ua) "
+                  "VALUES (?,?,?,?,?)", (msg_id, kind, now, url, (ua or "")[:200]))
+        col, first = ("opens", "first_open_at") if kind == "open" else \
+                     ("clicks", "first_click_at")
+        c.execute(f"UPDATE gaash_msgs SET {col}={col}+1, "
+                  f"{first}=COALESCE({first},?) WHERE id=?", (now, msg_id))
+
+
+# 1×1 transparent GIF (the tracking pixel body)
+PIXEL_GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
+             b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
+             b"\x00\x02\x02D\x01\x00;")
+
+
+# ── stats (the 📊 dashboard) ──
+def stats():
+    with db.connect() as c:
+        seqs = {s["id"]: {"seq_id": s["id"], "name": s["name"],
+                          "enrolled": 0, "active": 0, "goal_met": 0,
+                          "exhausted": 0, "replied": 0, "sent": 0,
+                          "opened": 0, "clicked": 0, "bounces": 0,
+                          "steps": []}
+                for s in sequences_list(include_archived=True)}
+        overall = {"enrolled": 0, "active": 0, "goal_met": 0, "exhausted": 0,
+                   "replied": 0, "sent": 0, "opened": 0, "clicked": 0,
+                   "bounces": 0}
+        LIVE = ("active", "waiting_reply", "missing_docs", "paused",
+                "waiting_task")
+        for t in c.execute("SELECT seq_id, state FROM gaash_threads "
+                           "WHERE state!='proposed'"):
+            tgt = seqs.get(t["seq_id"])
+            for d in ([overall, tgt] if tgt else [overall]):
+                d["enrolled"] += 1
+                if t["state"] in LIVE:
+                    d["active"] += 1
+                if t["state"] in ("goal_met", "cleared"):
+                    d["goal_met"] += 1
+                if t["state"] == "exhausted":
+                    d["exhausted"] += 1
+        for m in c.execute("SELECT seq_id, dir, kind, step, opens, clicks "
+                           "FROM gaash_msgs"):
+            tgt = seqs.get(m["seq_id"])
+            tgts = [overall, tgt] if tgt else [overall]
+            if m["dir"] == "out" and m["kind"] in ("sent", "resent"):
+                for d in tgts:
+                    d["sent"] += 1
+                    if (m["opens"] or 0) > 0:
+                        d["opened"] += 1
+                    if (m["clicks"] or 0) > 0:
+                        d["clicked"] += 1
+                if tgt is not None and m["step"]:
+                    steps = tgt["steps"]
+                    while len(steps) < m["step"]:
+                        steps.append(0)
+                    steps[m["step"] - 1] += 1
+            elif m["dir"] == "in" and m["kind"] == "bounce":
+                for d in tgts:
+                    d["bounces"] += 1
+        for r in c.execute("SELECT DISTINCT gwd FROM gaash_msgs WHERE dir='in' "
+                           "AND kind='reply'"):
+            overall["replied"] += 1
+            t = c.execute("SELECT seq_id FROM gaash_threads WHERE gwd=?",
+                          (r["gwd"],)).fetchone()
+            if t and t["seq_id"] in seqs:
+                seqs[t["seq_id"]]["replied"] += 1
+    return {"overall": overall, "sequences": list(seqs.values())}
+
+
+# ── one-time v2 seed: the legacy settings 4-step chain → real data ──
+def migrate_v2():
+    """Create the default 'GAASH clearance' sequence + its 4 templates from the
+    legacy settings, and point old threads at it. claim_once ⇒ runs once per DB;
+    never raises (boot must not break)."""
+    try:
+        with db.connect() as c:
+            have = c.execute("SELECT COUNT(*) n FROM gaash_sequences").fetchone()["n"]
+        if have or not db.claim_once("gaash_v2_seed"):
+            return
+        setts = _setts()
+        tpl_ids = []
+        for i, st in enumerate(setts.get("steps") or []):
+            tid = f"tpl_seed{i + 1}"
+            with db.connect() as c:
+                c.execute("""INSERT OR IGNORE INTO gaash_templates
+                    (id,name,subject_tpl,body_tpl,updated_at) VALUES (?,?,?,?,?)""",
+                          (tid, f"GAASH clearance #{i + 1}",
+                           st.get("subject_tpl") or "", st.get("body_tpl") or "",
+                           now_iso()))
+            tpl_ids.append(tid)
+        cadence = setts.get("cadence_days") or [2, 2, 2]
+        steps = []
+        for i, tid in enumerate(tpl_ids):
+            delay = 0 if i == 0 else cadence[min(i - 1, len(cadence) - 1)]
+            steps.append({"kind": "auto_email", "template_id": tid,
+                          "delay_days": delay})
+        res = sequence_save({"id": "seq_default", "name": "GAASH clearance",
+                             "to_address": setts.get("to_address") or "",
+                             "goal": "cleared", "send_window": DEFAULT_WINDOW,
+                             "steps": steps})
+        if res.get("ok"):
+            with db.connect() as c:
+                c.execute("UPDATE gaash_threads SET seq_id='seq_default' "
+                          "WHERE seq_id IS NULL")
+    except Exception as e:  # noqa - the seed must never block boot
+        print(f"gaash_mail: v2 seed skipped ({e})")
+
+
+# --------------------------------------------------------------------------- #
 # Threads + messages (SQLite)
 # --------------------------------------------------------------------------- #
 def thread_get(gwd):
@@ -408,7 +896,7 @@ def _smtp_send(acct, msg):
         s.send_message(msg)
 
 
-def _build_msg(acct, to_addr, subject, body, attachments, chain):
+def _build_msg(acct, to_addr, subject, body, attachments, chain, html=None):
     msg = EmailMessage()
     msg["From"] = acct["email"]
     msg["To"] = to_addr
@@ -420,6 +908,8 @@ def _build_msg(acct, to_addr, subject, body, attachments, chain):
         msg["In-Reply-To"] = chain[-1]
         msg["References"] = " ".join(chain)
     msg.set_content(body or "(see attachment)")
+    if html:                          # tracked HTML alternative (pixel + links)
+        msg.add_alternative(html, subtype="html")
     for name, data, ctype in (attachments or []):
         ctype = ctype if ctype and "/" in ctype else "application/octet-stream"
         maintype, subtype = ctype.split("/", 1)
@@ -429,9 +919,10 @@ def _build_msg(acct, to_addr, subject, body, attachments, chain):
 
 
 def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
-                 subject=None):
-    """Send one message on a thread (threaded Re: after the first). Records the
-    message only AFTER Gmail accepts it. Honors dry_run."""
+                 subject=None, to_override=None, step_id=None):
+    """Send one message on a thread (threaded Re: after the first). The message
+    row is pre-allocated so the tracking pixel/links can carry its id, then
+    DELETED if Gmail rejects the send. Honors dry_run."""
     th = thread_get(gwd)
     if not th:
         return {"ok": False, "error": "thread not found"}
@@ -443,22 +934,39 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
     acct = _account(th.get("account_id"))
     if not acct:
         return {"ok": False, "error": "sending account no longer exists — add one"}
-    to_addr = (setts.get("to_address") or "").strip()
+    seq = sequence_get(th.get("seq_id"))
+    to_addr = (to_override or (seq or {}).get("to_address")
+               or setts.get("to_address") or "").strip()
     if not to_addr:
-        return {"ok": False, "error": "no GAASH to_address configured in Settings"}
+        return {"ok": False, "error": "no recipient address — set one on the sequence or in Settings"}
     base = th.get("subject") or subject or f"Customs clearance — {gwd}"
     prior = [m for m in msgs_for(gwd) if m.get("message_id")]
     subj = base
     if prior and not re.match(r"(?i)re:", base):
         subj = f"Re: {base}"
     chain = [m["message_id"] for m in prior]
-    msg, mid = _build_msg(acct, to_addr, subj, body, attachments, chain)
+    # pre-allocate the row: the tracking token embeds its id
+    now = now_iso()
+    with db.connect() as c:
+        cur = c.execute("""INSERT INTO gaash_msgs
+            (gwd,dir,kind,step,at,from_addr,to_addr,subject,body,
+             attachments_json,notified,seq_id,step_id)
+            VALUES (?,?,?,?,?,?,?,?,?, '[]',1,?,?)""",
+                        (gwd, "out", kind, step, now, acct["email"], to_addr,
+                         subj, body or "", th.get("seq_id"), step_id))
+        mrow = cur.lastrowid
+    msg, mid = _build_msg(acct, to_addr, subj, body, attachments, chain,
+                          html=_html_body(body or "", mrow))
     try:
         _smtp_send(acct, msg)
     except smtplib.SMTPAuthenticationError:
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_msgs WHERE id=?", (mrow,))
         _thread_set(gwd, last_error=_AUTH_HELP)
         return {"ok": False, "error": _AUTH_HELP}
     except Exception as e:  # noqa
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_msgs WHERE id=?", (mrow,))
         err = f"send failed: {str(e)[:150]}"
         _thread_set(gwd, last_error=err)
         return {"ok": False, "error": err}
@@ -467,12 +975,11 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
         stored = _store_attachment(gwd, name, data)
         atts.append({"name": _safe_name(name), "file": stored,
                      "size": len(data), "ctype": ctype})
-    _msg_add(gwd, {"dir": "out", "kind": kind, "step": step, "at": now_iso(),
-                   "from_addr": acct["email"], "to_addr": to_addr,
-                   "subject": subj, "message_id": mid, "body": body or "",
-                   "attachments": atts})
-    _thread_set(gwd, subject=base, last_error=None)
-    return {"ok": True, "message_id": mid}
+    with db.connect() as c:
+        c.execute("UPDATE gaash_msgs SET message_id=?, attachments_json=? "
+                  "WHERE id=?", (mid, json.dumps(atts), mrow))
+    _thread_set(gwd, subject=base, last_error=None, last_activity=now)
+    return {"ok": True, "message_id": mid, "msg_row": mrow}
 
 
 def _step_attachments(th):
@@ -497,66 +1004,106 @@ def _step_attachments(th):
     return out
 
 
-def send_step(gwd):
-    """Send the thread's next sequence email (guards already passed)."""
-    th = thread_get(gwd)
-    if not th:
-        return {"ok": False, "error": "thread not found"}
-    step = int(th.get("step") or 0)
-    if step >= 4:
-        return {"ok": False, "error": "all 4 emails already sent"}
-    setts = _setts()
-    steps = setts.get("steps") or []
-    tpl = steps[step] if step < len(steps) else {}
-    subject = _fill(tpl.get("subject_tpl") or f"Customs clearance — {gwd}",
-                    gwd, th, step + 1)
-    body = _fill(tpl.get("body_tpl") or "", gwd, th, step + 1)
-    if step == 0:
-        _thread_set(gwd, subject=subject)          # the base subject of the thread
-        th["subject"] = subject
-    res = _thread_send(gwd, body, _step_attachments(th), kind="sent",
-                       step=step + 1, subject=subject)
-    if not res.get("ok"):
-        return res
-    cadence = setts.get("cadence_days") or [2, 2, 2]
-    new_step = step + 1
+def _schedule_next(gwd, seq, new_step):
+    """After completing step new_step-1: schedule the next step (business-day
+    delay inside the sequence's window) or mark the sequence exhausted."""
+    steps = (seq or {}).get("steps") or []
     fields = {"step": new_step, "pending_files_json": "[]"}
-    if new_step >= 4:
+    if new_step >= len(steps):
         fields["state"] = "exhausted"
         fields["next_send_at"] = None
     else:
-        delay = cadence[min(new_step - 1, len(cadence) - 1)]
-        due = datetime.now(timezone.utc) + timedelta(days=float(delay))
+        win = _win(seq)
+        due = add_business_days(datetime.now(timezone.utc),
+                                steps[new_step].get("delay_days") or 0, win)
         fields["next_send_at"] = due.isoformat(timespec="seconds")
+        if thread_get(gwd).get("state") == "waiting_task":
+            fields["state"] = "active"
     _thread_set(gwd, **fields)
-    return {"ok": True, "step": new_step, **res}
+    return fields
 
 
-def start_threads(gwds, id_doc_id, account_id):
+def send_step(gwd):
+    """Run the thread's next sequence STEP (guards already passed): an
+    auto_email sends the referenced template; a task pauses the thread as a
+    to-do until action=task_done."""
+    th = thread_get(gwd)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    seq = sequence_get(th.get("seq_id")) or sequence_get(default_sequence_id())
+    if not seq:
+        return {"ok": False, "error": "no sequence — create one in the builder"}
+    steps = seq["steps"]
+    step = int(th.get("step") or 0)
+    if step >= len(steps):
+        return {"ok": False, "error": "all steps already completed"}
+    st = steps[step]
+    if st["kind"] == "task":
+        # a to-do, not an email: pause here until the human ticks it
+        _msg_add(gwd, {"dir": "out", "kind": "task", "step": step + 1,
+                       "at": now_iso(), "body": st.get("task_note") or "task",
+                       "notified": True})
+        _thread_set(gwd, state="waiting_task", next_send_at=None)
+        return {"ok": True, "task": True, "step": step + 1}
+    tpl = _template(st.get("template_id") or "") or {}
+    subject = _fill(tpl.get("subject_tpl") or f"Customs clearance — {gwd}",
+                    gwd, th, step + 1)
+    body = _fill(tpl.get("body_tpl") or "", gwd, th, step + 1)
+    if not th.get("subject"):
+        _thread_set(gwd, subject=subject)          # the thread's base subject
+        th["subject"] = subject
+    res = _thread_send(gwd, body, _step_attachments(th), kind="sent",
+                       step=step + 1, subject=subject, step_id=st.get("id"))
+    if not res.get("ok"):
+        return res
+    _schedule_next(gwd, seq, step + 1)
+    return {"ok": True, "step": step + 1, **res}
+
+
+def task_done(gwd):
+    """Tick the current task step → the sequence continues."""
+    th = thread_get(gwd)
+    if not th or th.get("state") != "waiting_task":
+        return {"ok": False, "error": "no task is waiting on this thread"}
+    seq = sequence_get(th.get("seq_id")) or {}
+    _msg_add(gwd, {"dir": "out", "kind": "task_done",
+                   "step": int(th.get("step") or 0) + 1, "at": now_iso(),
+                   "body": "✓", "notified": True})
+    _schedule_next(gwd, seq, int(th.get("step") or 0) + 1)
+    return {"ok": True, "thread": thread_get(gwd)}
+
+
+def start_threads(gwds, id_doc_id, account_id, seq_id=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
-    to send email 1 immediately. Returns per-GWD results."""
+    to run step 1 immediately. Returns per-GWD results."""
+    seq_id = seq_id or default_sequence_id()
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
         if not re.match(r"GWD\d+$", gwd):
             out.append({"gwd": raw, "ok": False, "error": "not a GWD number"})
             continue
-        if thread_get(gwd):
+        existing = thread_get(gwd)
+        if existing and existing.get("state") == "proposed":
+            with db.connect() as c:                # a trigger suggestion → real
+                c.execute("DELETE FROM gaash_threads WHERE gwd=?", (gwd,))
+            existing = None
+        if existing:
             out.append({"gwd": gwd, "ok": False, "error": "thread already exists"})
             continue
         with db.connect() as c:
-            # next_send_at seeds to NOW so the sequencer retries email 1 even if
+            # next_send_at seeds to NOW so the sequencer retries step 1 even if
             # the immediate send below is blocked (dry-run / no account yet)
             c.execute("""INSERT INTO gaash_threads
                 (gwd,account_id,state,step,id_doc_id,unread,missing_docs,
-                 pending_files_json,next_send_at,created_at,last_activity)
-                VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?)""",
+                 pending_files_json,next_send_at,created_at,last_activity,seq_id)
+                VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?,?)""",
                       (gwd, account_id, id_doc_id or None,
                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                       now_iso(), now_iso()))
+                       now_iso(), now_iso(), seq_id))
         if package_terminal(gwd):
-            _thread_set(gwd, state="cleared")
-            out.append({"gwd": gwd, "ok": True, "state": "cleared",
+            _thread_set(gwd, state="goal_met")
+            out.append({"gwd": gwd, "ok": True, "state": "goal_met",
                         "note": "already cleared/delivered — no email needed"})
             continue
         res = send_step(gwd)
@@ -781,10 +1328,16 @@ def _check_account(acct, setts, our_mids, thread_gwds):
             received = _msg_datetime(msg)
             body_text = _extract_text(msg)
             subj = str(msg.get("Subject") or "")
-            kind = classify_incoming(gwd, received,
-                                     int(setts.get("ack_window_min") or 0))
-            if _matches_closed(setts, body_text, subj):
-                kind = "closed"     # office-closed bounce: mail was NOT received
+            frm2 = parseaddr(str(msg.get("From") or ""))[1].lower()
+            if frm2.startswith(("mailer-daemon@", "postmaster@")) or \
+                    re.match(r"(?i)(delivery status notification|undeliverable|"
+                             r"mail delivery failed)", subj):
+                kind = "bounce"     # counted on the dashboard, never a reply
+            else:
+                kind = classify_incoming(gwd, received,
+                                         int(setts.get("ack_window_min") or 0))
+                if _matches_closed(setts, body_text, subj):
+                    kind = "closed"  # office-closed bounce: mail was NOT received
             new_records.append((gwd, {
                 "dir": "in", "kind": kind,
                 "at": received.astimezone().isoformat(timespec="seconds"),
@@ -849,7 +1402,10 @@ def check_replies():
             upd = {"unread": int(th.get("unread") or 0) + 1}
             if rec["kind"] == "reply":
                 n_reply += 1
-                upd["state"] = "waiting_reply"
+                # goal 'reply' = a human answer IS the win; otherwise pause
+                seq = sequence_get(th.get("seq_id"))
+                upd["state"] = ("goal_met" if (seq or {}).get("goal") == "reply"
+                                else "waiting_reply")
                 kw = _matches_missing(setts, rec.get("body"), rec.get("subject"))
                 if kw:
                     upd["missing_docs"] = 1
@@ -970,22 +1526,30 @@ def _sent_today():
 
 
 def run_once():
-    """One sequencer pass: advance due threads (guards in order), then poll
-    inboxes. Safe to call from any worker — sends dedupe via claim_once."""
+    """One sequencer pass: auto-enroll rules, advance due threads (guards in
+    order), then poll inboxes. Safe from any worker — sends dedupe via claim_once."""
     setts = _setts()
     sent = 0
     cap = int(setts.get("daily_send_cap") or 40)
     now = datetime.now(timezone.utc)
+    try:
+        proposed = run_rules()
+    except Exception:  # noqa - a bad rule must never stop the sends
+        proposed = 0
     for th in threads_all():
-        if th.get("state") != "active" or int(th.get("step") or 0) >= 4:
+        if th.get("state") != "active":
             continue
         due = _parse_iso(th.get("next_send_at") or "")
         if due is None or due > now:
             continue
         gwd = th["gwd"]
-        # guard 1: already cleared/delivered → stop the sequence
+        seq = sequence_get(th.get("seq_id")) or sequence_get(default_sequence_id())
+        if not seq or int(th.get("step") or 0) >= len(seq["steps"]):
+            _thread_set(gwd, state="exhausted", next_send_at=None)
+            continue
+        # guard 1: already cleared/delivered → the goal is met, stop
         if package_terminal(gwd):
-            _thread_set(gwd, state="cleared")
+            _thread_set(gwd, state="goal_met")
             continue
         # guard 2: an unhandled real reply → pause (belt & braces; the poll
         # already flips the state, but a manual DB edit must not slip through)
@@ -995,27 +1559,39 @@ def run_once():
             _thread_set(gwd, state="waiting_reply")
             continue
         # guard 3: missing docs is a separate paused state (never "active")
-        # guard 4: dry-run — don't even claim; the step must fire once it's off
-        if setts.get("dry_run", True):
-            _thread_set(gwd, last_error="dry-run is ON in Settings — nothing is sent")
-            continue
-        # guard 5: daily cap
-        if _sent_today() + 1 > cap or sent + 1 > cap:
-            break
-        # guard 6: exactly-once across gunicorn workers; a FAILED send releases
+        # guard 4: outside the sequence's send window → defer to its next start
+        # (task steps aren't emails — they may fire any time)
+        st = seq["steps"][int(th.get("step") or 0)]
+        if st["kind"] == "auto_email":
+            win = _win(seq)
+            allowed = next_allowed(now, win)
+            if allowed > now.astimezone(allowed.tzinfo):
+                _thread_set(gwd, next_send_at=allowed.astimezone(timezone.utc)
+                            .isoformat(timespec="seconds"))
+                continue
+            # guard 5: dry-run — don't even claim; fires once it's off
+            if setts.get("dry_run", True):
+                _thread_set(gwd, last_error="dry-run is ON in Settings — nothing is sent")
+                continue
+            # guard 6: daily cap
+            if _sent_today() + 1 > cap or sent + 1 > cap:
+                break
+        # guard 7: exactly-once across gunicorn workers; a FAILED send releases
         # the claim so the next pass retries (otherwise the step is lost forever)
         key = f"gaashmail:{gwd}:step{int(th.get('step') or 0) + 1}"
         if not db.claim_once(key):
             continue
         res = send_step(gwd)
         if res.get("ok"):
-            sent += 1
+            if not res.get("task"):
+                sent += 1
         else:
             with db.connect() as c:
                 c.execute("DELETE FROM settings WHERE key=?", (key,))
     poll = check_replies() if accounts(redact=True) else {}
-    return {"sent": sent, **({k: poll[k] for k in ("new", "acks", "resent")
-                              if k in poll} if poll else {})}
+    return {"sent": sent, "proposed": proposed,
+            **({k: poll[k] for k in ("new", "acks", "resent")
+                if k in poll} if poll else {})}
 
 
 # --------------------------------------------------------------------------- #
@@ -1038,8 +1614,13 @@ def overview():
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
         th.pop("pending_files_json", None)
-    return {"threads": threads, "accounts": accounts(redact=True),
+    proposed = [t for t in threads if t.get("state") == "proposed"]
+    return {"threads": [t for t in threads if t.get("state") != "proposed"],
+            "proposed": proposed,
+            "accounts": accounts(redact=True),
             "ids": ids_list(), "settings": _setts(),
+            "sequences": sequences_list(), "templates": templates_list(),
+            "rules": rules_list(),
             "mailer_env": bool(os.environ.get("GAASH_MAILER"))}
 
 
