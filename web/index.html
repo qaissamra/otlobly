@@ -445,6 +445,10 @@
   .lx-col.lx-dragging{opacity:.35}
   .lx-col.lx-drop-l{box-shadow:inset 3px 0 0 #f76808}
   .lx-col.lx-drop-r{box-shadow:inset -3px 0 0 #f76808}
+  /* right-click column context menu (ClickUp-style) */
+  .lxt-ctx{min-width:210px}
+  .lxt-ctx .pop-item{white-space:nowrap}
+  .pop-sep{height:1px;background:var(--line);margin:5px 6px}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
   /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
@@ -3236,6 +3240,59 @@ function lxtSortClick(tbl,key){     // none → ↑ → ↓ → none
   try{ localStorage.setItem("lxt_sort_"+tbl,JSON.stringify(LXT_SORT[tbl])); }catch(e){}
   lxtRender(tbl);
 }
+// set a SPECIFIC sort direction (from the right-click menu), unlike the cycling
+// lxtSortClick — dir 1 = ascending, -1 = descending
+function lxtSortSet(tbl,key,dir){ LXT_SORT[tbl]={key,dir};
+  try{ localStorage.setItem("lxt_sort_"+tbl,JSON.stringify(LXT_SORT[tbl])); }catch(e){}
+  lxtRender(tbl); }
+function lxSortSet(key,dir){ LX_SORT={key,dir};      // the "" orders table (LX_SORT)
+  try{ localStorage.setItem("lx_sort",JSON.stringify(LX_SORT)); }catch(e){}
+  renderLeluxe(); }
+// right-click a column header → a ClickUp-style context menu at the cursor. It is
+// position:fixed + body-appended so it escapes the sticky header's overflow:hidden;
+// rows reuse the same helpers as click-sort / drag / the ⊕ panel. Hide is one item.
+let LXT_MENU=null;
+function lxtColMenuClose(){ if(LXT_MENU){ LXT_MENU.remove(); LXT_MENU=null; } }
+document.addEventListener("mousedown",e=>{ if(LXT_MENU&&!LXT_MENU.contains(e.target)) lxtColMenuClose(); },true);
+document.addEventListener("scroll",()=>{ if(LXT_MENU) lxtColMenuClose(); },true);
+window.addEventListener("resize",()=>{ if(LXT_MENU) lxtColMenuClose(); });
+function lxtColMenu(ev,tbl,key){
+  ev.preventDefault(); ev.stopPropagation();
+  lxtColMenuClose();
+  document.querySelectorAll(".pop-menu.open").forEach(m=>m.classList.remove("open"));
+  const cols=lxtCols(tbl), c=cols.find(x=>x.key===key); if(!c||c.locked) return;
+  const iscf=key.startsWith("cf_"), admin=(typeof CAN_ADMIN==="undefined"||CAN_ADMIN);
+  const sortable=(tbl===""?!!c.sort:!!c.sortable);
+  const movable=cols.filter(x=>!x.locked);
+  const firstKey=movable[0]&&movable[0].key, lastKey=movable.length&&movable[movable.length-1].key;
+  const sk=(tbl===""?(c.sortKey||c.sort):key);
+  const asc =tbl===""?`lxSortSet('${sk}',1)` :`lxtSortSet('${tbl}','${key}',1)`;
+  const desc=tbl===""?`lxSortSet('${sk}',-1)`:`lxtSortSet('${tbl}','${key}',-1)`;
+  const rows=[
+    sortable?[T("↑ فرز تصاعدي · Sort ascending"), asc]:null,
+    sortable?[T("↓ فرز تنازلي · Sort descending"), desc]:null,
+    "sep",
+    (iscf&&admin)?[T("✎ تعديل الحقل · Edit field"), `poCfFieldOpen('${key.slice(3)}')`]:null,
+    "sep",
+    key!==firstKey?[T("⇤ نقل إلى البداية · Move to start"), `lxtColMove('${tbl}','${key}','${firstKey}',false)`]:null,
+    key!==lastKey ?[T("⇥ نقل إلى النهاية · Move to end"),  `lxtColMove('${tbl}','${key}','${lastKey}',true)`]:null,
+    "sep",
+    [T("🚫 إخفاء العمود · Hide column"), `lxtColHide('${tbl}','${key}')`],
+  ];
+  // collapse leading / trailing / consecutive separators
+  const out=[]; rows.forEach(r=>{ if(!r) return;
+    if(r==="sep"){ if(out.length&&out[out.length-1]!=="sep") out.push("sep"); } else out.push(r); });
+  while(out.length&&out[out.length-1]==="sep") out.pop();
+  const html=out.map(r=> r==="sep"?`<div class="pop-sep"></div>`
+    :`<button class="pop-item" onclick="${r[1]};lxtColMenuClose()">${r[0]}</button>`).join("");
+  const host=document.createElement("div");
+  host.className="pop-menu cu-menu lxt-ctx open"; host.style.position="fixed"; host.style.zIndex=99;
+  host.innerHTML=html;
+  document.body.appendChild(host); LXT_MENU=host;
+  const w=host.offsetWidth||210, h=host.offsetHeight||210;
+  host.style.left=Math.max(8,Math.min(ev.clientX, innerWidth -w-8))+"px";
+  host.style.top =Math.max(8,Math.min(ev.clientY, innerHeight-h-8))+"px";
+}
 function lxtSortApply(tbl,arr,valFn){   // generic sort for p/k/po (orders keeps LX_SORT)
   const s=LXT_SORT[tbl]; if(!s) return arr;
   arr.sort((a,b)=>{ const va=valFn(a,s.key), vb=valFn(b,s.key);
@@ -3317,10 +3374,10 @@ function lxtHead(tbl,pinLabel,pinSortKey){
         <input class="cu-search" placeholder="${T('بحث · Search')}…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
         ${pick}${newField}
       </div></span>`;
-  // each header cell is draggable (reorder) + right-click to hide; the ⋯ menu
-  // and the resize handle are exempt (grabbing the handle resizes instead).
-  const dnd=c=>` draggable="true" ondragstart="lxtColDragStart(event,'${tbl}','${c.key}')" ondragover="lxtColDragOver(event,'${tbl}','${c.key}')" ondragleave="lxtColDragLeave(event)" ondrop="lxtColDrop(event,'${tbl}','${c.key}')" ondragend="lxtColDragEnd()" oncontextmenu="lxtColHide('${tbl}','${c.key}');return false"`;
-  const hint=T("اسحب لإعادة الترتيب • بالزر الأيمن للإخفاء · drag to reorder • right-click to hide");
+  // each header cell is draggable (reorder) + right-click opens a column menu; the
+  // ⋯ menu and the resize handle are exempt (grabbing the handle resizes instead).
+  const dnd=c=>` draggable="true" ondragstart="lxtColDragStart(event,'${tbl}','${c.key}')" ondragover="lxtColDragOver(event,'${tbl}','${c.key}')" ondragleave="lxtColDragLeave(event)" ondrop="lxtColDrop(event,'${tbl}','${c.key}')" ondragend="lxtColDragEnd()" oncontextmenu="lxtColMenu(event,'${tbl}','${c.key}');return false"`;
+  const hint=T("اسحب لإعادة الترتيب • بالزر الأيمن للخيارات · drag to reorder • right-click for options");
   const lbl=(c,i)=>{
     if(c.key==="menu") return `<span class="lbl">${lxtRsz(tbl,i)}</span>`;
     const L=T(c.label);

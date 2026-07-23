@@ -95,8 +95,19 @@ Later additions to the system:
   (unknown/new columns keep their default trailing spot). Reordering resets that
   table's positional widths (`lxColwSet(tbl,null)`), same as hide. Grabbing the
   `lx-rsz` handle resizes instead (guarded in DragStart; handle is `draggable=false`).
-  Right-click a header → `lxtColHide(tbl,key)` (restore from the ⊕ panel). Drop
-  indicator = `.lx-drop-l/.lx-drop-r` inset shadow; `.lx-col{cursor:grab}`.
+  Drop indicator = `.lx-drop-l/.lx-drop-r` inset shadow; `.lx-col{cursor:grab}`.
+- **Right-click column menu** (`lxtColMenu(ev,tbl,key)` — ClickUp-style; replaced the
+  earlier instant-hide): the header `oncontextmenu` opens a cursor-anchored,
+  `position:fixed`, body-appended menu (escapes `.bt-clip` overflow:hidden; positioned
+  from `ev.clientX/clientY`, viewport-clamped). Rows (all via `T()`, N/A rows omitted +
+  dividers collapsed): Sort ascending / Sort descending (`lxtSortSet(tbl,key,dir)` —
+  explicit dir, NOT the cycling `lxtSortClick`; the "" orders table uses
+  `lxSortSet(key,dir)` on `LX_SORT`) · Edit field (cf_ + admin → `poCfFieldOpen(key.slice(3))`)
+  · Move to start / Move to end (`lxtColMove` to first/last movable key; the
+  "already first/last" row drops out) · Hide column (`lxtColHide`, restore from ⊕). One
+  menu at a time (`LXT_MENU`); persistent doc listeners close it on outside-mousedown /
+  scroll / resize. `.pop-sep` divider + `.lxt-ctx` class; rows reuse `.pop-item`.
+  Left-click still sorts; drag still reorders.
 - **Pin resize**: the header pin carries an `lx-rsz` handle → `lxtPinDown` /
   `lxtPinReset`, width in `lxt_pin_<tbl>` (clamp 220–560), re-applied by
   `lxtGridApply` as an inline `--btpin` on `.bt-clip`/`.bt-wrap` (skipped ≤560px
