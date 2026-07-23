@@ -266,6 +266,15 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   opens approximate — image proxies). Builder UI mirrors HubSpot: summary card
   (steps/days/automation %), step cards + delay chips + ＋ "Choose step" panel
   (email/task), per-seq window editor. A/B testing deliberately DEFERRED.
+  **Enroll picker** (`gmNewOpen(preGwds)`, toolbar "📧 Enroll packages" — NOT the
+  builder): `candidates()` spans BOTH the Leluxe mirror AND Purchases packages
+  (`import purchases` — source-tagged leluxe/purchases, de-duped, terminal/
+  delivered excluded); the modal has search + "select shown" + a live count +
+  synthetic rows for pre-checked GWDs not in the list (any `GWD\d+` enrolls —
+  `start_threads` validates). `gmEnrollFrom(gwds)` opens it pre-checked from
+  elsewhere: a 📧 button on every Bulk-search row (`bsEnrollBtn`, gated by
+  `gmAvail()` = nav button visible) + a "📧 Chase via GAASH mail" item in the
+  Purchases package ⋯ menu. No new routes.
 
 ## 6. Verify everything (run after ANY board change)
 

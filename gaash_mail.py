@@ -1625,9 +1625,12 @@ def overview():
 
 
 def candidates():
-    """Non-terminal GWDs from the leluxe mirror without a thread yet."""
+    """Every enrollable GWD — from the Leluxe mirror AND the Purchases board —
+    that has no thread yet and isn't already delivered. Each row is tagged with
+    its `source` so the picker can show ⌚ Leluxe vs 📦 Purchases."""
     have = {t["gwd"] for t in threads_all()}
     out, seen = [], set()
+    # ── Leluxe mirror (carries the GASH STATUS field) ──
     with db.connect() as c:
         rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
                          "data_json FROM leluxe_orders WHERE deleted=0").fetchall()
@@ -1657,13 +1660,40 @@ def candidates():
         # (support.py rule): anything DELIVERED needs no clearance chasing
         if re.search(r"DELIVERED", str(gash or ""), re.I):
             continue
-        out.append({"gwd": tn,
+        out.append({"gwd": tn, "source": "leluxe",
                     "name": (names.get(r["parent_local_id"]) or r["name"] or "")[:70],
                     "status": r["status"], "gash_status": gash,
                     "bucket": _bucket(ts) or None,
                     "label": (ts.get("label") if isinstance(ts, dict)
                               else (str(ts)[:40] if ts else None))})
-    out.sort(key=lambda x: x["gwd"])
+    # ── Purchases board packages (Otlobly customer POs — no ClickUp mirror) ──
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            tn = str(pk.get("tracking_number") or "").strip().upper()
+            if not re.match(r"GWD\d+$", tn) or tn in seen or tn in have:
+                continue
+            if _bucket(pk.get("tracking_status")) in _TERMINAL or \
+                    _bucket(pk.get("gerizim_status")) == "delivered":
+                continue
+            st = str(pk.get("otlobly_status") or "")
+            if re.search(r"deliver|complete|collect", st, re.I):
+                continue
+            seen.add(tn)
+            custs = sorted({(it.get("customer_name") or "").strip()
+                            for it in (pk.get("items") or [])
+                            if (it.get("customer_name") or "").strip()})
+            out.append({"gwd": tn, "source": "purchases",
+                        "name": (p.get("ship_to") or "").strip()[:70],
+                        "status": pk.get("otlobly_status"), "gash_status": None,
+                        "customers": "، ".join(custs)[:70], "bucket": None,
+                        "label": None, "po_id": p.get("po_id")})
+    # Leluxe first (has clearance status), then by GWD
+    out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
     return out
 
 
