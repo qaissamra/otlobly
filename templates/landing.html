@@ -82,65 +82,16 @@
 
       <!-- Track search bar -->
       <div class="track-search">
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-        <input type="text" id="track-input" data-i18n-ph="track.inputph" placeholder="أدخل رقم تتبّع OTL…" autocomplete="off" spellcheck="false">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2.5"></rect><path d="M11 18h2"></path></svg>
+        <input type="text" id="track-input" inputmode="tel" data-i18n-ph="track.inputph" placeholder="أدخل رقم جوالك…" autocomplete="off" spellcheck="false">
         <button id="track-btn" onclick="trackSubmit()" data-i18n="track.submit">تتبّع</button>
       </div>
 
-      <!-- Idle teaser (fake sample). Hidden once a real lookup runs; restored via "بحث جديد". -->
-      <div id="track-demo">
-      <div class="track-card">
-        <div class="track-top">
-          <div class="track-thumb">
-            <div class="illo">
-              <img src="/static/assets/product.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>product.png</small></div>
-            </div>
-          </div>
-          <div class="track-meta">
-            <div class="nm" data-i18n="track.prod">سماعة Sony XM5</div>
-            <div class="id" id="track-otl-code">OTL-1234</div>
-          </div>
-          <div class="track-rider">
-            <div class="illo">
-              <img src="/static/assets/rider.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>rider.png</small></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="prog" aria-hidden="true">
-          <span class="node done"></span><span class="seg fill"></span>
-          <span class="node done"></span><span class="seg fill"></span>
-          <span class="node cur"></span><span class="seg"></span>
-          <span class="node"></span>
-        </div>
-        <div class="prog-labels">
-          <span data-i18n="track.s1">تم الطلب</span>
-          <span data-i18n="track.s2">تم الشحن</span>
-          <span data-i18n="track.s3">وصلت فلسطين</span>
-          <span data-i18n="track.s4">قيد التوصيل</span>
-        </div>
-
-        <div class="track-fields">
-          <div class="f">
-            <div class="k">
-              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              <span data-i18n="track.loc">الموقع</span>
-            </div>
-            <div class="v" data-i18n="track.locv">رام الله — المستودع</div>
-          </div>
-          <div class="f">
-            <div class="k">
-              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
-              <span data-i18n="track.eta">الوصول المتوقّع</span>
-            </div>
-            <div class="v" data-i18n="track.etav">خلال ٢٤ ساعة</div>
-          </div>
-        </div>
-        <a class="btn" href="/track" data-i18n="track.cta">تتبّع هذه الشحنة</a>
+      <!-- Empty state: shown until a real phone lookup runs -->
+      <div id="track-empty" class="track-empty">
+        <div class="te-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2.5"></rect><path d="M11 18h2"></path></svg></div>
+        <p data-i18n="track.empty">أدخل رقم جوالك لعرض حالة شحنتك</p>
       </div>
-      </div><!-- /#track-demo -->
 
       <!-- Inline live tracking: status message + real result card(s) render here -->
       <div id="track-status"></div>
@@ -155,49 +106,38 @@
         <h2 data-i18n="how.head">كيف تعمل الخدمة؟</h2>
       </div>
       <div class="steps">
-        <div class="step peach">
-          <div class="n">١</div>
-          <h3 data-i18n="how.s1t">أرسل الرابط</h3>
-          <p data-i18n="how.s1p">ابعتلنا رابط المنتج من أمازون على واتساب.</p>
-          <div class="art">
-            <div class="illo">
-              <img src="/static/assets/step-1.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>PNG</small></div>
-            </div>
+        <div class="step">
+          <div class="s-top">
+            <div class="s-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"></path><path d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"></path></svg></div>
+            <div class="n">١</div>
           </div>
+          <h3 data-i18n="how.s1t">أضف رابط المنتج</h3>
+          <p data-i18n="how.s1p">الصق رابط المنتج من أمازون واختر طريقة الدفع المناسبة لك.</p>
+          <a class="s-go" href="/order"><span data-i18n="how.s1btn">أضف منتج</span></a>
         </div>
-        <div class="step lav">
-          <div class="n">٢</div>
-          <h3 data-i18n="how.s2t">أكّد بعربون</h3>
-          <p data-i18n="how.s2p">ادفع عربون بسيط لتأكيد الطلب والبدء بالشراء.</p>
-          <div class="art">
-            <div class="illo">
-              <img src="/static/assets/step-2.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>PNG</small></div>
-            </div>
+        <div class="step">
+          <div class="s-top">
+            <div class="s-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5Z"></path></svg></div>
+            <div class="n">٢</div>
           </div>
+          <h3 data-i18n="how.s2t">نرسل لك السعر</h3>
+          <p data-i18n="how.s2p">نحسب التكلفة الكاملة ونرسل لك عرض السعر على واتساب.</p>
         </div>
-        <div class="step mint">
-          <div class="n">٣</div>
-          <h3 data-i18n="how.s3t">نشتري ونشحن</h3>
-          <p data-i18n="how.s3p">نطلب المنتج ونشحنه مع رقم تتبّع OTL خاص فيك.</p>
-          <div class="art">
-            <div class="illo">
-              <img src="/static/assets/step-3.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>PNG</small></div>
-            </div>
+        <div class="step">
+          <div class="s-top">
+            <div class="s-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="m8.5 12.5 2.5 2.5 4.5-5"></path></svg></div>
+            <div class="n">٣</div>
           </div>
+          <h3 data-i18n="how.s3t">تؤكّد ونطلب</h3>
+          <p data-i18n="how.s3p">توافق على السعر، ونطلب منتجك فوراً.</p>
         </div>
-        <div class="step sky">
-          <div class="n">٤</div>
-          <h3 data-i18n="how.s4t">استلم وادفع</h3>
-          <p data-i18n="how.s4p">استلم على باب البيت وادفع الباقي بالدولار كاش.</p>
-          <div class="art">
-            <div class="illo">
-              <img src="/static/assets/step-4.png" alt="" loading="lazy" onerror="showPh(this)">
-              <div class="ph" style="display:none"><small>PNG</small></div>
-            </div>
+        <div class="step">
+          <div class="s-top">
+            <div class="s-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h10v8H3z"></path><path d="M13 9h4l3 3v2h-7z"></path><circle cx="7.5" cy="17" r="1.6"></circle><circle cx="16.5" cy="17" r="1.6"></circle></svg></div>
+            <div class="n">٤</div>
           </div>
+          <h3 data-i18n="how.s4t">التوصيل حتى بابك</h3>
+          <p data-i18n="how.s4p">نوصل طلبك إلى باب بيتك، وتدفع عند الاستلام.</p>
         </div>
       </div>
     </section>
