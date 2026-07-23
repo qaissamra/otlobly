@@ -1393,7 +1393,7 @@
       <span class="spacer"></span>
       <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
       <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
-      <button class="accent" onclick="gmNewOpen()" data-en="＋ New sequence" data-ar="＋ تسلسل جديد">＋ New sequence</button>
+      <button class="accent" onclick="gmNewOpen()" data-en="📧 Enroll packages" data-ar="📧 إرسال طرود">📧 Enroll packages</button>
     </div>
     <div id="gmBanner"></div>
     <div style="display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px" id="gmTabs">
@@ -7304,6 +7304,7 @@ function poPkFlatRow(p,pk,pi){
     [`📱 إشعار العملاء · Notify customers`, `pkgNotifyOpen('${p.po_id}',${pi})`],
     [`🔎 تتبع الشحنة · Check shipping`, `trackPkg(this,'${p.po_id}',${pi})`],
     gaash?[`🪪 رفع مستندات لغاش · Upload docs to GAASH`, `gaashUploadOpen('${p.po_id}',${pi})`]:null,
+    (gaash&&gmAvail())?[`📧 مطاردة عبر بريد غاش · Chase via GAASH mail`, `gmEnrollFrom(['${poEsc(gaash)}'])`]:null,
     [`＋ إضافة منتج · Add product`, `poAddItem('${p.po_id}',${pi})`],
   ]);
   const cells={
@@ -9305,6 +9306,10 @@ function bsFindLx(tn,rows){
           trk:en&&en.data&&en.data.tracking_status||null};
 }
 function bsOpenPo(id){ setView("purchases"); poJumpOrder(id); }
+// is the 📧 GAASH-mail page available to this user? (nav button shown)
+function gmAvail(){ const b=$("gaashMailBtn"); return !!b && b.style.display!=="none"; }
+function bsEnrollBtn(tn){ return gmAvail()
+  ? `<button class="minibtn" style="padding:0 6px;margin-inline-start:6px" title="${T('أرسل تسلسل تخليص لغاش · start a GAASH clearance sequence')}" onclick="event.stopPropagation();gmEnrollFrom(['${poEsc(tn)}'])">📧</button>` : ""; }
 // results render through the shared ClickUp-table system (table id "bs") — the
 // ⊕ Fields picker, drag-reorder, right-click column menu and resize all apply.
 let BS_LAST=null;   // last search's row models — re-rendered on any column change
@@ -9359,7 +9364,7 @@ function bsRender(){
       const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
       if(PO_MONEY) sumUsd+=est.sum;
       return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
-        found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>`,
+        found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>${bsEnrollBtn(m.tn)}`,
         oname: poNameCell(p.ship_to,true),
         profile: poProfileCell(p),
         imgs: poThumbStrip(pk.items),
@@ -9375,7 +9380,7 @@ function bsRender(){
     const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
     const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
     return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
-      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>`,
+      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${bsEnrollBtn(m.tn)}`,
       oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
       profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
       imgs: lxThumbs(lx.items),
@@ -9568,20 +9573,34 @@ async function gmCheck(btn){
   gmLoad();
 }
 // ── ＋ New sequence: pick packages → ID → account → start ──
-function gmNewOpen(){
-  const ov=GM.ov||{}; const cands=ov.candidates||[], ids=ov.ids||[], accts=ov.accounts||[];
-  bulkOpen("📧 "+T("تسلسل جديد · New sequence"));
+function gmNewOpen(preGwds){
+  const ov=GM.ov||{}; const cands=(ov.candidates||[]).slice(), ids=ov.ids||[], accts=ov.accounts||[];
+  const pre=[...new Set((preGwds||[]).map(g=>String(g||"").trim().toUpperCase()).filter(g=>/^GWD\d+$/.test(g)))];
+  // pre-selected GWDs that aren't in the candidate list (e.g. from bulk search) →
+  // inject synthetic rows so any valid tracking is enrollable + shown checked
+  const known=new Set(cands.map(c=>c.gwd));
+  pre.forEach(g=>{ if(!known.has(g)) cands.unshift({gwd:g,source:"manual",name:""}); });
+  GM.newPre=new Set(pre);
+  bulkOpen("📧 "+T("إرسال طرود إلى تسلسل · Enroll packages into a sequence"));
+  const badge=s=>s==="leluxe"?`<span class="pill" style="background:#eef;border:1px solid var(--line);font-size:9.5px">⌚</span>`
+    :s==="purchases"?`<span class="pill" style="background:#fef3ec;border:1px solid var(--line);font-size:9.5px">📦</span>`
+    :`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">✎</span>`;
+  const row=c=>`<label class="gmCandRow" data-gwd="${poEsc(c.gwd)}" data-hay="${poEsc((c.gwd+" "+(c.name||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||"")).toLowerCase())}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
+      <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}" ${GM.newPre.has(c.gwd)?"checked":""} onchange="gmNewCount()">
+      ${badge(c.source)}
+      <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
+      ${(c.gash_status||c.status)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status||c.status)}</span>`:""}
+      <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||c.customers||"")}</span></label>`;
   $("bulkBody").innerHTML=`
     <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
-    <div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px">
-      ${cands.length?cands.map(c=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
-        <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}">
-        <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
-        ${c.gash_status?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status)}</span>`:""}
-        <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||"")}</span></label>`).join("")
-      :`<div class="muted2" style="padding:8px">${T("لا مرشحين من ليلوكس — الصق أرقاماً · no Leluxe candidates — paste numbers")}</div>`}
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input id="gmCandSearch" oninput="gmCandFilter()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
+      <label style="display:flex;gap:5px;align-items:center;font-size:11.5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="gmCandAll" onchange="gmCandSelectAll(this.checked)"> ${T("اختر الظاهر · select shown")}</label>
     </div>
-    <input id="gmNewPaste" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
+    <div id="gmCandList" style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px">
+      ${cands.length?cands.map(row).join(""):`<div class="muted2" style="padding:8px">${T("لا مرشحين — الصق أرقاماً تحت · no candidates — paste numbers below")}</div>`}
+    </div>
+    <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
     <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("الهوية المرفقة مع الإيميل الأول · ID attached to email #1")}</b>
       <div id="gmNewIds" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         ${ids.map(x=>`<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px">
@@ -9596,9 +9615,38 @@ function gmNewOpen(){
       <b style="font-size:13px">✉ ${T("الحساب المُرسِل · sending account")}</b>
       <select id="gmNewAcct">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select>
     </div>`;
-  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
+    <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
-    <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ التسلسل · Start sequence")}</button></div>`;
+    <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ · Start")}</button></div>`;
+  gmNewCount();
+}
+function gmCandFilter(){
+  const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
+  document.querySelectorAll("#gmCandList .gmCandRow").forEach(r=>{
+    r.style.display=(!q||r.dataset.hay.includes(q))?"":"none"; });
+  const all=$("gmCandAll"); if(all) all.checked=false;
+}
+function gmCandSelectAll(on){
+  document.querySelectorAll("#gmCandList .gmCandRow").forEach(r=>{
+    if(r.style.display!=="none"){ const cb=r.querySelector(".gmNewGwd"); if(cb) cb.checked=on; } });
+  gmNewCount();
+}
+function gmNewGwds(){
+  const set=new Set([...document.querySelectorAll(".gmNewGwd:checked")].map(x=>x.value));
+  ((($("gmNewPaste")||{}).value)||"").split(/[\s,;،]+/).forEach(t=>{
+    t=t.trim().toUpperCase(); if(/^GWD\d+$/.test(t)) set.add(t); });
+  return [...set];
+}
+function gmNewCount(){
+  const el=$("gmNewCount"); if(el) el.textContent=`${gmNewGwds().length} ${T("طرد مختار · selected")}`;
+}
+// open the enroll picker from anywhere (bulk search, purchases…) pre-checked
+async function gmEnrollFrom(gwds){
+  setView("gaashmail");
+  if(!GM.ov) await gmLoad();
+  gmTab("conv");
+  gmNewOpen(gwds);
 }
 async function gmIdUpload(){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
@@ -9614,8 +9662,7 @@ async function gmIdUpload(){
   inp.click();
 }
 async function gmNewStart(btn){
-  const gwds=[...document.querySelectorAll(".gmNewGwd:checked")].map(x=>x.value)
-    .concat((($("gmNewPaste")||{}).value||"").split(/[\s,;،]+/).filter(t=>/^GWD\d+$/i.test(t)));
+  const gwds=gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   const idSel=document.querySelector('input[name="gmNewId"]:checked');
   const acct=($("gmNewAcct")||{}).value||"";

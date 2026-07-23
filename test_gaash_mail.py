@@ -264,6 +264,29 @@ def main():
     check("task bubbles recorded", [m["kind"] for m in gm.msgs_for("GWD500")]
           == ["task", "task_done"])
 
+    print("— enroll picker: candidates span Leluxe + Purchases —")
+    import purchases
+    pdb = purchases.load()
+    pdb["purchase_orders"].append({
+        "po_id": "PO-T1", "ship_to": "Test Buyer", "packages": [
+            {"package_no": 1, "tracking_number": "GWD009000001",
+             "otlobly_status": "", "items": [{"customer_name": "Zaid"}]},
+            {"package_no": 2, "tracking_number": "GWD009000002",
+             "otlobly_status": "تم التسليم delivered",       # delivered → excluded
+             "items": []}]})
+    purchases.save(pdb)
+    cands = gm.candidates()
+    pc = [c for c in cands if c["gwd"] == "GWD009000001"]
+    check("Purchases package is a candidate, source-tagged",
+          pc and pc[0]["source"] == "purchases" and pc[0]["name"] == "Test Buyer")
+    check("delivered Purchases package excluded",
+          not any(c["gwd"] == "GWD009000002" for c in cands))
+    check("a Purchases-only GWD enrolls (start_threads)",
+          gm.start_threads(["GWD009000001"], None, None)[0]["ok"]
+          and gm.thread_get("GWD009000001"))
+    check("an enrolled GWD drops out of candidates",
+          not any(c["gwd"] == "GWD009000001" for c in gm.candidates()))
+
     print("— v2: auto-enroll rules —")
     r1 = gm.rule_save({"name": "stuck on ID",
                        "cond": {"gash_status": " customer ID", "min_age_days": 0},
