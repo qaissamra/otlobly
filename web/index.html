@@ -6655,7 +6655,7 @@ function poNameCell(txt,warn){ txt=(txt||"").trim();
     :(warn?`<span style="color:#b45309;font-size:10.5px" title="لا اسم بعد · not set">—</span>`:""); }
 // the AZ / Multilogin profile (box) the order was placed under — a compact 🖥 chip
 function poProfileCell(p){ const v=(p.profile_box||"").trim();
-  return v?`<span class="mono" title="${T('البروفايل · profile')}: ${poEsc(v)}" style="font-size:11px;color:var(--muted)">🖥 ${poEsc(v)}</span>`
+  return v?`<span class="mono" title="${T('البروفايل · profile')}: ${poEsc(v)}" style="font-size:13px;font-weight:700;color:var(--ink)">${poEsc(v)}</span>`
     :`<span class="muted2" style="opacity:.5">—</span>`; }
 // editable package due date — a colored due chip that becomes a date input on click
 // the customer order a package belongs to promises a delivery date
