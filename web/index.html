@@ -3101,6 +3101,7 @@ const LXT_COLS={
   ],
   "po":[
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
+    {key:"profile",   label:"الحساب · profile",  w:78,  sortable:true},
     {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
     {key:"total",     label:"الإجمالي · total",       w:118, sortable:true},
     {key:"arrival",   label:"الوصول · arrival",     w:88,  sortable:true},
@@ -3115,6 +3116,7 @@ const LXT_COLS={
   "pok":[   // Purchases → 📦 Packages flat view
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
+    {key:"profile",   label:"الحساب · profile",  w:78,  sortable:true},
     {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
     {key:"total",     label:"≈ التقدير · ≈ est",       w:96,  sortable:true},
     {key:"arrival",   label:"الوصول · arrival",     w:88,  sortable:true},
@@ -3129,6 +3131,7 @@ const LXT_COLS={
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
+    {key:"profile",   label:"الحساب · profile",  w:78,  sortable:true},
     {key:"package",   label:"الطرد · package",     w:120},
     {key:"pkgstatus", label:"حالة الطرد · pkg status",  w:120},
     {key:"customer",  label:"العميل · customer",    w:112, sortable:true},
@@ -6650,17 +6653,34 @@ function pkgWho(pk){ return [...new Set((pk&&pk.items||[]).map(it=>(it.customer_
 function poNameCell(txt,warn){ txt=(txt||"").trim();
   return txt?`<span title="${poEsc(txt)}">${poEsc(txt)}</span>`
     :(warn?`<span style="color:#b45309;font-size:10.5px" title="لا اسم بعد · not set">—</span>`:""); }
+// the AZ / Multilogin profile (box) the order was placed under — a compact 🖥 chip
+function poProfileCell(p){ const v=(p.profile_box||"").trim();
+  return v?`<span class="mono" title="${T('البروفايل · profile')}: ${poEsc(v)}" style="font-size:11px;color:var(--muted)">🖥 ${poEsc(v)}</span>`
+    :`<span class="muted2" style="opacity:.5">—</span>`; }
 // editable package due date — a colored due chip that becomes a date input on click
+// the customer order a package belongs to promises a delivery date
+// (est_delivery_customer, same value the Orders table shows). When a package has no
+// explicit due date, inherit that — the earliest if the package spans several orders.
+function poPkgOrderDue(pk){
+  const map=poOrderMap();
+  const ds=[...new Set((pk&&pk.items||[]).map(it=>(it.customer_order_id||"").trim()).filter(Boolean))]
+    .map(id=>map[id]&&map[id].est_delivery_customer).filter(Boolean).sort();
+  return ds[0]||"";
+}
+function poPkgDue(pk){ return (pk.due_date||"").trim()||poPkgOrderDue(pk); }   // effective due
 function poPkgDueCell(p,pk,pi){
-  const v=(pk.due_date||"").trim();
-  const chip=v?(dueChip(v,false)||`<span class="muted2">${poEsc(v.slice(0,10))}</span>`)
+  const own=(pk.due_date||"").trim(), eff=own||poPkgOrderDue(pk), inherited=!own&&!!eff;
+  const chip=eff?(dueChip(eff,false)||`<span class="muted2">${poEsc(eff.slice(0,10))}</span>`)
     :(CAN_EDIT?'<span class="muted2" style="opacity:.45">—</span>':"");
-  return `<span class="cf-cell" style="flex:1;min-width:24px;cursor:${CAN_EDIT?'pointer':'default'}" title="استحقاق الطرد · package due date${CAN_EDIT?' — انقر للتعديل · click to edit':''}"
+  const tip=(inherited?T('من تاريخ تسليم الطلب · from the order delivery date')
+                      :T('استحقاق الطرد · package due date'))
+    +(CAN_EDIT?' — '+T('انقر للتعديل · click to edit'):"");
+  return `<span class="cf-cell" style="flex:1;min-width:24px;${inherited?'opacity:.7;':''}cursor:${CAN_EDIT?'pointer':'default'}" title="${tip}"
     ${CAN_EDIT?`onclick="event.stopPropagation();poPkgDueEdit(this,'${p.po_id}',${pi})"`:""}>${chip}</span>`;
 }
 function poPkgDueEdit(el,poId,pi){
   const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
-  const inp=document.createElement("input"); inp.type="date"; inp.value=(pk.due_date||"").slice(0,10);
+  const inp=document.createElement("input"); inp.type="date"; inp.value=(poPkgDue(pk)||"").slice(0,10);
   inp.style.cssText="width:100%;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
   inp.onclick=e=>e.stopPropagation(); let done=false;
   const save=()=>{ if(done) return; done=true; pk.due_date=(inp.value||"").trim()||null; poSave(p); renderPurchases(); };
@@ -7100,8 +7120,9 @@ function poSortVal(p,key){
     return String(v==null?"~":(Array.isArray(v)?v.join(","):v)).toLowerCase();
   }
   if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+  if(key==="profile") return String(p.profile_box||"~").toLowerCase();
   if(key==="pcust") return String(poWho(p)||"~").toLowerCase();
-  if(key==="pdue") return (p.packages||[]).map(pk=>pk.due_date).filter(Boolean).sort()[0]||"~~";  // order sorts by its earliest package due
+  if(key==="pdue") return (p.packages||[]).map(pk=>poPkgDue(pk)).filter(Boolean).sort()[0]||"~~";  // order sorts by its earliest package due (own or inherited)
   if(key==="total") return Number(p.total_usd)||0;
   return String((p.packages||[]).map(pk=>pk.arrival).filter(Boolean).sort()[0]||"~");  // arrival: earliest, blanks last
 }
@@ -7152,8 +7173,9 @@ function poRenderPkgsFlat(mount,list){
     if(key==="total") return pkgEstTotal(pk).sum;
     if(key==="arrival") return String(pk.arrival||"~");
     if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+    if(key==="profile") return String(p.profile_box||"~").toLowerCase();
     if(key==="pcust") return String(pkgWho(pk)||"~").toLowerCase();
-    if(key==="pdue") return pk.due_date?(Date.parse(pk.due_date)||Infinity):Infinity;
+    if(key==="pdue"){ const d=poPkgDue(pk); return d?(Date.parse(d)||Infinity):Infinity; }
     return poSortVal(p,key);
   });
   const totEst=rows.reduce((a,[,pk])=>a+pkgEstTotal(pk).sum,0);
@@ -7178,6 +7200,7 @@ function poPkFlatRow(p,pk,pi){
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
     oname: poNameCell(p.ship_to,true),
+    profile: poProfileCell(p),
     pcust: poNameCell(pkgWho(pk),true),
     total: est.priced?`<span class="muted" title="تقدير تكلفة المنتجات · estimated cost">≈ <b style="color:var(--ink)">${money(est.sum)}</b></span>`:'',
     arrival: pkgDatePill(pk),
@@ -7207,9 +7230,10 @@ function poRenderProdsFlat(mount,list){
   lxtSortApply("pop",rows,([p,pk,,it],key)=>{
     if(key==="order") return String(p.po_id||"").toLowerCase();
     if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+    if(key==="profile") return String(p.profile_box||"~").toLowerCase();
     if(key==="customer") return String(it.customer_name||"~").toLowerCase();
     if(key==="qty") return Number(it.qty)||1;
-    if(key==="pdue") return pk.due_date?(Date.parse(pk.due_date)||Infinity):Infinity;
+    if(key==="pdue"){ const d=poPkgDue(pk); return d?(Date.parse(d)||Infinity):Infinity; }
     if(key==="collect"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
       return (co&&co.amount_to_collect_usd)||0; }
     return String(it.title||it.asin||"").toLowerCase();
@@ -7241,6 +7265,7 @@ function poItFlatRow(p,pk,pi,it,ii){
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
     oname: poNameCell(p.ship_to,true),
+    profile: poProfileCell(p),
     package:`<span class="muted2" style="font-size:11px">📦${pk.package_no}${gaash?` · ${poTn4(gaash,'10px')}`:""}</span>`,
     pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
     customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
@@ -8166,6 +8191,7 @@ function poCardHtml(p){
       </div>
       ${lxtCells("po",{
         oname: poNameCell(p.ship_to,true),
+        profile: poProfileCell(p),
         pcust: poNameCell(poWho(p)),
         total: `<span class="muted2">${total}${estChip}</span>`,
         gashstatus: poSummaryPill(p),

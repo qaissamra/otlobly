@@ -116,13 +116,18 @@ Later additions to the system:
   packages flat (table `"pok"`) · products flat (`"pop"`) · customers
   (`poRenderCustomers`); `poSearch` free-text filter (`poSearchMatch`);
   `poJumpOrder` = back to tree + open that card.
-- **Name + due columns** (po/pok/pop): `oname` = the order's Main name
+- **Name / profile / due columns** (po/pok/pop): `oname` = the order's Main name
   (`p.ship_to`), `pcust` = a package's item customers (`pkgWho(pk)` / `poWho(p)`
-  at PO level) — plain via `poNameCell`; `pdue` = editable per-package due date
-  (`pk.due_date`, preserved in purchases.py `_norm_packages`) via `poPkgDueCell`/
-  `poPkgDueEdit` (a `dueChip` that becomes a date input; NOT `lxDueChip` — that
-  wraps `lxMs` for ms-epoch and returns "" on a YYYY-MM-DD string). Typed sort in
-  each view's valFn + `poSortVal`.
+  at PO level) — plain via `poNameCell`; `profile` = the AZ/Multilogin box the PO
+  was placed under (`p.profile_box`) — a compact 🖥 chip via `poProfileCell`;
+  `pdue` = per-package due date via `poPkgDueCell`/`poPkgDueEdit` (a `dueChip` that
+  becomes a date input; NOT `lxDueChip` — that wraps `lxMs` for ms-epoch and returns
+  "" on a YYYY-MM-DD string). `pdue` is `pk.due_date` if set (preserved in
+  purchases.py `_norm_packages`), ELSE INHERITED from the linked customer order's
+  promised delivery `est_delivery_customer` (earliest across the pkg's items'
+  `customer_order_id` → `poOrderMap()`) — `poPkgOrderDue(pk)` / effective
+  `poPkgDue(pk)`; inherited shows muted (opacity .7), editing overrides. Typed sort
+  in each view's valFn + `poSortVal` all use `poPkgDue`.
 - **Custom fields v2 (ClickUp-style, sellable core)**: 13 types — select
   (dropdown), labels (multi), text, longtext, number, money, date, checkbox,
   phone, url, email, rating, progress. Defs per business `custom_fields.po`
