@@ -116,6 +116,16 @@ Later additions to the system:
   packages flat (table `"pok"`) · products flat (`"pop"`) · customers
   (`poRenderCustomers`); `poSearch` free-text filter (`poSearchMatch`);
   `poJumpOrder` = back to tree + open that card.
+- **🔎 Bulk search view** (`bulksearch` / `#bulkSearchView`, nav `bulkSearchBtn`):
+  paste many GWDs → one plain table (`.tbl-scroll`) locating each in BOTH data
+  sets — Purchases (`bsFindPo`: exact `pk.tracking_number`, PO chip → `bsOpenPo`
+  = setView+poJumpOrder, pkg status via `cuLabel`/`hexPill`, `pkgGaashPill`,
+  `pkgEstTotal` $ gated by PO_MONEY) and Leluxe (`bsFindLx` over `bsLxRows()`:
+  dedupes package+item matches, Σ item "total amount" ₪, `lxStatusPill` +
+  `lxCfPill("gash status",…)`). `bsEnsureData` lazily loads POS via
+  `loadPurchases()` and LX via a bare `/api/leluxe/orders` fetch (NOT
+  `loadLeluxe()` — that's view-coupled); non-Leluxe roles just get no LX matches.
+  Not-found rows amber; footer Σ found/missing + $ + ₪. All labels via T()/data-en|ar.
 - **Name / profile / due columns** (po/pok/pop): `oname` = the order's Main name
   (`p.ship_to`), `pcust` = a package's item customers (`pkgWho(pk)` / `poWho(p)`
   at PO level) — plain via `poNameCell`; `profile` = the AZ/Multilogin box the PO

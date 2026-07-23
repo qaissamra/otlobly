@@ -629,6 +629,7 @@
     <button id="metaLeadsBtn" style="display:none" onclick="setView('metaleads')" title="Messenger + Instagram DMs and lead-form ads"><span class="ic">📣</span><span data-en="Leads" data-ar="العملاء المحتملون">Leads</span></button>
     <button id="custBtn" onclick="setView('customers')"><span class="ic">👤</span><span data-en="Customers" data-ar="العملاء">Customers</span></button>
     <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span><span data-en="Package prep" data-ar="تجهيز الطرود">Package prep</span></button>
+    <button id="bulkSearchBtn" onclick="setView('bulksearch')" title="الصق مجموعة أرقام تتبع GWD ودفعة وحدة شوف وين كل طرد — مشتريات أو ليلوكس، الحالة والقيمة · paste many GWD tracking numbers, see where each package lives (Purchases or Leluxe), its status and value"><span class="ic">🔎</span><span data-en="Bulk search" data-ar="بحث جماعي">Bulk search</span></button>
     <div class="nav-sec" data-en="Insights" data-ar="التحليلات">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span><span data-en="P&amp;L" data-ar="الأرباح والخسائر">P&amp;L</span></button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span><span data-en="Activity" data-ar="النشاط">Activity</span></button>
@@ -1322,6 +1323,22 @@
     <div id="ppReady"></div>
     <div id="ppWaiting" style="margin-top:14px"></div>
     <div id="ppEmpty" class="muted2" style="display:none;padding:16px;text-align:center;font-size:13px"></div>
+  </div>
+
+  <!-- 🔎 Bulk search: paste many GWD/tracking numbers → where each package lives
+       (Purchases PO or Leluxe order), its status, GAASH stage, and value -->
+  <div id="bulkSearchView" class="hidden">
+    <div class="panel" style="max-width:860px">
+      <h2 style="margin:0 0 4px;font-size:17px;font-weight:800">🔎 <span data-en="Bulk package search" data-ar="بحث جماعي عن الطرود">Bulk package search</span></h2>
+      <div class="muted2" style="font-size:12.5px;margin-bottom:10px" data-en="Paste GWD tracking numbers (one per line, or separated by spaces/commas) — each is looked up across Purchases and Leluxe." data-ar="الصق أرقام تتبع GWD (رقم في كل سطر أو مفصولة بمسافات/فواصل) — يتم البحث عن كل رقم في المشتريات وليلوكس.">Paste GWD tracking numbers (one per line, or separated by spaces/commas) — each is looked up across Purchases and Leluxe.</div>
+      <textarea id="bsInput" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:12.5px" placeholder="GWD004755690&#10;GWD004699248&#10;GWD004678248…"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <button class="accent" id="bsGo" onclick="bsRun()" data-en="🔎 Search" data-ar="🔎 بحث">🔎 Search</button>
+        <button class="minibtn" onclick="$('bsInput').value='';$('bsResults').innerHTML=''" data-en="Clear" data-ar="مسح">Clear</button>
+        <span class="muted2" id="bsInfo" style="font-size:12px"></span>
+      </div>
+    </div>
+    <div id="bsResults" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -2039,7 +2056,7 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep"||v==="bulksearch");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -2068,15 +2085,16 @@ function setView(v){
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   $("leluxeView").classList.toggle("hidden",v!=="leluxe");
   $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
+  $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
     activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
     brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn"};
+    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn"};
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep",bulksearch:"Bulk search"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -2103,6 +2121,7 @@ function setView(v){
   if(v==="catalog"){ loadCatalog(); }
   if(v==="leluxe"){ loadLeluxe(); }
   if(v==="pkgprep"){ loadPkgprep(); }
+  if(v==="bulksearch"){ bsInit(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
@@ -9133,6 +9152,126 @@ function drillRenderFormula(metric){
 }
 
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json();}
+
+// ═══ 🔎 Bulk package search: paste many GWDs → where each lives + status + value ═══
+// Searches BOTH data sets client-side: Purchases (POS — customer purchase orders)
+// and Leluxe (LX — the ClickUp AZ (2) mirror). Read-only; money cells respect
+// PO_MONEY, and the Leluxe fetch simply skips for roles that can't access it.
+let BS_LOADING=null;
+async function bsEnsureData(){
+  if(BS_LOADING) return BS_LOADING;
+  BS_LOADING=(async()=>{
+    const jobs=[];
+    if(!POS) jobs.push((async()=>{ try{ await loadPurchases(); }catch(e){} })());
+    if(typeof LX==="undefined"||!LX) jobs.push((async()=>{
+      try{ const d=await (await fetch("/api/leluxe/orders")).json(); if(d&&d.ok) LX=d; }catch(e){}
+    })());
+    await Promise.all(jobs);
+  })();
+  try{ await BS_LOADING; } finally{ BS_LOADING=null; }
+}
+async function bsInit(){
+  const inf=$("bsInfo"); if(inf) inf.textContent=T("جارِ تحميل البيانات… · loading data…");
+  await bsEnsureData();
+  if(inf){
+    const nPo=(POS||[]).length, nLx=(typeof LX!=="undefined"&&LX&&LX.orders)?LX.orders.length:0;
+    inf.textContent=`${T("جاهز · ready")} — ${nPo} PO · ${nLx} Leluxe`;
+  }
+}
+function bsTokens(){
+  return [...new Set(($("bsInput").value||"").split(/[\s,;،]+/)
+    .map(t=>t.trim().toUpperCase()).filter(t=>t.length>=4))].slice(0,300);
+}
+function bsFindPo(tn){
+  const out=[];
+  (POS||[]).forEach(p=>(p.packages||[]).forEach((pk,pi)=>{
+    if(String(pk.tracking_number||"").trim().toUpperCase()===tn) out.push({p,pk,pi});
+  }));
+  return out;
+}
+function bsLxRows(){                       // [row, parentOrder|null] pairs, flattened once
+  if(typeof LX==="undefined"||!LX) return [];
+  const out=[];
+  (LX.orders||[]).forEach(o=>{
+    (o.items||[]).forEach(it=>out.push([it,o]));
+    (o.packages||[]).forEach(pk=>{ out.push([pk,o]); (pk.items||[]).forEach(it=>out.push([it,o])); });
+  });
+  (LX.orphans||[]).forEach(r=>out.push([r,null]));
+  return out;
+}
+function bsFindLx(tn,rows){
+  const hit=rows.filter(([r])=>String((r.data&&r.data.tracking_number)||lxF(r,"tracking number")||"").trim().toUpperCase()===tn);
+  if(!hit.length) return null;
+  const items=new Map();                   // dedupe: a package match + its item matches share items
+  let pkgRow=null, order=null;
+  hit.forEach(([r,o])=>{ order=order||o;
+    if(r.kind==="package"){ pkgRow=pkgRow||r; (r.items||[]).forEach(it=>items.set(it.id,it)); }
+    else items.set(r.id,r); });
+  let tot=0; items.forEach(it=>{ tot+=Number(lxF(it,"total amount"))||0; });
+  const sts=[...new Set([...items.values()].map(it=>it.status).filter(Boolean))];
+  const gash=(pkgRow&&lxF(pkgRow,"gash status"))||[...items.values()].map(it=>lxF(it,"gash status")).find(Boolean);
+  const en=pkgRow||[...items.values()].find(x=>x.data&&x.data.tracking_status)||null;
+  return {order, pkgRow, items:[...items.values()], tot:Math.round(tot*100)/100, sts, gash,
+          trk:en&&en.data&&en.data.tracking_status||null};
+}
+function bsOpenPo(id){ setView("purchases"); poJumpOrder(id); }
+async function bsRun(){
+  const res=$("bsResults"), toks=bsTokens();
+  if(!toks.length){ res.innerHTML=""; toast(T("الصق أرقام تتبع أولاً · paste tracking numbers first")); return; }
+  res.innerHTML=`<div class="muted2" style="padding:10px">${T("جارِ البحث… · searching…")}</div>`;
+  await bsEnsureData();
+  const lxRows=bsLxRows();
+  let found=0, sumUsd=0, sumIls=0;
+  const trs=[];
+  toks.forEach(tn=>{
+    const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
+    const tcell=`<td class="mono" style="white-space:nowrap">${poEsc(tn)}${lxCopyRawBtn(tn)}</td>`;
+    if(!pos.length&&!lx){
+      trs.push(`<tr style="background:#fff7ed">${tcell}<td colspan="6" style="color:#b45309">${T("غير موجود — لا في المشتريات ولا في ليلوكس · not found in Purchases or Leluxe")}</td></tr>`);
+      return;
+    }
+    found++;
+    pos.forEach(({p,pk,pi})=>{
+      const pst=(pk.otlobly_status||"").trim();
+      const est=pkgEstTotal(pk); if(PO_MONEY) sumUsd+=est.sum;
+      trs.push(`<tr>${tcell}
+        <td><button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button> <span class="muted2" style="font-size:11px">pkg ${pk.package_no}</span></td>
+        <td>${poEsc((p.ship_to||"").trim()||"—")}</td>
+        <td style="font-size:12px">${poEsc(pkgWho(pk)||"—")}</td>
+        <td>${pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>'}</td>
+        <td>${pkgGaashPill(pk)}</td>
+        <td>${(PO_MONEY&&est.priced)?`≈ <b>${money(est.sum)}</b>`:'<span class="muted2">—</span>'}</td></tr>`);
+    });
+    if(lx){
+      sumIls+=lx.tot;
+      const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
+      trs.push(`<tr>${tcell}
+        <td><span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span></td>
+        <td style="font-size:12px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</td>
+        <td class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</td>
+        <td>${lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>'}</td>
+        <td>${lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>')}</td>
+        <td>${lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>'}</td></tr>`);
+    }
+  });
+  const missing=toks.length-found;
+  res.innerHTML=`<div class="panel" style="padding:0;overflow:hidden">
+    <div class="tbl-scroll"><table>
+      <thead><tr>
+        <th>${T("التتبع · Tracking")}</th><th>${T("موجود في · Found in")}</th>
+        <th>${T("الطلب · Order")}</th><th>${T("العملاء · Customers")}</th>
+        <th>${T("الحالة · Status")}</th><th>${T("جمارك · GAASH")}</th><th>${T("القيمة · Value")}</th>
+      </tr></thead>
+      <tbody>${trs.join("")}</tbody>
+      <tfoot><tr style="background:var(--bg2);font-weight:700">
+        <td>Σ ${toks.length}</td>
+        <td colspan="4">${found} ${T("موجود · found")}${missing?` · <span style="color:#b45309">${missing} ${T("مفقود · missing")}</span>`:""}</td>
+        <td></td>
+        <td style="white-space:nowrap">${PO_MONEY&&sumUsd?`≈ ${money(Math.round(sumUsd*100)/100)}`:""}${sumIls?`${PO_MONEY&&sumUsd?" · ":""}₪${(Math.round(sumIls*100)/100).toLocaleString()}`:""}</td>
+      </tr></tfoot>
+    </table></div></div>`;
+  $("bsInfo").textContent=`${toks.length} ${T("رقم · numbers")} · ${found} ${T("موجود · found")}`;
+}
 
 localizeStatic();   // apply the saved UI language (default English) to the static chrome
 load();
