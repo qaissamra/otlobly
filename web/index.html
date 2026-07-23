@@ -3048,8 +3048,11 @@ const LXT_COLS={
     {key:"menu",    label:"",        w:28,  locked:true},
   ],
   "po":[
+    {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
+    {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
     {key:"total",     label:"total",       w:118, sortable:true},
     {key:"arrival",   label:"arrival",     w:88,  sortable:true},
+    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
     {key:"gashstatus",label:"gaash status",w:128},
     {key:"deadline",  label:"deadline",    w:98},
     {key:"docs",      label:"docs",        w:74},
@@ -3059,8 +3062,11 @@ const LXT_COLS={
   ],
   "pok":[   // Purchases → 📦 Packages flat view
     {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
+    {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
     {key:"total",     label:"≈ est",       w:96,  sortable:true},
     {key:"arrival",   label:"arrival",     w:88,  sortable:true},
+    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
     {key:"gashstatus",label:"gaash status",w:128},
     {key:"deadline",  label:"deadline",    w:98},
     {key:"docs",      label:"docs",        w:74},
@@ -3070,10 +3076,12 @@ const LXT_COLS={
   ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
     {key:"package",   label:"package",     w:120},
     {key:"pkgstatus", label:"pkg status",  w:120},
     {key:"customer",  label:"customer",    w:112, sortable:true},
     {key:"collect",   label:"💵 collect",  w:96,  sortable:true},
+    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
     {key:"qty",       label:"qty",         w:40,  sortable:true},
     {key:"status",    label:"exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
@@ -6462,6 +6470,29 @@ async function poRunShippingCheck(btn,onlyGwd,force){
 // The popup footer shows the live SerpApi credit balance.
 async function serpCredits(refresh){ try{ const c=await (await fetch("/api/serpapi/credits"+(refresh?"?refresh=1":""))).json(); return c&&c.left!=null?c.left:null; }catch(e){ return null; } }
 function pkgWho(pk){ return [...new Set((pk&&pk.items||[]).map(it=>(it.customer_name||'').trim()).filter(Boolean))].join('، '); }
+// name-column cells (shared po/pok/pop tables): the order's Main name (ship_to)
+// and the package's item-customer(s). Plain display; ship_to is edited in the
+// package popup, customers via the item's ✏️ editor.
+function poNameCell(txt,warn){ txt=(txt||"").trim();
+  return txt?`<span title="${poEsc(txt)}">${poEsc(txt)}</span>`
+    :(warn?`<span style="color:#b45309;font-size:10.5px" title="لا اسم بعد · not set">—</span>`:""); }
+// editable package due date — a colored due chip that becomes a date input on click
+function poPkgDueCell(p,pk,pi){
+  const v=(pk.due_date||"").trim();
+  const chip=v?(dueChip(v,false)||`<span class="muted2">${poEsc(v.slice(0,10))}</span>`)
+    :(CAN_EDIT?'<span class="muted2" style="opacity:.45">—</span>':"");
+  return `<span class="cf-cell" style="flex:1;min-width:24px;cursor:${CAN_EDIT?'pointer':'default'}" title="استحقاق الطرد · package due date${CAN_EDIT?' — انقر للتعديل · click to edit':''}"
+    ${CAN_EDIT?`onclick="event.stopPropagation();poPkgDueEdit(this,'${p.po_id}',${pi})"`:""}>${chip}</span>`;
+}
+function poPkgDueEdit(el,poId,pi){
+  const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
+  const inp=document.createElement("input"); inp.type="date"; inp.value=(pk.due_date||"").slice(0,10);
+  inp.style.cssText="width:100%;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
+  inp.onclick=e=>e.stopPropagation(); let done=false;
+  const save=()=>{ if(done) return; done=true; pk.due_date=(inp.value||"").trim()||null; poSave(p); renderPurchases(); };
+  inp.onblur=save; inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPurchases(); } };
+  el.replaceWith(inp); inp.focus();
+}
 async function poEstimateAll(btn){
   if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
   // one job per PACKAGE so prices appear package-by-package, live
@@ -6894,6 +6925,9 @@ function poSortVal(p,key){
     if(f.type==="checkbox") return (v===true||v==="1"||v==="true")?0:1;
     return String(v==null?"~":(Array.isArray(v)?v.join(","):v)).toLowerCase();
   }
+  if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+  if(key==="pcust") return String(poWho(p)||"~").toLowerCase();
+  if(key==="pdue") return (p.packages||[]).map(pk=>pk.due_date).filter(Boolean).sort()[0]||"~~";  // order sorts by its earliest package due
   if(key==="total") return Number(p.total_usd)||0;
   return String((p.packages||[]).map(pk=>pk.arrival).filter(Boolean).sort()[0]||"~");  // arrival: earliest, blanks last
 }
@@ -6943,6 +6977,9 @@ function poRenderPkgsFlat(mount,list){
     if(key==="order") return String(p.po_id||"").toLowerCase();
     if(key==="total") return pkgEstTotal(pk).sum;
     if(key==="arrival") return String(pk.arrival||"~");
+    if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+    if(key==="pcust") return String(pkgWho(pk)||"~").toLowerCase();
+    if(key==="pdue") return pk.due_date?(Date.parse(pk.due_date)||Infinity):Infinity;
     return poSortVal(p,key);
   });
   const totEst=rows.reduce((a,[,pk])=>a+pkgEstTotal(pk).sum,0);
@@ -6966,8 +7003,11 @@ function poPkFlatRow(p,pk,pi){
   ]);
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
+    oname: poNameCell(p.ship_to,true),
+    pcust: poNameCell(pkgWho(pk),true),
     total: est.priced?`<span class="muted" title="تقدير تكلفة المنتجات · estimated cost">≈ <b style="color:var(--ink)">${money(est.sum)}</b></span>`:'',
     arrival: pkgDatePill(pk),
+    pdue: poPkgDueCell(p,pk,pi),
     gashstatus: pkgGaashPill(pk),
     deadline: pkgDeadlinePill(p,pk,pi),
     docs: pkgDocsPill(p,pk,pi),
@@ -6992,8 +7032,10 @@ function poRenderProdsFlat(mount,list){
   list.forEach(p=>(p.packages||[]).forEach((pk,pi)=>(pk.items||[]).forEach((it,ii)=>rows.push([p,pk,pi,it,ii]))));
   lxtSortApply("pop",rows,([p,pk,,it],key)=>{
     if(key==="order") return String(p.po_id||"").toLowerCase();
+    if(key==="oname") return String(p.ship_to||"~").toLowerCase();
     if(key==="customer") return String(it.customer_name||"~").toLowerCase();
     if(key==="qty") return Number(it.qty)||1;
+    if(key==="pdue") return pk.due_date?(Date.parse(pk.due_date)||Infinity):Infinity;
     if(key==="collect"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
       return (co&&co.amount_to_collect_usd)||0; }
     return String(it.title||it.asin||"").toLowerCase();
@@ -7024,10 +7066,12 @@ function poItFlatRow(p,pk,pi,it,ii){
     :`<span class="muted2" style="opacity:.5" title="غير مرتبط بطلب زبون بعد · not linked to a customer order yet">—</span>`;
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
+    oname: poNameCell(p.ship_to,true),
     package:`<span class="muted2" style="font-size:11px">📦${pk.package_no}${gaash?` · ${poTn4(gaash,'10px')}`:""}</span>`,
     pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
     customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
     collect,
+    pdue: poPkgDueCell(p,pk,pi),
     qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
     status: exc,
     menu:`<button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>`,
@@ -7947,6 +7991,8 @@ function poCardHtml(p){
         ${profChip}
       </div>
       ${lxtCells("po",{
+        oname: poNameCell(p.ship_to,true),
+        pcust: poNameCell(poWho(p)),
         total: `<span class="muted2">${total}${estChip}</span>`,
         gashstatus: poSummaryPill(p),
         gerizim: gzRollup(poGwds),
@@ -8110,8 +8156,10 @@ function poPkgHtml(p,pk,pi){
         <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· ${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
       </div>
       ${lxtCells("po",{
+        pcust: poNameCell(pkgWho(pk)),
         total: est.priced?`<span class="muted" title="تقدير تكلفة المنتجات في الطرد · estimated cost of the products in this package">≈ <b style="color:var(--ink)">${money(est.sum)}</b> est${est.priced<est.total?` <span style="color:var(--warn)">(${est.total-est.priced})</span>`:''}</span>`:'',
         arrival: pkgDatePill(pk),
+        pdue: poPkgDueCell(p,pk,pi),
         gashstatus: pkgGaashPill(pk),
         deadline: pkgDeadlinePill(p,pk,pi),
         docs: pkgDocsPill(p,pk,pi),

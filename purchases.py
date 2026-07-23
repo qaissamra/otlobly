@@ -329,6 +329,7 @@ def _norm_packages(packages):
             "gaash_cd_at": p.get("gaash_cd_at"),             # GAASH's latest "docs required" event
             "gaash_deadline": p.get("gaash_deadline"),       # GAASH link expiry — lost past this date
             "gaash_deadline_checked": p.get("gaash_deadline_checked"),  # own cadence (~2-week re-check)
+            "due_date": (p.get("due_date") or "").strip() or None,  # owner-set package due date
             "alerts_sent": p.get("alerts_sent") or {},       # Telegram threshold stamps {key: iso}
             "track_notified": p.get("track_notified") or {},   # {order_id: iso} — customer-notify stamps
             "items": [_norm_item(it) for it in p.get("items", [])],

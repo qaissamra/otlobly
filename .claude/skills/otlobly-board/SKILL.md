@@ -80,8 +80,16 @@ Later additions to the system:
   `lxtGridApply` as an inline `--btpin` on `.bt-clip`/`.bt-wrap` (skipped ≤560px
   so the 200px phone cap wins).
 - **Purchases views**: `PO_BOARD_VIEW` (`po_board_view`) — orders tree ·
-  packages flat (table `"pok"`) · products flat (`"pop"`); `poSearch` free-text
-  filter (`poSearchMatch`); `poJumpOrder` = back to tree + open that card.
+  packages flat (table `"pok"`) · products flat (`"pop"`) · customers
+  (`poRenderCustomers`); `poSearch` free-text filter (`poSearchMatch`);
+  `poJumpOrder` = back to tree + open that card.
+- **Name + due columns** (po/pok/pop): `oname` = the order's Main name
+  (`p.ship_to`), `pcust` = a package's item customers (`pkgWho(pk)` / `poWho(p)`
+  at PO level) — plain via `poNameCell`; `pdue` = editable per-package due date
+  (`pk.due_date`, preserved in purchases.py `_norm_packages`) via `poPkgDueCell`/
+  `poPkgDueEdit` (a `dueChip` that becomes a date input; NOT `lxDueChip` — that
+  wraps `lxMs` for ms-epoch and returns "" on a YYYY-MM-DD string). Typed sort in
+  each view's valFn + `poSortVal`.
 - **Custom fields v2 (ClickUp-style, sellable core)**: 13 types — select
   (dropdown), labels (multi), text, longtext, number, money, date, checkbox,
   phone, url, email, rating, progress. Defs per business `custom_fields.po`
