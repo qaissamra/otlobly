@@ -117,15 +117,29 @@ Later additions to the system:
   (`poRenderCustomers`); `poSearch` free-text filter (`poSearchMatch`);
   `poJumpOrder` = back to tree + open that card.
 - **🔎 Bulk search view** (`bulksearch` / `#bulkSearchView`, nav `bulkSearchBtn`):
-  paste many GWDs → one plain table (`.tbl-scroll`) locating each in BOTH data
-  sets — Purchases (`bsFindPo`: exact `pk.tracking_number`, PO chip → `bsOpenPo`
-  = setView+poJumpOrder, pkg status via `cuLabel`/`hexPill`, `pkgGaashPill`,
-  `pkgEstTotal` $ gated by PO_MONEY) and Leluxe (`bsFindLx` over `bsLxRows()`:
-  dedupes package+item matches, Σ item "total amount" ₪, `lxStatusPill` +
-  `lxCfPill("gash status",…)`). `bsEnsureData` lazily loads POS via
-  `loadPurchases()` and LX via a bare `/api/leluxe/orders` fetch (NOT
-  `loadLeluxe()` — that's view-coupled); non-Leluxe roles just get no LX matches.
-  Not-found rows amber; footer Σ found/missing + $ + ₪. All labels via T()/data-en|ar.
+  paste many GWDs → a full LXT ClickUp table (**table id `"bs"`**, pin = tracking
+  #) locating each in BOTH data sets — Purchases (`bsFindPo`: exact
+  `pk.tracking_number`, PO chip → `bsOpenPo` = setView+poJumpOrder, pkg status via
+  `cuLabel`/`hexPill`, `pkgGaashPill`, `pkgEstTotal` $ gated by PO_MONEY,
+  `poThumbStrip` images, `poProfileCell`) and Leluxe (`bsFindLx` over
+  `bsLxRows()`: dedupes package+item matches, Σ item "total amount" ₪,
+  `lxStatusPill` + `lxCfPill("gash status",…)`, `lxThumbs` images, profile =
+  NAME field, gash date = `lxDueChip(v,true)||lxMs(v)`). Columns: found/oname/
+  profile/imgs/cust/status/gash/gashdate/value — the shared machinery (⊕ picker,
+  drag-reorder, right-click menu, resize, sort) applies because "bs" is
+  registered in LX_TABLES/LXT_COLS/LXT_CLS/LXT_PINCLS/the init array + every
+  `.bs-*` CSS selector group; `lxtRender("bs")` → `bsRender()` re-renders the
+  CACHED `BS_LAST` models (no re-search). Sort = `bsSortVal` (numeric keys
+  stringified zero-padded so mixed rows compare; missing rows always last).
+  `bsEnsureData` lazily loads POS via `loadPurchases()` and LX via a bare
+  `/api/leluxe/orders` fetch (NOT `loadLeluxe()` — view-coupled); non-Leluxe
+  roles just get no LX matches. Not-found rows amber (pin bg inlined too);
+  footer Σ found/missing + $ + ₪. All labels via T()/data-en|ar.
+  **Adding a new LXT table checklist** (what "bs" needed): LX_TABLES entry
+  (key/varn/head/rows) · LXT_COLS · LXT_CLS · LXT_PINCLS · the
+  `["","p","k","po","pok","pop","bs"]` init array · `lxtRender` branch · CSS:
+  `.X-cols{display:grid;…var(--Xgrid,defaults)}` + append `.X-colhead`/`.X-cols`
+  to the 7 shared selector groups (lines ~201-202, 428-429, 432-435, 438).
 - **Name / profile / due columns** (po/pok/pop): `oname` = the order's Main name
   (`p.ship_to`), `pcust` = a package's item customers (`pkgWho(pk)` / `poWho(p)`
   at PO level) — plain via `poNameCell`; `profile` = the AZ/Multilogin box the PO

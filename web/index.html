@@ -198,8 +198,8 @@
      got the same grid cells (806c25f): clicking a package row's status button
      opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
      white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -425,17 +425,18 @@
   .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -2660,6 +2661,7 @@ const LX_TABLES={
   "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
   "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree", mins:{7:84}},
   "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
+  "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults", mins:{}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -3147,6 +3149,17 @@ const LXT_COLS={
     {key:"status",    label:"الحالة · status",      w:134},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
+  "bs":[    // 🔎 Bulk search results (mixed Purchases + Leluxe rows)
+    {key:"found",    label:"موجود في · found in",   w:120, sortable:true},
+    {key:"oname",    label:"الاسم · order name",    w:120, sortable:true},
+    {key:"profile",  label:"الحساب · profile",     w:78,  sortable:true},
+    {key:"imgs",     label:"الصور · images",        w:120},
+    {key:"cust",     label:"العملاء · customers",   w:130, sortable:true},
+    {key:"status",   label:"الحالة · status",       w:110, sortable:true},
+    {key:"gash",     label:"جمارك · GAASH",         w:130},
+    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
+    {key:"value",    label:"القيمة · value",        w:96,  sortable:true},
+  ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
@@ -3163,10 +3176,11 @@ const LXT_COLS={
 };
 const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
-               "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":""};
+               "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"],
+               "bs":["bs-colhead","bs-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":""};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop"].forEach(t=>{
+["","p","k","po","pok","pop","bs"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -3194,7 +3208,7 @@ function lxtCols(tbl){
   return lxtOrderApply(tbl,cols);
 }
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
-function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():renderLeluxe(); }
+function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():renderLeluxe()); }
 function lxtColToggle(tbl,key){
   const h=LXT_HIDDEN[tbl]; h.has(key)?h.delete(key):h.add(key);
   try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}
@@ -9215,62 +9229,96 @@ function bsFindLx(tn,rows){
           trk:en&&en.data&&en.data.tracking_status||null};
 }
 function bsOpenPo(id){ setView("purchases"); poJumpOrder(id); }
+// results render through the shared ClickUp-table system (table id "bs") — the
+// ⊕ Fields picker, drag-reorder, right-click column menu and resize all apply.
+let BS_LAST=null;   // last search's row models — re-rendered on any column change
 async function bsRun(){
   const res=$("bsResults"), toks=bsTokens();
-  if(!toks.length){ res.innerHTML=""; toast(T("الصق أرقام تتبع أولاً · paste tracking numbers first")); return; }
+  if(!toks.length){ res.innerHTML=""; BS_LAST=null; toast(T("الصق أرقام تتبع أولاً · paste tracking numbers first")); return; }
   res.innerHTML=`<div class="muted2" style="padding:10px">${T("جارِ البحث… · searching…")}</div>`;
   await bsEnsureData();
-  const lxRows=bsLxRows();
-  let found=0, sumUsd=0, sumIls=0;
-  const trs=[];
+  const lxRows=bsLxRows(), models=[];
   toks.forEach(tn=>{
     const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
-    const tcell=`<td class="mono" style="white-space:nowrap">${poEsc(tn)}${lxCopyRawBtn(tn)}</td>`;
-    if(!pos.length&&!lx){
-      trs.push(`<tr style="background:#fff7ed">${tcell}<td colspan="6" style="color:#b45309">${T("غير موجود — لا في المشتريات ولا في ليلوكس · not found in Purchases or Leluxe")}</td></tr>`);
-      return;
-    }
-    found++;
-    pos.forEach(({p,pk,pi})=>{
-      const pst=(pk.otlobly_status||"").trim();
-      const est=pkgEstTotal(pk); if(PO_MONEY) sumUsd+=est.sum;
-      trs.push(`<tr>${tcell}
-        <td><button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button> <span class="muted2" style="font-size:11px">pkg ${pk.package_no}</span></td>
-        <td>${poEsc((p.ship_to||"").trim()||"—")}</td>
-        <td style="font-size:12px">${poEsc(pkgWho(pk)||"—")}</td>
-        <td>${pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>'}</td>
-        <td>${pkgGaashPill(pk)}</td>
-        <td>${(PO_MONEY&&est.priced)?`≈ <b>${money(est.sum)}</b>`:'<span class="muted2">—</span>'}</td></tr>`);
-    });
-    if(lx){
-      sumIls+=lx.tot;
-      const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
-      trs.push(`<tr>${tcell}
-        <td><span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span></td>
-        <td style="font-size:12px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</td>
-        <td class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</td>
-        <td>${lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>'}</td>
-        <td>${lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>')}</td>
-        <td>${lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>'}</td></tr>`);
-    }
+    if(!pos.length&&!lx){ models.push({kind:"miss",tn}); return; }
+    pos.forEach(({p,pk,pi})=>models.push({kind:"po",tn,p,pk,pi}));
+    if(lx) models.push({kind:"lx",tn,lx});
   });
-  const missing=toks.length-found;
-  res.innerHTML=`<div class="panel" style="padding:0;overflow:hidden">
-    <div class="tbl-scroll"><table>
-      <thead><tr>
-        <th>${T("التتبع · Tracking")}</th><th>${T("موجود في · Found in")}</th>
-        <th>${T("الطلب · Order")}</th><th>${T("العملاء · Customers")}</th>
-        <th>${T("الحالة · Status")}</th><th>${T("جمارك · GAASH")}</th><th>${T("القيمة · Value")}</th>
-      </tr></thead>
-      <tbody>${trs.join("")}</tbody>
-      <tfoot><tr style="background:var(--bg2);font-weight:700">
-        <td>Σ ${toks.length}</td>
-        <td colspan="4">${found} ${T("موجود · found")}${missing?` · <span style="color:#b45309">${missing} ${T("مفقود · missing")}</span>`:""}</td>
-        <td></td>
-        <td style="white-space:nowrap">${PO_MONEY&&sumUsd?`≈ ${money(Math.round(sumUsd*100)/100)}`:""}${sumIls?`${PO_MONEY&&sumUsd?" · ":""}₪${(Math.round(sumIls*100)/100).toLocaleString()}`:""}</td>
-      </tr></tfoot>
-    </table></div></div>`;
-  $("bsInfo").textContent=`${toks.length} ${T("رقم · numbers")} · ${found} ${T("موجود · found")}`;
+  BS_LAST={models,nTok:toks.length,found:toks.length-models.filter(m=>m.kind==="miss").length};
+  bsRender();
+}
+function bsSortVal(m,key){
+  if(m.kind==="po"){
+    const {p,pk}=m;
+    if(key==="found") return "1"+String(p.po_id||"").toLowerCase();
+    if(key==="oname") return String(p.ship_to||"~").toLowerCase();
+    if(key==="profile") return String(p.profile_box||"~").toLowerCase();
+    if(key==="cust") return String(pkgWho(pk)||"~").toLowerCase();
+    if(key==="status") return String(pk.otlobly_status||"~").toLowerCase();
+    if(key==="gashdate") return "~~";
+    if(key==="value") return String(1e9+(pkgEstTotal(pk).sum||0)).padStart(16,"0");
+  }else{
+    const lx=m.lx;
+    if(key==="found") return "2leluxe";
+    if(key==="oname") return String((lx.order&&lx.order.name)||"~").toLowerCase();
+    if(key==="profile") return String(lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"~").toLowerCase();
+    if(key==="cust") return "~";
+    if(key==="status") return String(lx.sts[0]||"~").toLowerCase();
+    if(key==="gashdate"){ const v=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean); return v?lxMs(v)||"~~":"~~"; }
+    if(key==="value") return String(1e9+(lx.tot||0)).padStart(16,"0");
+  }
+  return String(m.tn);
+}
+function bsRender(){
+  const res=$("bsResults"); if(!res||!BS_LAST) return;
+  const {models,nTok,found}=BS_LAST;
+  const live=lxtSortApply("bs",models.filter(m=>m.kind!=="miss").slice(),bsSortVal)
+    .concat(models.filter(m=>m.kind==="miss"));   // missing rows always last
+  let sumUsd=0, sumIls=0;
+  const pin=m=>`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}><span class="mono" style="font-size:12px">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}</div>`;
+  const rows=live.map(m=>{
+    if(m.kind==="miss")
+      return `<div class="poc-row" style="background:#fff7ed">${pin(m)}${lxtCells("bs",{found:`<span style="color:#b45309;font-size:11.5px">${T("غير موجود · not found")}</span>`})}</div>`;
+    if(m.kind==="po"){
+      const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
+      if(PO_MONEY) sumUsd+=est.sum;
+      return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
+        found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>`,
+        oname: poNameCell(p.ship_to,true),
+        profile: poProfileCell(p),
+        imgs: poThumbStrip(pk.items),
+        cust:`<span style="font-size:11.5px" title="${poEsc(pkgWho(pk)||'')}">${poEsc(pkgWho(pk)||"—")}</span>`,
+        status: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>',
+        gash: pkgGaashPill(pk),
+        gashdate:'<span class="muted2" style="opacity:.45">—</span>',
+        value:(PO_MONEY&&est.priced)?`<span>≈ <b>${money(est.sum)}</b></span>`:'<span class="muted2">—</span>',
+      })}</div>`;
+    }
+    const lx=m.lx; sumIls+=lx.tot;
+    const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
+    const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
+    const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
+    return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
+      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>`,
+      oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
+      profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
+      imgs: lxThumbs(lx.items),
+      cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
+      status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
+      gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>'),
+      gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
+      value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
+    })}</div>`;
+  }).join("");
+  const missing=nTok-found;
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${nTok} · ${found} ${T("موجود · found")}${missing?` · <span style="color:#b45309">${missing} ${T("مفقود · missing")}</span>`:""}</div>
+      ${lxtCells("bs",{value:`<b style="font-size:12px;white-space:nowrap">${PO_MONEY&&sumUsd?`≈ ${money(Math.round(sumUsd*100)/100)}`:""}${sumIls?`${PO_MONEY&&sumUsd?" · ":""}₪${(Math.round(sumIls*100)/100).toLocaleString()}`:""}</b>`})}
+    </div>`;
+  res.innerHTML=lxtHead("bs","التتبع · tracking")
+    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${rows}${totals}</div></div>`);
+  lxColwApply(); lxtGridApply("bs",res);
+  $("bsInfo").textContent=`${nTok} ${T("رقم · numbers")} · ${found} ${T("موجود · found")}`;
 }
 
 localizeStatic();   // apply the saved UI language (default English) to the static chrome
