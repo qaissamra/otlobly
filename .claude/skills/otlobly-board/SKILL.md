@@ -75,6 +75,28 @@ Catalog, Team, Trash, In cart, Activity, Picking) sit in `.tbl-scroll`
 wrappers (`overflow-x:auto`) — scroll, no pin.
 
 Later additions to the system:
+- **UI language toggle (staff console only)**: `LANG` (`otl_lang`, default `en`)
+  + a 🌐 `#langToggle` in the top bar (`langToggle`/`langSet`). Labels are written
+  bilingually `"عربي · English"`; `T(str)` splits on the first ` · ` and returns
+  ONE side by LANG (leaves composed strings whose two sides are the same language,
+  e.g. "3 pkgs · 4 items", untouched). EVERY column label — `LXT_COLS`, the pin
+  labels passed to `lxtHead`, the ⊕ Fields picker, sort tooltips — is bilingual and
+  rendered via `T()`, so a column never mixes languages. Static chrome (sidebar
+  nav, `nav-sec` labels, Purchases view tabs, top-bar buttons) carries
+  `data-en`/`data-ar`; `localizeStatic()` swaps their text (preserving a leading
+  `.ic` icon span) at boot + on every toggle, which then re-renders the live
+  boards. Customer-facing `templates/*` are NOT touched — English default keeps
+  the whole staff UI one language out of the box; the toggle re-Arabizes it.
+- **Column reorder + right-click hide** (all `.bt-*` tables): headers are
+  `draggable` (native HTML5 DnD → `lxtColDragStart/Over/Drop/End` → `lxtColMove`)
+  and reorder MOVABLE columns only; the locked ⋯ `menu` stays last and the pinned
+  first column never moves. Order persists to `lxt_order_<tbl>`, applied by
+  `lxtOrderApply` inside `lxtCols` so header/cells/grid all follow one ordered list
+  (unknown/new columns keep their default trailing spot). Reordering resets that
+  table's positional widths (`lxColwSet(tbl,null)`), same as hide. Grabbing the
+  `lx-rsz` handle resizes instead (guarded in DragStart; handle is `draggable=false`).
+  Right-click a header → `lxtColHide(tbl,key)` (restore from the ⊕ panel). Drop
+  indicator = `.lx-drop-l/.lx-drop-r` inset shadow; `.lx-col{cursor:grab}`.
 - **Pin resize**: the header pin carries an `lx-rsz` handle → `lxtPinDown` /
   `lxtPinReset`, width in `lxt_pin_<tbl>` (clamp 220–560), re-applied by
   `lxtGridApply` as an inline `--btpin` on `.bt-clip`/`.bt-wrap` (skipped ≤560px

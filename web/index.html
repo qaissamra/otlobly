@@ -439,6 +439,12 @@
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
+  /* drag a header to REORDER it (persisted), right-click to hide it */
+  .lx-col{cursor:grab}
+  .lx-col:active{cursor:grabbing}
+  .lx-col.lx-dragging{opacity:.35}
+  .lx-col.lx-drop-l{box-shadow:inset 3px 0 0 #f76808}
+  .lx-col.lx-drop-r{box-shadow:inset -3px 0 0 #f76808}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
   /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
@@ -604,30 +610,30 @@
     <button id="exitPlatBtn" onclick="exitPlatform()"><span class="ic">↩</span>Back to Otlobly</button>
   </nav>
   <nav id="sideNav">
-    <div class="nav-sec">Main menu</div>
-    <button id="brainBtn" class="on" onclick="setView('brain')" title="urgent actions, due dates, forgotten items, this week's results — your command center"><span class="ic">🧠</span>Brain</button>
+    <div class="nav-sec" data-en="Main menu" data-ar="القائمة الرئيسية">Main menu</div>
+    <button id="brainBtn" class="on" onclick="setView('brain')" title="urgent actions, due dates, forgotten items, this week's results — your command center"><span class="ic">🧠</span><span data-en="Brain" data-ar="لوحة القيادة">Brain</span></button>
     <!-- Nav ordered by real usage (owner, 2026-07-22): Brain on top, then
          Purchases · To order · Leluxe · Deposits, then the rest.
          Catalog + Picking list removed same day (owner: unused) — the views,
          loaders, and routes stay; restore by re-adding the buttons. -->
-    <button id="poBtn" onclick="setView('purchases')"><span class="ic">📦</span>Purchases</button>
-    <button id="needBtn" onclick="setView('needorder')" title="orders waiting to be placed on Amazon — includes the price-quote tool"><span class="ic">💡</span>To order</button>
-    <button id="leluxeBtn" style="display:none" onclick="setView('leluxe')" title="Leluxe — Amazon bulk (AZ) orders, mirrored live to ClickUp"><span class="ic">⌚</span>Leluxe</button>
-    <button id="depositsBtn" onclick="setView('deposits')" title="deposits / عربون customers paid — with remaining balance"><span class="ic">💵</span>Deposits</button>
-    <button id="homeBtn" onclick="setView('orders')"><span class="ic">🏠</span>Orders</button>
-    <button id="cartBtn" onclick="setView('incart')" title="orders you've added to the Amazon cart — profit preview before you buy"><span class="ic">🛒</span>In cart</button>
-    <button id="metaLeadsBtn" style="display:none" onclick="setView('metaleads')" title="Messenger + Instagram DMs and lead-form ads"><span class="ic">📣</span>Leads</button>
-    <button id="custBtn" onclick="setView('customers')"><span class="ic">👤</span>Customers</button>
-    <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span>Package prep</button>
-    <div class="nav-sec">Insights</div>
-    <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span>P&amp;L</button>
-    <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span>Activity</button>
-    <div class="nav-sec">System</div>
-    <button id="settingsBtn" onclick="setView('settings')" title="markup, shipping/import rules, WhatsApp number"><span class="ic">⚙️</span>Settings</button>
-    <button id="teamBtn" style="display:none" onclick="setView('team')" title="manage staff accounts &amp; roles"><span class="ic">👥</span>Team</button>
-    <button id="brokersBtn" style="display:none" onclick="enterPlatform()" title="Tatabu platform console — brokers, plans, usage (Otlobly only)"><span class="ic">🏗</span>Tatabu</button>
-    <button id="trashBtn" onclick="setView('trash')" title="deleted items — restore anything here"><span class="ic">🗑</span>Trash</button>
-    <button id="clickupBtn" onclick="syncClickup(this)"><span class="ic">↗</span>Sync ClickUp</button>
+    <button id="poBtn" onclick="setView('purchases')"><span class="ic">📦</span><span data-en="Purchases" data-ar="المشتريات">Purchases</span></button>
+    <button id="needBtn" onclick="setView('needorder')" title="orders waiting to be placed on Amazon — includes the price-quote tool"><span class="ic">💡</span><span data-en="To order" data-ar="للطلب">To order</span></button>
+    <button id="leluxeBtn" style="display:none" onclick="setView('leluxe')" title="Leluxe — Amazon bulk (AZ) orders, mirrored live to ClickUp"><span class="ic">⌚</span><span data-en="Leluxe" data-ar="ليلوكس">Leluxe</span></button>
+    <button id="depositsBtn" onclick="setView('deposits')" title="deposits / عربون customers paid — with remaining balance"><span class="ic">💵</span><span data-en="Deposits" data-ar="العرابين">Deposits</span></button>
+    <button id="homeBtn" onclick="setView('orders')"><span class="ic">🏠</span><span data-en="Orders" data-ar="الطلبات">Orders</span></button>
+    <button id="cartBtn" onclick="setView('incart')" title="orders you've added to the Amazon cart — profit preview before you buy"><span class="ic">🛒</span><span data-en="In cart" data-ar="في السلة">In cart</span></button>
+    <button id="metaLeadsBtn" style="display:none" onclick="setView('metaleads')" title="Messenger + Instagram DMs and lead-form ads"><span class="ic">📣</span><span data-en="Leads" data-ar="العملاء المحتملون">Leads</span></button>
+    <button id="custBtn" onclick="setView('customers')"><span class="ic">👤</span><span data-en="Customers" data-ar="العملاء">Customers</span></button>
+    <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span><span data-en="Package prep" data-ar="تجهيز الطرود">Package prep</span></button>
+    <div class="nav-sec" data-en="Insights" data-ar="التحليلات">Insights</div>
+    <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span><span data-en="P&amp;L" data-ar="الأرباح والخسائر">P&amp;L</span></button>
+    <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span><span data-en="Activity" data-ar="النشاط">Activity</span></button>
+    <div class="nav-sec" data-en="System" data-ar="النظام">System</div>
+    <button id="settingsBtn" onclick="setView('settings')" title="markup, shipping/import rules, WhatsApp number"><span class="ic">⚙️</span><span data-en="Settings" data-ar="الإعدادات">Settings</span></button>
+    <button id="teamBtn" style="display:none" onclick="setView('team')" title="manage staff accounts &amp; roles"><span class="ic">👥</span><span data-en="Team" data-ar="الفريق">Team</span></button>
+    <button id="brokersBtn" style="display:none" onclick="enterPlatform()" title="Tatabu platform console — brokers, plans, usage (Otlobly only)"><span class="ic">🏗</span><span data-en="Tatabu" data-ar="تتبّع">Tatabu</span></button>
+    <button id="trashBtn" onclick="setView('trash')" title="deleted items — restore anything here"><span class="ic">🗑</span><span data-en="Trash" data-ar="المحذوفات">Trash</span></button>
+    <button id="clickupBtn" onclick="syncClickup(this)"><span class="ic">↗</span><span data-en="Sync ClickUp" data-ar="مزامنة ClickUp">Sync ClickUp</span></button>
   </nav>
   <div id="quotaBox"></div>
   <div class="side-user" id="userChip"></div>
@@ -640,12 +646,13 @@
     <button class="iconbtn" id="navToggle" onclick="document.body.classList.toggle('nav-open')" aria-label="menu">☰</button>
     <span><h1 id="pageTitle">Orders</h1><div class="sub" id="sub">loading…</div></span>
     <span class="spacer"></span>
+    <button class="iconbtn" id="langToggle" title="اللغة · language — English / عربي" style="font-weight:800;min-width:30px" onclick="langToggle()">ع</button>
     <span class="pop">
       <button id="notifBell" title="إشعارات العملاء — طلبات جديدة، تأكيد عروض، عملاء محتملون · customer notifications" style="position:relative" onclick="notifOpen(this)">🔔<span id="notifBadge" class="notif-badge" style="display:none"></span></button>
       <div class="pop-menu notif-menu" id="notifMenu"></div>
     </span>
-    <button class="accent" id="addOrderBtn" onclick="aoOpenForm()">＋ Add order</button>
-    <button class="primary" id="refreshBtn" onclick="load()">↻ Refresh</button>
+    <button class="accent" id="addOrderBtn" data-en="＋ Add order" data-ar="＋ طلب جديد" onclick="aoOpenForm()">＋ Add order</button>
+    <button class="primary" id="refreshBtn" data-en="↻ Refresh" data-ar="↻ تحديث" onclick="load()">↻ Refresh</button>
   </div>
   <div class="nav-ovl" onclick="document.body.classList.remove('nav-open')"></div>
 <div class="wrap">
@@ -844,10 +851,10 @@
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 8px">
       <span style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden" title="طريقة العرض · view">
-        <button class="minibtn" id="poSegOrders" style="border:0;border-radius:0" onclick="poSetView('orders')">🧾 Orders</button>
-        <button class="minibtn" id="poSegPkgs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('packages')" title="كل الطرود في جدول واحد · every package as one flat row">📦 Packages</button>
-        <button class="minibtn" id="poSegProds" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('products')" title="كل المنتجات في جدول واحد · every product as one flat row">⫶ Products</button>
-        <button class="minibtn" id="poSegCust" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('customers')" title="كل عميل مع منتجاته — الطلبات المنفصلة تبقى منفصلة · each customer with their products; separate orders stay separated">👤 Customers</button>
+        <button class="minibtn" id="poSegOrders" style="border:0;border-radius:0" onclick="poSetView('orders')" data-en="🧾 Orders" data-ar="🧾 الطلبات">🧾 Orders</button>
+        <button class="minibtn" id="poSegPkgs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('packages')" title="كل الطرود في جدول واحد · every package as one flat row" data-en="📦 Packages" data-ar="📦 الطرود">📦 Packages</button>
+        <button class="minibtn" id="poSegProds" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('products')" title="كل المنتجات في جدول واحد · every product as one flat row" data-en="⫶ Products" data-ar="⫶ المنتجات">⫶ Products</button>
+        <button class="minibtn" id="poSegCust" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('customers')" title="كل عميل مع منتجاته — الطلبات المنفصلة تبقى منفصلة · each customer with their products; separate orders stay separated" data-en="👤 Customers" data-ar="👤 العملاء">👤 Customers</button>
       </span>
       <input id="poSearch" placeholder="search PO #, amazon #, customer, product, GWD…" oninput="renderPurchases()" style="width:280px;padding:4px 8px;font-size:12px">
     </div>
@@ -1563,6 +1570,44 @@ function quoteOrder(id){
 
 function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),3500);}
+
+// ═══ UI language (staff console only) ══════════════════════════════════════
+// English is the default; a 🌐 toggle in the top bar switches to Arabic. Labels
+// in this file are written bilingually "عربي · English"; T() renders exactly one
+// side so a column (or any chrome) never mixes languages. Composed strings like
+// "3 packages · 4 items" (both sides same language) are left untouched. The
+// customer-facing pages in templates/* are NOT affected by this toggle.
+let LANG=(localStorage.getItem("otl_lang")==="ar")?"ar":"en";
+const AR_RANGE=/[؀-ۿ]/;
+function T(s){
+  if(s==null) return s; s=String(s);
+  const i=s.indexOf(" · "); if(i<0) return s;
+  const a=s.slice(0,i), b=s.slice(i+3), aAr=AR_RANGE.test(a), bAr=AR_RANGE.test(b);
+  if(aAr===bAr) return s;                    // not a two-language label — leave as-is
+  return LANG==="ar"?(aAr?a:b):(aAr?b:a);
+}
+// swap only the trailing text of an element, preserving a leading .ic icon span
+function setLangText(el,txt){
+  [...el.childNodes].forEach(n=>{ if(n.nodeType===3) el.removeChild(n); });
+  const ic=el.querySelector(":scope > .ic");
+  if(ic) ic.insertAdjacentText("afterend",txt); else el.appendChild(document.createTextNode(txt));
+}
+// re-language every static-chrome element tagged with data-en / data-ar
+function localizeStatic(root){
+  (root||document).querySelectorAll("[data-en]").forEach(el=>
+    setLangText(el, LANG==="ar"?(el.dataset.ar||el.dataset.en):el.dataset.en));
+  document.documentElement.setAttribute("data-lang",LANG);
+  const b=$("langToggle"); if(b) b.textContent=LANG==="ar"?"EN":"ع";
+}
+function langSet(l){
+  LANG=(l==="ar")?"ar":"en";
+  try{ localStorage.setItem("otl_lang",LANG); }catch(e){}
+  localizeStatic();
+  // repaint the live boards so their column headers pick up the new language
+  try{ if(typeof renderPurchases==="function"&&typeof POS!=="undefined"&&POS) renderPurchases(); }catch(e){}
+  try{ if(typeof renderLeluxe==="function"&&typeof LX!=="undefined"&&LX) renderLeluxe(); }catch(e){}
+}
+function langToggle(){ langSet(LANG==="ar"?"en":"ar"); }
 
 let ME=null;
 // Roles that get a LIMITED console: only these nav buttons + views, landing on `home`.
@@ -2922,7 +2967,7 @@ function renderLeluxe(){
         <div class="bt-pin">Σ ${shown.length} منتج · products</div>
         ${lxtCells("p",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
       </div>`;
-    const pcolHead=lxtHead("p","product");
+    const pcolHead=lxtHead("p","المنتج · product");
     if(!gfdef){
       $("lxRows").innerHTML=pcolHead+lxtWrap("p",`<div class="pkg open"><div class="pkg-body">${prodRows(shown)}${pTotals}</div></div>`);
       lxColwApply(); lxtGridApply("p");
@@ -2977,7 +3022,7 @@ function renderLeluxe(){
       ${lxtCells("",{total:`<b style="font-size:12px" title="مجموع Total Amount لكل الطلبات المعروضة · total of all shown orders">₪${Math.round(totAmt).toLocaleString()}</b>`})}
     </div>`:"";
   $("lxRows").innerHTML=onlyBanner
-    +(orders.length?lxtHead("","order","name"):"")
+    +(orders.length?lxtHead("","الطلب · order","name"):"")
     +lxtWrap("",orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("")+oTotals);
   lxColwApply(); lxtGridApply("");
 }
@@ -3015,75 +3060,78 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // totals footers. Column registry per table; hidden/sort state per table in
 // localStorage. The ORDERS table keeps its richer LX_SORT (lxSortClick) — its
 // col.sort carries that key; other tables use the generic LXT_SORT. ──
+// Column labels are bilingual "عربي · English"; T() renders one side per LANG so
+// a column never shows both languages (the ⊕ picker + sort tooltips route through
+// T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
   "":[
-    {key:"status",  label:"status",  w:100, sort:"status"},
-    {key:"total",   label:"total",   w:66,  sort:"total"},
-    {key:"tracking",label:"tracking",w:98,  sort:"tracking"},
-    {key:"gash",    label:"gash",    w:160, sort:"gash"},
-    {key:"deadline",label:"deadline",w:112, sort:"gaash deadline", sortKey:"deadline"},
-    {key:"created", label:"created", w:78,  sort:"created"},
-    {key:"due",     label:"due date",w:78,  sort:"due"},
+    {key:"status",  label:"الحالة · status",  w:100, sort:"status"},
+    {key:"total",   label:"الإجمالي · total",   w:66,  sort:"total"},
+    {key:"tracking",label:"التتبع · tracking",w:98,  sort:"tracking"},
+    {key:"gash",    label:"الجمارك · gash",    w:160, sort:"gash"},
+    {key:"deadline",label:"الموعد النهائي · deadline",w:112, sort:"gaash deadline", sortKey:"deadline"},
+    {key:"created", label:"أُنشئ · created", w:78,  sort:"created"},
+    {key:"due",     label:"تاريخ الاستحقاق · due date",w:78,  sort:"due"},
     {key:"menu",    label:"",        w:28,  locked:true},
   ],
   "p":[
-    {key:"order",     label:"order",       w:84,  sortable:true},
-    {key:"profile",   label:"profile",     w:52,  sortable:true},
-    {key:"status",    label:"status",      w:104},
-    {key:"qty",       label:"qty",         w:40,  sortable:true},
-    {key:"tracking",  label:"tracking",    w:104},
-    {key:"gashstatus",label:"gaash status",w:128},
-    {key:"rdstatus",  label:"rd status",   w:100},
-    {key:"due",       label:"due",         w:78,  sortable:true},
+    {key:"order",     label:"الطلب · order",       w:84,  sortable:true},
+    {key:"profile",   label:"الحساب · profile",     w:52,  sortable:true},
+    {key:"status",    label:"الحالة · status",      w:104},
+    {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
+    {key:"tracking",  label:"التتبع · tracking",    w:104},
+    {key:"gashstatus",label:"حالة الجمارك · gaash status",w:128},
+    {key:"rdstatus",  label:"حالة RD · rd status",   w:100},
+    {key:"due",       label:"الاستحقاق · due",         w:78,  sortable:true},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
   "k":[
-    {key:"order",   label:"order",   w:100, sortable:true},
-    {key:"value",   label:"≈ value", w:86,  sortable:true},
-    {key:"status",  label:"status",  w:104},
-    {key:"gash",    label:"gash",    w:128},
-    {key:"mail",    label:"✉ mail",  w:60},
-    {key:"deadline",label:"deadline",w:110},
-    {key:"due",     label:"due",     w:78,  sortable:true},
+    {key:"order",   label:"الطلب · order",   w:100, sortable:true},
+    {key:"value",   label:"≈ القيمة · ≈ value", w:86,  sortable:true},
+    {key:"status",  label:"الحالة · status",  w:104},
+    {key:"gash",    label:"الجمارك · gash",    w:128},
+    {key:"mail",    label:"✉ البريد · ✉ mail",  w:60},
+    {key:"deadline",label:"الموعد · deadline",w:110},
+    {key:"due",     label:"الاستحقاق · due",     w:78,  sortable:true},
     {key:"menu",    label:"",        w:28,  locked:true},
   ],
   "po":[
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
     {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
-    {key:"total",     label:"total",       w:118, sortable:true},
-    {key:"arrival",   label:"arrival",     w:88,  sortable:true},
-    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
-    {key:"gashstatus",label:"gaash status",w:128},
-    {key:"deadline",  label:"deadline",    w:98},
-    {key:"docs",      label:"docs",        w:74},
-    {key:"gerizim",   label:"جيرزيم",       w:118},
-    {key:"status",    label:"status",      w:134},
+    {key:"total",     label:"الإجمالي · total",       w:118, sortable:true},
+    {key:"arrival",   label:"الوصول · arrival",     w:88,  sortable:true},
+    {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
+    {key:"gashstatus",label:"حالة الجمارك · gaash status",w:128},
+    {key:"deadline",  label:"الموعد · deadline",    w:98},
+    {key:"docs",      label:"الوثائق · docs",        w:74},
+    {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
+    {key:"status",    label:"الحالة · status",      w:134},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
   "pok":[   // Purchases → 📦 Packages flat view
-    {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
     {key:"pcust",     label:"العميل · customer",  w:120, sortable:true},
-    {key:"total",     label:"≈ est",       w:96,  sortable:true},
-    {key:"arrival",   label:"arrival",     w:88,  sortable:true},
-    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
-    {key:"gashstatus",label:"gaash status",w:128},
-    {key:"deadline",  label:"deadline",    w:98},
-    {key:"docs",      label:"docs",        w:74},
-    {key:"gerizim",   label:"جيرزيم",       w:118},
-    {key:"status",    label:"status",      w:134},
+    {key:"total",     label:"≈ التقدير · ≈ est",       w:96,  sortable:true},
+    {key:"arrival",   label:"الوصول · arrival",     w:88,  sortable:true},
+    {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
+    {key:"gashstatus",label:"حالة الجمارك · gaash status",w:128},
+    {key:"deadline",  label:"الموعد · deadline",    w:98},
+    {key:"docs",      label:"الوثائق · docs",        w:74},
+    {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
+    {key:"status",    label:"الحالة · status",      w:134},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
-    {key:"order",     label:"order",       w:88,  sortable:true},
+    {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
-    {key:"package",   label:"package",     w:120},
-    {key:"pkgstatus", label:"pkg status",  w:120},
-    {key:"customer",  label:"customer",    w:112, sortable:true},
-    {key:"collect",   label:"💵 collect",  w:96,  sortable:true},
-    {key:"pdue",      label:"استحقاق · due", w:96, sortable:true},
-    {key:"qty",       label:"qty",         w:40,  sortable:true},
-    {key:"status",    label:"exception",   w:110},
+    {key:"package",   label:"الطرد · package",     w:120},
+    {key:"pkgstatus", label:"حالة الطرد · pkg status",  w:120},
+    {key:"customer",  label:"العميل · customer",    w:112, sortable:true},
+    {key:"collect",   label:"💵 يؤخذ · 💵 collect",  w:96,  sortable:true},
+    {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
+    {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
+    {key:"status",    label:"استثناء · exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
 };
@@ -3091,19 +3139,33 @@ const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
                "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"]};
 const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":""};
-const LXT_HIDDEN={}, LXT_SORT={};
+const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
 ["","p","k","po","pok","pop"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
+  try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
 });
+// user's saved drag-order (an array of column keys) reorders the MOVABLE columns;
+// the locked ⋯ menu always stays last, new/unknown columns keep their default spot
+function lxtOrderApply(tbl,cols){
+  const ord=LXT_ORDER[tbl]; if(!Array.isArray(ord)||!ord.length) return cols;
+  const locked=cols.filter(c=>c.locked), movable=cols.filter(c=>!c.locked);
+  const byKey=new Map(movable.map(c=>[c.key,c])), out=[];
+  ord.forEach(k=>{ const c=byKey.get(k); if(c){ out.push(c); byKey.delete(k); } });
+  movable.forEach(c=>{ if(byKey.has(c.key)) out.push(c); });   // columns added since the save
+  return out.concat(locked);
+}
 // the PO tables carry the business's ClickUp-style CUSTOM FIELDS as extra
 // columns (defined in Settings → 🧩), inserted before the ⋯ menu column
 function lxtCols(tbl){
   const base=LXT_COLS[tbl]||[];
-  if(tbl!=="po"&&tbl!=="pok") return base;
-  const cf=(((QSETTINGS||{}).custom_fields||{}).po||[])
-    .map(f=>({key:"cf_"+f.key,label:f.label,w:110,sortable:true,cf:f}));
-  return cf.length?base.slice(0,-1).concat(cf,base.slice(-1)):base;
+  let cols=base;
+  if(tbl==="po"||tbl==="pok"){
+    const cf=(((QSETTINGS||{}).custom_fields||{}).po||[])
+      .map(f=>({key:"cf_"+f.key,label:f.label,w:110,sortable:true,cf:f}));
+    if(cf.length) cols=base.slice(0,-1).concat(cf,base.slice(-1));
+  }
+  return lxtOrderApply(tbl,cols);
 }
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
 function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():renderLeluxe(); }
@@ -3118,6 +3180,55 @@ function lxtColToggle(tbl,key){
   const head=document.querySelector(`.${LXT_CLS[tbl][0]}`);
   const m=head&&head.closest(".bt-clip")?head.closest(".bt-clip").querySelector(".fld-menu"):null;
   if(m){ m.classList.add("open"); if(m.previousElementSibling) fldPlace(m.previousElementSibling,m); }
+}
+// right-click a column header → hide it (restore from the ⊕ Fields panel)
+function lxtColHide(tbl,key){
+  const c=lxtCols(tbl).find(x=>x.key===key); if(!c||c.locked) return;
+  LXT_HIDDEN[tbl].add(key);
+  try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...LXT_HIDDEN[tbl]])); }catch(e){}
+  lxColwSet(tbl,null);              // saved widths are keyed to the visible set — reset
+  toast(T("عمود مخفي — استرجعه من زر ⊕ · Column hidden — restore from the ⊕ Fields button"));
+  lxtRender(tbl);
+}
+// drag a column header onto another to reposition it (ClickUp-style). Native
+// HTML5 drag-and-drop; the ⋯ menu column and the pinned column don't participate.
+let LXT_DRAG=null;   // {tbl,key} while a header is being dragged
+function lxtColDragStart(ev,tbl,key){
+  if(ev.target.classList.contains("lx-rsz")){ ev.preventDefault(); return; }   // grabbing the resize handle → resize, not reorder
+  LXT_DRAG={tbl,key};
+  try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain",key); }catch(e){}
+  ev.currentTarget.classList.add("lx-dragging");
+}
+function lxtColDragOver(ev,tbl,key){
+  if(!LXT_DRAG||LXT_DRAG.tbl!==tbl||LXT_DRAG.key===key) return;
+  ev.preventDefault(); try{ ev.dataTransfer.dropEffect="move"; }catch(e){}
+  const el=ev.currentTarget, r=el.getBoundingClientRect();
+  el.classList.remove("lx-drop-l","lx-drop-r");
+  el.classList.add((ev.clientX-r.left)>r.width/2?"lx-drop-r":"lx-drop-l");
+}
+function lxtColDragLeave(ev){ ev.currentTarget.classList.remove("lx-drop-l","lx-drop-r"); }
+function lxtColDrop(ev,tbl,key){
+  ev.preventDefault();
+  const el=ev.currentTarget, after=el.classList.contains("lx-drop-r");
+  el.classList.remove("lx-drop-l","lx-drop-r");
+  if(!LXT_DRAG||LXT_DRAG.tbl!==tbl||LXT_DRAG.key===key) return;
+  lxtColMove(tbl,LXT_DRAG.key,key,after);
+}
+function lxtColDragEnd(){
+  document.querySelectorAll(".lx-dragging,.lx-drop-l,.lx-drop-r")
+    .forEach(x=>x.classList.remove("lx-dragging","lx-drop-l","lx-drop-r"));
+  LXT_DRAG=null;
+}
+function lxtColMove(tbl,src,dst,after){
+  const movable=lxtCols(tbl).filter(c=>!c.locked).map(c=>c.key);   // current order, both shown + hidden
+  const from=movable.indexOf(src); if(from<0) return;
+  movable.splice(from,1);
+  let to=movable.indexOf(dst); if(to<0) return;
+  movable.splice(after?to+1:to,0,src);
+  LXT_ORDER[tbl]=movable;
+  try{ localStorage.setItem("lxt_order_"+tbl,JSON.stringify(movable)); }catch(e){}
+  lxColwSet(tbl,null);              // positional widths no longer line up — reset
+  lxtRender(tbl);
 }
 function lxtSortClick(tbl,key){     // none → ↑ → ↓ → none
   const s=LXT_SORT[tbl];
@@ -3179,39 +3290,45 @@ function lxtSync(el){               // keep the sticky header + shadow in step w
   el.classList.toggle("btscrolled",on);
   if(clip) clip.classList.toggle("btscrolled",on);
 }
-function lxtRsz(tbl,i){ return `<span class="lx-rsz" title="drag to resize · double-click to reset all" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'${tbl}')" ondblclick="lxRszReset(event,'${tbl}')"></span>`; }
+function lxtRsz(tbl,i){ return `<span class="lx-rsz" draggable="false" title="${T('اسحب لتغيير العرض · بنقرتين لإعادة الكل · drag to resize · double-click to reset all')}" onclick="event.stopPropagation()" onpointerdown="lxRszDown(event,${i},'${tbl}')" ondblclick="lxRszReset(event,'${tbl}')"></span>`; }
 function lxtHead(tbl,pinLabel,pinSortKey){
   const [headCls,colsCls]=LXT_CLS[tbl], s=LXT_SORT[tbl];
   // the pin's end edge is a drag handle: resize the pinned column (dblclick resets)
-  const pinRsz=`<span class="lx-rsz" title="drag to resize the pinned column · double-click to reset" onclick="event.stopPropagation()" onpointerdown="lxtPinDown(event,'${tbl}')" ondblclick="lxtPinReset(event,'${tbl}')"></span>`;
+  const pinRsz=`<span class="lx-rsz" draggable="false" title="${T('اسحب لتغيير عرض العمود المثبت · بنقرتين للإعادة · drag to resize the pinned column · double-click to reset')}" onclick="event.stopPropagation()" onpointerdown="lxtPinDown(event,'${tbl}')" ondblclick="lxtPinReset(event,'${tbl}')"></span>`;
+  const PL=T(pinLabel);
   const pin=pinSortKey&&tbl===""
-    ?`<span class="bt-pin lbl lx-sort" title="sort by ${pinLabel}" onclick="lxSortClick('${pinSortKey}')">${lxSortArrow(pinSortKey)}${pinLabel}${pinRsz}</span>`
-    :`<span class="bt-pin lbl">${pinLabel}${pinRsz}</span>`;
+    ?`<span class="bt-pin lbl lx-sort" title="${T('فرز · sort')}: ${PL}" onclick="lxSortClick('${pinSortKey}')">${lxSortArrow(pinSortKey)}${PL}${pinRsz}</span>`
+    :`<span class="bt-pin lbl">${PL}${pinRsz}</span>`;
   const hidden=LXT_HIDDEN[tbl];
   const shown=lxtCols(tbl).filter(c=>!c.locked&&!hidden.has(c.key)).length;
   // custom fields (create / edit inline) live on the Purchases po + pok tables
   const canCf=(tbl==="po"||tbl==="pok")&&(typeof CAN_ADMIN==="undefined"||CAN_ADMIN);
   const pick=lxtCols(tbl).filter(c=>!c.locked).map(c=>{
     const iscf=c.key.startsWith("cf_");
-    return `<button class="fld-row cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${c.label||c.key}</b>${iscf&&canCf?`<span class="cf-edit" title="تعديل الحقل · edit field" onclick="event.stopPropagation();poCfFieldOpen('${c.key.slice(3)}')">✎</span>`:""}<span class="tglsw${hidden.has(c.key)?"":" on"}"></span></button>`;
+    return `<button class="fld-row cu-item" onclick="lxtColToggle('${tbl}','${c.key}')"><b>${T(c.label)||c.key}</b>${iscf&&canCf?`<span class="cf-edit" title="${T('تعديل الحقل · edit field')}" onclick="event.stopPropagation();poCfFieldOpen('${c.key.slice(3)}')">✎</span>`:""}<span class="tglsw${hidden.has(c.key)?"":" on"}"></span></button>`;
   }).join("");
-  const newField=canCf?`<button class="fld-row fld-new" onclick="event.stopPropagation();poCfFieldOpen()"><b>＋ حقل جديد · New field</b></button>`:"";
+  const newField=canCf?`<button class="fld-row fld-new" onclick="event.stopPropagation();poCfFieldOpen()"><b>${T('＋ حقل جديد · ＋ New field')}</b></button>`:"";
   // the ⊕ Fields button is ANCHORED at the header's right edge (never scrolls
   // away with the columns); its panel opens position:fixed via popToggle
   const picker=`<span class="pop fld-anchor" onclick="event.stopPropagation()">
-      <button class="iconbtn" style="font-size:14px;padding:0 4px;background:var(--bg)" title="الأعمدة — أظهر أو أخفِ ما تريد · Fields — show / hide columns" onclick="popToggle(this)">⊕</button>
+      <button class="iconbtn" style="font-size:14px;padding:0 4px;background:var(--bg)" title="${T('الأعمدة — أظهر أو أخفِ ما تريد · Fields — show / hide columns')}" onclick="popToggle(this)">⊕</button>
       <div class="pop-menu fld-menu">
-        <div class="fld-head"><span>الأعمدة · fields</span><span>${shown} shown</span></div>
-        <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
+        <div class="fld-head"><span>${T('الأعمدة · Fields')}</span><span>${shown} ${T('ظاهر · shown')}</span></div>
+        <input class="cu-search" placeholder="${T('بحث · Search')}…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
         ${pick}${newField}
       </div></span>`;
+  // each header cell is draggable (reorder) + right-click to hide; the ⋯ menu
+  // and the resize handle are exempt (grabbing the handle resizes instead).
+  const dnd=c=>` draggable="true" ondragstart="lxtColDragStart(event,'${tbl}','${c.key}')" ondragover="lxtColDragOver(event,'${tbl}','${c.key}')" ondragleave="lxtColDragLeave(event)" ondrop="lxtColDrop(event,'${tbl}','${c.key}')" ondragend="lxtColDragEnd()" oncontextmenu="lxtColHide('${tbl}','${c.key}');return false"`;
+  const hint=T("اسحب لإعادة الترتيب • بالزر الأيمن للإخفاء · drag to reorder • right-click to hide");
   const lbl=(c,i)=>{
     if(c.key==="menu") return `<span class="lbl">${lxtRsz(tbl,i)}</span>`;
+    const L=T(c.label);
     if(tbl===""&&c.sort){ const k=c.sortKey||c.sort;
-      return `<span class="lbl lx-sort" title="sort by ${c.sort}" onclick="lxSortClick('${k}')">${lxSortArrow(k)}${c.label}${lxtRsz(tbl,i)}</span>`; }
+      return `<span class="lbl lx-sort lx-col" title="${T('فرز · sort')}: ${L} — ${hint}" onclick="lxSortClick('${k}')"${dnd(c)}>${lxSortArrow(k)}${L}${lxtRsz(tbl,i)}</span>`; }
     if(c.sortable){ const a=(s&&s.key===c.key)?(s.dir===1?"↑ ":"↓ "):"";
-      return `<span class="lbl lx-sort" title="sort by ${c.label}" onclick="lxtSortClick('${tbl}','${c.key}')">${a}${c.label}${lxtRsz(tbl,i)}</span>`; }
-    return `<span class="lbl">${c.label}${lxtRsz(tbl,i)}</span>`;
+      return `<span class="lbl lx-sort lx-col" title="${T('فرز · sort')}: ${L} — ${hint}" onclick="lxtSortClick('${tbl}','${c.key}')"${dnd(c)}>${a}${L}${lxtRsz(tbl,i)}</span>`; }
+    return `<span class="lbl lx-col" title="${L} — ${hint}"${dnd(c)}>${L}${lxtRsz(tbl,i)}</span>`;
   };
   return `<div class="bt-clip${LXT_PINCLS[tbl]}"><div class="${headCls}">
       ${pin}
@@ -3259,7 +3376,7 @@ function lxRenderPackages(){
       <div class="bt-pin">Σ ${rows.length} طرد · ${nItems} منتج</div>
       ${lxtCells("k",{value:`<b style="font-size:12px" title="مجموع قيمة كل الطرود المعروضة · total of all shown packages">₪${(Math.round(tot*100)/100).toLocaleString()}</b>`})}
     </div>`;
-  $("lxRows").innerHTML=lxtHead("k","package")
+  $("lxRows").innerHTML=lxtHead("k","الطرد · package")
     +lxtWrap("k",`<div class="pkg open"><div class="pkg-body">${rows.map(lxKRow).join("")}${totals}</div></div>`);
   lxColwApply();
   lxtGridApply("k");
@@ -6964,7 +7081,7 @@ function renderPurchases(){
       <div class="bt-pin">Σ ${list.length} orders · ${totItems} items</div>
       ${lxtCells("po",{total:PO_MONEY?`<b style="font-size:12px" title="مجموع المدفوع + التقدير · Σ paid totals + Σ estimated cost">${money(totUsd)}${totEst>0?` <span class="muted2" style="font-weight:600">· ≈ ${money(totEst)} est</span>`:""}</b>`:""})}
     </div>`:"";
-  const colHead=(!inAddCard&&list.length)?lxtHead("po","order"):"";
+  const colHead=(!inAddCard&&list.length)?lxtHead("po","الطلب · order"):"";
   mount.innerHTML=boxDatalist()+custDatalist()+colHead
     +lxtWrap("po",list.map(poCardHtml).join("")+poTotals);
   lxColwApply(); lxtGridApply("po",mount);
@@ -6988,7 +7105,7 @@ function poRenderPkgsFlat(mount,list){
       <div class="bt-pin">Σ ${rows.length} packages · ${nItems} products</div>
       ${lxtCells("pok",{total:(PO_MONEY&&totEst>0)?`<b style="font-size:12px" title="Σ تقدير التكلفة · total estimated cost">≈ ${money(totEst)}</b>`:""})}
     </div>`;
-  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pok","package")
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pok","الطرد · package")
     +lxtWrap("pok",`<div class="pkg open"><div class="pkg-body">${rows.map(([p,pk,pi])=>poPkFlatRow(p,pk,pi)).join("")}${totals}</div></div>`);
   lxColwApply(); lxtGridApply("pok",mount);
 }
@@ -7045,7 +7162,7 @@ function poRenderProdsFlat(mount,list){
       <div class="bt-pin">Σ ${rows.length} products</div>
       ${lxtCells("pop",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
     </div>`;
-  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","product")
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","المنتج · product")
     +lxtWrap("pop",`<div class="pkg open"><div class="pkg-body">${rows.map(([p,pk,pi,it,ii])=>poItFlatRow(p,pk,pi,it,ii)).join("")}${totals}</div></div>`);
   lxColwApply(); lxtGridApply("pop",mount);
 }
@@ -7150,7 +7267,7 @@ function poRenderCustomers(mount,list){
       <div class="bt-pin">Σ ${names.length} customer${names.length===1?"":"s"} · ${totProds} products</div>
       ${lxtCells("pop",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
     </div>`;
-  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","product")
+  mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","المنتج · product")
     +lxtWrap("pop",sections+totals);
   lxColwApply(); lxtGridApply("pop",mount);
 }
@@ -8938,5 +9055,6 @@ function drillRenderFormula(metric){
 
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json();}
 
+localizeStatic();   // apply the saved UI language (default English) to the static chrome
 load();
 </script>
