@@ -55,6 +55,11 @@ def _mk_thread(gwd, step=0, state="active", next_send_at=None, **extra):
                    next_send_at, db.now_iso(), db.now_iso()))
 
 
+def _del_thread(gwd):
+    with db.connect() as c:
+        c.execute("DELETE FROM gaash_threads WHERE gwd=?", (gwd,))
+
+
 def _mk_out(gwd, at_iso, mid="<m1@test>", step=1):
     with db.connect() as c:
         c.execute("""INSERT INTO gaash_msgs
@@ -370,6 +375,55 @@ def main():
           and th5 and th5["state"] == "proposed"
           and not gm.thread_get("GWD009000003"))
     gm.rule_remove(r2["id"])
+    _del_thread("GWD009000005")            # reset for the cf test below
+
+    print("— v2: board custom fields as criteria (cf:*) —")
+    _del_thread("GWD009000001")                 # enrolled earlier — free it
+    # a Purchases custom-field def + a value on the PO (applies to all its pkgs)
+    co0 = client("otlo")
+    co0.post("/api/settings", json={"custom_fields": {"po": [
+        {"key": "priority", "label": "Priority", "type": "select",
+         "options": [{"name": "High"}, {"name": "Low"}]}]}})
+    pdb = purchases.load()
+    for p in pdb["purchase_orders"]:
+        if p["po_id"] == "PO-T1":
+            p["custom"] = {"priority": "High"}
+    purchases.save(pdb)
+    # a Leluxe ClickUp field on a fresh package
+    with db.connect() as c:
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','Ring pkg','on hold',?,?)""",
+                  (str(int((now - timedelta(days=2)).timestamp() * 1000)),
+                   json.dumps({"tracking_number": "GWD009000007",
+                               "fields": {"GASH STATUS": "customer ID",
+                                          "PRODUCT": "Gold Ring 18k"}})))
+    cands = {c["gwd"]: c for c in gm.candidates()}
+    check("purchases candidate carries its PO custom-field value",
+          cands.get("GWD009000001", {}).get("cf", {}).get("Priority") == "High")
+    check("leluxe candidate carries its ClickUp field value",
+          "Gold Ring 18k" in cands.get("GWD009000007", {}).get("cf", {}).get("PRODUCT", ""))
+    cat = {f["key"]: f for f in gm.rule_cf_fields()}
+    check("cf catalog lists the Purchases def + a Leluxe field",
+          cat.get("cf:Priority", {}).get("source") == "purchases"
+          and "cf:PRODUCT" in cat)
+    rcf = gm.rule_save({"name": "gold rings", "cond": {"groups": [{"crits": [
+        {"field": "cf:product", "op": "contains", "value": "ring"}]}]},
+        "seq_id": sq["id"], "mode": "queue", "enabled": True})
+    made = gm.run_rules()
+    check("cf:* Leluxe field enrolls only the matching package",
+          made == 1 and gm.thread_get("GWD009000007")
+          and gm.thread_get("GWD009000007")["state"] == "proposed")
+    gm.rule_remove(rcf["id"]); _del_thread("GWD009000007")
+    # Priority=High is a PO-level value → both live PO-T1 packages (001 + 003)
+    rcf2 = gm.rule_save({"name": "high prio", "cond": {"groups": [{"crits": [
+        {"field": "cf:Priority", "op": "is", "value": "high"}]}]},
+        "seq_id": sq["id"], "mode": "queue", "enabled": True})
+    made = gm.run_rules()
+    check("cf:* Purchases custom field enrolls the PO's packages",
+          made == 2 and gm.thread_get("GWD009000001")
+          and gm.thread_get("GWD009000003"))
+    gm.rule_remove(rcf2["id"])
+    _del_thread("GWD009000001"); _del_thread("GWD009000003")
 
     print("— v2: open/click tracking tokens + public endpoints —")
     with db.connect() as c:
