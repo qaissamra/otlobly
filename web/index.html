@@ -566,7 +566,10 @@
   .bt-total>.bt-pin{background:var(--bg2);font-weight:800;font-size:11.5px}
   /* Leluxe brings its own ＋ New order / ↻ Refresh bar — hide the topbar
      duplicates there (topbar ＋ Add order creates an OTLOBLY order: a trap) */
-  body.view-leluxe #addOrderBtn,body.view-leluxe #refreshBtn{display:none}
+  /* Topbar quick-actions are per-view (toggled in setView): ＋ Add order on the
+     order-taking pages, ↻ Refresh on the /api/report-driven dashboards. Hidden
+     everywhere else so they don't clutter pages where they do nothing. */
+  body.hide-addorder #addOrderBtn,body.hide-refresh #refreshBtn{display:none}
   /* Leluxe dashboard: KPI card grid + horizontal breakdown bars */
   .lx-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:2px}
   .lx-sec{color:var(--muted);font-size:11px;font-weight:800;margin:15px 0 8px;text-transform:uppercase;letter-spacing:.05em}
@@ -2119,6 +2122,9 @@ function aoCloseForm(){ $("formPanel").classList.add("hidden"); PO_MOUNT="poTree
 async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const r=await post("/api/clickup",{});b.disabled=false;toast(r.output||"done");load();}
 
 let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true, BOOTED=false;
+// Which views keep the topbar quick-actions (see the toggles in setView).
+const ADD_ORDER_VIEWS=new Set(["orders","brain","needorder"]);  // create a customer order
+const REFRESH_VIEWS  =new Set(["orders","brain","picking"]);    // views load() actually re-renders
 function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
@@ -2175,7 +2181,12 @@ function setView(v){
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
   document.body.classList.remove("nav-open");        // picking a page closes the mobile drawer
-  document.body.classList.toggle("view-leluxe",v==="leluxe");  // Leluxe has its own bar → hide topbar dupes
+  // Topbar quick-actions only where they do something: ＋ Add order on the
+  // order-taking pages, ↻ Refresh where load() actually re-renders (/api/report:
+  // Orders / Brain / Picking). Hidden everywhere else. (RESTRICTED roles + Tatabu
+  // platform mode still hide these via inline display, which wins over this CSS.)
+  document.body.classList.toggle("hide-addorder", !ADD_ORDER_VIEWS.has(v));
+  document.body.classList.toggle("hide-refresh",  !REFRESH_VIEWS.has(v));
   if(v==="brain"){ loadBrain(); }
   if(v==="pnl"){ loadPnl(); startPnlAuto(); } else { stopPnlAuto(); }
   if(v==="customers"){ loadCustomers(); }
