@@ -276,7 +276,14 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   `rule_cf_fields()` (📦 defs + ⌚ leluxe names) ships in overview as
   `cf_fields`; client `gmRuleFieldList()` = built-ins + cf (source badge);
   `_field_kind`/`_cand_cf_val` make cf:* generic text; safe datalist ids
-  `gmDlId`. Engine:
+  `gmDlId`. Field picker is a type-to-search datalist combobox
+  (`gmRuleFieldPick`, shared `gmFieldsDL`). **Value auto-suggest (2026-07-24):**
+  `rule_field_meta()` (one scan, replaces rule_cf_fields — kept as a wrapper)
+  returns {fields, values}; `values` = distinct per-field values (≤50) from ALL
+  records (leluxe `fields` + Purchases `custom` + statuses) + Purchases
+  select/labels DEFINED options; overview ships `field_values`; client
+  `gmRuleVals` seeds from it (candidates were only the enrollable subset → most
+  columns were blank). Engine:
   `next_allowed`/`add_business_days` window math; `send_step` runs gaash_steps
   (task ⇒ waiting_task until action=task_done); `migrate_v2` claim_once-seeds
   "seq_default" from the legacy settings.steps; goal reply ⇒ human reply =
