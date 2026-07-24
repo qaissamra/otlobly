@@ -28,10 +28,11 @@ const I18N = {
     "track.eta":      "الوصول المتوقّع",
     "track.etav":     "خلال ٢٤ ساعة",
     "track.cta":      "تتبّع هذه الشحنة",
-    "track.inputph":  "أدخل رقم تتبّع OTL أو جوالك…",
+    "track.inputph":  "أدخل رقم جوالك…",
     "track.submit":   "تتبّع",
     "track.searching":"…",
-    "track.notfound": "لم نجد شحنة بهذا الرقم. تأكد من رقم OTL أو أدخل رقم جوالك كاملاً.",
+    "track.notfound": "لم نجد شحنة بهذا الرقم. تأكد من إدخال رقم جوالك كاملاً.",
+    "track.empty":    "أدخل رقم جوالك لعرض حالة شحنتك",
     "track.status":   "الحالة الحالية",
     "track.yourship": "شحنتك",
     "track.newsearch":"↺ بحث جديد",
@@ -40,14 +41,15 @@ const I18N = {
     "track.asof":     "🕓 آخر تحديث",
     "track.count":    "وجدنا {n} شحنات",
     "how.head":       "كيف تعمل الخدمة؟",
-    "how.s1t":        "أرسل الرابط",
-    "how.s1p":        "ابعتلنا رابط المنتج من أمازون على واتساب.",
-    "how.s2t":        "أكّد بعربون",
-    "how.s2p":        "ادفع عربون بسيط لتأكيد الطلب والبدء بالشراء.",
-    "how.s3t":        "نشتري ونشحن",
-    "how.s3p":        "نطلب المنتج ونشحنه مع رقم تتبّع OTL خاص فيك.",
-    "how.s4t":        "استلم وادفع",
-    "how.s4p":        "استلم على باب البيت وادفع الباقي بالدولار كاش.",
+    "how.s1t":        "أضف رابط المنتج",
+    "how.s1p":        "الصق رابط المنتج من أمازون واختر طريقة الدفع المناسبة لك.",
+    "how.s1btn":      "أضف منتج",
+    "how.s2t":        "نرسل لك السعر",
+    "how.s2p":        "نحسب التكلفة الكاملة ونرسل لك عرض السعر على واتساب.",
+    "how.s3t":        "تؤكّد ونطلب",
+    "how.s3p":        "توافق على السعر، ونطلب منتجك فوراً.",
+    "how.s4t":        "التوصيل حتى بابك",
+    "how.s4p":        "نوصل طلبك إلى باب بيتك، وتدفع عند الاستلام.",
     "why.head":       "ليش اطلبلي؟",
     "why.1t":         "تتبّع مباشر OTL",
     "why.1p":         "رقم تتبّع خاص لكل شحنة، وتحديثات لحظية من الطلب حتى بابك.",
@@ -92,10 +94,11 @@ const I18N = {
     "track.eta":      "Est. arrival",
     "track.etav":     "Within 24 hours",
     "track.cta":      "Track this shipment",
-    "track.inputph":  "Enter your OTL number or mobile…",
+    "track.inputph":  "Enter your mobile number…",
     "track.submit":   "Track",
     "track.searching":"…",
-    "track.notfound": "No shipment found for that. Check the OTL number, or enter your full mobile number.",
+    "track.notfound": "No shipment found for that number. Make sure you entered your full mobile number.",
+    "track.empty":    "Enter your mobile number to see your shipment status",
     "track.status":   "Current status",
     "track.yourship": "Your shipment",
     "track.newsearch":"↺ New search",
@@ -104,14 +107,15 @@ const I18N = {
     "track.asof":     "🕓 last updated",
     "track.count":    "Found {n} shipments",
     "how.head":       "How it works",
-    "how.s1t":        "Send the link",
-    "how.s1p":        "Send us the Amazon product link on WhatsApp.",
-    "how.s2t":        "Confirm with a deposit",
-    "how.s2p":        "Pay a small deposit to confirm and we start buying.",
-    "how.s3t":        "We order & ship",
-    "how.s3p":        "We order it and ship with your own OTL tracking number.",
-    "how.s4t":        "Receive & pay",
-    "how.s4p":        "Receive at your door and pay the rest in USD cash.",
+    "how.s1t":        "Add your product",
+    "how.s1p":        "Paste the Amazon link and pick how you'd like to pay.",
+    "how.s1btn":      "Add product",
+    "how.s2t":        "We send a quote",
+    "how.s2p":        "We work out the full cost and send it on WhatsApp.",
+    "how.s3t":        "You confirm, we order",
+    "how.s3p":        "Approve the price and we place your order right away.",
+    "how.s4t":        "Delivered to your door",
+    "how.s4p":        "We deliver to your doorstep — pay on arrival.",
     "why.head":       "Why Otlobly?",
     "why.1t":         "Live OTL tracking",
     "why.1p":         "A tracking number for every shipment, with live updates from order to door.",
@@ -244,7 +248,7 @@ function doTrackLookup(code) {
   var btn = document.getElementById("track-btn");
   var status = document.getElementById("track-status");
   var results = document.getElementById("track-results");
-  var demo = document.getElementById("track-demo");
+  var empty = document.getElementById("track-empty");
   var oldTxt = btn.textContent;
   btn.disabled = true; btn.textContent = tL("track.searching");
   status.innerHTML = "";
@@ -255,11 +259,11 @@ function doTrackLookup(code) {
     .then(function(d){
       btn.disabled = false; btn.textContent = oldTxt;
       if (!d || !d.found || !(d.shipments && d.shipments.length)) {
-        results.innerHTML = ""; if (demo) demo.style.display = "";
+        results.innerHTML = ""; if (empty) empty.style.display = "none";
         status.innerHTML = '<div class="track-msg">' + tL("track.notfound") + '</div>';
         return;
       }
-      if (demo) demo.style.display = "none";
+      if (empty) empty.style.display = "none";
       var head = (d.count > 1) ? '<div class="track-count">' + tL("track.count").replace("{n}", d.count) + '</div>' : "";
       var reset = '<button class="track-newsearch" onclick="trackReset()">' + tL("track.newsearch") + '</button>';
       results.innerHTML = head + d.shipments.map(renderLandingShip).join("") + reset;
@@ -269,11 +273,11 @@ function doTrackLookup(code) {
 function trackReset(){
   var results = document.getElementById("track-results");
   var status = document.getElementById("track-status");
-  var demo = document.getElementById("track-demo");
+  var empty = document.getElementById("track-empty");
   var input = document.getElementById("track-input");
   if (results) results.innerHTML = "";
   if (status) status.innerHTML = "";
-  if (demo) demo.style.display = "";
+  if (empty) empty.style.display = "";
   if (input) { input.value = ""; input.focus(); }
 }
 
@@ -313,13 +317,12 @@ function renderLandingShip(s){
     + '<div class="track-top">'
     +   '<div class="track-thumb">' + thumb + '</div>'
     +   '<div class="track-meta"><div class="nm" dir="auto">' + (trEsc(first.title) || tL("track.yourship")) + more + '</div>'
-    +     (s.tracking ? '<div class="id">' + trEsc(s.tracking) + '</div>' : '') + '</div>'
-    +   '<div class="track-rider"><div class="illo"><img src="/static/assets/rider.png" alt="" loading="lazy" onerror="showPh(this)"><div class="ph" style="display:none"><small>rider.png</small></div></div></div>'
+    +     (s.tracking ? '<div class="id">' + trEsc(s.tracking) + '</div>' : '')
+    +     (cur.label ? '<span class="tk-pill" dir="auto">' + trEsc(cur.label) + '</span>' : '') + '</div>'
     + '</div>'
     + '<div class="prog" aria-hidden="true">' + nodes + '</div>'
     + '<div class="prog-labels"><span>' + tL("track.s1") + '</span><span>' + tL("track.s2") + '</span><span>' + tL("track.s3") + '</span><span>' + tL("track.s4") + '</span></div>'
     + '<div class="track-fields">'
-    +   '<div class="f"><div class="k">' + TR_PIN + '<span>' + tL("track.status") + '</span></div><div class="v" dir="auto">' + (trEsc(cur.label) || "—") + '</div></div>'
     +   '<div class="f"><div class="k">' + TR_CLK + '<span>' + tL("track.eta") + '</span></div><div class="v">' + eta + '</div></div>'
     + '</div>'
     + asof + toggle + tl

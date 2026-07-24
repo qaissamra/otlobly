@@ -2,11 +2,15 @@
 """
 WhatsApp OTP sender for the customer login portal (Phase 14).
 
-Uses the WhatsApp Cloud API (Meta Graph API) **authentication-template** message. Config
+Uses the WhatsApp Cloud API (Meta Graph API) template messages. Config
 comes from env so no secret is committed:
   WHATSAPP_TOKEN            — permanent access token for the WhatsApp Business number
   WHATSAPP_PHONE_NUMBER_ID  — the sender phone-number id (from the Meta app)
-  WHATSAPP_OTP_TEMPLATE     — approved authentication template name (default 'otlobly_login_code')
+  WHATSAPP_OTP_TEMPLATE     — approved login-code template name (default 'otlobly_login_code')
+  WHATSAPP_OTP_KIND         — 'auth' (default: AUTHENTICATION template, body code + copy-code
+                              button) or 'utility' (body-only UTILITY template — the ship-now
+                              carrier while the Meta business is unverified, since Meta only
+                              grants AUTHENTICATION templates to verified businesses)
   WHATSAPP_LANG             — template language code (default 'ar')
 
 If the creds are absent, `send_whatsapp_otp` returns {ok:False, dev:True} so the caller can
@@ -16,11 +20,13 @@ testable before the live WhatsApp API is connected.
 Stdlib only (urllib), mirroring tracking.py / meta.py — zero new dependencies.
 """
 
+import base64
 import json
 import os
-from urllib import request, error
+from urllib import request, error, parse
 
 GRAPH = "https://graph.facebook.com/v21.0"
+TWILIO = "https://api.twilio.com/2010-04-01"
 
 
 def _cfg():
@@ -70,14 +76,93 @@ def _send_template(e164, template, lang, components):
 
 
 def send_whatsapp_otp(e164, code, lang=None):
-    """Send a one-time login code over WhatsApp (authentication template)."""
+    """Send a one-time login code over WhatsApp. The payload shape MUST match the
+    approved template's kind (WHATSAPP_OTP_KIND):
+      auth (default) — AUTHENTICATION template: one body variable (the code) + a
+                       copy-code URL button (param at button index 0).
+      utility        — body-only UTILITY template ({{1}} = the code, NO button) —
+                       Meta rejects a button component the template doesn't have."""
     _, _, template, _ = _cfg()
-    # Meta's "authentication" template = one body variable (the code) + a copy-code URL button.
-    return _send_template(e164, template, lang, [
-        {"type": "body", "parameters": [{"type": "text", "text": str(code)}]},
-        {"type": "button", "sub_type": "url", "index": "0",
-         "parameters": [{"type": "text", "text": str(code)}]},
-    ])
+    components = [{"type": "body", "parameters": [{"type": "text", "text": str(code)}]}]
+    if os.environ.get("WHATSAPP_OTP_KIND", "auth").strip().lower() != "utility":
+        components.append({"type": "button", "sub_type": "url", "index": "0",
+                           "parameters": [{"type": "text", "text": str(code)}]})
+    return _send_template(e164, template, lang, components)
+
+
+# --------------------------------------------------------------------------- #
+# SMS login codes (Twilio) — the "no Meta verification" channel. Alphanumeric
+# sender ids (e.g. "Otlobly") need NO pre-registration for Palestine, so this
+# sidesteps the WhatsApp AUTHENTICATION-template / business-verification wall.
+# --------------------------------------------------------------------------- #
+def sms_configured():
+    """True when Twilio SMS is set up: account sid + auth token + a sender
+    (TWILIO_SMS_FROM number/alphanumeric id, or a Messaging Service SID)."""
+    return bool(os.environ.get("TWILIO_ACCOUNT_SID")
+                and os.environ.get("TWILIO_AUTH_TOKEN")
+                and (os.environ.get("TWILIO_SMS_FROM")
+                     or os.environ.get("TWILIO_MESSAGING_SERVICE_SID")))
+
+
+def send_sms_otp(e164, code):
+    """Send a one-time login code by SMS via the Twilio REST API (stdlib only).
+    Returns the same {ok|dev|error} shape as the WhatsApp sender, so the caller's
+    OTLOBLY_OTP_DEV fallback works unchanged. Sender is an alphanumeric id
+    (TWILIO_SMS_FROM=Otlobly — no pre-registration for +970), a Twilio number,
+    or a Messaging Service SID (TWILIO_MESSAGING_SERVICE_SID)."""
+    sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    tok = os.environ.get("TWILIO_AUTH_TOKEN")
+    frm = os.environ.get("TWILIO_SMS_FROM")
+    msid = os.environ.get("TWILIO_MESSAGING_SERVICE_SID")
+    if not (sid and tok and (frm or msid)):
+        return {"ok": False, "dev": True, "error": "SMS not configured"}
+    to = str(e164).strip()
+    if not to.startswith("+"):
+        to = "+" + "".join(c for c in to if c.isdigit())
+    text = os.environ.get(
+        "SMS_OTP_TEXT",
+        "رمز الدخول إلى اطلبلي: {code}\nصالح لمدة 10 دقائق. لا تشاركه مع أحد.")
+    form = {"To": to, "Body": text.replace("{code}", str(code))}
+    if msid:
+        form["MessagingServiceSid"] = msid
+    else:
+        form["From"] = frm
+    auth = base64.b64encode(f"{sid}:{tok}".encode()).decode()
+    req = request.Request(f"{TWILIO}/Accounts/{sid}/Messages.json",
+                          data=parse.urlencode(form).encode(),
+                          headers={"Authorization": f"Basic {auth}",
+                                   "Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with request.urlopen(req, timeout=20) as r:
+            out = json.loads(r.read().decode() or "{}")
+        return {"ok": True, "id": out.get("sid"), "status": out.get("status")}
+    except error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")[:300]
+        return {"ok": False, "error": f"Twilio {e.code}: {body}"}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": str(e)}
+
+
+def otp_channel():
+    """Which channel delivers the typed login code: 'sms' or 'whatsapp' (default)."""
+    return os.environ.get("OTP_CHANNEL", "whatsapp").strip().lower()
+
+
+def send_login_code(e164, code, lang=None):
+    """Deliver a one-time login code over the configured channel (OTP_CHANNEL)."""
+    if otp_channel() == "sms":
+        return send_sms_otp(e164, code)
+    return send_whatsapp_otp(e164, code, lang)
+
+
+def otp_available():
+    """True when the typed-code login can actually deliver on the selected channel —
+    gates the /account UI. Each channel has its OWN explicit enable flag so nothing
+    appears before the owner activates it (WhatsApp: template approval; SMS: Twilio
+    creds + a Jawwal deliverability test)."""
+    if otp_channel() == "sms":
+        return bool(os.environ.get("SMS_OTP_ENABLED", "").strip()) and sms_configured()
+    return bool(os.environ.get("WHATSAPP_OTP_ENABLED", "").strip()) and configured()
 
 
 def send_account_verify(e164, name, token, lang=None):

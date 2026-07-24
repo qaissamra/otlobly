@@ -355,6 +355,19 @@ def index():
                            sections=settings_mod.public_sections())
 
 
+# web/index.html is a static, deploy-time file (~587 KB); the process restarts on
+# every deploy, so read + decode it ONCE and reuse — not on every /app request,
+# where the per-request disk read + decode was a needless memory/latency tax.
+_INDEX_HTML = None
+
+
+def _index_html():
+    global _INDEX_HTML
+    if _INDEX_HTML is None:
+        _INDEX_HTML = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    return _INDEX_HTML
+
+
 @app.route("/app")
 @login_required
 def staff_app():
@@ -363,7 +376,7 @@ def staff_app():
     favicon, sidebar wordmark) is stitched in SERVER-SIDE so a broker never sees
     the Otlobly mark — not even a first-paint flash."""
     import branding
-    html_text = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    html_text = _index_html()
     # db.current_business() (not the user's own id) so a Tatabu support view renders
     # the impersonated broker's shell — the owner sees exactly what the broker sees.
     brand = branding.resolve(db.current_business())
@@ -4212,7 +4225,13 @@ def _customer_orders(core):
 
 @app.route("/account", methods=["GET"])
 def account_page():
-    return render_template("account.html", wa_number=_wa_business_number())
+    # otp_enabled lights up the typed-code login (3rd method) only when the selected
+    # channel (OTP_CHANNEL) can actually deliver AND its explicit enable flag is set:
+    #   sms      → Twilio creds + SMS_OTP_ENABLED=1 (no Meta verification needed)
+    #   whatsapp → Cloud API creds + WHATSAPP_OTP_ENABLED=1 (needs an APPROVED auth
+    #              template — blocked until the Meta business is verified, tested 2026-07)
+    return render_template("account.html", wa_number=_wa_business_number(),
+                           otp_enabled=notify.otp_available())
 
 
 @app.route("/api/customer/me")
@@ -4365,10 +4384,11 @@ def api_customer_otp_request():
                                    "expires": time.time() + OTP_TTL, "attempts": 0, "name": name})
     pin = normalize.normalize_phone(b.get("phone") or "")
     e164 = (pin or {}).get("e164") or ("+" + core)
-    res = notify.send_whatsapp_otp(e164, code)
+    res = notify.send_login_code(e164, code)
     if res.get("ok"):
-        return jsonify({"ok": True, "sent": "whatsapp"})
-    app.logger.warning("OTP for %s = %s (whatsapp not sent: %s)", core, code, res.get("error"))
+        return jsonify({"ok": True, "sent": notify.otp_channel()})
+    app.logger.warning("OTP for %s = %s (%s not sent: %s)", core, code,
+                       notify.otp_channel(), res.get("error"))
     if os.environ.get("OTLOBLY_OTP_DEV"):         # testing before the live WhatsApp API is set up
         return jsonify({"ok": True, "sent": "dev", "dev_code": code})
     return jsonify({"ok": False,
@@ -4684,6 +4704,33 @@ def api_admin_email_test():
     res = mailer.send_login_code(email, f"{secrets.randbelow(1000000):06d}")
     if res.get("ok"):
         return jsonify({"ok": True, "sent_to": email, "message_id": res.get("id")})
+    return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
+
+
+@app.route("/api/admin/sms_test", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_admin_sms_test():
+    """Admin diagnostic for the customer-login SMS OTP (Twilio), mirroring the
+    WhatsApp/email tests. GET reports whether the Twilio env vars are set; POST
+    sends a REAL test code to a phone and surfaces Twilio's exact error — so the
+    setup AND deliverability to Jawwal/+970 can be validated before customers rely
+    on it. The test code is a delivery test only, never stored as a login OTP."""
+    if request.method == "GET":
+        return jsonify({"configured": notify.sms_configured()})
+    b = request.get_json(force=True, silent=True) or {}
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164")
+    if not e164:
+        return jsonify({"ok": False, "error": "Enter a valid phone number (e.g. 970599…)."}), 400
+    if not notify.sms_configured():
+        return jsonify({"ok": False, "configured": False,
+                        "error": "SMS not configured yet — set TWILIO_ACCOUNT_SID + "
+                                 "TWILIO_AUTH_TOKEN + TWILIO_SMS_FROM in Render, then redeploy."})
+    code = f"{secrets.randbelow(1000000):06d}"
+    res = notify.send_sms_otp(e164, code)
+    if res.get("ok"):
+        return jsonify({"ok": True, "sent_to": e164, "message_id": res.get("id"),
+                        "status": res.get("status")})
     return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
 
 
