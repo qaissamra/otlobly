@@ -9763,10 +9763,11 @@ function gmRenderSeq(){
       ${rules.map(r=>`<div class="panel" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px">
         <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
         <b>${poEsc(r.name)}</b>
-        <span class="muted2">GASH = "${poEsc(r.cond.gash_status||"any")}" ≥ ${r.cond.min_age_days||0}d → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
+        <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)} → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
         <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
         <span class="spacer"></span>
-        ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
+        ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button>
+        <button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
       </div>`).join("")}
       ${CAN_ADMIN?`<button class="minibtn" style="margin-top:8px" onclick="gmRuleNew()">＋ ${T("قاعدة جديدة · New rule")}</button>`:""}
     </div>`;
@@ -9916,30 +9917,121 @@ async function gmRuleDelete(id){
   await fetch("/api/gaash/rules",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
   await gmLoad(); gmRenderSeq();
 }
-function gmRuleNew(){
+// ── ⚡ trigger criteria builder (HubSpot-style: AND inside a group, OR across groups) ──
+const GM_RULE_FIELDS=[
+  {k:"gash_status", t:"text",   lab:"GASH STATUS"},
+  {k:"status",      t:"text",   lab:"حالة اللوحة · board status"},
+  {k:"bucket",      t:"text",   lab:"حالة التتبع · tracking bucket"},
+  {k:"label",       t:"text",   lab:"وصف التتبع · tracking label"},
+  {k:"name",        t:"text",   lab:"الاسم · profile name"},
+  {k:"customers",   t:"text",   lab:"العملاء · customers"},
+  {k:"source",      t:"enum",   lab:"المصدر · source"},
+  {k:"age_days",    t:"number", lab:"عمر السجل · record age"}];
+const GM_RULE_OPS={
+  text:[["is","يساوي · is"],["is_not","لا يساوي · is not"],["contains","يحتوي · contains"],["not_contains","لا يحتوي · doesn't contain"],["empty","فارغ · is empty"],["not_empty","غير فارغ · is not empty"]],
+  number:[["gte","≥ على الأقل · at least"],["lte","≤ على الأكثر · at most"]],
+  enum:[["is","يساوي · is"],["is_not","لا يساوي · is not"]]};
+function gmRuleFld(k){ return GM_RULE_FIELDS.find(f=>f.k===k)||GM_RULE_FIELDS[0]; }
+function gmRuleVals(k){ // live value suggestions straight out of the current candidates
+  const s=new Set();
+  ((GM.ov&&GM.ov.candidates)||[]).forEach(c=>{ const v=String(c[k]==null?"":c[k]).trim(); if(v) s.add(v); });
+  return [...s].sort().slice(0,40);
+}
+function gmRuleSummary(cond){
+  const OPS={is:"=",is_not:"≠",contains:"∋",not_contains:"∌",gte:"≥",lte:"≤",
+    empty:T("فارغ · empty"),not_empty:T("غير فارغ · not empty")};
+  const gs=(cond&&cond.groups)||[];
+  if(!gs.length) return T("كل الطرود المرشحة · every candidate");
+  return gs.map(g=>(g.crits||[]).map(c=>{
+    const f=T(gmRuleFld(c.field).lab);
+    if(c.op==="empty"||c.op==="not_empty") return `${f} ${OPS[c.op]}`;
+    if(c.field==="age_days") return `${f} ${OPS[c.op]} ${c.value}d`;
+    if(c.field==="source") return `${f} ${OPS[c.op]} ${c.value==="leluxe"?"⌚ Leluxe":"📦 "+T("مشتريات · Purchases")}`;
+    return `${f} ${OPS[c.op]} "${poEsc(String(c.value))}"`;
+  }).join(" + ")).join(` — ${T("أو · or")} — `);
+}
+function gmRuleNew(){ gmRuleOpen(null); }
+function gmRuleEdit(id){ const r=((GM.ov&&GM.ov.rules)||[]).find(x=>x.id===id); if(r) gmRuleOpen(r); }
+function gmRuleOpen(r){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
   if(!seqs.length){ toast(T("أنشئ تسلسلاً أولاً · build a sequence first")); return; }
-  bulkOpen("⚡ "+T("قاعدة تسجيل تلقائي · Auto-enroll rule"));
+  GM.ruleEdit={id:r?r.id:"", name:r?r.name:"", seq_id:r?r.seq_id:seqs[0].id,
+    mode:r?r.mode:"queue", enabled:r?!!r.enabled:true,
+    groups:(r&&r.cond&&(r.cond.groups||[]).length)
+      ?JSON.parse(JSON.stringify(r.cond.groups))
+      :[{crits:[{field:"gash_status",op:"is",value:""}]}]};
+  bulkOpen("⚡ "+T("قاعدة تسجيل تلقائي · Auto-enroll trigger"));
   $("bulkBody").innerHTML=`
-    <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;margin:8px 0">
-      <label>${T("الاسم · name")}: <input id="gmRuleName" style="width:240px" placeholder="${T("عالق على هوية العميل · stuck on customer ID")}"></label>
-      <label>GASH STATUS = <input id="gmRuleStatus" style="width:180px" placeholder="customer ID"></label>
-      <label>${T("منذ · for at least")} <input id="gmRuleAge" type="number" value="3" style="width:60px"> ${T("أيام · days")}</label>
-      <label>${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}">${poEsc(s.name)}</option>`).join("")}</select></label>
-      <label>${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue">${T("بموافقتي أولاً · my approval first")}</option><option value="auto">${T("تلقائي بالكامل · fully automatic")}</option></select></label>
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:12.5px;margin:8px 0">
+      <label>${T("الاسم · name")}: <input id="gmRuleName" style="width:250px" value="${poEsc(GM.ruleEdit.name)}" placeholder="${T("عالق على هوية العميل · stuck on customer ID")}"></label>
+      <div><b>${T("ابدأ عندما يطابق الطرد · Start when a package matches")}</b>
+        <div class="muted2" style="font-size:11px">${T("كل معايير المجموعة معاً (و)، وتكفي أي مجموعة (أو) · all criteria in a group must match (and); any one group is enough (or)")}</div></div>
+      <div id="gmRuleCrit"></div>
+      <label>${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}" ${s.id===GM.ruleEdit.seq_id?"selected":""}>${poEsc(s.name)}</option>`).join("")}</select></label>
+      <label>${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue" ${GM.ruleEdit.mode!=="auto"?"selected":""}>${T("بموافقتي أولاً · my approval first")}</option><option value="auto" ${GM.ruleEdit.mode==="auto"?"selected":""}>${T("تلقائي بالكامل · fully automatic")}</option></select></label>
     </div>`;
+  gmRuleCritRender();
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
     <button class="accent" onclick="gmRuleSave(this)">💾 ${T("حفظ · Save")}</button></div>`;
 }
+function gmRuleCritRender(){
+  const gs=GM.ruleEdit.groups;
+  const critRow=(cr,gi,ci)=>{
+    const fld=gmRuleFld(cr.field), noVal=cr.op==="empty"||cr.op==="not_empty";
+    let val="";
+    if(!noVal){
+      if(fld.t==="number") val=`<input type="number" min="0" max="365" style="width:64px" value="${poEsc(String(cr.value==null?0:cr.value))}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
+      else if(fld.t==="enum") val=`<select onchange="gmRuleSet(${gi},${ci},'value',this.value)">
+        <option value="leluxe" ${cr.value==="leluxe"?"selected":""}>⌚ Leluxe</option>
+        <option value="purchases" ${cr.value==="purchases"?"selected":""}>📦 ${T("مشتريات · Purchases")}</option></select>`;
+      else val=`<input list="gmDl_${fld.k}" style="width:150px" value="${poEsc(String(cr.value==null?"":cr.value))}" placeholder="${T("قيمة · value")}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
+    }
+    return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select onchange="gmRuleSet(${gi},${ci},'field',this.value)">${GM_RULE_FIELDS.map(f=>`<option value="${f.k}" ${f.k===cr.field?"selected":""}>${T(f.lab)}</option>`).join("")}</select>
+      <select onchange="gmRuleSet(${gi},${ci},'op',this.value)">${GM_RULE_OPS[fld.t].map(o=>`<option value="${o[0]}" ${o[0]===cr.op?"selected":""}>${T(o[1])}</option>`).join("")}</select>
+      ${val}
+      <button class="minibtn" onclick="gmRuleCritDel(${gi},${ci})">🗑</button></div>`;
+  };
+  const dls=GM_RULE_FIELDS.filter(f=>f.t==="text").map(f=>`<datalist id="gmDl_${f.k}">${gmRuleVals(f.k).map(v=>`<option value="${poEsc(v)}">`).join("")}</datalist>`).join("");
+  $("gmRuleCrit").innerHTML=gs.map((g,gi)=>`
+    ${gi?`<div style="display:flex;align-items:center;gap:8px;margin:7px 0"><span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${T("أو · or")}</span><div style="flex:1;border-top:1px dashed var(--line)"></div></div>`:""}
+    <div class="panel" style="padding:8px 10px">
+      <div style="display:flex;align-items:center;gap:8px"><b style="font-size:11.5px;color:var(--muted);text-transform:uppercase">${T("مجموعة · Group")} ${gi+1}</b><span class="spacer"></span>
+        ${gs.length>1?`<button class="minibtn" onclick="gmRuleGroupDel(${gi})">🗑</button>`:""}</div>
+      ${(g.crits||[]).map((cr,ci)=>critRow(cr,gi,ci)).join("")||`<div class="muted2" style="font-size:11px;margin-top:4px">${T("بلا معايير = كل الطرود · no criteria = every candidate")}</div>`}
+      <button class="minibtn" style="margin-top:7px" onclick="gmRuleCritAdd(${gi})">＋ ${T("معيار (و) · Add criteria (and)")}</button>
+    </div>`).join("")+
+    `<button class="minibtn" style="margin-top:8px" onclick="gmRuleGroupAdd()">＋ ${T("مجموعة (أو) · Add OR group")}</button>${dls}`;
+}
+function gmRuleSet(gi,ci,key,val){
+  const cr=GM.ruleEdit.groups[gi].crits[ci];
+  if(key==="field"&&val!==cr.field){
+    const t=gmRuleFld(val).t;
+    cr.field=val; cr.op=GM_RULE_OPS[t][0][0];
+    cr.value=t==="number"?3:(t==="enum"?"leluxe":"");
+  } else if(key==="op"){ cr.op=val; }
+  else { cr.value=gmRuleFld(cr.field).t==="number"?parseInt(val||"0"):val; }
+  gmRuleCritRender();
+}
+function gmRuleCritAdd(gi){ GM.ruleEdit.groups[gi].crits.push({field:"gash_status",op:"is",value:""}); gmRuleCritRender(); }
+function gmRuleCritDel(gi,ci){
+  const gs=GM.ruleEdit.groups;
+  gs[gi].crits.splice(ci,1);
+  if(!gs[gi].crits.length&&gs.length>1) gs.splice(gi,1);
+  gmRuleCritRender();
+}
+function gmRuleGroupAdd(){ GM.ruleEdit.groups.push({crits:[{field:"gash_status",op:"is",value:""}]}); gmRuleCritRender(); }
+function gmRuleGroupDel(gi){ const gs=GM.ruleEdit.groups; gs.splice(gi,1); if(!gs.length) gs.push({crits:[]}); gmRuleCritRender(); }
 async function gmRuleSave(btn){
+  const e=GM.ruleEdit;
   btn.disabled=true;
-  const r=await post("/api/gaash/rules",{name:($("gmRuleName")||{}).value,
-    cond:{gash_status:($("gmRuleStatus")||{}).value, min_age_days:($("gmRuleAge")||{}).value},
-    seq_id:($("gmRuleSeq")||{}).value, mode:($("gmRuleMode")||{}).value, enabled:true});
+  const r=await post("/api/gaash/rules",{id:e.id||undefined, name:($("gmRuleName")||{}).value,
+    cond:{groups:e.groups}, seq_id:($("gmRuleSeq")||{}).value,
+    mode:($("gmRuleMode")||{}).value, enabled:e.enabled});
   btn.disabled=false;
   if(!r.ok){ toast(r.error||"failed"); return; }
-  bulkClose(); await gmLoad(); gmRenderSeq();
+  bulkClose(); GM.ruleEdit=null; await gmLoad(); gmRenderSeq();
 }
 // ── 📝 Templates tab ──
 function gmRenderTpl(editId){

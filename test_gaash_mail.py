@@ -287,13 +287,89 @@ def main():
     check("an enrolled GWD drops out of candidates",
           not any(c["gwd"] == "GWD009000001" for c in gm.candidates()))
 
-    print("— v2: auto-enroll rules —")
+    print("— v2: auto-enroll rules (HubSpot-style criteria) —")
     r1 = gm.rule_save({"name": "stuck on ID",
-                       "cond": {"gash_status": " customer ID", "min_age_days": 0},
+                       "cond": {"gash_status": " customer ID", "min_age_days": 3},
                        "seq_id": sq["id"], "mode": "queue", "enabled": True})
-    check("rule saved", r1["ok"])
-    check("rule listed with parsed cond (trimmed, case kept)",
-          gm.rules_list()[0]["cond"]["gash_status"] == "customer ID")
+    check("legacy-shape rule saved", r1["ok"])
+    check("legacy cond auto-converts to criteria groups",
+          gm.rules_list()[0]["cond"] == {"groups": [{"crits": [
+              {"field": "gash_status", "op": "is", "value": "customer ID"},
+              {"field": "age_days", "op": "gte", "value": 3}]}]})
+    gm.rule_remove(r1["id"])
+    check("rule removed", not gm.rules_list())
+    nm = gm._cond_norm({"groups": [{"crits": [
+        {"field": "nope", "op": "is", "value": "x"},
+        {"field": "status", "op": "zap", "value": "x"},
+        {"field": "age_days", "op": "gte", "value": "999"},
+        {"field": "source", "op": "is", "value": "PURCHASES"}]}]})
+    check("sanitizer drops unknown field/op, clamps age, folds source",
+          nm == {"groups": [{"crits": [
+              {"field": "age_days", "op": "gte", "value": 365},
+              {"field": "source", "op": "is", "value": "purchases"}]}]})
+
+    cdx = {"gwd": "GWDX", "source": "purchases", "status": "stuck on Customer ID",
+           "gash_status": None, "name": "Ali", "customers": "Ahmad، Sara",
+           "bucket": "", "label": None}
+
+    def m(cnd, age=5.0):
+        return gm._cond_match(gm._cond_norm(cnd), cdx, lambda c: age)
+
+    def g1(*crits):
+        return {"groups": [{"crits": list(crits)}]}
+
+    check("evaluator: contains folds case + whitespace",
+          m(g1({"field": "status", "op": "contains", "value": " customer  id"})))
+    check("evaluator: AND inside a group",
+          not m(g1({"field": "status", "op": "contains", "value": "id"},
+                   {"field": "source", "op": "is", "value": "leluxe"})))
+    check("evaluator: OR across groups",
+          m({"groups": [
+              {"crits": [{"field": "source", "op": "is", "value": "leluxe"}]},
+              {"crits": [{"field": "customers", "op": "contains",
+                          "value": "sara"}]}]}))
+    check("evaluator: empty / not_empty / is_not",
+          m(g1({"field": "gash_status", "op": "empty"}))
+          and not m(g1({"field": "gash_status", "op": "not_empty"}))
+          and m(g1({"field": "name", "op": "is_not", "value": "Omar"})))
+    check("evaluator: age gte/lte + unknown age fails closed",
+          m(g1({"field": "age_days", "op": "gte", "value": 4}))
+          and not m(g1({"field": "age_days", "op": "lte", "value": 4}))
+          and not m(g1({"field": "age_days", "op": "gte", "value": 1}), age=None))
+    check("no criteria = every candidate", m({"groups": []}))
+
+    print("— v2: candidate ages + end-to-end run_rules —")
+    pdb = purchases.load()
+    for p in pdb["purchase_orders"]:
+        if p["po_id"] == "PO-T1":
+            p["created_at"] = (now - timedelta(days=4)).isoformat(timespec="seconds")
+            p["packages"].append({"package_no": 3,
+                                  "tracking_number": "GWD009000003",
+                                  "otlobly_status": "بانتظار الشحن",
+                                  "items": [{"customer_name": "Omar"}]})
+    purchases.save(pdb)
+    with db.connect() as c:
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','Watch pkg','on hold',?,?)""",
+                  (str(int((now - timedelta(days=6)).timestamp() * 1000)),
+                   json.dumps({"tracking_number": "GWD009000005",
+                               "fields": {"GASH STATUS": "customer ID"}})))
+    age_p = gm._cand_age_days({"gwd": "GWD009000001", "source": "purchases",
+                               "po_id": "PO-T1"})
+    age_l = gm._cand_age_days({"gwd": "GWD009000005", "source": "leluxe"})
+    check("purchases age from the PO created_at", age_p and 3.5 < age_p < 4.5)
+    check("leluxe age from date_created ms", age_l and 5.5 < age_l < 6.5)
+    r2 = gm.rule_save({"name": "old leluxe ID holds", "cond": {"groups": [{"crits": [
+        {"field": "source", "op": "is", "value": "leluxe"},
+        {"field": "gash_status", "op": "is", "value": "Customer  ID"},
+        {"field": "age_days", "op": "gte", "value": 3}]}]},
+        "seq_id": sq["id"], "mode": "queue", "enabled": True})
+    made = gm.run_rules()
+    th5 = gm.thread_get("GWD009000005")
+    check("run_rules proposes only the matching candidate", made == 1
+          and th5 and th5["state"] == "proposed"
+          and not gm.thread_get("GWD009000003"))
+    gm.rule_remove(r2["id"])
 
     print("— v2: open/click tracking tokens + public endpoints —")
     with db.connect() as c:

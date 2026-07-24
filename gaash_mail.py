@@ -461,15 +461,139 @@ def default_sequence_id():
 
 
 # ── CRUD: auto-enroll rules ──
+# HubSpot-style criteria (owner request, from the workflow-triggers screens):
+# cond = {"groups": [{"crits": [{field, op, value}, …]}, …]} — crits inside a
+# group AND together, groups OR together ("Group 1 / or / Group 2"). The
+# legacy fixed shape {gash_status, min_age_days} is still accepted everywhere
+# and auto-converted, so pre-existing rules keep working untouched.
+RULE_FIELDS = {                          # field → type; the criteria universe
+    "gash_status": "text",               # Leluxe ClickUp GASH STATUS field
+    "status": "text",                    # board status / otlobly_status
+    "bucket": "text",                    # tracking bucket (see _bucket)
+    "label": "text",                     # tracking status label
+    "name": "text",                      # profile / ship-to name
+    "customers": "text",                 # Purchases customer names
+    "source": "enum",                    # leluxe | purchases
+    "age_days": "number",                # days since the record was created
+}
+_RULE_OPS = {"text": ("is", "is_not", "contains", "not_contains",
+                      "empty", "not_empty"),
+             "number": ("gte", "lte"),
+             "enum": ("is", "is_not")}
+_SOURCES = ("leluxe", "purchases")
+
+
+def _cond_norm(cond):
+    """Sanitized v2 criteria out of any stored/posted cond (incl. legacy)."""
+    cond = cond if isinstance(cond, dict) else {}
+    if "groups" not in cond:             # legacy {gash_status, min_age_days}
+        crits = []
+        if str(cond.get("gash_status") or "").strip():
+            crits.append({"field": "gash_status", "op": "is",
+                          "value": str(cond["gash_status"]).strip()})
+        try:
+            age = int(cond.get("min_age_days") or 0)
+        except (TypeError, ValueError):
+            age = 0
+        if age > 0:
+            crits.append({"field": "age_days", "op": "gte", "value": age})
+        return {"groups": [{"crits": crits}] if crits else []}
+    groups = []
+    for g in (cond.get("groups") or [])[:5]:
+        crits = []
+        for cr in ((g if isinstance(g, dict) else {}).get("crits") or [])[:8]:
+            cr = cr if isinstance(cr, dict) else {}
+            f = str(cr.get("field") or "").strip()
+            op = str(cr.get("op") or "").strip()
+            kind = RULE_FIELDS.get(f)
+            if not kind or op not in _RULE_OPS[kind]:
+                continue                 # unknown field / op → dropped
+            v = cr.get("value")
+            if kind == "number":
+                try:
+                    v = min(365, max(0, int(v or 0)))
+                except (TypeError, ValueError):
+                    v = 0
+            elif f == "source":
+                v = str(v or "").strip().lower()
+                if v not in _SOURCES:
+                    continue
+            else:
+                v = str(v or "").strip()
+                if not v and op not in ("empty", "not_empty"):
+                    continue             # a text match needs a value
+            crits.append({"field": f, "op": op, "value": v})
+        if crits:
+            groups.append({"crits": crits})
+    return {"groups": groups}
+
+
+def _fold(s):
+    return re.sub(r"\s+", " ", str(s or "")).strip().lower()
+
+
+def _crit_match(cr, cd, age_fn):
+    f, op, want = cr["field"], cr["op"], cr.get("value")
+    if f == "age_days":
+        age = age_fn(cd)
+        if age is None:
+            return False
+        return age >= want if op == "gte" else age <= want
+    have = _fold(cd.get(f))
+    if op == "empty":
+        return not have
+    if op == "not_empty":
+        return bool(have)
+    w = _fold(want)
+    return {"is": have == w, "is_not": have != w,
+            "contains": w in have,
+            "not_contains": w not in have}.get(op, False)
+
+
+def _cond_match(cond, cd, age_fn):
+    groups = (cond or {}).get("groups") or []
+    if not groups:                       # no criteria = match every candidate
+        return True                      # (same as the old blank-status rule)
+    return any(all(_crit_match(cr, cd, age_fn) for cr in g["crits"])
+               for g in groups)
+
+
+def _cand_age_days(cd):
+    """Days since this candidate's record was created, or None if unknown."""
+    try:
+        if cd.get("source") == "purchases":
+            import purchases
+            for p in (purchases.load() or {}).get("purchase_orders") or []:
+                if p.get("po_id") == cd.get("po_id"):
+                    created = str(p.get("created_at") or "").strip()
+                    if not created:
+                        return None
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return (time.time() - dt.timestamp()) / 86400
+            return None
+        row = _leluxe_row_for(cd["gwd"])
+        if not row:
+            return None
+        with db.connect() as c:
+            rr = c.execute("SELECT date_created FROM leluxe_orders WHERE id=?",
+                           (row["id"],)).fetchone()
+        created = float(rr["date_created"] or 0) if rr else 0   # ClickUp ms
+        return (time.time() * 1000 - created) / 864e5 if created else None
+    except Exception:  # noqa
+        return None
+
+
 def rules_list():
     with db.connect() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM gaash_rules ORDER BY created_at")]
     for r in rows:
         try:
-            r["cond"] = json.loads(r.pop("cond_json") or "{}")
+            r["cond"] = _cond_norm(json.loads(r.pop("cond_json") or "{}"))
         except Exception:  # noqa
-            r["cond"] = {}
+            r["cond"] = {"groups": []}
     return rows
 
 
@@ -479,13 +603,7 @@ def rule_save(r):
     seq_id = (r.get("seq_id") or "").strip()
     if not name or not sequence_get(seq_id):
         return {"ok": False, "error": "rule needs a name and a valid sequence"}
-    cond = r.get("cond") if isinstance(r.get("cond"), dict) else {}
-    try:
-        min_age = min(90, max(0, int(cond.get("min_age_days") or 0)))
-    except (TypeError, ValueError):
-        min_age = 0
-    cond = {"gash_status": str(cond.get("gash_status") or "").strip(),
-            "min_age_days": min_age}
+    cond = _cond_norm(r.get("cond"))
     mode = r.get("mode") if r.get("mode") in ("queue", "auto") else "queue"
     with db.connect() as c:
         c.execute("""INSERT INTO gaash_rules
@@ -513,29 +631,18 @@ def run_rules():
         return 0
     cands = candidates()
     made = 0
-    now_ms = time.time() * 1000
+    ages = {}                            # gwd → age; computed only when asked
+
+    def age_fn(cd):
+        if cd["gwd"] not in ages:
+            ages[cd["gwd"]] = _cand_age_days(cd)
+        return ages[cd["gwd"]]
+
     for r in rules:
-        want = re.sub(r"\s+", " ", str(r["cond"].get("gash_status") or "")).strip().lower()
-        min_age = r["cond"].get("min_age_days") or 0
         for cd in cands:
             if thread_get(cd["gwd"]):
                 continue
-            have = re.sub(r"\s+", " ", str(cd.get("gash_status") or "")).strip().lower()
-            if want and have != want:
-                continue
-            age_ok = True
-            if min_age:
-                row = _leluxe_row_for(cd["gwd"])
-                created = 0
-                try:
-                    with db.connect() as c:
-                        rr = c.execute("SELECT date_created FROM leluxe_orders "
-                                       "WHERE id=?", (row["id"],)).fetchone() if row else None
-                    created = float(rr["date_created"] or 0) if rr else 0
-                except Exception:  # noqa
-                    created = 0
-                age_ok = created and (now_ms - created) >= min_age * 864e5
-            if not age_ok:
+            if not _cond_match(r["cond"], cd, age_fn):
                 continue
             if r["mode"] == "auto":
                 start_threads([cd["gwd"]], None, None, seq_id=r["seq_id"])
