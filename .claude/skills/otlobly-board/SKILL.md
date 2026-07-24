@@ -265,7 +265,18 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   leluxe date_created ms, purchases PO created_at ISO; None fails closed).
   UI `gmRuleOpen` builder modal (datalists fed from GM.ov.candidates,
   value input morphs by type), ✎ `gmRuleEdit` pre-fills, `gmRuleSummary`
-  renders the strip line. Engine:
+  renders the strip line. **Surfaced in the sequence builder (2026-07-24):**
+  `gmRenderBuilder` shows an ⚡ Enrollment-trigger card at the top (HubSpot
+  "when this happens") listing rules where seq_id=this seq, ＋ New trigger
+  `gmRuleNew(seqId)` pre-sets enroll-into; `gmAfterRule()` re-renders builder
+  or list. `?` help chips (`.gm-q`/`gmHelp`) on every control (field ? is
+  dynamic). **Board custom columns as criteria (2026-07-24):** field
+  `cf:<label>` filters ANY board column — candidates() attach a `cf` map
+  (Purchases PO custom values by label + Leluxe ClickUp `fields`), catalog
+  `rule_cf_fields()` (📦 defs + ⌚ leluxe names) ships in overview as
+  `cf_fields`; client `gmRuleFieldList()` = built-ins + cf (source badge);
+  `_field_kind`/`_cand_cf_val` make cf:* generic text; safe datalist ids
+  `gmDlId`. Engine:
   `next_allowed`/`add_business_days` window math; `send_step` runs gaash_steps
   (task ⇒ waiting_task until action=task_done); `migrate_v2` claim_once-seeds
   "seq_default" from the legacy settings.steps; goal reply ⇒ human reply =
