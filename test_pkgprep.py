@@ -85,13 +85,17 @@ def main():
     rep = pkgprep.build(orders, pdb, rate=3.1)
     ready = {c["name"]: c for c in rep["ready"]}
     waiting = {c["name"]: c for c in rep["waiting"]}
+    reviews = {c["name"]: c for c in rep["reviews"]}
 
     check("qty split across packages sums to READY", "Ready Rana" in ready)
     check("partial customer lands in WAITING", "Waiting Wael" in waiting)
-    check("dispatched-only customer hidden", "Sent Samir" not in ready and "Sent Samir" not in waiting)
-    check("QUOTED order ignored", "Quoted Qusai" not in ready and "Quoted Qusai" not in waiting)
+    check("fully-dispatched customer → review list, not prep",
+          "Sent Samir" in reviews and "Sent Samir" not in ready and "Sent Samir" not in waiting)
+    check("QUOTED order ignored",
+          "Quoted Qusai" not in ready and "Quoted Qusai" not in waiting and "Quoted Qusai" not in reviews)
     check("exception doesn't block readiness", "Flag Fadi" in ready)
-    check("counts match buckets", rep["counts"] == {"ready": len(rep["ready"]), "waiting": len(rep["waiting"])})
+    check("counts match buckets", rep["counts"] == {"ready": len(rep["ready"]),
+          "waiting": len(rep["waiting"]), "reviews": len(rep["reviews"])})
 
     rana = ready["Ready Rana"]
     check("received units counted (3/3)", rana["n_received"] == 3 and rana["n_missing"] == 0)
@@ -135,6 +139,40 @@ def main():
     check("redaction nulls per-order amounts",
           all(o["amount_to_collect_usd"] is None and o["deposit_usd"] is None for o in rred["orders"]))
     check("redacted message has no amounts", "150" not in rred["wa_text"] and "₪" not in rred["wa_text"])
+
+    # ---- partial send keeps the customer; full dispatch → testimonials ------ #
+    two = [_order("OTL-0101", "Partial Pete",
+                  [{"asin": "P0AAA", "title": "Phone", "qty": 1},
+                   {"asin": "P0BBB", "title": "Case", "qty": 1}],
+                  status="SHIPPED", amount=60.0)]
+    # Phone shipped to the customer; Case not in any package yet → still coming.
+    pdb_partial = {"purchase_orders": [{"po_id": "PO-9", "packages": [
+        _pkg("sent no rd", 1, [_pitem("OTL-0101", "P0AAA", 1)])]}]}
+    rp = pkgprep.build(two, pdb_partial, rate=3.1)
+    pete = {c["name"]: c for c in rp["waiting"]}.get("Partial Pete")
+    check("partial send KEEPS the customer in WAITING (not dropped)", pete is not None)
+    check("waiting message names the sent + coming items, no price",
+          bool(pete) and "Phone" in pete["wa_text"] and "Case" in pete["wa_text"]
+          and "$" not in pete["wa_text"])
+
+    # Now dispatch the Case too → the whole order is out → moves to testimonials.
+    pdb_done = {"purchase_orders": [{"po_id": "PO-9", "packages": [
+        _pkg("sent no rd", 1, [_pitem("OTL-0101", "P0AAA", 1)]),
+        _pkg("complete", 2, [_pitem("OTL-0101", "P0BBB", 1)])]}]}
+    rd2 = pkgprep.build(two, pdb_done, rate=3.1, facebook_url="https://facebook.com/x")
+    pete_rv = {c["name"]: c for c in rd2["reviews"]}.get("Partial Pete")
+    check("fully-dispatched customer moves into the review list", pete_rv is not None)
+    check("no longer in prep once fully dispatched",
+          not any(c["name"] == "Partial Pete" for c in rd2["ready"] + rd2["waiting"]))
+    check("review card has +970 and +972 links on the same core",
+          bool(pete_rv) and pete_rv["wa_url_970"].startswith("https://wa.me/970599000001?text=")
+          and pete_rv["wa_url_972"].startswith("https://wa.me/972599000001?text="))
+    check("review message is the testimonial one (fb link + review ask)",
+          bool(pete_rv) and "facebook.com/x" in pete_rv["wa_review_text"]
+          and "تقييم" in pete_rv["wa_review_text"])
+    rd3 = pkgprep.build(two, pdb_done, rate=3.1, asked={"+970599000001"})
+    check("already-asked customer hidden from reviews",
+          "Partial Pete" not in {c["name"]: c for c in rd3["reviews"]})
 
     # ---- settings key ------------------------------------------------------ #
     cfgd = {"_seed": True}    # truthy — settings.read/apply treat {} as "load the real file"
