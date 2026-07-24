@@ -570,6 +570,11 @@
      order-taking pages, ↻ Refresh on the /api/report-driven dashboards. Hidden
      everywhere else so they don't clutter pages where they do nothing. */
   body.hide-addorder #addOrderBtn,body.hide-refresh #refreshBtn{display:none}
+  /* tiny ? help chip (criteria builder + wherever an option needs explaining) */
+  .gm-q{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+    border-radius:50%;background:var(--bg2);border:1px solid var(--line);color:var(--muted);
+    font-size:10px;font-weight:700;cursor:help;flex:none;user-select:none}
+  .gm-q:hover{background:var(--accent);border-color:var(--accent);color:#fff}
   /* Leluxe dashboard: KPI card grid + horizontal breakdown bars */
   .lx-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:2px}
   .lx-sec{color:var(--muted);font-size:11px;font-weight:800;margin:15px 0 8px;text-transform:uppercase;letter-spacing:.05em}
@@ -9826,6 +9831,28 @@ function gmRenderBuilder(){
       ${CAN_ADMIN?`<button class="gsq-add" onclick="gmStepAdd(${i})" title="${T("أضف خطوة · add step")}">＋</button><div class="gsq-line"></div>`:""}
     </div>`;
   const w=e.send_window;
+  // Enrollment triggers feeding THIS sequence (HubSpot-style "When this happens").
+  const trigs=((GM.ov&&GM.ov.rules)||[]).filter(x=>x.seq_id===e.id);
+  const trigRow=r=>`<div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:12.5px">
+      <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
+      <b>${poEsc(r.name)}</b>
+      <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)}</span>
+      <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
+      <span class="spacer"></span>
+      ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button><button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
+    </div>`;
+  const trigCard=`<div class="panel" style="margin-bottom:12px;font-size:12.5px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <b>⚡ ${T("مُشغّل التسجيل · Enrollment trigger")}</b>
+        ${gmHelp("يقرر أي الطرود تدخل هذا التسلسل تلقائياً (اختياري) — بدونه تُسجّل الطرود يدوياً · decides which packages auto-enter this sequence (optional) — without one, packages are enrolled by hand")}
+        <span class="spacer"></span>
+        ${CAN_ADMIN&&e.id?`<button class="minibtn" onclick="gmRuleNew('${e.id}')">＋ ${T("مُشغّل · New trigger")}</button>`:""}
+      </div>
+      ${!e.id
+        ? `<div class="muted2" style="font-size:11.5px;margin-top:5px">${T("احفظ التسلسل أولاً لربط مُشغّل به · save the sequence first to attach a trigger")}</div>`
+        : (trigs.length ? trigs.map(trigRow).join("")
+            : `<div class="muted2" style="font-size:11.5px;margin-top:5px">${T("لا مُشغّل بعد — الطرود تُسجَّل يدوياً · no trigger yet — packages are enrolled manually")}</div>`)}
+    </div>`;
   $("gmSeqPane").innerHTML=`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <button class="minibtn" onclick="GM.edit=null;gmRenderSeq()">‹ ${T("رجوع · Back")}</button>
@@ -9833,6 +9860,7 @@ function gmRenderBuilder(){
       <span class="spacer"></span>
       ${CAN_ADMIN?`<button class="accent" onclick="gmSeqSave(this)">💾 ${T("حفظ · Save")}</button>`:""}
     </div>
+    ${trigCard}
     <div class="panel" style="display:flex;gap:26px;justify-content:center;text-align:center;margin-bottom:12px">
       <div><b style="font-size:22px">${e.steps.length}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("خطوات · total steps")}</div></div>
       <div><b style="font-size:22px">${gmSeqDays(e)+1}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("أيام للإكمال · days to complete")}</div></div>
@@ -9918,26 +9946,32 @@ async function gmSeqSave(btn){
   toast(T("حُفظ · saved")); GM.edit=null;
   await gmLoad(); gmRenderSeq();
 }
+// After any rule change, refresh overview + re-render whichever screen is open:
+// the sequence builder (trigger card) if we're inside one, else the list strip.
+async function gmAfterRule(){ await gmLoad(); if(GM.edit) gmRenderBuilder(); else if(GM.tab==="seq") gmRenderSeq(); }
 async function gmRuleToggle(id,on){
   const r=((GM.ov&&GM.ov.rules)||[]).find(x=>x.id===id); if(!r) return;
   await post("/api/gaash/rules",{...r, enabled:on});
-  gmLoad();
+  await gmAfterRule();
 }
 async function gmRuleDelete(id){
   if(!confirm(T("حذف القاعدة؟ · delete this rule?"))) return;
   await fetch("/api/gaash/rules",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
-  await gmLoad(); gmRenderSeq();
+  await gmAfterRule();
 }
 // ── ⚡ trigger criteria builder (HubSpot-style: AND inside a group, OR across groups) ──
+// `help` = the ? tooltip explaining what each field filters on.
 const GM_RULE_FIELDS=[
-  {k:"gash_status", t:"text",   lab:"GASH STATUS"},
-  {k:"status",      t:"text",   lab:"حالة اللوحة · board status"},
-  {k:"bucket",      t:"text",   lab:"حالة التتبع · tracking bucket"},
-  {k:"label",       t:"text",   lab:"وصف التتبع · tracking label"},
-  {k:"name",        t:"text",   lab:"الاسم · profile name"},
-  {k:"customers",   t:"text",   lab:"العملاء · customers"},
-  {k:"source",      t:"enum",   lab:"المصدر · source"},
-  {k:"age_days",    t:"number", lab:"عمر السجل · record age"}];
+  {k:"gash_status", t:"text",   lab:"GASH STATUS", help:"حالة التخليص لدى غاش (حقل ClickUp) — مثل \"customer ID\" · the package's GAASH customs-clearance status (the ClickUp field) — e.g. \"customer ID\""},
+  {k:"status",      t:"text",   lab:"حالة اللوحة · board status", help:"حالة الطرد على اللوحة (Leluxe status أو otlobly_status للمشتريات) · the package's board status (Leluxe status, or otlobly_status for Purchases)"},
+  {k:"bucket",      t:"text",   lab:"حالة التتبع · tracking bucket", help:"مرحلة التتبع المبسّطة: in transit / delivered / cleared · the simplified tracking stage: in transit / delivered / cleared"},
+  {k:"label",       t:"text",   lab:"وصف التتبع · tracking label", help:"نص حالة التتبع الخام كما ورد · the raw tracking-status text as reported"},
+  {k:"name",        t:"text",   lab:"الاسم · profile name", help:"اسم البروفايل / المُرسَل إليه على الطرد · the profile / ship-to name on the package"},
+  {k:"customers",   t:"text",   lab:"العملاء · customers", help:"أسماء العملاء ضمن الطرد (مشتريات) · the customer names inside the package (Purchases)"},
+  {k:"source",      t:"enum",   lab:"المصدر · source", help:"من أي نظام أتى الطرد: ⌚ Leluxe أو 📦 مشتريات · which system the package comes from: ⌚ Leluxe or 📦 Purchases"},
+  {k:"age_days",    t:"number", lab:"عمر السجل · record age", help:"كم يوماً مضى منذ إنشاء السجل · how many days since the record was created"}];
+// A small ? chip with a hover/tap tooltip (native title) — used across the builder.
+function gmHelp(txt){ return `<span class="gm-q" tabindex="0" title="${poEsc(T(txt))}" onclick="event.stopPropagation();alert(this.getAttribute('title'))">?</span>`; }
 const GM_RULE_OPS={
   text:[["is","يساوي · is"],["is_not","لا يساوي · is not"],["contains","يحتوي · contains"],["not_contains","لا يحتوي · doesn't contain"],["empty","فارغ · is empty"],["not_empty","غير فارغ · is not empty"]],
   number:[["gte","≥ على الأقل · at least"],["lte","≤ على الأكثر · at most"]],
@@ -9961,12 +9995,12 @@ function gmRuleSummary(cond){
     return `${f} ${OPS[c.op]} "${poEsc(String(c.value))}"`;
   }).join(" + ")).join(` — ${T("أو · or")} — `);
 }
-function gmRuleNew(){ gmRuleOpen(null); }
+function gmRuleNew(presetSeqId){ gmRuleOpen(null, presetSeqId); }
 function gmRuleEdit(id){ const r=((GM.ov&&GM.ov.rules)||[]).find(x=>x.id===id); if(r) gmRuleOpen(r); }
-function gmRuleOpen(r){
+function gmRuleOpen(r, presetSeqId){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
   if(!seqs.length){ toast(T("أنشئ تسلسلاً أولاً · build a sequence first")); return; }
-  GM.ruleEdit={id:r?r.id:"", name:r?r.name:"", seq_id:r?r.seq_id:seqs[0].id,
+  GM.ruleEdit={id:r?r.id:"", name:r?r.name:"", seq_id:r?r.seq_id:(presetSeqId||seqs[0].id),
     mode:r?r.mode:"queue", enabled:r?!!r.enabled:true,
     groups:(r&&r.cond&&(r.cond.groups||[]).length)
       ?JSON.parse(JSON.stringify(r.cond.groups))
@@ -9975,11 +10009,14 @@ function gmRuleOpen(r){
   $("bulkBody").innerHTML=`
     <div style="display:flex;flex-direction:column;gap:10px;font-size:12.5px;margin:8px 0">
       <label>${T("الاسم · name")}: <input id="gmRuleName" style="width:250px" value="${poEsc(GM.ruleEdit.name)}" placeholder="${T("عالق على هوية العميل · stuck on customer ID")}"></label>
-      <div><b>${T("ابدأ عندما يطابق الطرد · Start when a package matches")}</b>
-        <div class="muted2" style="font-size:11px">${T("كل معايير المجموعة معاً (و)، وتكفي أي مجموعة (أو) · all criteria in a group must match (and); any one group is enough (or)")}</div></div>
+      <div style="display:flex;align-items:center;gap:6px"><b>${T("ابدأ عندما يطابق الطرد · Start when a package matches")}</b>
+        ${gmHelp("المُشغِّل يفحص كل طرد قابل للتسجيل؛ عند تطابق الشروط يُقترح/يُسجَّل تلقائياً · the trigger scans every enrollable package; when the conditions match it's proposed/enrolled automatically")}</div>
+      <div class="muted2" style="font-size:11px">${T("كل معايير المجموعة معاً (و)، وتكفي أي مجموعة (أو) · all criteria in a group must match (and); any one group is enough (or)")}</div>
       <div id="gmRuleCrit"></div>
-      <label>${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}" ${s.id===GM.ruleEdit.seq_id?"selected":""}>${poEsc(s.name)}</option>`).join("")}</select></label>
-      <label>${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue" ${GM.ruleEdit.mode!=="auto"?"selected":""}>${T("بموافقتي أولاً · my approval first")}</option><option value="auto" ${GM.ruleEdit.mode==="auto"?"selected":""}>${T("تلقائي بالكامل · fully automatic")}</option></select></label>
+      <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}" ${s.id===GM.ruleEdit.seq_id?"selected":""}>${poEsc(s.name)}</option>`).join("")}</select>
+        ${gmHelp("التسلسل الذي تدخله الطرود المطابقة · the sequence matching packages are enrolled into")}</label>
+      <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue" ${GM.ruleEdit.mode!=="auto"?"selected":""}>${T("بموافقتي أولاً · my approval first")}</option><option value="auto" ${GM.ruleEdit.mode==="auto"?"selected":""}>${T("تلقائي بالكامل · fully automatic")}</option></select>
+        ${gmHelp("بموافقتي أولاً = يظهر اقتراح تضغط ✓ لبدئه؛ تلقائي بالكامل = يبدأ التسلسل فوراً دون سؤال · my approval first = a suggestion appears and you press ✓ to start it; fully automatic = the sequence starts immediately without asking")}</label>
     </div>`;
   gmRuleCritRender();
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
@@ -10000,6 +10037,7 @@ function gmRuleCritRender(){
     }
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
       <select onchange="gmRuleSet(${gi},${ci},'field',this.value)">${GM_RULE_FIELDS.map(f=>`<option value="${f.k}" ${f.k===cr.field?"selected":""}>${T(f.lab)}</option>`).join("")}</select>
+      ${gmHelp(fld.help)}
       <select onchange="gmRuleSet(${gi},${ci},'op',this.value)">${GM_RULE_OPS[fld.t].map(o=>`<option value="${o[0]}" ${o[0]===cr.op?"selected":""}>${T(o[1])}</option>`).join("")}</select>
       ${val}
       <button class="minibtn" onclick="gmRuleCritDel(${gi},${ci})">🗑</button></div>`;
@@ -10011,9 +10049,11 @@ function gmRuleCritRender(){
       <div style="display:flex;align-items:center;gap:8px"><b style="font-size:11.5px;color:var(--muted);text-transform:uppercase">${T("مجموعة · Group")} ${gi+1}</b><span class="spacer"></span>
         ${gs.length>1?`<button class="minibtn" onclick="gmRuleGroupDel(${gi})">🗑</button>`:""}</div>
       ${(g.crits||[]).map((cr,ci)=>critRow(cr,gi,ci)).join("")||`<div class="muted2" style="font-size:11px;margin-top:4px">${T("بلا معايير = كل الطرود · no criteria = every candidate")}</div>`}
-      <button class="minibtn" style="margin-top:7px" onclick="gmRuleCritAdd(${gi})">＋ ${T("معيار (و) · Add criteria (and)")}</button>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:7px"><button class="minibtn" onclick="gmRuleCritAdd(${gi})">＋ ${T("معيار (و) · Add criteria (and)")}</button>
+        ${gmHelp("شرط إضافي في نفس المجموعة — يجب أن تتحقق كل شروط المجموعة معاً · another condition in this group — every condition in the group must be true together")}</div>
     </div>`).join("")+
-    `<button class="minibtn" style="margin-top:8px" onclick="gmRuleGroupAdd()">＋ ${T("مجموعة (أو) · Add OR group")}</button>${dls}`;
+    `<div style="display:flex;align-items:center;gap:6px;margin-top:8px"><button class="minibtn" onclick="gmRuleGroupAdd()">＋ ${T("مجموعة (أو) · Add OR group")}</button>
+      ${gmHelp("مجموعة بديلة — يكفي أن تتطابق أي مجموعة واحدة لتسجيل الطرد · an alternative group — matching any one group is enough to enroll the package")}</div>${dls}`;
 }
 function gmRuleSet(gi,ci,key,val){
   const cr=GM.ruleEdit.groups[gi].crits[ci];
@@ -10042,7 +10082,7 @@ async function gmRuleSave(btn){
     mode:($("gmRuleMode")||{}).value, enabled:e.enabled});
   btn.disabled=false;
   if(!r.ok){ toast(r.error||"failed"); return; }
-  bulkClose(); GM.ruleEdit=null; await gmLoad(); gmRenderSeq();
+  bulkClose(); GM.ruleEdit=null; await gmAfterRule();
 }
 // ── 📝 Templates tab ──
 function gmRenderTpl(editId){
