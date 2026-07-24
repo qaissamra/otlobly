@@ -18,6 +18,7 @@ USD + ILS at the Settings rate fx.pkg_ils_per_usd.
 from collections import defaultdict
 from urllib.parse import quote as _urlquote
 
+import normalize
 import store
 from purchases import ITEM_EXCEPTIONS
 
@@ -31,6 +32,10 @@ DISPATCHED_STATUSES = {"sent rd", "sent no rd", "complete"}
 # Orders whose pieces can still be sitting in (or heading to) the office.
 # Pre-order statuses can't be PO-matched; DELIVERED+ already went out the door.
 ACTIVE_STATUSES = ("ORDERED", "SHIPPED", "ARRIVED")
+# The review-outreach cohort: goods received AND COD paid — the happiest, most
+# complete moment to ask for a Facebook review.
+COLLECTED_STATUS = "COLLECTED"
+DEFAULT_COUPON_USD = 5
 
 
 def _tally(pdb):
@@ -175,7 +180,69 @@ def _partial_message(name, received_items):
     return "\n".join(lines)
 
 
-def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
+def _review_message(name, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
+    """Warm ask for a review: thanks + how-was-it + $coupon-if-happy-and-review."""
+    name = name or "عميلنا العزيز"
+    lines = [f"مرحباً {name} 👋",
+             "نتمنّى إنك استلمت طلبك من اطلبلي وكل شي وصلك تمام 🧡",
+             "",
+             "بنحب ناخد رأيك بصراحة:",
+             "كيف كانت تجربتك معنا؟ وفي إشي نقدر نحسّنه؟",
+             "",
+             f"وكشكر منّا 🎁 إذا تجربتك كانت حلوة، إلك خصم {coupon_usd}$ على طلبك القادم"]
+    if facebook_url:
+        lines.append("لما تترك لنا تقييم على صفحتنا على فيسبوك 👇")
+        lines.append(facebook_url)
+    else:
+        lines.append("لما تترك لنا تقييم على صفحتنا على فيسبوك 🙏")
+    lines += ["", f"رأيك بيفرق كتير معنا 🙏 — فريق {BRAND}"]
+    return "\n".join(lines)
+
+
+def _review_cards(orders, asked=None, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
+    """One card per collected customer (deduped, already-asked hidden), each with
+    +970 and +972 WhatsApp links carrying the prefilled review message."""
+    asked = asked or set()
+    groups = {}
+    for o in orders or []:
+        if o.get("status") != COLLECTED_STATUS:
+            continue
+        groups.setdefault(_person_key(o), []).append(o)
+
+    cards = []
+    for key, group in groups.items():
+        if key in asked:
+            continue                      # staff already messaged them
+        first = group[0]
+        name = (first.get("customer", {}).get("name") or "").strip()
+        ph = store.primary_phone(first)
+        e164 = ph.get("e164") if ph else None
+        core = normalize.phone_core(e164 or (ph.get("wa") if ph else "") or "")
+        last_at = max((o.get("updated_at") or o.get("order_id") or "") for o in group)
+        text = _review_message(name, facebook_url, coupon_usd)
+        card = {
+            "key": key,
+            "name": name,
+            "phone": e164,
+            "n_orders": len(group),
+            "last_at": last_at,
+            "wa_review_text": text,
+        }
+        if core:
+            wa970, wa972 = "970" + core, "972" + core
+            enc = _urlquote(text)
+            card["wa_url_970"] = f"https://wa.me/{wa970}?text={enc}"
+            card["wa_url_972"] = f"https://wa.me/{wa972}?text={enc}"
+        else:                             # no usable number — copy-only card
+            card["wa_url_970"] = card["wa_url_972"] = None
+        cards.append(card)
+
+    cards.sort(key=lambda c: c["last_at"], reverse=True)   # most-recent first
+    return cards
+
+
+def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
+          asked=None, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
     """Group active orders by person and split into ready / waiting cards."""
     recv, sent, exc, meta, pkgmeta = _tally(pdb)
 
@@ -269,19 +336,27 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True):
     ready.sort(key=lambda c: (1 if (c["totals"]["usd"] is None or c["totals"]["unpriced"]) else 0,
                               -(c["totals"]["usd"] or 0)))
     waiting.sort(key=lambda c: (c["n_missing"], -c["n_received"]))
+    reviews = _review_cards(orders, asked, facebook_url, coupon_usd)
     return {
         "rate": rate,
-        "counts": {"ready": len(ready), "waiting": len(waiting)},
+        "counts": {"ready": len(ready), "waiting": len(waiting),
+                   "reviews": len(reviews)},
         "ready": ready,
         "waiting": waiting,
+        "reviews": reviews,
     }
 
 
 if __name__ == "__main__":
     import purchases
-    rep = build(store.load().get("orders", []), purchases.load())
+    rep = build(store.load().get("orders", []), purchases.load(),
+                facebook_url="https://facebook.com/otlobly")
     for bucket in ("ready", "waiting"):
         print(f"\n===== {bucket.upper()} ({rep['counts'][bucket]}) =====")
         for c in rep[bucket]:
             print(f"  {c['name'] or c['key']}: {c['n_received']}/{c['n_items']} received,"
                   f" {c['n_missing']} missing, total {c['totals']['usd']}$")
+    print(f"\n===== REVIEWS ({rep['counts']['reviews']}) =====")
+    for c in rep["reviews"]:
+        print(f"  {c['name'] or c['key']} · {c['n_orders']} order(s) · {c['phone']}")
+        print(f"    970: {c['wa_url_970']}")

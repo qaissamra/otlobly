@@ -118,7 +118,12 @@
   },
   "business": {
     "whatsapp": "",
-    "_note": "Otlobly WhatsApp number in international format, e.g. 970599... — used by the 'message us' button."
+    "facebook_reviews_url": "",
+    "_note": "Otlobly WhatsApp number in international format, e.g. 970599... — used by the 'message us' button. facebook_reviews_url = the public Facebook page link put in the Package-prep review-request WhatsApp message (leave blank to omit the link)."
+  },
+  "reviews": {
+    "coupon_usd": 5,
+    "_note": "$ discount on the NEXT order, promised in the Package-prep review-request message to customers who leave a good review. Wording only — applied manually by staff."
   },
   "pipeline": {
     "delivery_buffer_days": 8,
