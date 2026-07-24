@@ -2243,6 +2243,9 @@ function ppToggle(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) retu
 function ppCopy(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
   (navigator.clipboard?navigator.clipboard.writeText(c.wa_text):Promise.reject())
     .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
+function ppCopyReview(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
+  (navigator.clipboard?navigator.clipboard.writeText(c.wa_review_text):Promise.reject())
+    .then(()=>toast("Review message copied ✓")).catch(()=>toast("copy failed")); }
 function ppUsd(x){ return "$"+(+x).toFixed(2).replace(/\.00$/,""); }
 function ppItemRow(it){
   const img=it.image?`<img src="${poEsc(it.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border:1px solid var(--line);border-radius:7px;background:#fff;flex:none">`
@@ -2309,8 +2312,15 @@ function ppPkgRow(pkg){
 }
 function ppCard(c,bucket,i){
   const open=PP_OPEN.has(c.key), t=c.totals||{}, money=t.usd!=null;
-  const wa=c.wa_url?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب برسالة جاهزة — الحالة + المبلغ">📱 واتساب</a>`
-    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم هاتف — انسخ الرسالة 📋">☎ بلا رقم</span>`;
+  // Primary action: ask for a review on +972 / +970 (same number, either code).
+  const rev=c.wa_review_970
+    ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +972">📱 972</a>
+      <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +970">📱 970</a>
+      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`
+    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم هاتف — انسخ الرسالة 📋">☎ بلا رقم</span>
+      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`;
+  // Secondary: the order-status + amount update message (the old one).
+  const statusBtn=c.wa_url?`<a class="po-btn" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة حالة الطلب + المبلغ (تحديث للعميل)">📦 حالة</a>`:"";
   const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
   const flds=[`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`];
   if(money){
@@ -2328,8 +2338,8 @@ function ppCard(c,bucket,i){
       <span class="muted" style="font-size:12px">${c.orders.length>1?`${c.orders.length} orders · `:""}${poEsc(c.phone||"")}</span>
       ${state}
       <span class="spacer"></span>
-      ${wa}
-      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopy('${bucket}',${i})" title="نسخ الرسالة">📋</button>
+      ${rev}
+      ${statusBtn}
     </div>
     <div class="po-meta">${flds.join("")}</div>
   </div>`;

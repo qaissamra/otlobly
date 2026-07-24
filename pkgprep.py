@@ -162,20 +162,38 @@ def _ready_message(name, totals, include_money):
     return "\n".join(lines)
 
 
-def _partial_message(name, received_items):
-    name = name or "عميلنا العزيز"
-    lines = [f"مرحباً {name} 👋",
-             "📦 وصل جزء من طلبك إلى مكتب اطلبلي:"]
-    for it in received_items[:6]:
+def _fmt_items(items, qty_field):
+    """Bulleted product list (title, ×qty when >1), capped at 6 + a '+N more'."""
+    out = []
+    for it in items[:6]:
         t = (it.get("title") or it.get("asin") or "منتج").strip()
         if len(t) > 60:
             t = t[:57] + "…"
-        q = it.get("received_qty") or 0
-        lines.append(f"• {t}" + (f" ×{q}" if q > 1 else ""))
-    extra = len(received_items) - 6
+        q = it.get(qty_field) or 0
+        out.append(f"• {t}" + (f" ×{q}" if q > 1 else ""))
+    extra = len(items) - 6
     if extra > 0:
-        lines.append(f"• و{extra} قطع أخرى…")
-    lines.append("⏳ باقي القطع في طريقها إلينا — فور اكتمالها نجهز طردك كاملاً ونخبرك.")
+        out.append(f"• و{extra} قطع أخرى…")
+    return out
+
+
+def _waiting_message(name, sent_items, received_items, coming_items):
+    """Status update for a customer still mid-fulfilment: what already shipped to
+    them, what's in our office ready, and what's still on the way. Deliberately
+    NO amounts — we only quote the total once the whole order is ready
+    (_ready_message), so a partial order never triggers a premature price."""
+    name = name or "عميلنا العزيز"
+    lines = [f"مرحباً {name} 👋"]
+    if sent_items:
+        lines.append("✈️ انبعتلك:")
+        lines += _fmt_items(sent_items, "sent_qty")
+    if received_items:
+        lines.append("✅ جاهز عنّا بمكتب اطلبلي:")
+        lines += _fmt_items(received_items, "received_qty")
+    if coming_items:
+        lines.append("⏳ لسا بالطريق إلنا:")
+        lines += _fmt_items(coming_items, "missing_qty")
+    lines.append("فور ما تكتمل باقي القطع بنجهّز طردك ونبلّغك 🙏")
     lines.append(f"شكراً لصبرك — {BRAND} 🙏")
     return "\n".join(lines)
 
@@ -199,46 +217,38 @@ def _review_message(name, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
     return "\n".join(lines)
 
 
-def _review_cards(orders, asked=None, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
-    """One card per collected customer (deduped, already-asked hidden), each with
-    +970 and +972 WhatsApp links carrying the prefilled review message."""
-    asked = asked or set()
-    groups = {}
-    for o in orders or []:
-        if o.get("status") != COLLECTED_STATUS:
-            continue
-        groups.setdefault(_person_key(o), []).append(o)
+def _review_links(ph, text):
+    """(url_970, url_972) wa.me links for `text`, both on the same 9-digit core so
+    a Palestinian number is reachable on either country code. (None, None) if no
+    usable phone — the caller falls back to a copy-only button."""
+    e164 = ph.get("e164") if ph else None
+    core = normalize.phone_core(e164 or (ph.get("wa") if ph else "") or "")
+    if not core:
+        return None, None
+    enc = _urlquote(text)
+    return (f"https://wa.me/970{core}?text={enc}",
+            f"https://wa.me/972{core}?text={enc}")
 
-    cards = []
-    for key, group in groups.items():
-        if key in asked:
-            continue                      # staff already messaged them
-        first = group[0]
-        name = (first.get("customer", {}).get("name") or "").strip()
-        ph = store.primary_phone(first)
-        e164 = ph.get("e164") if ph else None
-        core = normalize.phone_core(e164 or (ph.get("wa") if ph else "") or "")
-        last_at = max((o.get("updated_at") or o.get("order_id") or "") for o in group)
-        text = _review_message(name, facebook_url, coupon_usd)
-        card = {
-            "key": key,
-            "name": name,
-            "phone": e164,
-            "n_orders": len(group),
-            "last_at": last_at,
-            "wa_review_text": text,
-        }
-        if core:
-            wa970, wa972 = "970" + core, "972" + core
-            enc = _urlquote(text)
-            card["wa_url_970"] = f"https://wa.me/{wa970}?text={enc}"
-            card["wa_url_972"] = f"https://wa.me/{wa972}?text={enc}"
-        else:                             # no usable number — copy-only card
-            card["wa_url_970"] = card["wa_url_972"] = None
-        cards.append(card)
 
-    cards.sort(key=lambda c: c["last_at"], reverse=True)   # most-recent first
-    return cards
+def _make_review_card(key, group, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
+    """One testimonial card for a person: name + phone + the +970/+972 WhatsApp
+    links carrying the prefilled review message. Copy-only when no phone."""
+    first = group[0]
+    name = (first.get("customer", {}).get("name") or "").strip()
+    ph = store.primary_phone(first)
+    last_at = max((o.get("updated_at") or o.get("order_id") or "") for o in group)
+    text = _review_message(name, facebook_url, coupon_usd)
+    url_970, url_972 = _review_links(ph, text)
+    return {
+        "key": key,
+        "name": name,
+        "phone": ph.get("e164") if ph else None,
+        "n_orders": len(group),
+        "last_at": last_at,
+        "wa_review_text": text,
+        "wa_url_970": url_970,
+        "wa_url_972": url_972,
+    }
 
 
 def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
@@ -253,21 +263,27 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         groups.setdefault(_person_key(o), []).append(o)
 
     ready, waiting = [], []
+    dispatched = {}                       # key -> group: every live piece already sent
     for key, group in groups.items():
         first = group[0]
         card_orders = []
-        n_items = n_received = n_missing = 0
+        n_items = n_received = n_sent = n_missing = 0
         usd = dep = 0.0
         unpriced = False
-        received_items = []
+        received_items, sent_items, coming_items = [], [], []
         for o in sorted(group, key=lambda x: x.get("order_id") or ""):
             items = _annotate_items(o, recv, sent, exc, meta)
             for it in items:
                 n_items += it["qty"]
                 n_received += it["received_qty"]
+                n_sent += it["sent_qty"]
                 n_missing += it["missing_qty"]
                 if it["received_qty"]:
                     received_items.append(it)
+                if it["sent_qty"]:
+                    sent_items.append(it)
+                if it["missing_qty"]:
+                    coming_items.append(it)
             amt = o.get("amount_to_collect_usd")
             if amt is None:
                 unpriced = True
@@ -281,8 +297,13 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
                 "deposit_usd": round(float(o.get("deposit_usd") or 0), 2),
                 "items": items,
             })
-        if n_received == 0:
-            continue                  # nothing of theirs on the prep table yet
+        if n_received == 0 and n_sent == 0:
+            continue                  # nothing arrived and nothing sent — off-radar
+        if n_received == 0 and n_missing == 0:
+            dispatched[key] = group   # every live piece already went out → testimonial
+            continue
+        # else: still has pieces to pack (received) OR is partially sent with more
+        # on the way (n_received==0, n_sent>0, n_missing>0) — keep on the board.
 
         # The PO packages holding this customer's pieces — each carries the
         # owner-set otlobly_status the card lets you change (recieved/sent/…).
@@ -310,8 +331,13 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         ph = store.primary_phone(first)
         is_ready = n_missing == 0
         wa_text = (_ready_message(name, totals, include_money) if is_ready
-                   else _partial_message(name, received_items))
+                   else _waiting_message(name, sent_items, received_items, coming_items))
         wa = ph.get("wa") if ph else None
+        # Every prep card also carries the review message + 970/972 links, so the
+        # owner can ask for a testimonial straight from any customer card — not
+        # only from the 📸 fully-dispatched section.
+        review_text = _review_message(name, facebook_url, coupon_usd)
+        rev_970, rev_972 = _review_links(ph, review_text)
         card = {
             "key": key,
             "name": name,
@@ -322,9 +348,13 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
             "totals": totals,
             "n_items": n_items,
             "n_received": n_received,
+            "n_sent": n_sent,
             "n_missing": n_missing,
             "wa_text": wa_text,
             "wa_url": f"https://wa.me/{wa}?text={_urlquote(wa_text)}" if wa else None,
+            "wa_review_text": review_text,
+            "wa_review_970": rev_970,
+            "wa_review_972": rev_972,
         }
         if not include_money:         # fulfillment: page loads, money stays dark
             card["totals"] = {k: None for k in totals}
@@ -336,7 +366,19 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
     ready.sort(key=lambda c: (1 if (c["totals"]["usd"] is None or c["totals"]["unpriced"]) else 0,
                               -(c["totals"]["usd"] or 0)))
     waiting.sort(key=lambda c: (c["n_missing"], -c["n_received"]))
-    reviews = _review_cards(orders, asked, facebook_url, coupon_usd)
+
+    # Testimonial list: customers whose order has fully reached them — either an
+    # active order with every piece dispatched (the owner's package-status
+    # workflow) OR an order marked COLLECTED. One card per person, deduped, minus
+    # anyone already asked (review_asked).
+    asked = asked or set()
+    review_groups = {k: list(g) for k, g in dispatched.items()}
+    for o in orders or []:
+        if o.get("status") == COLLECTED_STATUS:
+            review_groups.setdefault(_person_key(o), []).append(o)
+    reviews = [_make_review_card(k, g, facebook_url, coupon_usd)
+               for k, g in review_groups.items() if k not in asked]
+    reviews.sort(key=lambda c: c["last_at"], reverse=True)   # most-recent first
     return {
         "rate": rate,
         "counts": {"ready": len(ready), "waiting": len(waiting),
