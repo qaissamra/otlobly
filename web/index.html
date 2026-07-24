@@ -6010,8 +6010,16 @@ async function neRequestId(id){
   let r; try{ r=await post("/api/order/request_id_link",{id}); }catch(e){ r={}; }
   if(!r||!r.ok){ toast((r&&r.error)||"Couldn't build the ID-request link"); return; }
   try{ await navigator.clipboard.writeText(r.url); }catch(e){}
-  if(r.wa_link) window.open(r.wa_link,"_blank");
-  toast(r.wa_link?T("فتحنا واتساب — رابط طلب الهوية منسوخ · WhatsApp opened, ID-request link copied"):T("رابط طلب الهوية منسوخ · ID-request link copied"));
+  // just a copyable link (no WhatsApp) — staff copy it and send it however they like;
+  // the customer opens it, enters their ID number + optionally uploads a photo
+  bulkOpen("🪪 "+T("رابط طلب الهوية · ID-request link"));
+  $("bulkBody").innerHTML=`<div style="font-size:12.5px;margin:8px 0">
+    <p class="muted2" style="margin:0 0 8px">${T("انسخ الرابط وأرسله للعميل — يفتحه ويُدخل رقم هويته ويرفع صورتها · copy this link and send it to the customer — they open it, enter their ID number and upload a photo")}</p>
+    <input id="reqIdUrl" readonly value="${poEsc(r.url)}" style="width:100%;font-size:12.5px;direction:ltr" onclick="this.select()"></div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>
+    <button class="accent" onclick="navigator.clipboard.writeText($('reqIdUrl').value).then(()=>toast(T('نُسخ ✓ · copied ✓')),()=>{$('reqIdUrl').select();document.execCommand('copy');toast(T('نُسخ ✓ · copied ✓'))})">📋 ${T("نسخ الرابط · Copy link")}</button></div>`;
+  toast(T("رابط طلب الهوية منسوخ · ID-request link copied"));
 }
 // Capture the internal Amazon (SERP) price onto a To-order item — the card's 💲 button.
 // Works for any product however the order was added; stored staff-only, never sent to the customer.
