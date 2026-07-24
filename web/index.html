@@ -3247,6 +3247,7 @@ const LXT_COLS={
     {key:"deadline",  label:"الموعد · deadline",    w:98},
     {key:"docs",      label:"الوثائق · docs",        w:74},
     {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
+    {key:"idnum",     label:"🪪 الهوية · ID number",  w:110, sortable:true},
     {key:"status",    label:"الحالة · status",      w:134},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
@@ -3271,6 +3272,7 @@ const LXT_COLS={
     {key:"collect",   label:"💵 يؤخذ · 💵 collect",  w:96,  sortable:true},
     {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
     {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
+    {key:"idnum",     label:"🪪 الهوية · ID number",  w:110, sortable:true},
     {key:"status",    label:"استثناء · exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
@@ -5773,7 +5775,7 @@ function neRowHtml(o,kind){
     const extra=items.length>MAX?`<span class="more">+${items.length-MAX}</span>`:'';
     prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
   }
-  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.source==="website"&&!o.payment_plan?`<span class="pill" style="background:#f4f1ea;color:#8a7f6d" title="ترك الموقع قبل ما يختار الباقة — تواصل معه · left the site before choosing a plan">⏳ بدون باقة</span>`:''}${o.payment_plan==="prepaid"?`<span class="pill" style="background:#dcfce7;color:#15803d" title="يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front">💰 مسبق 0%</span>`:''}${o.payment_plan==="zero_risk"?`<span class="pill" style="background:#fef3c7;color:#92400e" title="عربون + الباقي عند الاستلام · deposit + cash on delivery">🛡️ زيرو ريسك</span>`:''}${o.customer_confirmed_at?`<span class="pill" style="background:#dcfce7;color:#15803d" title="أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link">✓ أكّد العميل</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${o.has_id?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="الهوية على الملف · ID on file">🪪 هوية</span>`:''}`;
+  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.source==="website"&&!o.payment_plan?`<span class="pill" style="background:#f4f1ea;color:#8a7f6d" title="ترك الموقع قبل ما يختار الباقة — تواصل معه · left the site before choosing a plan">⏳ بدون باقة</span>`:''}${o.payment_plan==="prepaid"?`<span class="pill" style="background:#dcfce7;color:#15803d" title="يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front">💰 مسبق 0%</span>`:''}${o.payment_plan==="zero_risk"?`<span class="pill" style="background:#fef3c7;color:#92400e" title="عربون + الباقي عند الاستلام · deposit + cash on delivery">🛡️ زيرو ريسك</span>`:''}${o.customer_confirmed_at?`<span class="pill" style="background:#dcfce7;color:#15803d" title="أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link">✓ أكّد العميل</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${(o.has_id||o.has_id_number)?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="${o.id_number?('رقم الهوية · ID '+poEsc(o.id_number)):'الهوية على الملف · ID on file'}">🪪 ${o.id_number?poEsc(o.id_number):'هوية'}</span>`:''}`;
   const statusCell = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
     : statusPill(o.status);   // shared per-status colour (same map as the card)
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
@@ -5783,13 +5785,15 @@ function neRowHtml(o,kind){
   if(kind==="pending") acts=`${o.amount_to_collect_usd==null?`<button class="po-btn" title="سعّر الطلب (إجمالي أمازون → السعر النهائي) · price the order" onclick="event.stopPropagation();neQuotePrice('${poEsc(oid)}')">💲</button>`:''}
     <button class="po-btn" title="أرسل عرض السعر برابط على واتساب · send the quotation link on WhatsApp" onclick="event.stopPropagation();neQuoteLink('${poEsc(oid)}')">🔗</button>
     <button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
-    <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>`;
+    <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>
+    <span onclick="event.stopPropagation()">${popMenu([[`🪪 ${T("طلب الهوية · Request ID")}`, `neRequestId('${poEsc(oid)}')`]])}</span>`;
   else if(kind==="incart") acts=`<button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="event.stopPropagation();neUncart('${poEsc(oid)}')">↩</button>`;
   else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
     ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا · remove permanently" onclick="event.stopPropagation();nePurge('${poEsc(o.trash_id)}','${nm}')">✕</button>`:''}`;
   // detail: customer info as a labelled meta strip (consistent with the order card), then the products
   const fld=(lbl,val,style='')=>`<span class="field"><span class="lbl">${lbl}</span><span class="v"${style?` style="${style}"`:''}>${val}</span></span>`;
   const bits=[fld('Phone',`<span class="mono">${poEsc((o.phones&&o.phones.length?o.phones.join(' · '):o.phone)||'—')}</span>`)];
+  if(o.id_number) bits.push(fld('🪪 هوية · ID',`<span class="mono">${poEsc(o.id_number)}</span>`,'font-weight:700'));
   if(o.city) bits.push(fld('City',poEsc(o.city)));
   if(o.address) bits.push(fld('Address',poEsc(o.address)));
   if(o.payment_plan) bits.push(fld('الخطة · Plan', o.payment_plan==="prepaid"?"💰 دفع مسبق — 0% عمولة":"🛡️ زيرو ريسك — عربون + الباقي عند الاستلام"));
@@ -5960,6 +5964,14 @@ async function neQuoteLink(id){
   try{ await navigator.clipboard.writeText(r.url); }catch(e){}
   if(r.wa_link) window.open(r.wa_link,"_blank");
   toast(r.wa_link?"فتحنا واتساب — الرابط منسوخ أيضاً · WhatsApp opened, link copied":"الرابط منسوخ · quotation link copied");
+}
+// 🪪 Request ID — a per-customer link where they type their ID number + optional photo
+async function neRequestId(id){
+  let r; try{ r=await post("/api/order/request_id_link",{id}); }catch(e){ r={}; }
+  if(!r||!r.ok){ toast((r&&r.error)||"Couldn't build the ID-request link"); return; }
+  try{ await navigator.clipboard.writeText(r.url); }catch(e){}
+  if(r.wa_link) window.open(r.wa_link,"_blank");
+  toast(r.wa_link?T("فتحنا واتساب — رابط طلب الهوية منسوخ · WhatsApp opened, ID-request link copied"):T("رابط طلب الهوية منسوخ · ID-request link copied"));
 }
 // Capture the internal Amazon (SERP) price onto a To-order item — the card's 💲 button.
 // Works for any product however the order was added; stored staff-only, never sent to the customer.
@@ -7255,6 +7267,13 @@ function poOrderMap(){
   if(!PO_OMAP||PO_OMAP_N!==os.length){ PO_OMAP={}; os.forEach(o=>PO_OMAP[o.order_id]=o); PO_OMAP_N=os.length; }
   return PO_OMAP;
 }
+// 🪪 the customer's ID number, resolved through the matched customer order
+function idNumCell(n){ return n?`<span class="mono" title="رقم هوية العميل · customer ID number" style="font-size:11px">${poEsc(n)}</span>`:`<span class="muted2" style="opacity:.4">—</span>`; }
+function pkgIdNumber(pk){
+  const m=poOrderMap();
+  for(const it of (pk.items||[])){ const co=m[(it.customer_order_id||"").trim()]; if(co&&co.id_number) return co.id_number; }
+  return "";
+}
 function poSearchMatch(p,q){
   if([p.po_id,p.amazon_order_number,p.ship_to,p.profile_box].some(v=>v&&String(v).toLowerCase().includes(q))) return true;
   return (p.packages||[]).some(pk=>String(pk.tracking_number||"").toLowerCase().includes(q)
@@ -7361,6 +7380,7 @@ function poPkFlatRow(p,pk,pi){
     deadline: pkgDeadlinePill(p,pk,pi),
     docs: pkgDocsPill(p,pk,pi),
     gerizim: `${gzBadge(gaash)}${pkgGerizimPill(pk)}`,
+    idnum: idNumCell(pkgIdNumber(pk)),
     status: pkgCuSelect(p,pk,pi),
     menu,
     ...poCfCells(p),
@@ -7424,6 +7444,7 @@ function poItFlatRow(p,pk,pi,it,ii){
     collect,
     pdue: poPkgDueCell(p,pk,pi),
     qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
+    idnum: idNumCell((co||{}).id_number),
     status: exc,
     menu:`<button class="iconbtn" style="flex:0 0 auto" title="تعديل المنتج · edit product" onclick="itemEditOpen('${p.po_id}',${pi},${ii})">✏️</button>`,
   };
@@ -8954,6 +8975,8 @@ function showProfile(id){
     <div class="kv"><span>ID document</span><b>${c.id_image
         ? `<a href="/api/customer_image?file=${encodeURIComponent(c.id_image)}" target="_blank" title="open full size"><img src="/api/customer_image?file=${encodeURIComponent(c.id_image)}" style="height:46px;border-radius:6px;border:1px solid var(--line);vertical-align:middle"></a>`
         : `<span style="color:var(--muted)">none</span>`}</b></div>
+    <div class="kv"><span>🪪 ID number</span><b>${c.id_number?`<span class="mono">${poEsc(c.id_number)}</span>`:'<span style="color:var(--muted)">none</span>'}
+        ${CAN_EDIT?`<button class="minibtn" style="padding:1px 6px;margin-inline-start:6px" onclick="custIdNumberEdit('${c.customer_id}')">✎</button>`:''}</b></div>
     <h2 style="margin-top:12px">Order history</h2>${orders}
     <div style="margin-top:10px;display:flex;gap:8px">
       <button class="minibtn" onclick="editCustomer('${c.customer_id}')">✎ Edit</button>
@@ -8991,7 +9014,7 @@ function renderIdGallery(){
       :`<div class="noid" onclick="custIdUpload('${c.customer_id}')" title="upload an ID for this customer">＋ Upload ID</div>`;
     return `<div class="id-card">${top}
       <div class="nm" title="${poEsc(c.name)}">${poEsc(c.name)||'—'}${c.in_to_order?` <span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;white-space:nowrap" title="لديه طلب قيد التجهيز · has a To-order order">💡 للطلب</span>`:''}</div>
-      <div class="ph">${poEsc(c.whatsapp)||''}</div></div>`;
+      <div class="ph">${poEsc(c.whatsapp)||''}${c.id_number?` · 🪪 ${poEsc(c.id_number)}`:''}</div></div>`;
   }).join("");
   $("custGallery").innerHTML=`<div class="idsum">🪪 <b>${have}</b> of <b>${total}</b> customers have an ID on file.
       <a class="seeall" onclick="ID_MISS=!ID_MISS;renderIdGallery()">${ID_MISS?'Show all':`Show only missing (${total-have})`}</a>
@@ -9005,6 +9028,14 @@ function custIdUpload(id){ const inp=$("custIdInput"); inp.value=""; inp.onchang
     if(r.ok){ toast("ID uploaded ✓"); await loadCustomers(); showProfile(id); }
     else toast("Upload failed: "+(r.error||"")); };
   rd.readAsDataURL(f); }; inp.click(); }
+async function custIdNumberEdit(id){
+  const c=CUST.customers.find(x=>x.customer_id===id)||{};
+  const v=prompt(T("رقم هوية العميل · customer ID number"), c.id_number||"");
+  if(v===null) return;
+  const r=await post("/api/customer/id_number",{customer_id:id,id_number:v.trim()});
+  if(r&&r.ok){ toast(T("حُفظ · saved")); await loadCustomers(); showProfile(id); }
+  else toast((r&&r.error)||"failed");
+}
 function toggleCustForm(){ $("custFormPanel").classList.toggle("hidden"); }
 async function addCustomer(b){
   b.disabled=true;

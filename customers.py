@@ -48,7 +48,7 @@ def _key(whatsapp, name):
 
 def new_customer(db, *, name, whatsapp="", email="", address="", city="",
                  vip=False, notes="", payment_method="Cash on delivery",
-                 id_image=""):
+                 id_image="", id_number=""):
     db["seq"] = db.get("seq", 0) + 1
     ph = normalize.normalize_phone(whatsapp) if whatsapp else None
     return {
@@ -60,6 +60,7 @@ def new_customer(db, *, name, whatsapp="", email="", address="", city="",
         "address": (address or "").strip(),
         "city": (city or "").strip(),
         "id_image": id_image,                 # filename under customer_ids/
+        "id_number": (id_number or "").strip(),  # national ID / document number
         "vip": bool(vip),
         "notes": (notes or "").strip(),
         "payment_method": payment_method or "Cash on delivery",
@@ -74,9 +75,11 @@ def upsert(db, cust):
         if ex.get("match_key") and ex["match_key"] == cust["match_key"]:
             cust["customer_id"] = ex["customer_id"]
             cust["created_at"] = ex.get("created_at", cust["created_at"])
-            # keep an uploaded ID if the new record doesn't carry one
+            # keep an uploaded ID image / number if the new record doesn't carry one
             if ex.get("id_image") and not cust.get("id_image"):
                 cust["id_image"] = ex["id_image"]
+            if ex.get("id_number") and not cust.get("id_number"):
+                cust["id_number"] = ex["id_number"]
             cust["updated_at"] = now_iso()
             db["customers"][i] = cust
             return cust, "updated"

@@ -1014,10 +1014,61 @@ def _customer_for(gwd):
     return ""
 
 
+def _id_number_for(gwd):
+    """The package customer's CRM ID number (submitted via the Request-ID link),
+    or "". Resolves the customer by phone — the Purchases order link first, then a
+    'phone' field on the Leluxe mirror row — and falls back to a name match."""
+    g = (gwd or "").strip().upper()
+    try:
+        import normalize
+        by_phone, by_name = {}, {}
+        for c in db.list_customers():
+            num = str(c.get("id_number") or "").strip()
+            if not num:
+                continue
+            core = normalize.phone_core(c.get("whatsapp") or "")
+            if core:
+                by_phone.setdefault(core, num)
+            nm = _fold(c.get("name"))
+            if nm:
+                by_name.setdefault(nm, num)
+        if not by_phone and not by_name:
+            return ""
+        try:                                  # 1) Purchases: gwd → order → phone
+            import purchases
+            for p in (purchases.load() or {}).get("purchase_orders") or []:
+                for pk in (p.get("packages") or []):
+                    if str(pk.get("tracking_number") or "").strip().upper() != g:
+                        continue
+                    for it in (pk.get("items") or []):
+                        oid = it.get("customer_order_id")
+                        o = db.get_order(oid) if oid else None
+                        for ph in ((o or {}).get("customer") or {}).get("phones") or []:
+                            core = normalize.phone_core(ph.get("e164") or "")
+                            if core in by_phone:
+                                return by_phone[core]
+        except Exception:  # noqa
+            pass
+        row = _leluxe_row_for(g)              # 2) Leluxe: a phone field on the row
+        if row:
+            for k, v in ((row.get("data") or {}).get("fields") or {}).items():
+                if "phone" in str(k).lower():
+                    core = normalize.phone_core(str(v or ""))
+                    if core and core in by_phone:
+                        return by_phone[core]
+        nm = _fold(_customer_for(g))          # 3) name fallback
+        if nm in by_name:
+            return by_name[nm]
+    except Exception:  # noqa
+        pass
+    return ""
+
+
 # the fixed personalization tokens (name → friendly label for the UI picker)
 TPL_CORE_TOKENS = [
     ("gwd", "رقم التتبع · tracking number"),
     ("customer", "اسم العميل · customer name"),
+    ("id_number", "رقم هوية العميل · customer ID number"),
     ("upload_link", "رابط رفع المستندات · document-upload link"),
     ("id_name", "اسم مستند الهوية · attached ID name"),
     ("days_waiting", "أيام الانتظار · days waiting"),
@@ -1073,6 +1124,8 @@ def _fill(tpl, gwd, thread=None, step=None):
             .replace("{id_name}", id_name)
             .replace("{days_waiting}", days)
             .replace("{step}", str(step or (thread or {}).get("step") or "")))
+    if "{id_number}" in text:                   # the customer's submitted ID number
+        text = text.replace("{id_number}", _id_number_for(gwd))
     if "{" not in text:                        # no board-column tokens left
         return text
     cf = {_fold(k): v for k, v in _cf_for_gwd(gwd).items()}

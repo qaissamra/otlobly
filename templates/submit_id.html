@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otlobly — رقم الهوية / Your ID</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#111111">
+<style>
+  :root{--bg:#f7f5ef;--ink:#15140f;--muted:#7a766c;--line:#e8e4d8;--accent:#ff5a1f;--card:#fff;--good:#16a34a;--bad:#dc2626}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .pagewrap{display:flex;align-items:flex-start;justify-content:center;padding:28px 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;
+    width:440px;max-width:100%;box-shadow:0 8px 30px rgba(30,25,10,.07)}
+  h2.hd{font-size:19px;margin:0 0 2px;font-weight:800}
+  .sub{color:var(--muted);font-size:13px;margin:6px 0 14px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:14px 0 4px}
+  input[type=text]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+  input#f_num{direction:ltr;text-align:left;letter-spacing:1px;font-size:17px}
+  .drop{margin-top:6px;border:1.5px dashed var(--line);border-radius:12px;background:#fbfaf6;
+    padding:16px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer}
+  .drop.has{border-color:var(--good);color:var(--ink)}
+  .thumb{display:block;max-width:100%;max-height:230px;margin:10px auto 0;border-radius:10px;border:1px solid var(--line)}
+  .opt{font-size:11px;color:var(--muted);font-weight:600}
+  button{width:100%;margin-top:18px;padding:12px;border:none;border-radius:10px;background:var(--accent);
+    color:#fff;font:inherit;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6}
+  .err{background:#fef2f2;color:var(--bad);border:1px solid #f3c0c0;border-radius:9px;padding:9px 12px;font-size:13px;margin-top:12px}
+  .ok{margin-top:6px;text-align:center}.ok h3{color:var(--good);font-size:18px;margin:8px 0 6px}
+  .priv{color:var(--muted);font-size:11.5px;margin-top:12px;text-align:center;line-height:1.5}
+  body[dir=rtl]{direction:rtl}
+</style>
+{% include "_nav.html" %}
+<div class="pagewrap">
+<div class="card" id="card">
+  <h2 class="hd" id="hd"></h2>
+  <p class="sub" id="intro"></p>
+  <div id="form">
+    <label id="lbl_num"></label>
+    <input id="f_num" type="text" inputmode="numeric" autocomplete="off" placeholder="—">
+    <label id="lbl_img"></label>
+    <div class="drop" id="drop" onclick="document.getElementById('f_file').click()">
+      <span id="dropTxt"></span>
+      <img id="thumb" class="thumb" style="display:none" alt="">
+    </div>
+    <input id="f_file" type="file" accept="image/*" style="display:none" onchange="pickFile(this)">
+    <button id="submitBtn" onclick="submitId(this)"></button>
+    <p class="priv" id="priv"></p>
+  </div>
+  <div id="out"></div>
+</div>
+</div><!-- /.pagewrap -->
+<script>
+const $=id=>document.getElementById(id);
+const TOKEN=location.pathname.split("/").pop();
+let LANG="ar", IMG_B64="", IMG_NAME="";
+const T={
+  ar:{hd:"رقم الهوية",intro:"لإتمام طلبك، فضلاً أدخل رقم هويتك. صورة الهوية اختيارية لكنها تسرّع التخليص.",
+      num:"رقم الهوية",img:"صورة الهوية (اختياري)",drop:"اضغط لرفع صورة الهوية 📷",change:"اضغط لتغيير الصورة",
+      submit:"إرسال",need:"رقم الهوية مطلوب.",expired:"انتهت صلاحية هذا الرابط.",err:"تعذّر الإرسال",
+      ok:"تم الاستلام ✓",okmsg:"شكراً! تم ربط هويتك بطلبك.",big:"الصورة كبيرة جداً (الحد 15 ميغابايت).",
+      priv:"معلوماتك تُستخدم فقط لتخليص شحنتك ولا تُنشر."},
+  en:{hd:"Your ID",intro:"To complete your order, please enter your ID number. An ID photo is optional but speeds up clearance.",
+      num:"ID number",img:"ID photo (optional)",drop:"Tap to upload your ID photo 📷",change:"Tap to change the photo",
+      submit:"Submit",need:"An ID number is required.",expired:"This link has expired.",err:"Couldn’t submit",
+      ok:"Received ✓",okmsg:"Thank you! Your ID is now linked to your order.",big:"That image is too large (15 MB max).",
+      priv:"Your details are used only to clear your shipment and are never shared."}
+};
+function t(k){return (T[LANG]||T.en)[k];}
+function setLang(l){LANG=l; document.body.setAttribute("dir", l==="ar"?"rtl":"ltr");
+  if($("l_ar")) $("l_ar").classList.toggle("on",l==="ar");
+  if($("l_en")) $("l_en").classList.toggle("on",l==="en"); render();}
+function render(){
+  $("hd").textContent=t("hd"); $("intro").textContent=t("intro");
+  $("lbl_num").textContent=t("num"); $("lbl_img").innerHTML=t("img");
+  $("dropTxt").textContent=IMG_B64?t("change"):t("drop");
+  $("submitBtn").textContent=t("submit"); $("priv").textContent=t("priv");
+}
+async function load(){
+  setLang("ar");
+  const r=await fetch("/api/idreq/"+TOKEN);
+  if(!r.ok){ $("form").style.display="none"; $("out").innerHTML=`<div class="err">${t("expired")}</div>`; return; }
+  const d=await r.json(); render();
+}
+function pickFile(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  if(f.size>15*1024*1024){ $("out").innerHTML=`<div class="err">${t("big")}</div>`; inp.value=""; return; }
+  $("out").innerHTML="";
+  const fr=new FileReader();
+  fr.onload=()=>{ IMG_B64=fr.result; IMG_NAME=f.name;
+    $("thumb").src=fr.result; $("thumb").style.display="block";
+    $("drop").classList.add("has"); render(); };
+  fr.readAsDataURL(f);
+}
+async function submitId(btn){
+  const num=$("f_num").value.trim();
+  if(!num){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }
+  btn.disabled=true;
+  const r=await fetch("/api/id/submit",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({token:TOKEN,id_number:num,data_base64:IMG_B64||"",filename:IMG_NAME||"id.png"})});
+  let d={}; try{ d=await r.json(); }catch(e){}
+  btn.disabled=false;
+  if(!r.ok||d.error){ $("out").innerHTML=`<div class="err">${d.error||t("err")}</div>`; return; }
+  $("form").style.display="none";
+  $("out").innerHTML=`<div class="ok"><h3>${t("ok")}</h3><p class="sub">${t("okmsg")}</p></div>`;
+}
+load();
+</script>

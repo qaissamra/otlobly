@@ -207,6 +207,34 @@ def _backfill_customers_from_orders():
         _ensure_customer(o, existing)
 
 
+def _crm_customer_for_order(o):
+    """The CRM customer record for an order (created if missing), matched by the
+    order's match_key. Used to hang the ID number/image on the right profile."""
+    _ensure_customer(o)
+    key = _cust_from_order(o).get("match_key")
+    if not key:
+        return None
+    return next((x for x in db.list_customers() if x.get("match_key") == key), None)
+
+
+def _attach_customer_ids(rows):
+    """Set id_number / has_id_number / has_id on order rows from the CRM, matched
+    by phone. The ID lives on the customer (submitted once, reused), so it shows on
+    every order + package for that person. Used by /api/report + /api/needorder."""
+    idmap = {}
+    for c in db.list_customers():
+        core = normalize.phone_core(c.get("whatsapp") or "")
+        if core:
+            idmap[core] = (c.get("id_number") or "", bool(c.get("id_image")))
+    for r in rows:
+        core = normalize.phone_core(r.get("phone") or "")
+        num, has_img = idmap.get(core, ("", False))
+        r["id_number"] = num
+        r["has_id_number"] = bool(num)
+        r["has_id"] = has_img              # existing meaning: has an ID image on file
+    return rows
+
+
 def orders_db():
     return {"orders": db.list_orders()}
 
@@ -417,7 +445,9 @@ def api_quota():
 @app.route("/api/report")
 @auth.require("view_orders")
 def api_report():
-    return jsonify(redact_report(report_mod.build(orders_db())))
+    rep = redact_report(report_mod.build(orders_db()))
+    _attach_customer_ids(rep.get("orders") or [])   # id_number → Purchases order-map
+    return jsonify(rep)
 
 
 @app.route("/api/brain")
@@ -581,13 +611,8 @@ def api_needorder():
                        "qty": it.get("qty") or 1} for it in (o.get("items") or [])][:6],
         })
     data["deleted"] = deleted
-    # read-only: flag which orders' customers already have an ID document on file
-    idset = {normalize.phone_core(c.get("whatsapp") or "")
-             for c in db.list_customers() if c.get("id_image")}
-    idset.discard("")
-    for r in data["orders"] + placed + cart:
-        core = normalize.phone_core(r.get("phone") or "")
-        r["has_id"] = bool(core and core in idset)
+    # attach the customer's ID (number + image flag) to every order row, by phone
+    _attach_customer_ids(data["orders"] + placed + cart)
     return jsonify(data)
 
 
@@ -2290,6 +2315,22 @@ def api_customer_image():
     return jsonify({"ok": True, "file": fn})
 
 
+@app.route("/api/customer/id_number", methods=["POST"])
+@auth.require("manage_customers")
+def api_customer_id_number():
+    """Staff: set/clear a customer's ID number (also settable by the customer via
+    the /id/<token> self-service link)."""
+    b = request.get_json(force=True, silent=True) or {}
+    c = db.get_customer((b.get("customer_id") or "").strip())
+    if not c:
+        return jsonify({"ok": False, "error": "customer not found"}), 404
+    c["id_number"] = (b.get("id_number") or "").strip()[:40]
+    db.upsert_customer(c)
+    activity.log("edited", "customer", c.get("customer_id", ""), c.get("name", ""),
+                 detail="set ID number", user=_user())
+    return jsonify({"ok": True})
+
+
 @app.route("/api/automatch")
 @auth.require("edit_order")
 def api_automatch():
@@ -3855,6 +3896,120 @@ def api_order_quote_link():
     activity.log("sent", "order", o["order_id"], _olabel(o),
                  detail="quotation link generated", user=_user())
     return jsonify({"ok": True, "url": url, "wa_link": wa})
+
+
+@app.route("/api/order/request_id_link", methods=["POST"])
+@auth.require("edit_order")
+def api_order_request_id_link():
+    """One click on a To-order row → a per-customer link to the /id/<token> page
+    where the customer types their ID number (+ optional photo). The token
+    remembers the order + customer so the ID lands on the right CRM profile and
+    auto-shows on all their orders/packages. Returns a copy URL + a wa.me link."""
+    b = request.get_json(force=True, silent=True) or {}
+    o = db.get_order((b.get("id") or "").strip())
+    if not o:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    cust = _crm_customer_for_order(o)
+    did = uuid.uuid4().hex[:10]
+    db.set_setting(f"idreq:{did}", {
+        "order_id": o["order_id"],
+        "customer_id": (cust or {}).get("customer_id"),
+        "match_key": (cust or {}).get("match_key"),
+        "created_at": db.now_iso(), "used": False,
+    })
+    url = _portal_base() + f"/id/{did}"
+    ph = store.primary_phone(o)
+    name = (o.get("customer") or {}).get("name") or ""
+    text = (f"مرحباً {name} 👋 لإتمام طلبك من اطلبلي، فضلاً أدخل رقم هويتك "
+            f"(وصورتها اختياري):\n{url}\n"
+            "Please enter your ID number (photo optional) to complete your order.")
+    wa = f"https://wa.me/{ph['wa']}?text={_urlquote(text)}" if ph and ph.get("wa") else None
+    db.audit(auth.actor(), "request_id_link", "order", o["order_id"], did)
+    activity.log("sent", "order", o["order_id"], _olabel(o),
+                 detail="ID-request link generated", user=_user())
+    return jsonify({"ok": True, "url": url, "wa_link": wa})
+
+
+@app.route("/id/<token>", methods=["GET"])
+def submit_id_page(token):
+    return render_template("submit_id.html")
+
+
+@app.route("/api/idreq/<token>", methods=["GET"])
+@limiter.limit("20 per minute")
+def api_idreq_get(token):
+    """Public: hydrate the /id/<token> page — prefill the customer's name/phone and
+    whether they already have an ID on file. 404 on a bad/used token."""
+    d = db.get_setting(f"idreq:{token}")
+    if not d or d.get("used"):
+        return jsonify({"error": "not found"}), 404
+    name = phone = ""
+    oo = db.get_order(d.get("order_id") or "")
+    if oo:
+        ph = store.primary_phone(oo)
+        name = (oo.get("customer") or {}).get("name") or ""
+        phone = (ph.get("e164") if ph else "") or ""
+    cust = db.get_customer(d.get("customer_id")) if d.get("customer_id") else None
+    return jsonify({"ok": True, "name": name, "phone": phone,
+                    "have_number": bool((cust or {}).get("id_number")),
+                    "have_image": bool((cust or {}).get("id_image"))})
+
+
+@app.route("/api/id/submit", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_id_submit():
+    """Public (token-gated, single-use): the customer submits an ID number
+    (required) + an optional image. Saved onto their CRM profile (reused across all
+    their orders); the order is stamped id_submitted_at. Image serving stays authed
+    (via /api/customer_image GET) — never echoed back here."""
+    import base64
+    b = request.get_json(force=True, silent=True) or {}
+    tok = (b.get("token") or "").strip()
+    d = db.get_setting(f"idreq:{tok}")
+    if not d or d.get("used"):
+        return jsonify({"error": "This link has expired."}), 404
+    id_number = (b.get("id_number") or "").strip()
+    if not id_number:
+        return jsonify({"error": "رقم الهوية مطلوب · An ID number is required."}), 400
+    cust = db.get_customer(d.get("customer_id")) if d.get("customer_id") else None
+    if not cust:
+        oo0 = db.get_order(d.get("order_id") or "")
+        cust = _crm_customer_for_order(oo0) if oo0 else None
+    if not cust:
+        return jsonify({"error": "This link has expired."}), 404
+    cust["id_number"] = id_number[:40]
+    data = (b.get("data_base64") or "")
+    if data.strip():                              # optional image
+        if data.strip().startswith("data:") and "," in data:
+            data = data.split(",", 1)[1]
+        raw = b""
+        try:
+            if len(data) <= 22 * 1024 * 1024:     # ~15 MB decoded
+                raw = base64.b64decode(data)
+        except Exception:  # noqa
+            raw = b""
+        if raw and len(raw) <= 15 * 1024 * 1024:
+            ext = re.sub(r"[^a-z0-9]", "", (b.get("filename", "id.png")
+                         .rsplit(".", 1)[-1] or "png").lower())[:5] or "png"
+            cust_mod.ID_DIR.mkdir(exist_ok=True)
+            fn = f"{cust['customer_id']}-{uuid.uuid4().hex[:8]}.{ext}"
+            try:
+                (cust_mod.ID_DIR / fn).write_bytes(raw)
+                cust["id_image"] = fn
+            except Exception:  # noqa
+                pass
+    db.upsert_customer(cust)
+    oo = db.get_order(d.get("order_id") or "")
+    if oo:
+        oo["id_submitted_at"] = db.now_iso()
+        db.upsert_order(oo)
+    db.set_setting(f"idreq:{tok}", {**d, "used": True})
+    db.audit({"username": "customer"}, "id_submitted", "customer",
+             cust.get("customer_id", ""), "")
+    activity.log("uploaded", "customer", cust.get("customer_id", ""),
+                 cust.get("name", ""), detail="customer submitted ID number",
+                 user="customer")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/bridge/draft", methods=["POST"])
