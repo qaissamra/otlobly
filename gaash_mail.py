@@ -1014,6 +1014,47 @@ def _customer_for(gwd):
     return ""
 
 
+# the fixed personalization tokens (name → friendly label for the UI picker)
+TPL_CORE_TOKENS = [
+    ("gwd", "رقم التتبع · tracking number"),
+    ("customer", "اسم العميل · customer name"),
+    ("upload_link", "رابط رفع المستندات · document-upload link"),
+    ("id_name", "اسم مستند الهوية · attached ID name"),
+    ("days_waiting", "أيام الانتظار · days waiting"),
+    ("step", "رقم الخطوة · step number"),
+]
+
+
+def _cf_for_gwd(gwd):
+    """{label: value} of this ONE package's board columns — Leluxe ClickUp
+    fields + the Purchases PO's custom values (defined-but-empty defs as "")."""
+    out = {}
+    row = _leluxe_row_for(gwd)
+    if row:
+        for k, v in ((row.get("data") or {}).get("fields") or {}).items():
+            lab = str(k).strip()
+            if lab:
+                out[lab] = _cf_stringify(v)
+        return out
+    g = (gwd or "").strip().upper()
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        if not any(str(pk.get("tracking_number") or "").strip().upper() == g
+                   for pk in (p.get("packages") or [])):
+            continue
+        cust = p.get("custom") or {}
+        for dfn in _cf_defs():                 # every defined column (blank if unset)
+            lab = str(dfn.get("label") or "").strip()
+            if lab:
+                out[lab] = _cf_stringify(cust.get(dfn.get("key")))
+        break
+    return out
+
+
 def _fill(tpl, gwd, thread=None, step=None):
     id_name = ""
     if thread and thread.get("id_doc_id"):
@@ -1024,7 +1065,7 @@ def _fill(tpl, gwd, thread=None, step=None):
         ts = _parse_iso(thread["created_at"])
         if ts:
             days = str(max(0, (datetime.now(timezone.utc) - ts).days))
-    return (str(tpl or "")
+    text = (str(tpl or "")
             .replace("{gwd}", gwd)
             .replace("{customer}", _customer_for(gwd))
             .replace("{upload_link}",
@@ -1032,6 +1073,14 @@ def _fill(tpl, gwd, thread=None, step=None):
             .replace("{id_name}", id_name)
             .replace("{days_waiting}", days)
             .replace("{step}", str(step or (thread or {}).get("step") or "")))
+    if "{" not in text:                        # no board-column tokens left
+        return text
+    cf = {_fold(k): v for k, v in _cf_for_gwd(gwd).items()}
+
+    def sub(m):
+        v = cf.get(_fold(m.group(1)))
+        return v if v is not None else m.group(0)   # unknown token → left literal
+    return re.sub(r"\{([^{}]+)\}", sub, text)
 
 
 # --------------------------------------------------------------------------- #
@@ -1773,7 +1822,12 @@ def overview():
 
 def _field_meta_out():
     m = rule_field_meta()
-    return {"cf_fields": m["fields"], "field_values": m["values"]}
+    tokens = [{"token": "{" + n + "}", "label": lab, "source": "core"}
+              for n, lab in TPL_CORE_TOKENS]
+    tokens += [{"token": "{" + f["label"] + "}", "label": f["label"],
+                "source": f["source"]} for f in m["fields"]]
+    return {"cf_fields": m["fields"], "field_values": m["values"],
+            "tpl_tokens": tokens}
 
 
 def candidates():

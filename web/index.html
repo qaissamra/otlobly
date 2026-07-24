@@ -9468,7 +9468,7 @@ async function gmLoad(){
   gmRenderList();
   if(GM.cur) gmOpen(GM.cur,true);
   if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
-  if(GM.tab==="tpl") gmRenderTpl();
+  if(GM.tab==="tpl"&&!GM.tplEditId) gmRenderTpl();   // don't wipe an open editor
   clearInterval(GM.timer);
   GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
 }
@@ -10133,10 +10133,11 @@ async function gmRuleSave(btn){
 function gmRenderTpl(editId){
   const tpls=(GM.ov&&GM.ov.templates)||[];
   const ed=tpls.find(t=>t.id===editId)||(editId==="new"?{id:"",name:"",subject_tpl:"",body_tpl:""}:null);
+  GM.tplEditId=ed?(editId||"new"):null;         // guards the 60s poll re-render
   $("gmTplPane").innerHTML=`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <b style="font-size:14px">📝 ${T("مكتبة القوالب · Template library")}</b>
-      <span class="muted2" style="font-size:11px">{gwd} {customer} {upload_link} {id_name} {days_waiting} {step}</span>
+      <span class="muted2" style="font-size:11px">${T("اضغط متغيّراً بالأسفل لإدراجه · click a variable below to insert it")}</span>
       <span class="spacer"></span>
       ${CAN_ADMIN?`<button class="accent" onclick="gmRenderTpl('new')">＋ ${T("قالب جديد · New template")}</button>`:""}
     </div>
@@ -10151,12 +10152,44 @@ function gmRenderTpl(editId){
     ${ed?`<div class="panel" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
       <b>${ed.id?T("تعديل القالب · Edit template"):T("قالب جديد · New template")}</b>
       <input id="gmTplName" value="${poEsc(ed.name)}" placeholder="${T("اسم القالب · template name")}">
-      <input id="gmTplSubj" value="${poEsc(ed.subject_tpl||"")}" placeholder="subject — e.g. Customs clearance — {gwd}">
-      <textarea id="gmTplBody" rows="8" style="font-size:12.5px">${poEsc(ed.body_tpl||"")}</textarea>
+      <input id="gmTplSubj" value="${poEsc(ed.subject_tpl||"")}" placeholder="subject — e.g. Customs clearance — {gwd}" onfocus="gmTokCaret(this)" onblur="gmTokCaret(this)">
+      ${gmTokBar()}
+      <textarea id="gmTplBody" rows="22" style="font-size:13px;min-height:48vh;resize:vertical;line-height:1.5" onfocus="gmTokCaret(this)" onblur="gmTokCaret(this)">${poEsc(ed.body_tpl||"")}</textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="minibtn" onclick="gmRenderTpl()">${T("إلغاء · Cancel")}</button>
         <button class="accent" onclick="gmTplSave('${poEsc(ed.id)}',this)">💾 ${T("حفظ · Save")}</button>
       </div></div>`:""}`;
+}
+// ── template variable picker: core-token chips + a searchable all-columns box ──
+function gmTokList(){ return (GM.ov&&GM.ov.tpl_tokens)||[]; }
+function gmTokBar(){
+  const core=gmTokList().filter(t=>t.source==="core");
+  const dl=`<datalist id="gmTokDL">${gmTokList().map(t=>`<option value="${poEsc(t.token)}">${poEsc(t.source==="core"?T(t.label):t.label)}</option>`).join("")}</datalist>`;
+  return `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:11.5px">
+    <span class="muted2">${T("أدرج متغيّراً · insert a variable")}:</span>
+    ${core.map(t=>`<button type="button" class="minibtn" title="${poEsc(T(t.label))}" onclick="gmTokInsert('${poEsc(t.token)}')">${poEsc(t.token)}</button>`).join("")}
+    <input list="gmTokDL" class="gm-tokpick" placeholder="🔍 ${T("كل الأعمدة · all columns")}" title="${T("اكتب اسم عمود لإدراجه كمتغيّر · type a column name to insert it as a variable")}" style="width:170px" onchange="gmTokPick(this)">
+    ${dl}</div>`;
+}
+function gmTokCaret(el){ GM.tplFocus={el, start:el.selectionStart, end:el.selectionEnd}; }
+function gmTokInsert(tok){
+  const f=GM.tplFocus, body=$("gmTplBody");
+  const el=(f&&f.el&&document.contains(f.el))?f.el:body;
+  if(!el) return;
+  const at=(el===(f&&f.el))?f:{start:el.value.length,end:el.value.length};
+  el.focus();
+  el.setRangeText(tok, at.start, at.end, "end");
+  GM.tplFocus={el, start:el.selectionStart, end:el.selectionEnd};
+}
+function gmTokPick(inp){
+  const want=String(inp.value||"").trim(); if(!want){ return; }
+  const wl=want.replace(/[{}]/g,"").trim().toLowerCase();
+  const list=gmTokList();
+  const t=list.find(x=>x.token===want)
+        ||list.find(x=>x.token.slice(1,-1).toLowerCase()===wl)
+        ||list.find(x=>String(x.label).toLowerCase()===want.toLowerCase());
+  if(t) gmTokInsert(t.token); else if(wl) gmTokInsert("{"+want.replace(/[{}]/g,"")+"}");
+  inp.value="";
 }
 async function gmTplSave(id,btn){
   btn.disabled=true;

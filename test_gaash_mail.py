@@ -427,6 +427,17 @@ def main():
           and "Low" in (fv.get("cf:Priority") or []))
     check("overview ships field_values + cf_fields together",
           set(gm.overview()["field_values"].get("cf:Priority") or []) >= {"High", "Low"})
+
+    print("— templates: any board column is a fillable {token} —")
+    lel = gm._fill("pkg {gwd} product {PRODUCT} unknown {foo}", "GWD009000007")
+    check("Leluxe field token fills; unknown token left literal",
+          "GWD009000007" in lel and "Gold Ring 18k" in lel and "{foo}" in lel)
+    pur = gm._fill("prio={Priority}", "GWD009000001")   # PO-T1 custom priority=High
+    check("Purchases custom-field token fills from the PO",
+          pur == "prio=High")
+    toks = {t["token"]: t for t in gm.overview()["tpl_tokens"]}
+    check("tpl_tokens lists core + every board column",
+          toks.get("{gwd}", {}).get("source") == "core" and "{PRODUCT}" in toks)
     rcf = gm.rule_save({"name": "gold rings", "cond": {"groups": [{"crits": [
         {"field": "cf:product", "op": "contains", "value": "ring"}]}]},
         "seq_id": sq["id"], "mode": "queue", "enabled": True})
