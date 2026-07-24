@@ -283,7 +283,14 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   records (leluxe `fields` + Purchases `custom` + statuses) + Purchases
   select/labels DEFINED options; overview ships `field_values`; client
   `gmRuleVals` seeds from it (candidates were only the enrollable subset → most
-  columns were blank). Engine:
+  columns were blank). **Template variables (2026-07-24):** `_fill` resolves any
+  `{Column}` token from THAT package's data (`_cf_for_gwd`: Leluxe fields or the
+  Purchases PO custom by label; unknown tokens left literal) on top of the 6
+  fixed tokens; overview ships `tpl_tokens` (core + every column). Editor
+  (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
+  all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
+  `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`
+  guard so the 60s `gmLoad` poll no longer wipes an open editor. Engine:
   `next_allowed`/`add_business_days` window math; `send_step` runs gaash_steps
   (task ⇒ waiting_task until action=task_done); `migrate_v2` claim_once-seeds
   "seq_default" from the legacy settings.steps; goal reply ⇒ human reply =
