@@ -2,11 +2,15 @@
 """
 WhatsApp OTP sender for the customer login portal (Phase 14).
 
-Uses the WhatsApp Cloud API (Meta Graph API) **authentication-template** message. Config
+Uses the WhatsApp Cloud API (Meta Graph API) template messages. Config
 comes from env so no secret is committed:
   WHATSAPP_TOKEN            — permanent access token for the WhatsApp Business number
   WHATSAPP_PHONE_NUMBER_ID  — the sender phone-number id (from the Meta app)
-  WHATSAPP_OTP_TEMPLATE     — approved authentication template name (default 'otlobly_login_code')
+  WHATSAPP_OTP_TEMPLATE     — approved login-code template name (default 'otlobly_login_code')
+  WHATSAPP_OTP_KIND         — 'auth' (default: AUTHENTICATION template, body code + copy-code
+                              button) or 'utility' (body-only UTILITY template — the ship-now
+                              carrier while the Meta business is unverified, since Meta only
+                              grants AUTHENTICATION templates to verified businesses)
   WHATSAPP_LANG             — template language code (default 'ar')
 
 If the creds are absent, `send_whatsapp_otp` returns {ok:False, dev:True} so the caller can
@@ -70,14 +74,18 @@ def _send_template(e164, template, lang, components):
 
 
 def send_whatsapp_otp(e164, code, lang=None):
-    """Send a one-time login code over WhatsApp (authentication template)."""
+    """Send a one-time login code over WhatsApp. The payload shape MUST match the
+    approved template's kind (WHATSAPP_OTP_KIND):
+      auth (default) — AUTHENTICATION template: one body variable (the code) + a
+                       copy-code URL button (param at button index 0).
+      utility        — body-only UTILITY template ({{1}} = the code, NO button) —
+                       Meta rejects a button component the template doesn't have."""
     _, _, template, _ = _cfg()
-    # Meta's "authentication" template = one body variable (the code) + a copy-code URL button.
-    return _send_template(e164, template, lang, [
-        {"type": "body", "parameters": [{"type": "text", "text": str(code)}]},
-        {"type": "button", "sub_type": "url", "index": "0",
-         "parameters": [{"type": "text", "text": str(code)}]},
-    ])
+    components = [{"type": "body", "parameters": [{"type": "text", "text": str(code)}]}]
+    if os.environ.get("WHATSAPP_OTP_KIND", "auth").strip().lower() != "utility":
+        components.append({"type": "button", "sub_type": "url", "index": "0",
+                           "parameters": [{"type": "text", "text": str(code)}]})
+    return _send_template(e164, template, lang, components)
 
 
 def send_account_verify(e164, name, token, lang=None):

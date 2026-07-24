@@ -4225,7 +4225,14 @@ def _customer_orders(core):
 
 @app.route("/account", methods=["GET"])
 def account_page():
-    return render_template("account.html", wa_number=_wa_business_number())
+    # otp_enabled lights up the typed-code WhatsApp login (3rd method) only when
+    # BOTH hold: the Cloud API can send (token + phone id in env) AND the owner
+    # explicitly flipped WHATSAPP_OTP_ENABLED=1 — set it only after the login-code
+    # template is APPROVED on the WABA (auth templates need a verified Meta
+    # business; utility OTP copy gets INCORRECT_CATEGORY-rejected, tested 2026-07).
+    otp_on = bool(os.environ.get("WHATSAPP_OTP_ENABLED", "").strip()) and notify.configured()
+    return render_template("account.html", wa_number=_wa_business_number(),
+                           otp_enabled=otp_on)
 
 
 @app.route("/api/customer/me")

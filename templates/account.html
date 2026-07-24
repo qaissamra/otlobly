@@ -203,10 +203,11 @@
     <div id="waStatus" style="margin-top:10px"></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
             style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
-    <!-- Push-OTP (typed code) hidden until the auth template clears Meta review.
-         Kept in the DOM (paint()/sendCode() reference these ids) — it reuses the
-         visible #phone input above the day it returns. -->
-    <div style="display:none">
+    <!-- Push-OTP (typed code): visible when the server has the WhatsApp Cloud API
+         configured (otp_enabled = token + phone id in env; WHATSAPP_OTP_TEMPLATE/
+         _KIND pick the carrier template). Hidden-but-in-DOM otherwise, because
+         paint()/sendCode() reference these ids. Reuses the #phone input above. -->
+    <div{% if not otp_enabled %} style="display:none"{% endif %}>
       <button id="b_send" onclick="sendCode()"></button>
       <div id="out1"></div>
     </div>
