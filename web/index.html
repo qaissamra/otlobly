@@ -9976,10 +9976,36 @@ const GM_RULE_OPS={
   text:[["is","يساوي · is"],["is_not","لا يساوي · is not"],["contains","يحتوي · contains"],["not_contains","لا يحتوي · doesn't contain"],["empty","فارغ · is empty"],["not_empty","غير فارغ · is not empty"]],
   number:[["gte","≥ على الأقل · at least"],["lte","≤ على الأكثر · at most"]],
   enum:[["is","يساوي · is"],["is_not","لا يساوي · is not"]]};
-function gmRuleFld(k){ return GM_RULE_FIELDS.find(f=>f.k===k)||GM_RULE_FIELDS[0]; }
+// The built-in fields + every board custom column (cf:*) shipped in overview.
+function gmRuleFieldList(){
+  const cf=((GM.ov&&GM.ov.cf_fields)||[]).map(f=>({
+    k:f.key, t:"text", cf:true, source:f.source||"", lab:f.label,
+    help:(f.source==="leluxe"?"عمود من لوحة Leluxe (ClickUp)"
+         :(f.source==="purchases"?"حقل مخصّص من لوحة المشتريات":"عمود مخصّص من لوحاتك"))
+         +" · a custom column from your board"}));
+  return GM_RULE_FIELDS.concat(cf);
+}
+function gmRuleFld(k){
+  let f=gmRuleFieldList().find(x=>x.k===k);
+  if(!f&&String(k).startsWith("cf:")) f={k, t:"text", cf:true, source:"",
+    lab:String(k).slice(3), help:"a board custom column · عمود مخصّص"};
+  return f||GM_RULE_FIELDS[0];
+}
+function gmFieldLbl(field){ const f=gmRuleFld(field); return f.cf?f.lab:T(f.lab); }
+function gmFieldOpt(f){                  // <option> text: raw cf label + source badge
+  const badge=f.cf?(f.source==="leluxe"?" ⌚":(f.source==="purchases"?" 📦":" ⌚📦")):"";
+  return (f.cf?poEsc(f.lab):T(f.lab))+badge;
+}
+function gmDlId(k){ return "gmDl_"+String(k).replace(/[^a-z0-9_]/gi,"_"); }
 function gmRuleVals(k){ // live value suggestions straight out of the current candidates
   const s=new Set();
-  ((GM.ov&&GM.ov.candidates)||[]).forEach(c=>{ const v=String(c[k]==null?"":c[k]).trim(); if(v) s.add(v); });
+  const cfLab=String(k).startsWith("cf:")?String(k).slice(3).trim().toLowerCase():null;
+  ((GM.ov&&GM.ov.candidates)||[]).forEach(c=>{
+    let v;
+    if(cfLab){ const cf=c.cf||{}; const kk=Object.keys(cf).find(x=>x.trim().toLowerCase()===cfLab); v=kk?cf[kk]:""; }
+    else v=c[k];
+    v=String(v==null?"":v).trim(); if(v) s.add(v);
+  });
   return [...s].sort().slice(0,40);
 }
 function gmRuleSummary(cond){
@@ -9988,7 +10014,7 @@ function gmRuleSummary(cond){
   const gs=(cond&&cond.groups)||[];
   if(!gs.length) return T("كل الطرود المرشحة · every candidate");
   return gs.map(g=>(g.crits||[]).map(c=>{
-    const f=T(gmRuleFld(c.field).lab);
+    const f=gmFieldLbl(c.field);
     if(c.op==="empty"||c.op==="not_empty") return `${f} ${OPS[c.op]}`;
     if(c.field==="age_days") return `${f} ${OPS[c.op]} ${c.value}d`;
     if(c.field==="source") return `${f} ${OPS[c.op]} ${c.value==="leluxe"?"⌚ Leluxe":"📦 "+T("مشتريات · Purchases")}`;
@@ -10033,16 +10059,21 @@ function gmRuleCritRender(){
       else if(fld.t==="enum") val=`<select onchange="gmRuleSet(${gi},${ci},'value',this.value)">
         <option value="leluxe" ${cr.value==="leluxe"?"selected":""}>⌚ Leluxe</option>
         <option value="purchases" ${cr.value==="purchases"?"selected":""}>📦 ${T("مشتريات · Purchases")}</option></select>`;
-      else val=`<input list="gmDl_${fld.k}" style="width:150px" value="${poEsc(String(cr.value==null?"":cr.value))}" placeholder="${T("قيمة · value")}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
+      else val=`<input list="${gmDlId(fld.k)}" style="width:150px" value="${poEsc(String(cr.value==null?"":cr.value))}" placeholder="${T("قيمة · value")}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
     }
+    const fields=gmRuleFieldList();
+    const known=fields.some(f=>f.k===cr.field);
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select onchange="gmRuleSet(${gi},${ci},'field',this.value)">${GM_RULE_FIELDS.map(f=>`<option value="${f.k}" ${f.k===cr.field?"selected":""}>${T(f.lab)}</option>`).join("")}</select>
+      <select onchange="gmRuleSet(${gi},${ci},'field',this.value)">${fields.map(f=>`<option value="${f.k}" ${f.k===cr.field?"selected":""}>${gmFieldOpt(f)}</option>`).join("")}${known?"":`<option value="${poEsc(cr.field)}" selected>${poEsc(fld.lab)}</option>`}</select>
       ${gmHelp(fld.help)}
       <select onchange="gmRuleSet(${gi},${ci},'op',this.value)">${GM_RULE_OPS[fld.t].map(o=>`<option value="${o[0]}" ${o[0]===cr.op?"selected":""}>${T(o[1])}</option>`).join("")}</select>
       ${val}
       <button class="minibtn" onclick="gmRuleCritDel(${gi},${ci})">🗑</button></div>`;
   };
-  const dls=GM_RULE_FIELDS.filter(f=>f.t==="text").map(f=>`<datalist id="gmDl_${f.k}">${gmRuleVals(f.k).map(v=>`<option value="${poEsc(v)}">`).join("")}</datalist>`).join("");
+  // one datalist per text field actually in use (base text fields + any chosen cf)
+  const used=new Set(GM_RULE_FIELDS.filter(f=>f.t==="text").map(f=>f.k));
+  gs.forEach(g=>(g.crits||[]).forEach(cr=>{ if(gmRuleFld(cr.field).t==="text") used.add(cr.field); }));
+  const dls=[...used].map(k=>`<datalist id="${gmDlId(k)}">${gmRuleVals(k).map(v=>`<option value="${poEsc(v)}">`).join("")}</datalist>`).join("");
   $("gmRuleCrit").innerHTML=gs.map((g,gi)=>`
     ${gi?`<div style="display:flex;align-items:center;gap:8px;margin:7px 0"><span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${T("أو · or")}</span><div style="flex:1;border-top:1px dashed var(--line)"></div></div>`:""}
     <div class="panel" style="padding:8px 10px">

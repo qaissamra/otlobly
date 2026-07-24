@@ -483,6 +483,37 @@ _RULE_OPS = {"text": ("is", "is_not", "contains", "not_contains",
 _SOURCES = ("leluxe", "purchases")
 
 
+def _field_kind(f):
+    """The op family for a criterion field. `cf:<label>` = any board custom
+    column (all treated as text: is/contains/empty…). None ⇒ unknown, drop."""
+    if f in RULE_FIELDS:
+        return RULE_FIELDS[f]
+    if f.startswith("cf:") and len(f) > 3:
+        return "text"
+    return None
+
+
+def _cf_stringify(v):
+    """A custom-field value (any board, any type) → a string we can match on."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (list, tuple)):
+        return ", ".join(_cf_stringify(x) for x in v if x not in (None, ""))
+    if isinstance(v, dict):                # unsupported ClickUp shape → skip
+        return str(v.get("value") or v.get("name") or "")
+    return str(v)
+
+
+def _cf_defs():
+    """Purchases custom-field DEFINITIONS (settings.custom_fields.po)."""
+    try:
+        return (settings_mod.read().get("custom_fields") or {}).get("po") or []
+    except Exception:  # noqa
+        return []
+
+
 def _cond_norm(cond):
     """Sanitized v2 criteria out of any stored/posted cond (incl. legacy)."""
     cond = cond if isinstance(cond, dict) else {}
@@ -505,7 +536,7 @@ def _cond_norm(cond):
             cr = cr if isinstance(cr, dict) else {}
             f = str(cr.get("field") or "").strip()
             op = str(cr.get("op") or "").strip()
-            kind = RULE_FIELDS.get(f)
+            kind = _field_kind(f)
             if not kind or op not in _RULE_OPS[kind]:
                 continue                 # unknown field / op → dropped
             v = cr.get("value")
@@ -532,6 +563,15 @@ def _fold(s):
     return re.sub(r"\s+", " ", str(s or "")).strip().lower()
 
 
+def _cand_cf_val(cd, label):
+    """A candidate's value for a custom column, matched by folded label."""
+    lab = _fold(label)
+    for k, v in (cd.get("cf") or {}).items():
+        if _fold(k) == lab:
+            return v
+    return ""
+
+
 def _crit_match(cr, cd, age_fn):
     f, op, want = cr["field"], cr["op"], cr.get("value")
     if f == "age_days":
@@ -539,7 +579,7 @@ def _crit_match(cr, cd, age_fn):
         if age is None:
             return False
         return age >= want if op == "gte" else age <= want
-    have = _fold(cd.get(f))
+    have = _fold(_cand_cf_val(cd, f[3:]) if f.startswith("cf:") else cd.get(f))
     if op == "empty":
         return not have
     if op == "not_empty":
@@ -1727,7 +1767,7 @@ def overview():
             "accounts": accounts(redact=True),
             "ids": ids_list(), "settings": _setts(),
             "sequences": sequences_list(), "templates": templates_list(),
-            "rules": rules_list(),
+            "rules": rules_list(), "cf_fields": rule_cf_fields(),
             "mailer_env": bool(os.environ.get("GAASH_MAILER"))}
 
 
@@ -1767,19 +1807,31 @@ def candidates():
         # (support.py rule): anything DELIVERED needs no clearance chasing
         if re.search(r"DELIVERED", str(gash or ""), re.I):
             continue
+        # every ClickUp field becomes a filterable custom column (cf:<name>)
+        cf = {str(k).strip(): _cf_stringify(v) for k, v in f.items()
+              if str(k).strip() and _cf_stringify(v)}
         out.append({"gwd": tn, "source": "leluxe",
                     "name": (names.get(r["parent_local_id"]) or r["name"] or "")[:70],
                     "status": r["status"], "gash_status": gash,
                     "bucket": _bucket(ts) or None,
                     "label": (ts.get("label") if isinstance(ts, dict)
-                              else (str(ts)[:40] if ts else None))})
+                              else (str(ts)[:40] if ts else None)),
+                    "cf": cf})
     # ── Purchases board packages (Otlobly customer POs — no ClickUp mirror) ──
     try:
         import purchases
         pos = (purchases.load() or {}).get("purchase_orders") or []
     except Exception:  # noqa
         pos = []
+    defs = _cf_defs()
     for p in pos:
+        # the PO's custom-field values become filterable columns (labelled)
+        pcf = {}
+        for dfn in defs:
+            val = _cf_stringify((p.get("custom") or {}).get(dfn.get("key")))
+            lab = str(dfn.get("label") or "").strip()
+            if lab and val:
+                pcf[lab] = val
         for pk in (p.get("packages") or []):
             tn = str(pk.get("tracking_number") or "").strip().upper()
             if not re.match(r"GWD\d+$", tn) or tn in seen or tn in have:
@@ -1798,9 +1850,52 @@ def candidates():
                         "name": (p.get("ship_to") or "").strip()[:70],
                         "status": pk.get("otlobly_status"), "gash_status": None,
                         "customers": "، ".join(custs)[:70], "bucket": None,
-                        "label": None, "po_id": p.get("po_id")})
+                        "label": None, "po_id": p.get("po_id"), "cf": dict(pcf)})
     # Leluxe first (has clearance status), then by GWD
     out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
+    return out
+
+
+def rule_cf_fields():
+    """Catalog of every board custom column, for the trigger field picker:
+    Purchases custom-field defs (📦) + distinct Leluxe ClickUp field names (⌚).
+    Deduped by folded label (source 'both' when a name exists on both boards)."""
+    out, seen = [], {}
+    for dfn in _cf_defs():
+        lab = str(dfn.get("label") or "").strip()
+        if not lab:
+            continue
+        fk = _fold(lab)
+        if fk in seen:
+            continue
+        e = {"key": "cf:" + lab, "label": lab, "source": "purchases"}
+        seen[fk] = e
+        out.append(e)
+    try:
+        with db.connect() as c:
+            rows = c.execute("SELECT data_json FROM leluxe_orders "
+                             "WHERE deleted=0").fetchall()
+    except Exception:  # noqa
+        rows = []
+    for r in rows:
+        try:
+            fdict = json.loads(r["data_json"] or "{}").get("fields") or {}
+        except Exception:  # noqa
+            continue
+        for nm in fdict:
+            lab = str(nm).strip()
+            if not lab:
+                continue
+            fk = _fold(lab)
+            if fk in seen:
+                if seen[fk]["source"] == "purchases":
+                    seen[fk]["source"] = "both"
+                continue
+            e = {"key": "cf:" + lab, "label": lab, "source": "leluxe"}
+            seen[fk] = e
+            out.append(e)
+        if len(out) >= 80:            # a sane ceiling for the dropdown
+            break
     return out
 
 
