@@ -217,31 +217,38 @@ def _review_message(name, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
     return "\n".join(lines)
 
 
+def _review_links(ph, text):
+    """(url_970, url_972) wa.me links for `text`, both on the same 9-digit core so
+    a Palestinian number is reachable on either country code. (None, None) if no
+    usable phone — the caller falls back to a copy-only button."""
+    e164 = ph.get("e164") if ph else None
+    core = normalize.phone_core(e164 or (ph.get("wa") if ph else "") or "")
+    if not core:
+        return None, None
+    enc = _urlquote(text)
+    return (f"https://wa.me/970{core}?text={enc}",
+            f"https://wa.me/972{core}?text={enc}")
+
+
 def _make_review_card(key, group, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
     """One testimonial card for a person: name + phone + the +970/+972 WhatsApp
     links carrying the prefilled review message. Copy-only when no phone."""
     first = group[0]
     name = (first.get("customer", {}).get("name") or "").strip()
     ph = store.primary_phone(first)
-    e164 = ph.get("e164") if ph else None
-    core = normalize.phone_core(e164 or (ph.get("wa") if ph else "") or "")
     last_at = max((o.get("updated_at") or o.get("order_id") or "") for o in group)
     text = _review_message(name, facebook_url, coupon_usd)
-    card = {
+    url_970, url_972 = _review_links(ph, text)
+    return {
         "key": key,
         "name": name,
-        "phone": e164,
+        "phone": ph.get("e164") if ph else None,
         "n_orders": len(group),
         "last_at": last_at,
         "wa_review_text": text,
+        "wa_url_970": url_970,
+        "wa_url_972": url_972,
     }
-    if core:
-        enc = _urlquote(text)
-        card["wa_url_970"] = f"https://wa.me/970{core}?text={enc}"
-        card["wa_url_972"] = f"https://wa.me/972{core}?text={enc}"
-    else:                                 # no usable number — copy-only card
-        card["wa_url_970"] = card["wa_url_972"] = None
-    return card
 
 
 def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
@@ -326,6 +333,11 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         wa_text = (_ready_message(name, totals, include_money) if is_ready
                    else _waiting_message(name, sent_items, received_items, coming_items))
         wa = ph.get("wa") if ph else None
+        # Every prep card also carries the review message + 970/972 links, so the
+        # owner can ask for a testimonial straight from any customer card — not
+        # only from the 📸 fully-dispatched section.
+        review_text = _review_message(name, facebook_url, coupon_usd)
+        rev_970, rev_972 = _review_links(ph, review_text)
         card = {
             "key": key,
             "name": name,
@@ -340,6 +352,9 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
             "n_missing": n_missing,
             "wa_text": wa_text,
             "wa_url": f"https://wa.me/{wa}?text={_urlquote(wa_text)}" if wa else None,
+            "wa_review_text": review_text,
+            "wa_review_970": rev_970,
+            "wa_review_972": rev_972,
         }
         if not include_money:         # fulfillment: page loads, money stays dark
             card["totals"] = {k: None for k in totals}
