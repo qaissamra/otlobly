@@ -1767,8 +1767,13 @@ def overview():
             "accounts": accounts(redact=True),
             "ids": ids_list(), "settings": _setts(),
             "sequences": sequences_list(), "templates": templates_list(),
-            "rules": rules_list(), "cf_fields": rule_cf_fields(),
+            "rules": rules_list(), **_field_meta_out(),
             "mailer_env": bool(os.environ.get("GAASH_MAILER"))}
+
+
+def _field_meta_out():
+    m = rule_field_meta()
+    return {"cf_fields": m["fields"], "field_values": m["values"]}
 
 
 def candidates():
@@ -1856,47 +1861,98 @@ def candidates():
     return out
 
 
-def rule_cf_fields():
-    """Catalog of every board custom column, for the trigger field picker:
-    Purchases custom-field defs (📦) + distinct Leluxe ClickUp field names (⌚).
-    Deduped by folded label (source 'both' when a name exists on both boards)."""
-    out, seen = [], {}
-    for dfn in _cf_defs():
+_GASH_FK = None
+
+
+def rule_field_meta():
+    """The trigger builder's field catalog AND value suggestions, in ONE scan.
+
+    fields: [{key,label,source}] every board custom column — Purchases defs (📦)
+      + distinct Leluxe ClickUp field names (⌚), deduped by folded label.
+    values: {field_key: [distinct values ≤50]} pulled from ALL records (not just
+      the enrollable candidates) PLUS Purchases select/labels defined options —
+      so the value box suggests what we already have instead of blank typing.
+    """
+    global _GASH_FK
+    if _GASH_FK is None:
+        _GASH_FK = _fold("GASH STATUS")
+    fields, seen = [], {}             # seen: folded label -> catalog entry
+    vals = {}                         # canonical field key -> set() of values
+
+    def add_val(key, v):
+        v = _cf_stringify(v).strip()
+        if not v:
+            return
+        s = vals.setdefault(key, set())
+        if len(s) < 50:
+            s.add(v)
+
+    # ── Purchases custom-field DEFINITIONS (📦) + their option names ──
+    defs = _cf_defs()
+    for dfn in defs:
         lab = str(dfn.get("label") or "").strip()
         if not lab:
             continue
         fk = _fold(lab)
-        if fk in seen:
-            continue
-        e = {"key": "cf:" + lab, "label": lab, "source": "purchases"}
-        seen[fk] = e
-        out.append(e)
+        if fk not in seen:
+            e = {"key": "cf:" + lab, "label": lab, "source": "purchases"}
+            seen[fk] = e
+            fields.append(e)
+        for opt in (dfn.get("options") or []):
+            add_val(seen[fk]["key"], opt.get("name") if isinstance(opt, dict) else opt)
+
+    # ── Leluxe mirror: field names (⌚) + every observed value ──
     try:
         with db.connect() as c:
-            rows = c.execute("SELECT data_json FROM leluxe_orders "
+            rows = c.execute("SELECT status, data_json FROM leluxe_orders "
                              "WHERE deleted=0").fetchall()
     except Exception:  # noqa
         rows = []
     for r in rows:
+        add_val("status", r["status"])
         try:
             fdict = json.loads(r["data_json"] or "{}").get("fields") or {}
         except Exception:  # noqa
             continue
-        for nm in fdict:
+        for nm, v in fdict.items():
             lab = str(nm).strip()
             if not lab:
                 continue
             fk = _fold(lab)
+            if fk == _GASH_FK:
+                add_val("gash_status", v)
+            if fk not in seen:
+                if len(fields) >= 80:        # catalog ceiling for the dropdown
+                    continue
+                e = {"key": "cf:" + lab, "label": lab, "source": "leluxe"}
+                seen[fk] = e
+                fields.append(e)
+            elif seen[fk]["source"] == "purchases":
+                seen[fk]["source"] = "both"
+            add_val(seen[fk]["key"], v)
+
+    # ── Purchases packages: custom values (📦) + statuses ──
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    defs_by_key = {d.get("key"): d for d in defs}
+    for p in pos:
+        for k, v in (p.get("custom") or {}).items():
+            lab = str((defs_by_key.get(k) or {}).get("label") or k or "").strip()
+            fk = _fold(lab)
             if fk in seen:
-                if seen[fk]["source"] == "purchases":
-                    seen[fk]["source"] = "both"
-                continue
-            e = {"key": "cf:" + lab, "label": lab, "source": "leluxe"}
-            seen[fk] = e
-            out.append(e)
-        if len(out) >= 80:            # a sane ceiling for the dropdown
-            break
-    return out
+                add_val(seen[fk]["key"], v)
+        for pk in (p.get("packages") or []):
+            add_val("status", pk.get("otlobly_status"))
+
+    return {"fields": fields,
+            "values": {k: sorted(s) for k, s in vals.items() if s}}
+
+
+def rule_cf_fields():
+    return rule_field_meta()["fields"]
 
 
 def thread_detail(gwd):
