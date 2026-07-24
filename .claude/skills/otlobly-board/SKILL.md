@@ -253,8 +253,19 @@ tooltip must show the breakdown; `+N?` warn = row has unpriced products.
   platform, goal cleared|reply|manual, send_window_json {tz days start end} —
   default Sun–Thu 09–17 **Asia/Hebron "Palestine time"**) / gaash_steps (pos,
   kind auto_email|task, template_id, delay_days = BUSINESS days) / gaash_rules
-  (auto-enroll: {gash_status,min_age_days}→seq, mode queue|auto; queue ⇒
-  state='proposed' approval chips) / gaash_events (open/click hits). Engine:
+  (auto-enroll → seq, mode queue|auto; queue ⇒ state='proposed' approval
+  chips) / gaash_events (open/click hits). **Trigger criteria (HubSpot-style,
+  2026-07-24):** cond_json v2 `{"groups":[{"crits":[{field,op,value}…]}…]}` —
+  crits AND inside a group, groups OR; legacy {gash_status,min_age_days}
+  auto-converts via `_cond_norm` (also the sanitizer: unknown field/op
+  dropped, age clamped 0-365, ≤5 groups × ≤8 crits). Field registry
+  `RULE_FIELDS`: gash_status/status/bucket/label/name/customers (text: is,
+  is_not, contains, not_contains, empty, not_empty — `_fold` case+space),
+  source (enum leluxe|purchases), age_days (gte/lte — `_cand_age_days`:
+  leluxe date_created ms, purchases PO created_at ISO; None fails closed).
+  UI `gmRuleOpen` builder modal (datalists fed from GM.ov.candidates,
+  value input morphs by type), ✎ `gmRuleEdit` pre-fills, `gmRuleSummary`
+  renders the strip line. Engine:
   `next_allowed`/`add_business_days` window math; `send_step` runs gaash_steps
   (task ⇒ waiting_task until action=task_done); `migrate_v2` claim_once-seeds
   "seq_default" from the legacy settings.steps; goal reply ⇒ human reply =
