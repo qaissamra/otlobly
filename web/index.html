@@ -9996,6 +9996,20 @@ function gmFieldOpt(f){                  // <option> text: raw cf label + source
   const badge=f.cf?(f.source==="leluxe"?" ⌚":(f.source==="purchases"?" 📦":" ⌚📦")):"";
   return (f.cf?poEsc(f.lab):T(f.lab))+badge;
 }
+function gmFieldDisplay(f){              // plain (unescaped) label + badge for an input value
+  const badge=f.cf?(f.source==="leluxe"?" ⌚":(f.source==="purchases"?" 📦":" ⌚📦")):"";
+  return (f.cf?f.lab:T(f.lab))+badge;
+}
+// the type-to-search field picker: map what was typed/picked back to a field key
+function gmRuleFieldPick(gi,ci,inp){
+  const want=String(inp.value||"").trim();
+  const list=gmRuleFieldList();
+  const wl=want.replace(/[⌚📦]/g,"").trim().toLowerCase();
+  let f=list.find(x=>gmFieldDisplay(x)===want)                       // exact pick
+      ||list.find(x=>(x.cf?x.lab:T(x.lab)).toLowerCase()===wl)       // label match
+      ||(wl?list.find(x=>(x.cf?x.lab:T(x.lab)).toLowerCase().includes(wl)):null);
+  if(f) gmRuleSet(gi,ci,'field',f.k); else gmRuleCritRender();       // no match → revert
+}
 function gmDlId(k){ return "gmDl_"+String(k).replace(/[^a-z0-9_]/gi,"_"); }
 function gmRuleVals(k){ // live value suggestions straight out of the current candidates
   const s=new Set();
@@ -10061,10 +10075,8 @@ function gmRuleCritRender(){
         <option value="purchases" ${cr.value==="purchases"?"selected":""}>📦 ${T("مشتريات · Purchases")}</option></select>`;
       else val=`<input list="${gmDlId(fld.k)}" style="width:150px" value="${poEsc(String(cr.value==null?"":cr.value))}" placeholder="${T("قيمة · value")}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
     }
-    const fields=gmRuleFieldList();
-    const known=fields.some(f=>f.k===cr.field);
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select onchange="gmRuleSet(${gi},${ci},'field',this.value)">${fields.map(f=>`<option value="${f.k}" ${f.k===cr.field?"selected":""}>${gmFieldOpt(f)}</option>`).join("")}${known?"":`<option value="${poEsc(cr.field)}" selected>${poEsc(fld.lab)}</option>`}</select>
+      <input list="gmFieldsDL" class="gm-fieldpick" value="${poEsc(gmFieldDisplay(fld))}" title="${T("اكتب للبحث عن عمود · type to search a column")}" placeholder="🔍 ${T("ابحث · search")}" style="width:180px" onfocus="this.select()" onchange="gmRuleFieldPick(${gi},${ci},this)">
       ${gmHelp(fld.help)}
       <select onchange="gmRuleSet(${gi},${ci},'op',this.value)">${GM_RULE_OPS[fld.t].map(o=>`<option value="${o[0]}" ${o[0]===cr.op?"selected":""}>${T(o[1])}</option>`).join("")}</select>
       ${val}
@@ -10073,7 +10085,9 @@ function gmRuleCritRender(){
   // one datalist per text field actually in use (base text fields + any chosen cf)
   const used=new Set(GM_RULE_FIELDS.filter(f=>f.t==="text").map(f=>f.k));
   gs.forEach(g=>(g.crits||[]).forEach(cr=>{ if(gmRuleFld(cr.field).t==="text") used.add(cr.field); }));
-  const dls=[...used].map(k=>`<datalist id="${gmDlId(k)}">${gmRuleVals(k).map(v=>`<option value="${poEsc(v)}">`).join("")}</datalist>`).join("");
+  let dls=[...used].map(k=>`<datalist id="${gmDlId(k)}">${gmRuleVals(k).map(v=>`<option value="${poEsc(v)}">`).join("")}</datalist>`).join("");
+  // the shared field-search list (all built-ins + every board column)
+  dls+=`<datalist id="gmFieldsDL">${gmRuleFieldList().map(f=>`<option value="${poEsc(gmFieldDisplay(f))}">`).join("")}</datalist>`;
   $("gmRuleCrit").innerHTML=gs.map((g,gi)=>`
     ${gi?`<div style="display:flex;align-items:center;gap:8px;margin:7px 0"><span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${T("أو · or")}</span><div style="flex:1;border-top:1px dashed var(--line)"></div></div>`:""}
     <div class="panel" style="padding:8px 10px">
