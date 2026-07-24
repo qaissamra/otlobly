@@ -215,6 +215,30 @@ order total. Example: total 200, 4 products à 30, 2 packages, pkg 1 holds 3 →
 3×30 + (200−120)/2 = **130**. Implemented in `lxOrderPkgEst` (Packages view);
 tooltip must show the breakdown; `+N?` warn = row has unpriced products.
 
+## 4b. Customer ID number + Request-ID self-service (2026-07-24)
+
+Distinct from the ID *image* (`customer.id_image`, customer_ids/) and the GAASH
+mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
+(a string). Per-customer (submitted once, reused across all their orders).
+- **Store:** `customer.id_number` (customers.py new_customer + upsert preserve
+  guard; JSON blob, no migration). Source of truth = CRM, keyed by phone.
+- **Surface:** `_attach_customer_ids(rows)` (app.py) enriches order rows
+  (`id_number`/`has_id_number`, by phone) for BOTH /api/report + /api/needorder;
+  Purchases 📦/⫶ "ID number" column (`LXT_COLS.pok/pop` + `idNumCell`/`pkgIdNumber`
+  via `poOrderMap()[it.customer_order_id].id_number`); To-order 🪪 badge + detail;
+  customer profile + ID gallery (`custIdNumberEdit` → `/api/customer/id_number`).
+- **Request-ID link:** To-order ⋯ menu → 🪪 Request ID (`neRequestId`) →
+  `POST /api/order/request_id_link` mints a single-use `idreq:<token>` (mirrors
+  the 🔗 quote-link) → copy + wa.me. Public no-login page `GET /id/<token>`
+  (`templates/submit_id.html`), hydrate `GET /api/idreq/<token>`, submit
+  `POST /api/id/submit` (token-gated, single-use, number required, optional 15MB
+  image → customer_ids/, stamps the order `id_submitted_at`). Auto-attaches to
+  ordered products via the existing `it.customer_order_id` link — no new plumbing.
+- **Email token:** `{id_number}` in GAASH templates — `_id_number_for(gwd)`
+  resolves the package's customer (Purchases order link → phone, else Leluxe phone
+  field, else name) → CRM `id_number`. Registered in `TPL_CORE_TOKENS`.
+- Tests: test_customer_id.py (16 checks).
+
 ## 5. GAASH customs clearance flow
 
 - Upload docs page (per GWD): `https://ops.gaashwd.com/fileUpload?packageId=<GWD>&type=N`
