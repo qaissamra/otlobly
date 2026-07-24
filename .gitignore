@@ -13,6 +13,7 @@ otlobly.db-shm
 customer_ids/
 meta_spend.json
 purchases.json
+review_asked.json
 po_images/
 leluxe_images/
 gaash_ids/

@@ -151,6 +151,9 @@ def read(config=None):
         "import_rule": cfg.get(config, "estimate.import_rule", {"type": "pct", "value": 0}),
         "customer_mode": bool(cfg.get(config, "estimate.customer_mode", False)),
         "business_whatsapp": cfg.get(config, "business.whatsapp", ""),
+        # Facebook page link + $ coupon promised in the Package-prep review request.
+        "business_facebook_reviews": cfg.get(config, "business.facebook_reviews_url", ""),
+        "reviews_coupon_usd": cfg.get(config, "reviews.coupon_usd", 5),
         "tracking_status_map": cfg.get(config, "customer_tracking.status_map",
                                        tracking.DEFAULT_STATUS_MAP),
         "tracking_default_label": cfg.get(config, "customer_tracking.default_label",
@@ -306,6 +309,11 @@ def apply(body, config=None, persist=True):
     if "business_whatsapp" in body:
         cfg.set_path(config, "business.whatsapp",
                      re.sub(r"[^\d+]", "", str(body["business_whatsapp"])))
+    if "business_facebook_reviews" in body:            # a URL — keep it verbatim
+        cfg.set_path(config, "business.facebook_reviews_url",
+                     str(body["business_facebook_reviews"] or "").strip())
+    if "reviews_coupon_usd" in body:
+        cfg.set_path(config, "reviews.coupon_usd", max(0, int(_f(body["reviews_coupon_usd"], 5))))
     if isinstance(body.get("tracking_status_map"), list):
         rows = []
         for r in body["tracking_status_map"]:

@@ -5040,14 +5040,47 @@ def api_gen_customer_tracking():
 @auth.require("view_orders")
 def api_pkgprep():
     """Package prep: customers whose pieces are received (استلمتها اطلبلي) —
-    ready-to-ship vs still-missing — with prefilled WhatsApp status messages."""
+    ready-to-ship vs still-missing — with prefilled WhatsApp status messages.
+    Plus a 'reviews' cohort: collected (delivered+paid) customers to ask for a
+    Facebook review, minus anyone already contacted (review_asked)."""
     import pkgprep
+    import review_asked
+    c = cfg.load()
     try:
-        rate = float(cfg.get(cfg.load(), "fx.pkg_ils_per_usd", 3.1)) or 3.1
+        rate = float(cfg.get(c, "fx.pkg_ils_per_usd", 3.1)) or 3.1
     except (TypeError, ValueError):
         rate = 3.1
-    return jsonify(pkgprep.build(db.list_orders(), purchases.load(), rate,
-                                 include_money=current_user.has("view_money")))
+    try:
+        coupon = int(cfg.get(c, "reviews.coupon_usd", 5) or 5)
+    except (TypeError, ValueError):
+        coupon = 5
+    return jsonify(pkgprep.build(
+        db.list_orders(), purchases.load(), rate,
+        include_money=current_user.has("view_money"),
+        asked=review_asked.keys(),
+        facebook_url=(cfg.get(c, "business.facebook_reviews_url", "") or "").strip(),
+        coupon_usd=coupon))
+
+
+@app.route("/api/pkgprep/review-asked", methods=["POST"])
+@auth.require("edit_fulfillment")
+def api_pkgprep_review_asked():
+    """Mark a collected customer as already asked for a review (drops them off the
+    Package-prep review list), or undo it with {asked:false}. Keyed by the same
+    person-key pkgprep emits (primary phone e164, else 'name:<name>')."""
+    import review_asked
+    b = request.get_json(force=True, silent=True) or {}
+    key = (b.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "missing key"}), 400
+    asked = b.get("asked", True)
+    if asked:
+        review_asked.mark(key)
+    else:
+        review_asked.unmark(key)
+    db.audit(auth.actor(), "review_asked", "customer", key,
+             "asked for review" if asked else "undo review-asked")
+    return jsonify({"ok": True, "asked": bool(asked)})
 
 
 @app.route("/api/pkgprep/status", methods=["POST"])

@@ -1005,6 +1005,8 @@
         <div><label class="fld">ILS per USD (₪ → $ for deposits)</label><input id="s_ils" type="number" step="0.01" style="width:100%" placeholder="3.7"></div>
         <div><label class="fld">Package prep ₪ rate ($ → ₪ in the customer message)</label><input id="s_pkg_ils" type="number" step="0.01" style="width:100%" placeholder="3.1"></div>
         <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
+        <div><label class="fld">Facebook page (review link in Package-prep message)</label><input id="s_fb" style="width:100%" placeholder="https://facebook.com/otlobly"></div>
+        <div><label class="fld">Review coupon $ (promised for a good review)</label><input id="s_coupon" type="number" step="1" style="width:100%" placeholder="5"></div>
         <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
         <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
         <div><label class="fld">Shipping estimate</label>
@@ -1383,6 +1385,7 @@
     </div>
     <div id="ppReady"></div>
     <div id="ppWaiting" style="margin-top:14px"></div>
+    <div id="ppReviews" style="margin-top:14px"></div>
     <div id="ppEmpty" class="muted2" style="display:none;padding:16px;text-align:center;font-size:13px"></div>
   </div>
 
@@ -2349,15 +2352,42 @@ function ppSection(emoji,label,count,sub,tone){
     <span class="pill" style="${tone};font-weight:700">${count}</span>
     <span class="muted2" style="font-size:12px">${sub}</span></div>`;
 }
+// One collected customer to ask for a Facebook review. Two WhatsApp links
+// (+972 / +970) because a Palestinian number may be reachable on either code.
+function ppReviewCard(c,i){
+  const meta=[c.n_orders>1?`${c.n_orders} orders`:"",poEsc(c.phone||"")].filter(Boolean).join(" · ");
+  const btns=c.wa_url_970
+    ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +972 برسالة تقييم جاهزة">📱 972</a>
+       <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +970 برسالة تقييم جاهزة">📱 970</a>`
+    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم — انسخ الرسالة 📋">☎ بلا رقم</span>`;
+  return `<div class="po-card"><div class="po-head"><div class="po-title" style="cursor:default">
+    <span style="font-size:15px">📸</span>
+    <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
+    <span class="muted" style="font-size:12px">${meta}</span>
+    <span class="spacer"></span>
+    ${btns}
+    <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewCopy(${i})" title="انسخ رسالة التقييم">📋</button>
+    <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewDone('${poEsc(c.key)}')" title="تم التواصل — أخفِه من القائمة">✓ تم</button>
+  </div></div></div>`;
+}
+function ppReviewCopy(i){ const c=((PKGPREP||{}).reviews||[])[i]; if(!c) return;
+  (navigator.clipboard?navigator.clipboard.writeText(c.wa_review_text):Promise.reject())
+    .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
+async function ppReviewDone(key){
+  const r=await post("/api/pkgprep/review-asked",{key:key,asked:true});
+  if(r&&r.ok){ toast("تم — انحذف من القائمة"); loadPkgprep(); } else { toast((r&&r.error)||"تعذّر"); }
+}
 function renderPkgprep(){
-  const d=PKGPREP, R=$("ppReady"), W=$("ppWaiting"), E=$("ppEmpty");
-  if(!d){ R.innerHTML=""; W.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
+  const d=PKGPREP, R=$("ppReady"), W=$("ppWaiting"), V=$("ppReviews"), E=$("ppEmpty");
+  if(!d){ R.innerHTML=""; W.innerHTML=""; V.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
   $("ppSub").textContent=`1$ = ${d.rate} ₪ · تتغيّر من الإعدادات`;
-  const ready=d.ready||[], waiting=d.waiting||[];
+  const ready=d.ready||[], waiting=d.waiting||[], reviews=d.reviews||[];
   R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي",TONE.green)+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
   W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع",TONE.amber)+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
-  E.style.display=(ready.length||waiting.length)?"none":"";
-  if(!(ready.length||waiting.length)) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
+  V.innerHTML=reviews.length?ppSection("📸","اطلب تقييم — عملاء تم التسليم",reviews.length,"راسلهم واطلب تقييم على فيسبوك مقابل خصم",TONE.green)+reviews.map((c,i)=>ppReviewCard(c,i)).join(""):"";
+  const any=ready.length||waiting.length||reviews.length;
+  E.style.display=any?"none":"";
+  if(!any) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
 }
 // ---- Catalog: products the public /catalog page sells ----------------------- //
 let CATALOG=[];
@@ -6353,7 +6383,10 @@ async function loadSettings(){
   const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
   if($("s_ils")) $("s_ils").value=s.ils_per_usd||3.7;
   if($("s_pkg_ils")) $("s_pkg_ils").value=s.pkg_ils_per_usd||3.1;
-  $("s_wa").value=s.business_whatsapp||""; $("s_dest").value=s.destination.shipping_location||"";
+  $("s_wa").value=s.business_whatsapp||"";
+  if($("s_fb")) $("s_fb").value=s.business_facebook_reviews||"";
+  if($("s_coupon")) $("s_coupon").value=(s.reviews_coupon_usd!=null?s.reviews_coupon_usd:5);
+  $("s_dest").value=s.destination.shipping_location||"";
   $("s_destlabel").value=s.destination.label||"";
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
   $("s_imptype").value=s.import_rule.type; $("s_impval").value=s.import_rule.value;
@@ -6548,6 +6581,8 @@ async function saveSettings(b){
   const body={ markup_pct:(parseFloat($("s_markup").value)||0)/100,
     ils_per_usd:parseFloat($("s_ils").value)||3.7,
     pkg_ils_per_usd:parseFloat($("s_pkg_ils").value)||3.1, business_whatsapp:$("s_wa").value,
+    business_facebook_reviews:($("s_fb")?$("s_fb").value:""),
+    reviews_coupon_usd:($("s_coupon")?(parseInt($("s_coupon").value,10)||5):5),
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},
