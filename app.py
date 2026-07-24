@@ -4707,6 +4707,33 @@ def api_admin_email_test():
     return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
 
 
+@app.route("/api/admin/sms_test", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_admin_sms_test():
+    """Admin diagnostic for the customer-login SMS OTP (Twilio), mirroring the
+    WhatsApp/email tests. GET reports whether the Twilio env vars are set; POST
+    sends a REAL test code to a phone and surfaces Twilio's exact error — so the
+    setup AND deliverability to Jawwal/+970 can be validated before customers rely
+    on it. The test code is a delivery test only, never stored as a login OTP."""
+    if request.method == "GET":
+        return jsonify({"configured": notify.sms_configured()})
+    b = request.get_json(force=True, silent=True) or {}
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164")
+    if not e164:
+        return jsonify({"ok": False, "error": "Enter a valid phone number (e.g. 970599…)."}), 400
+    if not notify.sms_configured():
+        return jsonify({"ok": False, "configured": False,
+                        "error": "SMS not configured yet — set TWILIO_ACCOUNT_SID + "
+                                 "TWILIO_AUTH_TOKEN + TWILIO_SMS_FROM in Render, then redeploy."})
+    code = f"{secrets.randbelow(1000000):06d}"
+    res = notify.send_sms_otp(e164, code)
+    if res.get("ok"):
+        return jsonify({"ok": True, "sent_to": e164, "message_id": res.get("id"),
+                        "status": res.get("status")})
+    return jsonify({"ok": False, "configured": True, "error": res.get("error") or "send failed"})
+
+
 @app.route("/api/customer/logout", methods=["POST"])
 def api_customer_logout():
     session.pop("cust_phone", None)

@@ -1139,6 +1139,15 @@
         <span id="emTestOut" style="font-size:12.5px"></span>
       </div>
     </div>
+    <div class="panel" style="max-width:760px;margin-top:14px">
+      <h3 style="margin:0 0 3px;font-size:15px;font-weight:800">📱 Customer login (SMS · Twilio)</h3>
+      <div class="muted2" style="font-size:12px;margin-bottom:9px">Customers can sign in with a one-time code sent by <b>SMS</b> (Twilio) — no Meta verification needed. Status: <b id="smsStatus">…</b>. Send yourself a test code to verify Twilio <b>and delivery to Jawwal / +970</b> before customers rely on it.</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <input id="smsTestPhone" style="width:210px" placeholder="970599… your own number">
+        <button class="po-btn accent" onclick="smsTest(this)">Send test SMS</button>
+        <span id="smsTestOut" style="font-size:12.5px"></span>
+      </div>
+    </div>
   </div>
 
   <!-- Trash / Recycle bin -->
@@ -6373,6 +6382,7 @@ async function loadSettings(){
   if($("s_sec_why")) $("s_sec_why").checked=!!ps.landing_why;
   waLoadStatus();
   emailLoadStatus();
+  smsLoadStatus();
 }
 async function waLoadStatus(){
   const el=$("waStatus"); if(!el) return;
@@ -6404,6 +6414,22 @@ async function emailTest(btn){
   let d; try{ d=await post("/api/admin/email_test",{email}); }catch(e){ d={error:"network error"}; }
   btn.disabled=false; btn.textContent=old;
   if(d&&d.ok){ out.style.color="var(--good)"; out.textContent="✅ Sent to "+d.sent_to+" — check your inbox."; }
+  else { out.style.color="var(--warn)"; out.textContent="⚠ "+((d&&d.error)||"failed"); }
+}
+async function smsLoadStatus(){
+  const el=$("smsStatus"); if(!el) return;
+  try{ const d=await (await fetch("/api/admin/sms_test")).json();
+    el.textContent = d.configured ? "✅ SMS connected (Twilio)" : "⚠ not set up yet — codes show on screen (dev)";
+    el.style.color = d.configured ? "var(--good)" : "var(--warn)";
+  }catch(e){ el.textContent="?"; }
+}
+async function smsTest(btn){
+  const phone=($("smsTestPhone").value||"").trim(), out=$("smsTestOut");
+  if(!phone){ out.style.color="var(--warn)"; out.textContent="Enter your number first"; return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent="Sending…"; out.textContent="";
+  let d; try{ d=await post("/api/admin/sms_test",{phone}); }catch(e){ d={error:"network error"}; }
+  btn.disabled=false; btn.textContent=old;
+  if(d&&d.ok){ out.style.color="var(--good)"; out.textContent="✅ Sent to "+d.sent_to+" — check for the SMS."; }
   else { out.style.color="var(--warn)"; out.textContent="⚠ "+((d&&d.error)||"failed"); }
 }
 // Customer-side bucket colours (same as the /track page dots) — tint the selects
