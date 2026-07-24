@@ -10011,8 +10011,8 @@ function gmRuleFieldPick(gi,ci,inp){
   if(f) gmRuleSet(gi,ci,'field',f.k); else gmRuleCritRender();       // no match → revert
 }
 function gmDlId(k){ return "gmDl_"+String(k).replace(/[^a-z0-9_]/gi,"_"); }
-function gmRuleVals(k){ // live value suggestions straight out of the current candidates
-  const s=new Set();
+function gmRuleVals(k){ // value suggestions: all records (server) + any current candidates
+  const s=new Set(((GM.ov&&GM.ov.field_values&&GM.ov.field_values[k])||[]));
   const cfLab=String(k).startsWith("cf:")?String(k).slice(3).trim().toLowerCase():null;
   ((GM.ov&&GM.ov.candidates)||[]).forEach(c=>{
     let v;
@@ -10020,7 +10020,7 @@ function gmRuleVals(k){ // live value suggestions straight out of the current ca
     else v=c[k];
     v=String(v==null?"":v).trim(); if(v) s.add(v);
   });
-  return [...s].sort().slice(0,40);
+  return [...s].sort().slice(0,60);
 }
 function gmRuleSummary(cond){
   const OPS={is:"=",is_not:"≠",contains:"∋",not_contains:"∌",gte:"≥",lte:"≤",

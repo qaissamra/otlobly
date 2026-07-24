@@ -406,6 +406,27 @@ def main():
     check("cf catalog lists the Purchases def + a Leluxe field",
           cat.get("cf:Priority", {}).get("source") == "purchases"
           and "cf:PRODUCT" in cat)
+
+    print("— v2: field_values suggests values we already have (all records) —")
+    # a leluxe pkg that is NOT a candidate (delivered) but carries a field value
+    with db.connect() as c:
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','Sold pkg','delivered',?,?)""",
+                  (str(int(now.timestamp() * 1000)),
+                   json.dumps({"tracking_number": "GWD009000009",
+                               "tracking_status": {"bucket": "delivered"},
+                               "fields": {"Colour": "Midnight Blue"}})))
+    meta = gm.rule_field_meta()
+    fv = meta["values"]
+    cand_gwds = {c["gwd"] for c in gm.candidates()}
+    check("field_values pulls from records that aren't candidates",
+          "GWD009000009" not in cand_gwds
+          and "Midnight Blue" in (fv.get("cf:Colour") or []))
+    check("field_values includes a select def's defined option (even if unused)",
+          "High" in (fv.get("cf:Priority") or [])
+          and "Low" in (fv.get("cf:Priority") or []))
+    check("overview ships field_values + cf_fields together",
+          set(gm.overview()["field_values"].get("cf:Priority") or []) >= {"High", "Low"})
     rcf = gm.rule_save({"name": "gold rings", "cond": {"groups": [{"crits": [
         {"field": "cf:product", "op": "contains", "value": "ring"}]}]},
         "seq_id": sq["id"], "mode": "queue", "enabled": True})
