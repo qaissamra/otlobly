@@ -8330,10 +8330,19 @@ function fldPlace(btn,m){
   m.style.top=Math.max(8,Math.min(r.bottom+4,innerHeight-400))+"px";
   m.style.left=Math.max(8,Math.min(r.left-205,innerWidth-262))+"px";
 }
-function popClose(x){ x.classList.remove("open"); if(x.classList.contains("fld-menu")) x.style.cssText=""; }
+function popClose(x){ x.classList.remove("open"); x.style.cssText=""; }   // clear any fixed placement
+// Action ⋯ menus live inside overflow-clipped tables/scrollers (To-order, Purchases
+// rows), so a plain absolute dropdown gets cut off. Place it position:FIXED at the
+// button — right-aligned, flipping above when it would run off the bottom.
+function popPlace(btn,m){
+  const r=btn.getBoundingClientRect(), w=m.offsetWidth||190, h=m.offsetHeight||130;
+  m.style.position="fixed"; m.style.zIndex=99; m.style.insetInlineEnd="auto";
+  m.style.left=Math.max(8,Math.min(r.right-w,innerWidth-w-8))+"px";
+  m.style.top=((r.bottom+4+h>innerHeight-8)?Math.max(8,r.top-h-4):r.bottom+4)+"px";
+}
 function popToggle(btn){ const m=btn.nextElementSibling; const wasOpen=m.classList.contains("open");
   document.querySelectorAll(".pop-menu.open").forEach(popClose);
-  if(!wasOpen){ m.classList.add("open"); if(m.classList.contains("fld-menu")) fldPlace(btn,m); }
+  if(!wasOpen){ m.classList.add("open"); (m.classList.contains("fld-menu")?fldPlace:popPlace)(btn,m); }
   event.stopPropagation();
   if(wasOpen) popResync(); }
 document.addEventListener("click",e=>{ if(!e.target.closest(".pop")){
