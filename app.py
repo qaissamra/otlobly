@@ -4496,7 +4496,11 @@ def api_customer_me():
                         "phone": core,
                         "whatsapp": row.get("whatsapp") or None,   # e164 for form prefill
                         "email_masked": _mask_email(email) if email else None,
-                        "email_verified": bool(email and row.get("email_verified_at"))})
+                        "email_verified": bool(email and row.get("email_verified_at")),
+                        # drives the Settings "change password" box — only accounts
+                        # that actually registered one can change it.
+                        "has_password": bool(row.get("id")
+                                             and db.get_customer_password_hash(row["id"]))})
     if session.get("cust_email") or session.get("cust_pending"):
         # Auth-v2 onboarding session (Google email-only, or a pending manual
         # signup) — logged in, but the phone isn't linked/verified yet.
@@ -5154,6 +5158,33 @@ def api_customer_phone_link_verify():
     session["cust_name"] = ((row or {}).get("name") or "").strip() \
         or session.get("cust_name") or _match_customer(core)[1]
     return jsonify({"ok": True, "name": session["cust_name"], "known": known})
+
+
+@app.route("/api/customer/password/change", methods=["POST"])
+@limiter.limit("6 per 10 minutes")
+@customer_required
+def api_customer_password_change():
+    """Change the portal password from Settings. Only for accounts that HAVE one
+    (manual signups); the current password must be given, so a borrowed session
+    can't silently take the account over."""
+    b = request.get_json(force=True, silent=True) or {}
+    row = _customer_row_for_core(session["cust_phone"])
+    cur_hash = db.get_customer_password_hash(row["id"]) if row else ""
+    if not row or not cur_hash:
+        return jsonify({"ok": False,
+                        "error": "لا توجد كلمة مرور لهذا الحساب · This account has no password."}), 400
+    if not check_password_hash(cur_hash, b.get("current") or ""):
+        return jsonify({"ok": False,
+                        "error": "كلمة المرور الحالية غير صحيحة · Current password is wrong."}), 400
+    new = b.get("new") or ""
+    if len(new) < PW_MIN:
+        return jsonify({"ok": False,
+                        "error": f"كلمة المرور ٨ أحرف على الأقل · Password must be at least {PW_MIN} characters."}), 400
+    if new != (b.get("confirm") or ""):
+        return jsonify({"ok": False,
+                        "error": "كلمتا المرور غير متطابقتين · Passwords don't match."}), 400
+    db.set_customer_password(row["id"], auth.hash_pw(new))
+    return jsonify({"ok": True})
 
 
 @app.route("/api/admin/whatsapp_test", methods=["GET", "POST"])

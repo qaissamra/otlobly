@@ -348,7 +348,18 @@
     <!-- SETTINGS tab -->
     <div id="sec_set" style="display:none">
       <h2 class="sec" id="t_sethead"></h2>
+      <!-- the phone this account's orders are keyed on (or a prompt to link one) -->
+      <div id="phoneLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
       <div id="emailLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
+      <!-- password: shown ONLY for accounts that registered one (has_password) -->
+      <div id="pwLine" class="hint" style="display:none;text-align:start;margin:-2px 0 10px"></div>
+      <div id="pwMgr" class="setbox" style="display:none">
+        <input id="pwcur" type="password" placeholder="••••••••" style="letter-spacing:0">
+        <input id="pwnew" type="password" placeholder="••••••••" style="letter-spacing:0;margin-top:8px">
+        <input id="pwnew2" type="password" placeholder="••••••••" style="letter-spacing:0;margin-top:8px">
+        <button id="b_pwgo" onclick="pwChange()" style="margin-top:10px;padding:11px"></button>
+        <div id="out5"></div>
+      </div>
       <div id="emailMgr" class="setbox" style="display:none">
         <input id="memail" type="email" inputmode="email" placeholder="name@example.com" style="letter-spacing:0">
         <div id="mcodeBox" style="display:none">
@@ -431,6 +442,10 @@ const T={
       linknoorders:"لا توجد طلبات مرتبطة بهذا الرقم — إذا كان الرقم خاطئاً اضغط «تعديل» وصحّحه.",
       lkskip:"التخطي الآن", linkskipnote:"⚠️ لن ترى طلباتك حتى تربط رقم جوالك.",
       signedas:"مسجّل الدخول باسم", notyou:"لست أنت؟",
+      phoneline:"رقم الجوال:", phonenone:"رقم الجوال: غير مربوط", phonelink:"ربط رقم",
+      pwline:"كلمة المرور:", pwset:"مضبوطة ✓", pwchange:"تغيير", pwcur:"كلمة المرور الحالية",
+      pwnew:"كلمة المرور الجديدة", pwnew2:"تأكيد كلمة المرور الجديدة", pwsave:"حفظ كلمة المرور",
+      pwdone:"تم تغيير كلمة المرور ✓",
       banner:"رقم هاتفك غير مربوط — لن تظهر طلباتك حتى تربطه.", bannerbtn:"اربطه الآن",
       emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
@@ -470,6 +485,10 @@ const T={
       linknoorders:"No orders are linked to this number — if it's wrong, tap “Edit” and fix it.",
       lkskip:"Skip for now", linkskipnote:"⚠️ You won't see your orders until you link your phone number.",
       signedas:"Signed in as", notyou:"Not you?",
+      phoneline:"Mobile number:", phonenone:"Mobile number: not linked", phonelink:"Link a number",
+      pwline:"Password:", pwset:"set ✓", pwchange:"Change", pwcur:"Current password",
+      pwnew:"New password", pwnew2:"Confirm new password", pwsave:"Save password",
+      pwdone:"Password changed ✓",
       banner:"Your phone number is not connected — your orders won't appear until you link it.", bannerbtn:"Link it now",
       emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
       eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
@@ -519,6 +538,8 @@ function paint(){
   $("b_lkedit").textContent=t("lkedit"); $("b_lkskip").textContent=t("lkskip");
   if($("b_linknow")) $("b_linknow").textContent=t("bannerbtn");
   $("b_mgo").textContent=MCODE?t("everify"):t("esend");
+  $("b_pwgo").textContent=t("pwsave");
+  $("pwcur").placeholder=t("pwcur"); $("pwnew").placeholder=t("pwnew"); $("pwnew2").placeholder=t("pwnew2");
   $("osearch").placeholder=t("searchph");
   [["nb_home","navhome"],["nb_orders","navorders"],["nb_pay","navpay"],["nb_set","navset"]]
     .forEach(([id,k])=>{ $(id).title=t(k); $(id).setAttribute("aria-label",t(k)); });
@@ -599,6 +620,30 @@ async function refreshEmailLine(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
   $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
+  // the phone the account's orders hang off (or a prompt to link one)
+  const ph=me.whatsapp||me.phone;
+  $("phoneLine").innerHTML=ph
+    ? `📱 ${t("phoneline")} <b dir="ltr">${esc(ph)}</b>`
+    : `📵 ${t("phonenone")} <a href="#" onclick="openLink('',true);return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("phonelink")}</a>`;
+  // password box only for accounts that registered one
+  $("pwLine").style.display=me.has_password?"block":"none";
+  if(!me.has_password) $("pwMgr").style.display="none";
+  else $("pwLine").innerHTML=`🔒 ${t("pwline")} ${t("pwset")} <a href="#" onclick="togglePwMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("pwchange")}</a>`;
+}
+function togglePwMgr(){
+  const m=$("pwMgr"); const open=m.style.display!=="none";
+  m.style.display=open?"none":"block";
+  if(!open){ $("pwcur").value=$("pwnew").value=$("pwnew2").value=""; $("out5").innerHTML=""; paint(); $("pwcur").focus(); }
+}
+async function pwChange(){
+  const b=$("b_pwgo"); b.disabled=true; const o=b.textContent; b.textContent=t("sending");
+  const d=await post("/api/customer/password/change",{current:$("pwcur").value||"",
+    new:$("pwnew").value||"", confirm:$("pwnew2").value||""});
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("out5").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  $("pwcur").value=$("pwnew").value=$("pwnew2").value="";
+  $("pwMgr").style.display="none"; $("out5").innerHTML="";
+  $("pwLine").innerHTML=`🔒 ${t("pwdone")}`;
 }
 function toggleEmailMgr(){
   const m=$("emailMgr"); const open=m.style.display!=="none";
