@@ -4005,9 +4005,9 @@ def api_idreq_get(token):
 @app.route("/api/id/submit", methods=["POST"])
 @limiter.limit("6 per minute")
 def api_id_submit():
-    """Public (token-gated, single-use): the customer submits an ID number
-    (required) + an optional image. Saved onto their CRM profile (reused across all
-    their orders); the order is stamped id_submitted_at. Image serving stays authed
+    """Public (token-gated, single-use): the customer submits an ID number AND an
+    ID photo — both required. Saved onto their CRM profile (reused across all their
+    orders); the order is stamped id_submitted_at. Image serving stays authed
     (via /api/customer_image GET) — never echoed back here."""
     import base64
     b = request.get_json(force=True, silent=True) or {}
@@ -4025,26 +4025,33 @@ def api_id_submit():
     if not cust:
         return jsonify({"error": "This link has expired."}), 404
     cust["id_number"] = id_number[:40]
-    data = (b.get("data_base64") or "")
-    if data.strip():                              # optional image
-        if data.strip().startswith("data:") and "," in data:
-            data = data.split(",", 1)[1]
+    # The photo is REQUIRED. Every failure below returns early, so the token is
+    # never burned and nothing is saved — the customer can just retry. (This used
+    # to swallow a failed decode/write and still answer ok, which would now mean
+    # telling them "Received ✓" with no image on file.)
+    data = (b.get("data_base64") or "").strip()
+    if not data:
+        return jsonify({"error": "صورة الهوية مطلوبة · An ID photo is required."}), 400
+    if data.startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    raw = b""
+    try:
+        if len(data) <= 22 * 1024 * 1024:         # ~15 MB decoded
+            raw = base64.b64decode(data)
+    except Exception:  # noqa
         raw = b""
-        try:
-            if len(data) <= 22 * 1024 * 1024:     # ~15 MB decoded
-                raw = base64.b64decode(data)
-        except Exception:  # noqa
-            raw = b""
-        if raw and len(raw) <= 15 * 1024 * 1024:
-            ext = re.sub(r"[^a-z0-9]", "", (b.get("filename", "id.png")
-                         .rsplit(".", 1)[-1] or "png").lower())[:5] or "png"
-            cust_mod.ID_DIR.mkdir(exist_ok=True)
-            fn = f"{cust['customer_id']}-{uuid.uuid4().hex[:8]}.{ext}"
-            try:
-                (cust_mod.ID_DIR / fn).write_bytes(raw)
-                cust["id_image"] = fn
-            except Exception:  # noqa
-                pass
+    if not raw or len(raw) > 15 * 1024 * 1024:
+        return jsonify({"error": "الصورة كبيرة جداً أو غير صالحة (الحد 15 ميغابايت) · "
+                                 "That photo is too large or unreadable (15 MB max)."}), 400
+    ext = re.sub(r"[^a-z0-9]", "", (b.get("filename", "id.png")
+                 .rsplit(".", 1)[-1] or "png").lower())[:5] or "png"
+    fn = f"{cust['customer_id']}-{uuid.uuid4().hex[:8]}.{ext}"
+    try:
+        cust_mod.ID_DIR.mkdir(exist_ok=True)
+        (cust_mod.ID_DIR / fn).write_bytes(raw)
+    except OSError:
+        return jsonify({"error": "تعذّر حفظ الصورة · Could not save that photo."}), 500
+    cust["id_image"] = fn
     db.upsert_customer(cust)
     oo = db.get_order(d.get("order_id") or "")
     if oo:

@@ -4,8 +4,9 @@ Self-checks: the customer ID-number feature.
 
 Covers: id_number on the customer record (round-trip + dict-upsert preserve
 guard); the staff "Request ID" link mint; the public token-gated /api/id/submit
-(number required, optional image, single-use, writes to the CRM + stamps the
-order); the id_number flowing onto order rows (/api/report); and the GAASH-mail
+(number AND photo required, single-use, rejections don't burn the token, writes
+to the CRM + stamps the order); the id_number flowing onto order rows
+(/api/report); and the GAASH-mail
 {id_number} template token resolving gwd → customer.
 
     ./.venv/bin/python test_customer_id.py
@@ -90,9 +91,17 @@ def main():
     hy = anon.get(f"/api/idreq/{token}").get_json()
     check("public hydrate returns the customer name", hy.get("ok") and hy.get("name") == "Sami")
 
-    print("— public submit: number required, image optional, single-use —")
+    print("— public submit: number AND photo required, single-use —")
     bad = anon.post("/api/id/submit", json={"token": token, "id_number": " "})
     check("blank ID number is rejected", bad.status_code == 400)
+    noimg = anon.post("/api/id/submit", json={"token": token, "id_number": "PAL-1"})
+    check("a submit with no photo is rejected", noimg.status_code == 400)
+    badimg = anon.post("/api/id/submit", json={"token": token, "id_number": "PAL-1",
+                                               "data_base64": "not-valid-base64!!"})
+    check("an unreadable photo is rejected", badimg.status_code == 400)
+    # a rejection must not burn the single-use token — the customer retries
+    check("a rejected submit leaves the link usable",
+          anon.get(f"/api/idreq/{token}").get_json().get("ok") is True)
     b64 = "data:image/png;base64," + base64.b64encode(_PNG).decode()
     ok = anon.post("/api/id/submit",
                    json={"token": token, "id_number": "PAL-99887766",

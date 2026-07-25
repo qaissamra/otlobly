@@ -57,13 +57,15 @@ const TOKEN=location.pathname.split("/").pop();
 let LANG="ar", IMG_B64="", IMG_NAME="";
 const T={
   ar:{hd:"رقم الهوية",intro:"فضلاً أدخل رقم هويتك وأرفق صورة الهوية.",
-      num:"رقم الهوية",img:"صورة الهوية (اختياري)",drop:"اضغط لرفع صورة الهوية 📷",change:"اضغط لتغيير الصورة",
-      submit:"إرسال",need:"رقم الهوية مطلوب.",expired:"انتهت صلاحية هذا الرابط.",err:"تعذّر الإرسال",
+      num:"رقم الهوية",img:"صورة الهوية",drop:"اضغط لرفع صورة الهوية 📷",change:"اضغط لتغيير الصورة",
+      submit:"إرسال",need:"رقم الهوية مطلوب.",needimg:"صورة الهوية مطلوبة.",
+      expired:"انتهت صلاحية هذا الرابط.",err:"تعذّر الإرسال",
       ok:"تم الاستلام ✓",okmsg:"شكراً! تم ربط هويتك بطلبك.",big:"الصورة كبيرة جداً (الحد 15 ميغابايت).",
       priv:"معلوماتك تُستخدم فقط لتخليص شحنتك ولا تُنشر."},
   en:{hd:"Your ID",intro:"Please enter your ID number and attach a photo of your ID.",
-      num:"ID number",img:"ID photo (optional)",drop:"Tap to upload your ID photo 📷",change:"Tap to change the photo",
-      submit:"Submit",need:"An ID number is required.",expired:"This link has expired.",err:"Couldn’t submit",
+      num:"ID number",img:"ID photo",drop:"Tap to upload your ID photo 📷",change:"Tap to change the photo",
+      submit:"Submit",need:"An ID number is required.",needimg:"An ID photo is required.",
+      expired:"This link has expired.",err:"Couldn’t submit",
       ok:"Received ✓",okmsg:"Thank you! Your ID is now linked to your order.",big:"That image is too large (15 MB max).",
       priv:"Your details are used only to clear your shipment and are never shared."}
 };
@@ -96,6 +98,7 @@ function pickFile(inp){
 async function submitId(btn){
   const num=$("f_num").value.trim();
   if(!num){ $("out").innerHTML=`<div class="err">${t("need")}</div>`; return; }
+  if(!IMG_B64){ $("out").innerHTML=`<div class="err">${t("needimg")}</div>`; return; }
   btn.disabled=true;
   const r=await fetch("/api/id/submit",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({token:TOKEN,id_number:num,data_base64:IMG_B64||"",filename:IMG_NAME||"id.png"})});
