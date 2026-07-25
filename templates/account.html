@@ -183,73 +183,88 @@
 <div class="pagewrap">
 <div class="card">
 
-  <!-- STATE 1: enter phone. Primary = WhatsApp verify-button (utility template whose
-       "Verify account" button carries a one-time login link — no code to type).
-       wa.me tap stays as the free fallback, email third. -->
+  <!-- STATE 1 (auth v2): Google is THE front door; under it a password login and
+       "Create an account". Old passwordless buttons removed from the UI — their
+       endpoints stay alive for magic ?vt= links + the ManyChat relay. -->
   <div id="s_phone" style="display:none">
     <div class="lhero"><img src="/static/assets/truck.jpg" alt=""></div>
     <p class="sub" id="t_introphone"></p>
-    <label id="t_phonelbl"></label>
-    <input id="phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
-           onkeydown="if(event.key==='Enter')vlStart()">
-    <button id="b_vl" onclick="vlStart()"></button>
-    <div class="hint" id="t_phonehint"></div>
-    <div id="vlOut"></div>
+    {% if google_enabled %}
+    <button id="b_google" onclick="googleGo()"
+            style="width:100%;background:#fff;color:#1a160f;border:1.5px solid var(--line);border-radius:999px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px rgba(35,24,10,.08)">
+      <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.7 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.2C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.4 6.9-17.7z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.6l-7.7-6c-2.1 1.4-4.8 2.3-7.5 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>
+      <span id="t_googlebtn"></span></button>
     <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
       <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
-    <button id="b_wa" onclick="waLogin()"
-            style="width:100%;background:#25D366;color:#fff;border:none;border-radius:999px;padding:13px;font-size:14.5px;font-weight:800;cursor:pointer;margin-top:12px;box-shadow:0 10px 22px rgba(37,211,102,.28)">
-      🟢 تسجيل الدخول عبر واتساب · Log in with WhatsApp</button>
-    <div id="waStatus" style="margin-top:10px"></div>
-    <button class="ghost" id="b_email" onclick="emailOpen()"
-            style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
-    {% if google_enabled %}
-    <!-- Sign in with Google — free per-login (no SMS cost, no Meta). Same eligibility
-         as email login: works once the customer linked their email from the dashboard.
-         Rendered only when the OAuth client env (GOOGLE_CLIENT_ID/SECRET) is set. -->
-    <button class="ghost" id="b_google" onclick="location.href='/api/customer/google/start'"
-            style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px">
-      <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.7 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.2C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.4 6.9-17.7z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.6l-7.7-6c-2.1 1.4-4.8 2.3-7.5 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>
-      <span id="t_googlebtn"></span></button>
     {% endif %}
-    <!-- Typed code (SMS/WhatsApp): visible only when the server can actually deliver
-         on the selected channel (otp_enabled = notify.otp_available()). Kept LAST and
-         styled as a secondary outline button on purpose — the WhatsApp/email doors above
-         are free, this one costs per send, so it reads as the fallback. Hidden-but-in-DOM
-         otherwise, because paint()/sendCode() reference these ids. Reuses #phone above. -->
-    <div{% if not otp_enabled %} style="display:none"{% endif %}>
-      <button class="ghost" id="b_send" onclick="sendCode()"
-              style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
-      <div class="hint" id="t_smshint"></div>
-      <div id="out1"></div>
-    </div>
+    <label id="t_loginid"></label>
+    <input id="lid" inputmode="email" placeholder="05xxxxxxxx / name@example.com"
+           style="letter-spacing:0" onkeydown="if(event.key==='Enter')pwLogin()">
+    <label id="t_loginpw"></label>
+    <input id="lpw" type="password" placeholder="••••••••"
+           onkeydown="if(event.key==='Enter')pwLogin()">
+    <button id="b_login" onclick="pwLogin()"></button>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer">
+      <input id="remember" type="checkbox" checked style="width:auto;margin:0"><span id="t_remember"></span></label>
+    <div id="vlOut"></div>
+    <button class="ghost" id="b_mksignup" onclick="openSignup()"
+            style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px;margin-top:14px"></button>
   </div>
 
-  <!-- STATE 2: enter code -->
-  <div id="s_code" style="display:none">
-    <p class="sub" id="t_introcode"></p>
-    <label id="t_codelbl"></label>
-    <input id="code" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
-           onkeydown="if(event.key==='Enter')verifyCode()">
-    <button id="b_verify" onclick="verifyCode()"></button>
-    <button class="ghost" id="b_resend" onclick="backToPhone()"></button>
-    <div id="out2"></div>
+  <!-- STATE 1b (auth v2): create an account — name, phone, optional email, password.
+       NOTHING is created server-side until the phone verifies on the next step. -->
+  <div id="s_signup" style="display:none">
+    <p class="sub" id="t_signhead"></p>
+    <label id="t_signname"></label>
+    <input id="sname" placeholder="" style="letter-spacing:0"
+           onkeydown="if(event.key==='Enter')signupGo()">
+    <label id="t_signphone"></label>
+    <input id="sphone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
+           onkeydown="if(event.key==='Enter')signupGo()">
+    <label id="t_signemail"></label>
+    <input id="semail" type="email" inputmode="email" placeholder="name@example.com"
+           style="letter-spacing:0" onkeydown="if(event.key==='Enter')signupGo()">
+    <label id="t_signpw"></label>
+    <input id="spw" type="password" placeholder="••••••••"
+           onkeydown="if(event.key==='Enter')signupGo()">
+    <label id="t_signpw2"></label>
+    <input id="spw2" type="password" placeholder="••••••••"
+           onkeydown="if(event.key==='Enter')signupGo()">
+    <button id="b_signup" onclick="signupGo()"></button>
+    <button class="ghost" id="b_sback" onclick="show('s_phone')"></button>
+    <div id="sOut"></div>
   </div>
 
-  <!-- STATE 2b: email login (second method — WhatsApp above stays the main door) -->
-  <div id="s_email" style="display:none">
-    <p class="sub" id="t_introemail"></p>
-    <label id="t_emaillbl"></label>
-    <input id="lemail" type="email" inputmode="email" placeholder="name@example.com"
-           style="letter-spacing:0" onkeydown="if(event.key==='Enter')emailGo()">
-    <div id="ecodeBox" style="display:none">
-      <label id="t_ecodelbl"></label>
-      <input id="ecode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
-             onkeydown="if(event.key==='Enter')emailGo()">
+  <!-- STATE 2 (auth v2): the shared "verify your phone" step — after Google (skippable,
+       with the you-won't-see-your-orders disclaimer) or after a manual signup. -->
+  <div id="s_link" style="display:none">
+    <p class="sub" id="t_linkhead"></p>
+    <div id="linkEntry">
+      <label id="t_linkphone"></label>
+      <input id="lkphone" type="tel" inputmode="tel" placeholder="05xxxxxxxx"
+             onkeydown="if(event.key==='Enter')lkSend()">
+      <button id="b_lksend" onclick="lkSend()"></button>
     </div>
-    <button id="b_esend" onclick="emailGo()"></button>
-    <button class="ghost" id="b_eback" onclick="emailBack()"></button>
-    <div id="out3"></div>
+    <div id="linkCode" style="display:none">
+      <!-- "SMS sent to <number> [Edit]" -->
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:11px 13px;font-size:13.5px;margin-top:8px">
+        📩 <span id="t_linksent"></span> <b id="lkShown" dir="ltr"></b>
+        <button class="ghost" id="b_lkedit" onclick="lkEdit()"
+                style="display:inline;width:auto;padding:3px 12px;margin:0 6px;font-size:12.5px;border:1px solid var(--line);border-radius:999px"></button>
+      </div>
+      <div id="lkKnown" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:11px 13px;font-size:13px;margin-top:8px">
+        ℹ️ <span id="t_linknoorders"></span></div>
+      <label id="t_linkcode"></label>
+      <input id="lkcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
+             onkeydown="if(event.key==='Enter')lkVerify()">
+      <button id="b_lkverify" onclick="lkVerify()"></button>
+    </div>
+    <div id="lkOut"></div>
+    <div id="linkSkipBox" style="display:none;margin-top:14px">
+      <button class="ghost" id="b_lkskip" onclick="lkSkip()"
+              style="border:1px solid var(--line);border-radius:999px;width:100%;padding:11px;font-size:13.5px"></button>
+      <div class="hint" id="t_linkskipnote" style="margin-top:6px"></div>
+    </div>
   </div>
 
   <!-- STATE 3: dashboard — app-style: greeting+bell, quick actions, shipment cards,
@@ -266,6 +281,12 @@
 
     <!-- HOME tab -->
     <div id="sec_home">
+      <!-- Auth v2: standing disclaimer for phone-less (Google-skip) sessions -->
+      <div id="linkbanner" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;border-radius:14px;padding:13px 15px;font-size:13.5px;margin-bottom:12px">
+        📵 <span id="t_banner"></span>
+        <button id="b_linknow" onclick="openLink('', true)"
+                style="width:auto;display:inline-block;margin:8px 0 0;padding:8px 18px;font-size:13px;border-radius:999px"></button>
+      </div>
       <div id="balSum"></div>
       <div class="qacts">
         <a class="qa peach" href="/order">
@@ -389,6 +410,18 @@ const T={
       googlebtn:"الدخول بحساب Google",
       gerrnomatch:"حساب Google هذا غير مربوط بأي حساب لدينا — سجّل الدخول برقم جوالك أولاً، ثم اربط بريدك من لوحة حسابك.",
       gerrfail:"تعذّر تسجيل الدخول عبر Google — حاول مرة أخرى.",
+      loginid:"رقم الجوال أو البريد الإلكتروني", loginpw:"كلمة المرور", loginbtn:"تسجيل الدخول",
+      remember:"تذكّرني — ابقَ مسجلاً للدخول", mksignup:"إنشاء حساب جديد",
+      signhead:"أنشئ حسابك — وسنؤكد رقم جوالك في الخطوة التالية.", signname:"الاسم الكامل",
+      signphone:"رقم الجوال", signemail:"البريد الإلكتروني (اختياري)", signpw:"كلمة المرور",
+      signpw2:"تأكيد كلمة المرور", signbtn:"إنشاء الحساب", sback:"رجوع",
+      linkhead:"أكّد رقم جوالك — سنرسل لك رمزاً برسالة نصية لربط طلباتك بحسابك.",
+      linkphone:"رقم الجوال", lksend:"إرسال رمز التأكيد",
+      linksent:"أُرسلت رسالة نصية إلى", lkedit:"تعديل", linkcode:"رمز التأكيد",
+      lkverify:"تأكيد ودخول",
+      linknoorders:"لا توجد طلبات مرتبطة بهذا الرقم — إذا كان الرقم خاطئاً اضغط «تعديل» وصحّحه.",
+      lkskip:"التخطي الآن", linkskipnote:"⚠️ لن ترى طلباتك حتى تربط رقم جوالك.",
+      banner:"رقم هاتفك غير مربوط — لن تظهر طلباتك حتى تربطه.", bannerbtn:"اربطه الآن",
       emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
       elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
@@ -415,6 +448,18 @@ const T={
       googlebtn:"Sign in with Google",
       gerrnomatch:"This Google account isn't linked to any customer yet — sign in with your phone first, then link your email from your dashboard.",
       gerrfail:"Google sign-in failed — please try again.",
+      loginid:"Mobile number or email", loginpw:"Password", loginbtn:"Log in",
+      remember:"Remember me — keep me signed in", mksignup:"Create an account",
+      signhead:"Create your account — we'll verify your phone in the next step.", signname:"Full name",
+      signphone:"Mobile number", signemail:"Email (optional)", signpw:"Password",
+      signpw2:"Confirm password", signbtn:"Create account", sback:"Back",
+      linkhead:"Verify your phone — we'll text you a code to connect your orders to this account.",
+      linkphone:"Mobile number", lksend:"Send verification code",
+      linksent:"An SMS has been sent to", lkedit:"Edit", linkcode:"Verification code",
+      lkverify:"Verify & sign in",
+      linknoorders:"No orders are linked to this number — if it's wrong, tap “Edit” and fix it.",
+      lkskip:"Skip for now", linkskipnote:"⚠️ You won't see your orders until you link your phone number.",
+      banner:"Your phone number is not connected — your orders won't appear until you link it.", bannerbtn:"Link it now",
       emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
       eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
       elink:"Link email", echange:"Change", elinked:"Email linked ✓",
@@ -449,21 +494,24 @@ function setLang(l){ LANG=l;
   if(D && $("s_dash").style.display!=="none") renderLists();  // re-render cards in the new language
 }
 function paint(){
-  ["introphone","phonelbl","phonehint","smshint","introcode","codelbl","deliveries","orders","payments",
-   "introemail","emaillbl","ecodelbl","qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
+  ["introphone","deliveries","orders","payments",
+   "loginid","loginpw","remember","signhead","signname","signphone","signemail","signpw","signpw2",
+   "linkhead","linkphone","linksent","linkcode","linknoorders","linkskipnote","banner",
+   "qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
     .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
-  $("b_vl").textContent=t("vlbtn");
-  $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
-  $("b_email").textContent=t("emailbtn"); $("b_eback").textContent=t("eback");
   if($("t_googlebtn")) $("t_googlebtn").textContent=t("googlebtn");   // Jinja-gated button
-  $("b_esend").textContent=ECODE?t("everify"):t("esend");
+  $("b_login").textContent=t("loginbtn"); $("b_mksignup").textContent=t("mksignup");
+  $("b_signup").textContent=t("signbtn"); $("b_sback").textContent=t("sback");
+  $("b_lksend").textContent=t("lksend"); $("b_lkverify").textContent=t("lkverify");
+  $("b_lkedit").textContent=t("lkedit"); $("b_lkskip").textContent=t("lkskip");
+  if($("b_linknow")) $("b_linknow").textContent=t("bannerbtn");
   $("b_mgo").textContent=MCODE?t("everify"):t("esend");
   $("osearch").placeholder=t("searchph");
   [["nb_home","navhome"],["nb_orders","navorders"],["nb_pay","navpay"],["nb_set","navset"]]
     .forEach(([id,k])=>{ $(id).title=t(k); $(id).setAttribute("aria-label",t(k)); });
 }
-function show(state){ ["s_phone","s_code","s_email","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none");
+function show(state){ ["s_phone","s_signup","s_link","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none");
   const dash=state==="s_dash";
   $("pillnav").classList.toggle("show",dash);
   document.body.classList.toggle("hasnav",dash); }
@@ -473,85 +521,64 @@ function switchTab(k){ TAB=k;
     $(sec).style.display=key===k?"block":"none";
     $(nb).classList.toggle("on",key===k); });
 }
-async function sendCode(){
-  const p=$("phone").value.trim(); if(!p)return; PHONE=p;
-  const b=$("b_send"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("out1").innerHTML="";
-  let d; try{ d=await (await fetch("/api/customer/otp/request",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p})})).json(); }catch(e){ d={error:"network"}; }
-  b.disabled=false; b.textContent=o;
-  if(!d.ok){ $("out1").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
-  paint(); show("s_code"); $("code").focus();
-  if(d.dev_code){ $("out2").innerHTML=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("code").value=d.dev_code; }
-}
-/* ---- WhatsApp verify-button login (primary): we send the utility template whose
-   "Verify account" button carries a one-time ?vt= link. The tap opens /account in a
-   new tab that gets the session cookie; this tab polls /api/customer/me and flips to
-   the dashboard as soon as the login lands (same browser = same cookie jar). ---- */
-let VL_POLL=null;
-async function vlStart(){
-  const p=$("phone").value.trim(); if(!p)return;
-  const b=$("b_vl"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("vlOut").innerHTML="";
-  const d=await post("/api/customer/wa_verify/start",{phone:p});
+/* ---- Auth v2 flows: Google front door · password login · create-account ·
+   the shared "verify your phone" step (send → sent-to <number> [Edit] → code). ---- */
+async function post(url,body){ try{ return await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json(); }catch(e){ return {error:"network"}; } }
+function rememberVal(){ const r=$("remember"); return (!r||r.checked)?1:0; }
+function googleGo(){ location.href="/api/customer/google/start?remember="+rememberVal(); }
+async function pwLogin(){
+  const id=($("lid").value||"").trim(), pw=$("lpw").value||"";
+  if(!id||!pw){ $("vlOut").innerHTML=`<div class="err">${t("loginid")} + ${t("loginpw")}</div>`; return; }
+  const b=$("b_login"); b.disabled=true; const o=b.textContent; b.textContent=t("sending");
+  const d=await post("/api/customer/pwlogin",{identifier:id,password:pw,remember:!!rememberVal()});
   b.disabled=false; b.textContent=o;
   if(!d.ok){ $("vlOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
-  $("vlOut").innerHTML=`<div class="hint" style="line-height:1.7">${t("vlsent")}</div><div class="hint">${t("vlwait")}</div>`;
-  if(d.dev_link){ $("vlOut").innerHTML+=`<div class="dev">رابط تجريبي (dev): <a href="${esc(d.dev_link)}" target="_blank">${esc(d.dev_link)}</a></div>`; }
-  clearInterval(VL_POLL); VL_POLL=setInterval(vlPoll,3000);
-  setTimeout(()=>clearInterval(VL_POLL),10*60*1000);   // give up after the token TTL
+  $("vlOut").innerHTML=""; loadDashboard();
 }
-async function vlPoll(){
-  let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ return; }
-  if(me&&me.logged_in){ clearInterval(VL_POLL); loadDashboard(); }
-}
-let WA_POLL=null;
-async function waLogin(){
-  const b=$("b_wa"); b.disabled=true; b.style.opacity=".6";
-  let d; try{ d=await (await fetch("/api/customer/wa_login/start",{method:"POST"})).json(); }catch(e){ d={}; }
-  if(!d.ok){ b.disabled=false; b.style.opacity="1";
-    $("waStatus").innerHTML=`<div class="err">${esc(d.error)||'WhatsApp login unavailable'}</div>`; return; }
-  window.open(d.wa_url,"_blank");                      // opens WhatsApp with the code pre-filled
-  $("waStatus").innerHTML=`<div class="hint" style="line-height:1.7">📲 <b>أرسل الرسالة</b> التي فتحت في واتساب — سيتم تسجيل دخولك تلقائياً.<br>
-    Hit <b>send</b> in WhatsApp — you'll be logged in automatically.</div>
-    <div class="hint">⏳ بانتظار رسالتك · waiting for your message…</div>`;
-  clearInterval(WA_POLL); WA_POLL=setInterval(waPoll,3000); setTimeout(waPoll,1200);
-}
-async function waPoll(){
-  let d; try{ d=await (await fetch("/api/customer/wa_login/poll")).json(); }catch(e){ return; }
-  if(d.status==="ok"){ clearInterval(WA_POLL); loadDashboard(); }
-  else if(d.status==="unknown"){ clearInterval(WA_POLL); const b=$("b_wa"); b.disabled=false; b.style.opacity="1";
-    $("waStatus").innerHTML=`<div class="err">${esc(d.error)}</div>`; }
-  else if(d.status==="expired"||d.status==="none"){ clearInterval(WA_POLL); const b=$("b_wa"); b.disabled=false; b.style.opacity="1";
-    $("waStatus").innerHTML=`<div class="hint">انتهت المهلة — اضغط الزر لتجربة أخرى · timed out, tap again</div>`; }
-  // pending → keep polling
-}
-function backToPhone(){ show("s_phone"); $("out2").innerHTML=""; clearInterval(WA_POLL); clearInterval(VL_POLL); $("phone").focus(); }
-async function verifyCode(){
-  const c=($("code").value||"").trim(); if(!c)return;
-  const b=$("b_verify"); b.disabled=true; const o=b.textContent; b.textContent=t("verifying"); $("out2").innerHTML="";
-  let d; try{ d=await (await fetch("/api/customer/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:PHONE,code:c})})).json(); }catch(e){ d={error:"network"}; }
+function openSignup(){ $("sOut").innerHTML=""; paint(); show("s_signup"); $("sname").focus(); }
+async function signupGo(){
+  const b=$("b_signup"); b.disabled=true; const o=b.textContent; b.textContent=t("sending");
+  const d=await post("/api/customer/signup",{name:($("sname").value||"").trim(),
+    phone:($("sphone").value||"").trim(), email:($("semail").value||"").trim(),
+    password:$("spw").value||"", confirm:$("spw2").value||"", remember:!!rememberVal()});
   b.disabled=false; b.textContent=o;
-  if(!d.ok){ $("out2").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  if(!d.ok){ $("sOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  // Signup parked server-side — nothing exists until the phone verifies.
+  openLink($("sphone").value.trim(), false);
+}
+/* the shared verify-phone step. skippable=true only for Google (email-verified) sessions */
+let LKPHONE="";
+function openLink(prefill, skippable){
+  $("lkOut").innerHTML=""; $("lkcode").value="";
+  $("linkEntry").style.display="block"; $("linkCode").style.display="none";
+  $("linkSkipBox").style.display=skippable?"block":"none";
+  if(prefill) $("lkphone").value=prefill;
+  paint(); show("s_link"); $("lkphone").focus();
+}
+async function lkSend(){
+  const p=($("lkphone").value||"").trim(); if(!p)return; LKPHONE=p;
+  const b=$("b_lksend"); b.disabled=true; const o=b.textContent; b.textContent=t("sending"); $("lkOut").innerHTML="";
+  const d=await post("/api/customer/phone/link/start",{phone:p});
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("lkOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
+  $("linkEntry").style.display="none"; $("linkCode").style.display="block";
+  $("lkShown").textContent=d.to||p;                       // "SMS sent to <number> [Edit]"
+  $("lkKnown").style.display=(d.known===false)?"block":"none";  // no-orders note
+  $("lkcode").focus();
+  if(d.dev_code){ $("lkOut").innerHTML=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("lkcode").value=d.dev_code; }
+}
+function lkEdit(){ $("linkCode").style.display="none"; $("linkEntry").style.display="block"; $("lkOut").innerHTML=""; $("lkphone").focus(); }
+async function lkVerify(){
+  const c=($("lkcode").value||"").trim(); if(!c)return;
+  const b=$("b_lkverify"); b.disabled=true; const o=b.textContent; b.textContent=t("verifying");
+  const d=await post("/api/customer/phone/link/verify",{phone:LKPHONE,code:c});
+  b.disabled=false; b.textContent=o;
+  if(!d.ok){ $("lkOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
   loadDashboard();
 }
-async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} D=null; backToPhone(); show("s_phone"); }
-/* ---- email login (second method) + link/change from the settings tab ---- */
-async function post(url,body){ try{ return await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json(); }catch(e){ return {error:"network"}; } }
-function emailOpen(){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); show("s_email"); $("lemail").focus(); }
-function emailBack(){ if(ECODE){ ECODE=false; $("ecodeBox").style.display="none"; $("out3").innerHTML=""; paint(); $("lemail").focus(); } else { show("s_phone"); } }
-function emailGo(){ ECODE?emailVerify():emailStart(); }
-async function emailStart(){
-  const em=($("lemail").value||"").trim(); if(!em)return; LEMAIL=em;
-  const b=$("b_esend"); b.disabled=true; const d=await post("/api/customer/email/login/start",{email:em}); b.disabled=false;
-  if(!d.ok){ $("out3").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
-  ECODE=true; $("ecodeBox").style.display="block"; paint(); $("ecode").focus();
-  $("out3").innerHTML=`<div class="hint">${t("esent")}</div>`;
-  if(d.dev_code){ $("out3").innerHTML+=`<div class="dev">رمز تجريبي (dev): <b>${d.dev_code}</b></div>`; $("ecode").value=d.dev_code; }
-}
-async function emailVerify(){
-  const c=($("ecode").value||"").trim(); if(!c)return;
-  const b=$("b_esend"); b.disabled=true; const d=await post("/api/customer/email/login/verify",{email:LEMAIL,code:c}); b.disabled=false;
-  if(!d.ok){ $("out3").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
-  ECODE=false; loadDashboard();
-}
+function lkSkip(){ loadDashboard(); }
+function backToPhone(){ show("s_phone"); $("lid").focus(); }
+async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} D=null; show("s_phone"); }
 async function refreshEmailLine(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
@@ -704,6 +731,8 @@ async function loadDashboard(){
   let d; try{ d=await (await fetch("/api/customer/orders")).json(); }catch(e){ d=null; }
   if(!d){ backToPhone(); return; }
   D=d; paint(); show("s_dash"); switchTab(TAB==="pay"&&!(d.payments||[]).length?"home":TAB);
+  // Auth v2: phone-less (Google-skip) session → the standing "not connected" banner.
+  $("linkbanner").style.display=(d.phone_linked===false)?"block":"none";
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
   refreshEmailLine();
   renderLists();
@@ -715,9 +744,11 @@ async function init(){
   // email magic link. Strip it from the URL/history first, then redeem via POST.
   const qs=new URLSearchParams(location.search);
   const vt=qs.get("vt");
-  // ?gerr= — a failed "Sign in with Google" round-trip (nomatch/fail/state).
+  // ?gerr= — a failed "Sign in with Google" round-trip (fail/state).
   const gerr=qs.get("gerr");
-  if(gerr) history.replaceState(null,"",location.pathname);
+  // ?link=phone — fresh Google login with no linked phone → the verify-phone step.
+  const lk=qs.get("link");
+  if(gerr||lk) history.replaceState(null,"",location.pathname);
   let vtErr="";
   if(vt){
     history.replaceState(null,"",location.pathname);
@@ -726,11 +757,15 @@ async function init(){
     vtErr=(d&&d.error)||"";
   }
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
-  if(me&&me.logged_in){ loadDashboard(); }
+  if(me&&me.logged_in){
+    if(me.phone_linked===false&&(lk==="phone"||me.pending_phone)){
+      openLink(me.pending_phone||"", !me.pending_phone);   // signup=required, google=skippable
+    } else loadDashboard();
+  }
   else { show("s_phone");
     if(vtErr)$("vlOut").innerHTML=`<div class="err">${esc(vtErr)}</div>`;
-    else if(gerr)$("vlOut").innerHTML=`<div class="err">${esc(t(gerr==="nomatch"?"gerrnomatch":"gerrfail"))}</div>`;
-    $("phone").focus(); }
+    else if(gerr)$("vlOut").innerHTML=`<div class="err">${esc(t("gerrfail"))}</div>`;
+    $("lid").focus(); }
 }
 init();
 </script>

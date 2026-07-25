@@ -438,6 +438,11 @@ def migrate():
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_email "
                   "ON customers(business_id, lower(email)) "
                   "WHERE email IS NOT NULL AND email <> ''")
+        # Portal auth v2: customer password login (manual "create an account").
+        # Column-only like email — never mirrored into data_json (upsert_customer
+        # rewrites that wholesale). Hash via auth.hash_pw / check_password_hash.
+        if "password_hash" not in _columns(c, "customers"):
+            c.execute("ALTER TABLE customers ADD COLUMN password_hash TEXT")
         # True order date for Leluxe goal math (ms-epoch string). Set once —
         # backfilled from the AZ (2) source list or stamped at insert; the
         # ClickUp pull/push sync never writes this column, so it survives every
@@ -772,6 +777,20 @@ def set_customer_email(row_id, email, verified_at):
         return True
     except sqlite3.IntegrityError:
         return False
+
+
+def set_customer_password(row_id, pw_hash):
+    """Set the portal password hash (manual-account login). Applied only AFTER the
+    phone was verified by SMS — never from an unverified signup claim."""
+    with connect() as c:
+        c.execute("UPDATE customers SET password_hash=?, updated_at=? WHERE id=?",
+                  (pw_hash, now_iso(), row_id))
+
+
+def get_customer_password_hash(row_id):
+    with connect() as c:
+        r = c.execute("SELECT password_hash FROM customers WHERE id=?", (row_id,)).fetchone()
+        return (r["password_hash"] or "") if r else ""
 
 
 def list_customer_login_rows(business_id=None):
