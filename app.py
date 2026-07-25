@@ -4338,6 +4338,47 @@ def api_track():
 OTP_TTL = 600                  # code valid for 10 minutes
 OTP_MAX_ATTEMPTS = 5
 
+# --- Login-code cost-abuse guards (DB-backed → shared across workers, survive restart).
+# The strongest guard is upstream: only KNOWN customers (with an order) reach the send at
+# all (_match_customer). These add per-phone throttling + a global daily SMS budget so no
+# one can quietly run up the Twilio bill even with a valid customer number. ---
+OTP_RESEND_COOLDOWN = int(os.environ.get("OTP_RESEND_COOLDOWN", "60"))   # seconds between codes to one number
+OTP_PHONE_DAILY_MAX = int(os.environ.get("OTP_PHONE_DAILY_MAX", "8"))    # max codes to one number / 24h
+SMS_DAILY_CAP = int(os.environ.get("SMS_DAILY_CAP", "500"))             # global SMS/day circuit-breaker
+
+
+def _otp_recent_sends(core):
+    """Timestamps of codes sent to this number in the last 24h (self-pruning)."""
+    now = time.time()
+    rec = db.get_setting(f"otpsend:{core}") or {}
+    return [t for t in (rec.get("sends") or []) if now - t < 86400]
+
+
+def _otp_guard(core, channel):
+    """Cost-abuse gate before sending a login code. Returns (ok, status, msg): a
+    per-phone cooldown + daily cap (any channel), plus a global daily SMS budget when
+    the channel actually costs money (sms)."""
+    sends = _otp_recent_sends(core)
+    if sends and time.time() - max(sends) < OTP_RESEND_COOLDOWN:
+        return (False, 429,
+                "انتظر قليلاً قبل طلب رمز جديد · Please wait a moment before requesting another code.")
+    if len(sends) >= OTP_PHONE_DAILY_MAX:
+        return (False, 429,
+                "محاولات كثيرة اليوم · Too many codes today — try again later or use WhatsApp/email.")
+    if channel == "sms" and db.get_usage(1, "otp_sms", datetime.now().strftime("%Y-%m-%d")) >= SMS_DAILY_CAP:
+        app.logger.warning("SMS daily cap %s reached — refusing OTP SMS for %s", SMS_DAILY_CAP, core)
+        return (False, 429,
+                "تعذّر الإرسال الآن · Can't text a code right now — please use WhatsApp or email.")
+    return (True, 200, None)
+
+
+def _otp_record_send(core, channel):
+    """Record a SUCCESSFUL code send: per-phone timestamp (self-pruning >24h) + the
+    global daily SMS counter (only for the paid sms channel)."""
+    db.set_setting(f"otpsend:{core}", {"sends": _otp_recent_sends(core) + [time.time()]})
+    if channel == "sms":
+        db.bump_usage(1, "otp_sms", datetime.now().strftime("%Y-%m-%d"), 1)
+
 
 def customer_required(fn):
     """Guard customer-portal API: 401 unless a customer session is established."""
@@ -4570,6 +4611,10 @@ def api_customer_otp_request():
     if not matched:
         return jsonify({"ok": False,
                         "error": "لا توجد طلبات لهذا الرقم · No orders found for this number."}), 404
+    channel = notify.otp_channel()
+    ok, status, msg = _otp_guard(core, channel)     # per-phone throttle + global SMS budget
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), status
     code = f"{secrets.randbelow(1000000):06d}"
     db.set_setting(f"otp:{core}", {"hash": auth.hash_pw(code),
                                    "expires": time.time() + OTP_TTL, "attempts": 0, "name": name})
@@ -4577,9 +4622,10 @@ def api_customer_otp_request():
     e164 = (pin or {}).get("e164") or ("+" + core)
     res = notify.send_login_code(e164, code)
     if res.get("ok"):
-        return jsonify({"ok": True, "sent": notify.otp_channel()})
+        _otp_record_send(core, channel)             # only count an actual queued send
+        return jsonify({"ok": True, "sent": channel})
     app.logger.warning("OTP for %s = %s (%s not sent: %s)", core, code,
-                       notify.otp_channel(), res.get("error"))
+                       channel, res.get("error"))
     if os.environ.get("OTLOBLY_OTP_DEV"):         # testing before the live WhatsApp API is set up
         return jsonify({"ok": True, "sent": "dev", "dev_code": code})
     return jsonify({"ok": False,
