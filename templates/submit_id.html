@@ -56,12 +56,12 @@ const $=id=>document.getElementById(id);
 const TOKEN=location.pathname.split("/").pop();
 let LANG="ar", IMG_B64="", IMG_NAME="";
 const T={
-  ar:{hd:"رقم الهوية",intro:"لإتمام طلبك، فضلاً أدخل رقم هويتك. صورة الهوية اختيارية لكنها تسرّع التخليص.",
+  ar:{hd:"رقم الهوية",intro:"فضلاً أدخل رقم هويتك وأرفق صورة الهوية.",
       num:"رقم الهوية",img:"صورة الهوية (اختياري)",drop:"اضغط لرفع صورة الهوية 📷",change:"اضغط لتغيير الصورة",
       submit:"إرسال",need:"رقم الهوية مطلوب.",expired:"انتهت صلاحية هذا الرابط.",err:"تعذّر الإرسال",
       ok:"تم الاستلام ✓",okmsg:"شكراً! تم ربط هويتك بطلبك.",big:"الصورة كبيرة جداً (الحد 15 ميغابايت).",
       priv:"معلوماتك تُستخدم فقط لتخليص شحنتك ولا تُنشر."},
-  en:{hd:"Your ID",intro:"To complete your order, please enter your ID number. An ID photo is optional but speeds up clearance.",
+  en:{hd:"Your ID",intro:"Please enter your ID number and attach a photo of your ID.",
       num:"ID number",img:"ID photo (optional)",drop:"Tap to upload your ID photo 📷",change:"Tap to change the photo",
       submit:"Submit",need:"An ID number is required.",expired:"This link has expired.",err:"Couldn’t submit",
       ok:"Received ✓",okmsg:"Thank you! Your ID is now linked to your order.",big:"That image is too large (15 MB max).",
