@@ -49,6 +49,7 @@ import customers as cust_mod
 import db
 import estimate
 import settings as settings_mod
+import google_login
 import mailer
 import messages
 import money
@@ -4069,7 +4070,8 @@ def api_bridge_draft():
 
 @app.route("/order/<draft_id>", methods=["GET"])
 def order_intake_page(draft_id):
-    return render_template("order.html")
+    # wa_number: without it the shared nav's WhatsApp/Contact link self-hides here
+    return render_template("order.html", wa_number=_wa_business_number())
 
 
 # A sample "Amazon checkout" screenshot for the /order/demo preview (so the big proof
@@ -4338,12 +4340,68 @@ def api_track():
 OTP_TTL = 600                  # code valid for 10 minutes
 OTP_MAX_ATTEMPTS = 5
 
+# --- Login-code cost-abuse guards (DB-backed → shared across workers, survive restart).
+# The strongest guard is upstream: only KNOWN customers (with an order) reach the send at
+# all (_match_customer). These add per-phone throttling + a global daily SMS budget so no
+# one can quietly run up the Twilio bill even with a valid customer number. ---
+OTP_RESEND_COOLDOWN = int(os.environ.get("OTP_RESEND_COOLDOWN", "60"))   # seconds between codes to one number
+OTP_PHONE_DAILY_MAX = int(os.environ.get("OTP_PHONE_DAILY_MAX", "8"))    # max codes to one number / 24h
+SMS_DAILY_CAP = int(os.environ.get("SMS_DAILY_CAP", "500"))             # global SMS/day circuit-breaker
+
+
+def _otp_recent_sends(core):
+    """Timestamps of codes sent to this number in the last 24h (self-pruning)."""
+    now = time.time()
+    rec = db.get_setting(f"otpsend:{core}") or {}
+    return [t for t in (rec.get("sends") or []) if now - t < 86400]
+
+
+def _otp_guard(core, channel):
+    """Cost-abuse gate before sending a login code. Returns (ok, status, msg): a
+    per-phone cooldown + daily cap (any channel), plus a global daily SMS budget when
+    the channel actually costs money (sms)."""
+    sends = _otp_recent_sends(core)
+    if sends and time.time() - max(sends) < OTP_RESEND_COOLDOWN:
+        return (False, 429,
+                "انتظر قليلاً قبل طلب رمز جديد · Please wait a moment before requesting another code.")
+    if len(sends) >= OTP_PHONE_DAILY_MAX:
+        return (False, 429,
+                "محاولات كثيرة اليوم · Too many codes today — try again later or use WhatsApp/email.")
+    if channel == "sms" and db.get_usage(1, "otp_sms", datetime.now().strftime("%Y-%m-%d")) >= SMS_DAILY_CAP:
+        app.logger.warning("SMS daily cap %s reached — refusing OTP SMS for %s", SMS_DAILY_CAP, core)
+        return (False, 429,
+                "تعذّر الإرسال الآن · Can't text a code right now — please use WhatsApp or email.")
+    return (True, 200, None)
+
+
+def _otp_record_send(core, channel):
+    """Record a SUCCESSFUL code send: per-phone timestamp (self-pruning >24h) + the
+    global daily SMS counter (only for the paid sms channel)."""
+    db.set_setting(f"otpsend:{core}", {"sends": _otp_recent_sends(core) + [time.time()]})
+    if channel == "sms":
+        db.bump_usage(1, "otp_sms", datetime.now().strftime("%Y-%m-%d"), 1)
+
 
 def customer_required(fn):
     """Guard customer-portal API: 401 unless a customer session is established."""
     @wraps(fn)
     def wrapper(*a, **k):
         if not session.get("cust_phone"):
+            abort(401)
+        return fn(*a, **k)
+    return wrapper
+
+
+def customer_session_required(fn):
+    """Lighter guard for auth-v2 onboarding: accepts a FULL session (cust_phone) or
+    a not-yet-phone-linked one — Google email-only (cust_email) or a pending manual
+    signup (cust_pending). Used only by /api/customer/orders (returns an empty
+    shell for phone-less sessions) and the phone-link endpoints; everything
+    money/data-bearing stays behind customer_required."""
+    @wraps(fn)
+    def wrapper(*a, **k):
+        if not (session.get("cust_phone") or session.get("cust_email")
+                or session.get("cust_pending")):
             abort(401)
         return fn(*a, **k)
     return wrapper
@@ -4421,8 +4479,11 @@ def account_page():
     #   sms      → Twilio creds + SMS_OTP_ENABLED=1 (no Meta verification needed)
     #   whatsapp → Cloud API creds + WHATSAPP_OTP_ENABLED=1 (needs an APPROVED auth
     #              template — blocked until the Meta business is verified, tested 2026-07)
+    # google_enabled shows "Sign in with Google" once the OAuth client env is set —
+    # the free-per-login door for returning customers with a linked email.
     return render_template("account.html", wa_number=_wa_business_number(),
-                           otp_enabled=notify.otp_available())
+                           otp_enabled=notify.otp_available(),
+                           google_enabled=google_login.configured())
 
 
 @app.route("/api/customer/me")
@@ -4431,11 +4492,25 @@ def api_customer_me():
         core = session["cust_phone"]
         row = _customer_row_for_core(core) or {}
         email = (row.get("email") or "").strip()
-        return jsonify({"logged_in": True, "name": session.get("cust_name") or "",
+        return jsonify({"logged_in": True, "phone_linked": True,
+                        "name": session.get("cust_name") or "",
                         "phone": core,
                         "whatsapp": row.get("whatsapp") or None,   # e164 for form prefill
-                        "email_masked": _mask_email(email) if email else None,
-                        "email_verified": bool(email and row.get("email_verified_at"))})
+                        # full address, not masked: it's the visitor's OWN email,
+                        # echoed back so they can see which one is on the account.
+                        "email": email or None,
+                        "email_verified": bool(email and row.get("email_verified_at")),
+                        # drives the Settings "change password" box — only accounts
+                        # that actually registered one can change it.
+                        "has_password": bool(row.get("id")
+                                             and db.get_customer_password_hash(row["id"]))})
+    if session.get("cust_email") or session.get("cust_pending"):
+        # Auth-v2 onboarding session (Google email-only, or a pending manual
+        # signup) — logged in, but the phone isn't linked/verified yet.
+        return jsonify({"logged_in": True, "phone_linked": False,
+                        "name": session.get("cust_name") or "",
+                        "pending_phone": session.get("cust_pending") or None,
+                        "email": session.get("cust_email") or None})
     return jsonify({"logged_in": False})
 
 
@@ -4570,6 +4645,10 @@ def api_customer_otp_request():
     if not matched:
         return jsonify({"ok": False,
                         "error": "لا توجد طلبات لهذا الرقم · No orders found for this number."}), 404
+    channel = notify.otp_channel()
+    ok, status, msg = _otp_guard(core, channel)     # per-phone throttle + global SMS budget
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), status
     code = f"{secrets.randbelow(1000000):06d}"
     db.set_setting(f"otp:{core}", {"hash": auth.hash_pw(code),
                                    "expires": time.time() + OTP_TTL, "attempts": 0, "name": name})
@@ -4577,9 +4656,10 @@ def api_customer_otp_request():
     e164 = (pin or {}).get("e164") or ("+" + core)
     res = notify.send_login_code(e164, code)
     if res.get("ok"):
-        return jsonify({"ok": True, "sent": notify.otp_channel()})
+        _otp_record_send(core, channel)             # only count an actual queued send
+        return jsonify({"ok": True, "sent": channel})
     app.logger.warning("OTP for %s = %s (%s not sent: %s)", core, code,
-                       notify.otp_channel(), res.get("error"))
+                       channel, res.get("error"))
     if os.environ.get("OTLOBLY_OTP_DEV"):         # testing before the live WhatsApp API is set up
         return jsonify({"ok": True, "sent": "dev", "dev_code": code})
     return jsonify({"ok": False,
@@ -4850,6 +4930,292 @@ def api_customer_email_login_verify():
     return jsonify({"ok": True, "name": session["cust_name"]})
 
 
+# ---- Sign in with Google (OAuth) — email login where Google does the verifying --- #
+# Same eligibility as the email-code login: the Google email must match a customer
+# whose email is linked & verified and whose record has a phone (orders key on phone).
+def _google_redirect_uri():
+    return f"{_portal_base()}/api/customer/google/callback"
+
+
+@app.route("/api/customer/google/start")
+@limiter.limit("10 per minute")
+def api_customer_google_start():
+    if not google_login.configured():
+        return redirect("/account")
+    state = google_login.new_state()
+    session["g_state"] = state
+    # Remember-me travels the OAuth round-trip via the session (default: on).
+    session["g_remember"] = (request.args.get("remember") or "1") != "0"
+    return redirect(google_login.auth_url(_google_redirect_uri(), state))
+
+
+@app.route("/api/customer/google/callback")
+@limiter.limit("10 per minute")
+def api_customer_google_callback():
+    # CSRF check: the state must round-trip through THIS browser session.
+    state = request.args.get("state") or ""
+    if not state or state != session.pop("g_state", None):
+        return redirect("/account?gerr=state")
+    code = request.args.get("code")
+    if not code:                                    # user cancelled on Google
+        return redirect("/account")
+    res = google_login.exchange_code(code, _google_redirect_uri())
+    if not res.get("ok") or not res.get("email_verified"):
+        app.logger.warning("google login failed: %s", res.get("error") or "unverified email")
+        return redirect("/account?gerr=fail")
+    email = res["email"]
+    remember = bool(session.pop("g_remember", True))
+    ebid = db.find_business_for_email(email)        # cross-tenant → the customer's broker
+    if ebid:
+        db.set_current_business(ebid)
+    row = db.get_customer_by_email(email)
+    core = normalize.phone_core((row or {}).get("whatsapp") or "")
+    if not row or not row.get("email_verified_at") or not core:
+        # Not the row's PRIMARY email — check the login-identity map: any address
+        # that once proved itself alongside a verified phone signs in forever after.
+        # (A customer can hold several Gmail accounts; `customers.email` holds one.)
+        alt = db.get_setting(_email_identity_key(email)) or {}
+        acore, abid = alt.get("core") or "", alt.get("bid") or 1
+        if acore:
+            db.set_current_business(abid)
+            arow = _customer_row_for_core(acore)
+            if arow:
+                row, core, ebid = arow, acore, abid
+    if not row or not core:
+        # Auth v2 — Google is the FRONT DOOR for everyone: a proven-owned Google
+        # email with no linked customer gets an email-only session and lands on
+        # the "verify your phone" step (linkable, or skippable with the
+        # you-won't-see-your-orders disclaimer).
+        session["cust_email"] = email
+        session["cust_name"] = (res.get("name") or "").strip()
+        session["cust_business"] = ebid or 1
+        session.permanent = remember
+        return redirect("/account?link=phone")
+    bid = _business_for_phone(core) or ebid or 1
+    db.set_current_business(bid)
+    session["cust_phone"] = core
+    session["cust_email"] = email
+    session["cust_business"] = bid
+    session["cust_name"] = (row.get("name") or "").strip() or _match_customer(core)[1]
+    session.permanent = remember
+    return redirect("/account")
+
+
+# ---- Auth v2: manual accounts + the shared "verify your phone" step ------------- #
+# SECURITY INVARIANT: no customer row is created or modified from an UNVERIFIED
+# phone claim. A manual signup parks in KV (pendsignup:) until the SMS code proves
+# the phone; only then is the row attached/created and the password applied.
+PW_MIN = 8
+SIGNUP_TTL = 1800                     # pending signup valid for 30 minutes
+
+
+def _email_identity_key(email):
+    """KV key for the login-identity map: a proven email → the customer's phone core.
+    Written only when BOTH were proven in one flow (Google verified the address, SMS
+    verified the phone), so it is exactly as trustworthy as the login itself. Lets a
+    customer keep several sign-in emails without clobbering `customers.email`."""
+    return "custemail:" + hashlib.sha256((email or "").strip().lower().encode()).hexdigest()[:16]
+
+
+@app.route("/api/customer/signup", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_customer_signup():
+    b = request.get_json(force=True, silent=True) or {}
+    name = (b.get("name") or "").strip()
+    core = normalize.phone_core(b.get("phone") or "")
+    email = (b.get("email") or "").strip().lower()
+    pw, pw2 = b.get("password") or "", b.get("confirm") or ""
+    if not name:
+        return jsonify({"ok": False, "error": "أدخل اسمك الكامل · Enter your full name."}), 400
+    if len(core) < 9:
+        return jsonify({"ok": False,
+                        "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    if email and not EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "بريد غير صالح · Enter a valid email."}), 400
+    if len(pw) < PW_MIN:
+        return jsonify({"ok": False,
+                        "error": f"كلمة المرور ٨ أحرف على الأقل · Password must be at least {PW_MIN} characters."}), 400
+    if pw != pw2:
+        return jsonify({"ok": False,
+                        "error": "كلمتا المرور غير متطابقتين · Passwords don't match."}), 400
+    # Park the signup — NO customer row yet (see invariant above). Generic success:
+    # never reveals whether the phone/email already exists.
+    db.set_setting(f"pendsignup:{core}", {"name": name, "email": email,
+                                          "pw_hash": auth.hash_pw(pw),
+                                          "expires": time.time() + SIGNUP_TTL})
+    session["cust_pending"] = core
+    session["cust_name"] = name
+    session.permanent = bool(b.get("remember", True))
+    return jsonify({"ok": True, "next": "verify_phone", "phone": core})
+
+
+@app.route("/api/customer/pwlogin", methods=["POST"])
+@limiter.limit("6 per minute")
+def api_customer_pwlogin():
+    """Password login for manual accounts — identifier is a phone OR an email."""
+    b = request.get_json(force=True, silent=True) or {}
+    ident = (b.get("identifier") or "").strip()
+    pw = b.get("password") or ""
+    FAIL = (jsonify({"ok": False,
+                     "error": "بيانات الدخول غير صحيحة · Wrong credentials."}), 400)
+    if not ident or not pw:
+        return FAIL
+    row, core = None, ""
+    if "@" in ident:
+        if EMAIL_RE.match(ident.lower()):
+            ebid = db.find_business_for_email(ident.lower())
+            if ebid:
+                db.set_current_business(ebid)
+            row = db.get_customer_by_email(ident.lower())
+            core = normalize.phone_core((row or {}).get("whatsapp") or "")
+    else:
+        core = normalize.phone_core(ident)
+        if len(core) >= 9:
+            _scope_to_phone(core)
+            row = _customer_row_for_core(core)
+    if not row or not core:
+        return FAIL
+    pw_hash = db.get_customer_password_hash(row["id"])
+    if not pw_hash or not check_password_hash(pw_hash, pw):
+        return FAIL
+    bid = _business_for_phone(core) or db.current_business() or 1
+    db.set_current_business(bid)
+    session["cust_phone"] = core
+    session["cust_business"] = bid
+    session["cust_name"] = (row.get("name") or "").strip() or _match_customer(core)[1]
+    session.permanent = bool(b.get("remember", True))
+    return jsonify({"ok": True, "name": session["cust_name"]})
+
+
+@app.route("/api/customer/phone/link/start", methods=["POST"])
+@limiter.limit("5 per 10 minutes")
+@customer_session_required
+def api_customer_phone_link_start():
+    """Send the verify-your-phone SMS for an onboarding session (Google email-only
+    or pending manual signup). Full _otp_guard cost protection; `known` in the
+    response drives the "no orders linked to this number" note."""
+    b = request.get_json(force=True, silent=True) or {}
+    core = normalize.phone_core(b.get("phone") or "")
+    if len(core) < 9:
+        return jsonify({"ok": False,
+                        "error": "أدخل رقم جوالك كاملاً · Enter your full mobile number."}), 400
+    channel = notify.otp_channel()
+    ok, status, msg = _otp_guard(core, channel)
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), status
+    _scope_to_phone(core)
+    known = _match_customer(core)[0] or bool(_customer_row_for_core(core))
+    code = f"{secrets.randbelow(1000000):06d}"
+    db.set_setting(f"phonelink:{core}", {"hash": auth.hash_pw(code),
+                                         "expires": time.time() + OTP_TTL, "attempts": 0})
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164") or ("+" + core)
+    res = notify.send_login_code(e164, code)
+    if res.get("ok"):
+        _otp_record_send(core, channel)
+        return jsonify({"ok": True, "sent": channel, "to": e164, "known": known})
+    app.logger.warning("phone-link code for %s = %s (%s not sent: %s)", core, code,
+                       channel, res.get("error"))
+    if os.environ.get("OTLOBLY_OTP_DEV"):
+        return jsonify({"ok": True, "sent": "dev", "dev_code": code,
+                        "to": e164, "known": known})
+    return jsonify({"ok": False,
+                    "error": "تعذّر إرسال الرمز حالياً · Couldn't send the code right now."}), 502
+
+
+@app.route("/api/customer/phone/link/verify", methods=["POST"])
+@limiter.limit("10 per 10 minutes")
+@customer_session_required
+def api_customer_phone_link_verify():
+    b = request.get_json(force=True, silent=True) or {}
+    core = normalize.phone_core(b.get("phone") or "")
+    code = re.sub(r"\D", "", b.get("code") or "")
+    rec = db.get_setting(f"phonelink:{core}") if core else None
+    if not rec or not code or rec.get("used"):
+        return jsonify({"ok": False, "error": "اطلب رمزاً جديداً · Request a new code."}), 400
+    if time.time() > (rec.get("expires") or 0):
+        return jsonify({"ok": False, "error": "انتهت صلاحية الرمز · Code expired."}), 400
+    if (rec.get("attempts") or 0) >= OTP_MAX_ATTEMPTS:
+        return jsonify({"ok": False,
+                        "error": "محاولات كثيرة · Too many attempts — request a new code."}), 429
+    if not check_password_hash(rec.get("hash") or "", code):
+        rec["attempts"] = (rec.get("attempts") or 0) + 1
+        db.set_setting(f"phonelink:{core}", rec)
+        return jsonify({"ok": False, "error": "رمز غير صحيح · Wrong code."}), 400
+    db.set_setting(f"phonelink:{core}", {"used": True, "expires": 0})   # one-time
+    # Phone OWNERSHIP is now proven — safe to attach/create the customer row.
+    bid = _business_for_phone(core) or session.get("cust_business") or 1
+    db.set_current_business(bid)
+    row = _customer_row_for_core(core)
+    known = bool(row) or _match_customer(core)[0]
+    # proper E.164 (+970…) — NOT "+"+core, which drops the country code and stores a
+    # number staff/WhatsApp/GAASH can't use.
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164") or ("+" + core)
+    if not row:
+        db.upsert_customer({"customer_id": db.next_customer_code(), "match_key": core,
+                            "whatsapp": e164,
+                            "name": session.get("cust_name") or ""})
+        row = _customer_row_for_core(core)
+    elif row.get("whatsapp") and len(re.sub(r"\D", "", row["whatsapp"])) < len(re.sub(r"\D", "", e164)):
+        # self-heal a row stored without its country code (same core, shorter digits)
+        db.set_customer_whatsapp(row["id"], e164)
+        row = _customer_row_for_core(core) or row
+    if row and session.get("cust_email"):
+        # Remember this address as a sign-in identity for the phone — so the NEXT
+        # login (any device) goes straight in even if it isn't the row's primary email.
+        db.set_setting(_email_identity_key(session["cust_email"]),
+                       {"core": core, "bid": bid})
+        # Link it as the primary email too — but NEVER clobber a different verified one.
+        cur = (row.get("email") or "").strip().lower()
+        if cur and row.get("email_verified_at") and cur != session["cust_email"]:
+            app.logger.warning("phone-link: row %s keeps existing verified email", row["id"])
+        elif not db.set_customer_email(row["id"], session["cust_email"], db.now_iso()):
+            app.logger.warning("phone-link: email %s already owned elsewhere — left as-is",
+                               _mask_email(session["cust_email"]))
+    pend_key = session.get("cust_pending")
+    if row and pend_key:
+        pend = db.get_setting(f"pendsignup:{pend_key}") or {}
+        if pend.get("pw_hash") and time.time() <= (pend.get("expires") or 0):
+            db.set_customer_password(row["id"], pend["pw_hash"])
+            if pend.get("email") and not (row.get("email") or "").strip():
+                db.set_customer_email(row["id"], pend["email"], None)   # stored, unverified
+        db.set_setting(f"pendsignup:{pend_key}", {"used": True, "expires": 0})
+        session.pop("cust_pending", None)
+    session["cust_phone"] = core
+    session["cust_business"] = bid
+    session["cust_name"] = ((row or {}).get("name") or "").strip() \
+        or session.get("cust_name") or _match_customer(core)[1]
+    return jsonify({"ok": True, "name": session["cust_name"], "known": known})
+
+
+@app.route("/api/customer/password/change", methods=["POST"])
+@limiter.limit("6 per 10 minutes")
+@customer_required
+def api_customer_password_change():
+    """Change the portal password from Settings. Only for accounts that HAVE one
+    (manual signups); the current password must be given, so a borrowed session
+    can't silently take the account over."""
+    b = request.get_json(force=True, silent=True) or {}
+    row = _customer_row_for_core(session["cust_phone"])
+    cur_hash = db.get_customer_password_hash(row["id"]) if row else ""
+    if not row or not cur_hash:
+        return jsonify({"ok": False,
+                        "error": "لا توجد كلمة مرور لهذا الحساب · This account has no password."}), 400
+    if not check_password_hash(cur_hash, b.get("current") or ""):
+        return jsonify({"ok": False,
+                        "error": "كلمة المرور الحالية غير صحيحة · Current password is wrong."}), 400
+    new = b.get("new") or ""
+    if len(new) < PW_MIN:
+        return jsonify({"ok": False,
+                        "error": f"كلمة المرور ٨ أحرف على الأقل · Password must be at least {PW_MIN} characters."}), 400
+    if new != (b.get("confirm") or ""):
+        return jsonify({"ok": False,
+                        "error": "كلمتا المرور غير متطابقتين · Passwords don't match."}), 400
+    db.set_customer_password(row["id"], auth.hash_pw(new))
+    return jsonify({"ok": True})
+
+
 @app.route("/api/admin/whatsapp_test", methods=["GET", "POST"])
 @auth.require("admin_actions")
 def api_admin_whatsapp_test():
@@ -4927,15 +5293,21 @@ def api_admin_sms_test():
 
 @app.route("/api/customer/logout", methods=["POST"])
 def api_customer_logout():
-    session.pop("cust_phone", None)
-    session.pop("cust_name", None)
-    session.pop("cust_business", None)
+    for k in ("cust_phone", "cust_name", "cust_business",
+              "cust_email", "cust_pending", "g_remember"):
+        session.pop(k, None)
     return jsonify({"ok": True})
 
 
 @app.route("/api/customer/orders")
-@customer_required
+@customer_session_required
 def api_customer_orders():
+    if not session.get("cust_phone"):
+        # Phone-less onboarding session (Google skip / pending signup): an empty
+        # shell so the dashboard renders with the "phone not connected" banner.
+        return jsonify({"orders": [], "shipments": [], "payments": [],
+                        "deposited": 0, "remaining": 0, "credit": 0,
+                        "name": session.get("cust_name") or "", "phone_linked": False})
     core = session["cust_phone"]
     pdb = purchases.load()
     pairs, names, oids = _phone_pairs(core, pdb)

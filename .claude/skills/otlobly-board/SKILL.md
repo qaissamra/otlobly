@@ -277,8 +277,9 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   platform, goal cleared|reply|manual, send_window_json {tz days start end} —
   default Sun–Thu 09–17 **Asia/Hebron "Palestine time"**) / gaash_steps (pos,
   kind auto_email|task, template_id, delay_days = BUSINESS days) / gaash_rules
-  (auto-enroll → seq, mode queue|auto; queue ⇒ state='proposed' approval
-  chips) / gaash_events (open/click hits). **Trigger criteria (HubSpot-style,
+  (auto-enroll → seq, mode queue|auto; queue ⇒ state='proposed', approved
+  ONLY from the Workflows table's per-row expansion) / gaash_events
+  (open/click hits). **Trigger criteria (HubSpot-style,
   2026-07-24):** cond_json v2 `{"groups":[{"crits":[{field,op,value}…]}…]}` —
   crits AND inside a group, groups OR; legacy {gash_status,min_age_days}
   auto-converts via `_cond_norm` (also the sanitizer: unknown field/op
@@ -305,7 +306,22 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   chip click → `gmMatchesView(gwds)` = Bulk search prefilled (full columns).
   `stats()` has enrolled_7d; builder shows a stats strip + description input;
   Overview tab `gmOvRender` tiles. Caches GM.stats/GM.matches cleared each
-  gmLoad, lazy-fetched by `gmWfEnsureData`. **Surfaced in the sequence builder (2026-07-24):**
+  gmLoad, lazy-fetched by `gmWfEnsureData`. **Per-row enrollments expansion
+  (2026-07-25):** the top "suggested enrollments" banner (#gmProposed, shown on
+  every tab) is REMOVED — its 6-vs-ENROLLED-1 mismatch confused the owner.
+  Instead each wf row has a ▸ `.caret` in the pin + a clickable ENROLLED cell
+  (real count + amber `⚡ N` chip = this workflow's proposed GWDs via
+  `gmWfPropOf(seqId)` grouping `GM.ov.proposed` by seq_id). Toggle
+  `gmWfExpToggle` (state `GM.wfOpen` Set, survives re-renders) appends a
+  `.wf-exp` block after the row; `gmWfExpRender` fills it with bulk-search
+  full-columns tables (`bsModelRow`) in two sections: enrolled (state chip +
+  💬 opens the conversation) and suggested (✓/✕ per GWD `gmPropAct` +
+  per-workflow approve-all/dismiss-all `gmPropAllSeq`). `.wf-exp` is a
+  client-width block inside the h-scrolling wf wrap — sticky can't pin it
+  (parent = element width), so gmRenderSeq translates it by wrap.scrollLeft
+  on scroll. Open row = `.wf-openrow` (#fff4ee, pin bg mirrored). Approve =
+  POST /api/gaash/thread action approve (start_threads into the thread's own
+  seq_id) — test_gaash_mail.py locks the approve/dismiss/re-propose loop. **Surfaced in the sequence builder (2026-07-24):**
   `gmRenderBuilder` shows an ⚡ Enrollment-trigger card at the top (HubSpot
   "when this happens") listing rules where seq_id=this seq, ＋ New trigger
   `gmRuleNew(seqId)` pre-sets enroll-into; `gmAfterRule()` re-renders builder

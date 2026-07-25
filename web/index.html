@@ -571,6 +571,13 @@
   .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
   .wf-row:hover .wf-acts{visibility:visible}
   .wf-off .bt-pin b,.wf-off .wf-cols{opacity:.55}
+  .wf-row>.bt-pin .caret{flex:none;transition:transform .15s}
+  .wf-row:hover>.bt-pin{background:var(--bg2)}
+  .wf-row.wf-openrow,.wf-row.wf-openrow>.bt-pin{background:#fff4ee}
+  .wf-openrow>.bt-pin .caret{transform:rotate(90deg);color:var(--accent)}
+  .wf-exp{box-sizing:border-box;width:100%;padding:6px 10px 12px;background:#fff9f5;border-bottom:1px solid var(--line)}
+  .wf-exp .wf-exp-h{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;margin:8px 0 4px;flex-wrap:wrap}
+  .wf-exp .bt-wrap{max-height:400px;overflow-y:auto}
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
   /* the pin floats over scrolled content → its background must mirror every
      row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
@@ -1446,7 +1453,6 @@
       <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
       <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
     </div>
-    <div id="gmProposed"></div>
     <div id="gmConvPane">
       <div class="gm-wrap">
         <div class="gm-list panel" id="gmList"></div>
@@ -9638,7 +9644,7 @@ function bsRender(){
 }
 
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
-let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null};
+let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null, wfOpen:new Set()};
 const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
   missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
   cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
@@ -9678,22 +9684,6 @@ async function gmLoad(){
   $("gmBanner").innerHTML=warn.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${warn.join(" · ")}</div>`:"";
   const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
   $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
-  // trigger-proposed enrollments → an orange COUNT that expands into a full
-  // Purchases-columns table (bulk-search rows) with ✓/✕ per package (any tab)
-  const prop=d.proposed||[];
-  GM.propGwds=[...new Set(prop.map(p=>p.gwd))];
-  $("gmProposed").innerHTML=prop.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;margin-bottom:10px;font-size:12.5px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      ⚡ <b>${T("اقتراحات تسجيل · suggested enrollments")}</b>
-      <button class="pill" style="background:var(--accent);color:#fff;border:none;font-weight:800;font-size:12.5px;padding:2px 11px;cursor:pointer" title="${T("انقر لعرض الطرود بكل الأعمدة · click to view the packages with full columns")}" onclick="gmPropExpand()">${GM.propGwds.length} ${GM.propOpen?"▴":"▾"}</button>
-      <span class="muted2" style="font-size:11px">${T("طرود تطابق المُشغّلات وتنتظر موافقتك · packages matched your triggers and await approval")}</span>
-      <span class="spacer"></span>
-      <button class="minibtn" onclick="gmPropAll('approve')">✓ ${T("موافقة الكل · approve all")}</button>
-      <button class="minibtn" onclick="gmPropAll('dismiss')">✕ ${T("تجاهل الكل · dismiss all")}</button>
-    </div>
-    <div id="gmPropTable" style="margin-top:8px;display:none"></div>
-  </div>`:"";
-  if(prop.length&&GM.propOpen) gmPropRender();
   gmRenderList();
   if(GM.cur) gmOpen(GM.cur,true);
   if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
@@ -9701,47 +9691,77 @@ async function gmLoad(){
   clearInterval(GM.timer);
   GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
 }
-async function gmPropAct(gwd,action){
+async function gmPropAct(gwd,action){       // ✓/✕ one suggested enrollment (Workflows expansion)
   const r=await post("/api/gaash/thread",{gwd,action});
   if(r&&r.ok===false&&r.error) toast(r.error);
   gmLoad();
 }
-// expand the orange count into a full-columns table (bulk-search rows + ✓/✕)
-function gmPropExpand(){ GM.propOpen=!GM.propOpen;
-  const el=$("gmPropTable");
-  if(!GM.propOpen){ if(el) el.style.display="none"; gmLoad(); return; }
-  gmPropRender();
+// ── per-workflow enrollments expansion (replaced the old top "suggested" banner) ──
+// distinct GWDs proposed by triggers INTO this workflow (awaiting approval)
+function gmWfPropOf(seqId){ const seen=new Set(), out=[];
+  ((GM.ov&&GM.ov.proposed)||[]).forEach(p=>{
+    if(p.seq_id===seqId&&!seen.has(p.gwd)){ seen.add(p.gwd); out.push(p.gwd); } });
+  return out; }
+function gmWfExpToggle(seqId){
+  GM.wfOpen=GM.wfOpen||new Set();
+  GM.wfOpen.has(seqId)?GM.wfOpen.delete(seqId):GM.wfOpen.add(seqId);
+  gmRenderSeq();
 }
-async function gmPropRender(){
-  const el=$("gmPropTable"); if(!el) return;
-  el.style.display="block";
-  el.innerHTML=`<div class="muted2" style="padding:8px">${T("جارِ التحميل… · loading…")}</div>`;
-  await bsEnsureData();
-  const lxRows=bsLxRows(), models=[];
-  (GM.propGwds||[]).forEach(tn=>{
-    const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
-    if(!pos.length&&!lx){ models.push({kind:"miss",tn}); return; }
-    pos.forEach(({p,pk,pi})=>models.push({kind:"po",tn,p,pk,pi}));
-    if(lx) models.push({kind:"lx",tn,lx});
-  });
-  const seen=new Set();                       // ✓/✕ once per GWD (a PO+Leluxe double match acts on the same thread)
-  const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
-    return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">
-      <button class="minibtn" style="padding:0 7px" title="${T('موافقة وبدء · approve & start')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','approve')">✓</button>
-      <button class="minibtn" style="padding:0 7px" title="${T('تجاهل · dismiss')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','dismiss')">✕</button></span>`; };
-  el.innerHTML=lxtHead("bs","التتبع · tracking")
-    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${models.map(m=>bsModelRow(m,acts).html).join("")}</div></div>`);
-  lxtGridApply("bs",el);
-}
-async function gmPropAll(action){
-  const gwds=GM.propGwds||[];
+async function gmPropAllSeq(seqId,action){
+  const gwds=gmWfPropOf(seqId);
   if(!gwds.length) return;
   if(!confirm((action==="approve"
-      ?T("موافقة وبدء لكل الاقتراحات؟ · approve & start ALL suggestions?")
-      :T("تجاهل كل الاقتراحات؟ · dismiss ALL suggestions?"))+` (${gwds.length})`)) return;
+      ?T("موافقة وبدء لكل اقتراحات سير العمل هذا؟ · approve & start ALL this workflow's suggestions?")
+      :T("تجاهل كل اقتراحات سير العمل هذا؟ · dismiss ALL this workflow's suggestions?"))+` (${gwds.length})`)) return;
   for(const g of gwds){ try{ await post("/api/gaash/thread",{gwd:g,action}); }catch(e){} }
   toast(`${gwds.length} ${action==="approve"?T("بدأ ✓ · started ✓"):T("تم التجاهل · dismissed")}`);
   gmLoad();
+}
+// fill an open workflow row's expansion: the enrolled + suggested packages with
+// the full board columns (bulk-search rows); ✓/✕ approve suggestions in place
+async function gmWfExpRender(seqId){
+  const pane=$("gmSeqPane"), box=pane&&pane.querySelector(`.wf-exp[data-seq="${seqId}"]`);
+  if(!box) return;
+  box.innerHTML=`<div class="muted2" style="padding:8px">${T("جارِ التحميل… · loading…")}</div>`;
+  await bsEnsureData();
+  const cur=pane.querySelector(`.wf-exp[data-seq="${seqId}"]`);   // may have re-rendered while loading
+  if(!cur) return;
+  const lxRows=bsLxRows();
+  const models=gwds=>{ const out=[]; (gwds||[]).forEach(tn=>{
+      const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
+      if(!pos.length&&!lx){ out.push({kind:"miss",tn}); return; }
+      pos.forEach(({p,pk,pi})=>out.push({kind:"po",tn,p,pk,pi}));
+      if(lx) out.push({kind:"lx",tn,lx}); });
+    return out; };
+  const table=(ms,acts)=>lxtHead("bs","التتبع · tracking")
+    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${ms.map(m=>bsModelRow(m,acts).html).join("")}</div></div>`);
+  const ths=((GM.ov&&GM.ov.threads)||[]).filter(t=>t.seq_id===seqId);
+  const stByGwd={}; ths.forEach(t=>stByGwd[t.gwd]=t.state);
+  const prop=gmWfPropOf(seqId);
+  let html="";
+  if(ths.length){
+    const seen=new Set();                     // chip once per GWD (a PO+Leluxe double match = one thread)
+    const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
+      return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">${gmChip(stByGwd[m.tn])}
+        <button class="minibtn" style="padding:0 7px" title="${T('فتح المحادثة · open the conversation')}" onclick="event.stopPropagation();gmTab('conv');gmOpen('${poEsc(m.tn)}')">💬</button></span>`; };
+    html+=`<div class="wf-exp-h">${T("مسجّل · enrolled")} <b>${ths.length}</b></div>`
+      +table(models(ths.map(t=>t.gwd)),acts);
+  }
+  if(prop.length){
+    const seen=new Set();
+    const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
+      return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">
+        <button class="minibtn" style="padding:0 7px" title="${T('موافقة وبدء · approve & start')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','approve')">✓</button>
+        <button class="minibtn" style="padding:0 7px" title="${T('تجاهل · dismiss')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','dismiss')">✕</button></span>`; };
+    html+=`<div class="wf-exp-h">⚡ ${T("اقتراحات تنتظر موافقتك · suggested — awaiting your approval")} <b>${prop.length}</b>
+        <span class="spacer"></span>
+        <button class="minibtn" onclick="gmPropAllSeq('${seqId}','approve')">✓ ${T("موافقة الكل · approve all")}</button>
+        <button class="minibtn" onclick="gmPropAllSeq('${seqId}','dismiss')">✕ ${T("تجاهل الكل · dismiss all")}</button></div>`
+      +table(models(prop),acts);
+  }
+  cur.innerHTML=html||`<div class="muted2" style="padding:6px 2px">${T("لا تسجيلات بعد — سجّل من 📧 أو عبر مُشغّل · no enrollments yet — enroll via 📧 or a trigger")}</div>`;
+  if(html) lxtGridApply("bs",cur);
+  if(gmRenderSeq._pinX) gmRenderSeq._pinX();   // keep the box inside the visible x-range
 }
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
@@ -10073,6 +10093,7 @@ async function gmWfClone(id){
 }
 function gmWfRow(row){
   const s=row.s, st=row.st||{}, myRules=row.rules;
+  const prop=gmWfPropOf(s.id), open=!!(GM.wfOpen&&GM.wfOpen.has(s.id));
   const onoff=`<span style="display:inline-flex;align-items:center;gap:5px;${CAN_ADMIN?"cursor:pointer":""}" ${CAN_ADMIN?`onclick="event.stopPropagation();gmWfToggle('${s.id}')"`:""} title="${T("تشغيل/إيقاف — الإيقاف يمنع الإرسال والتسجيل الجديد · On/Off — Off stops sends and new enrollment")}"><span class="tglsw${s.paused?"":" on"}"></span><span class="muted2" style="font-size:10px">${s.paused?"Off":"On"}</span></span>`;
   const trig=myRules.length
     ?myRules.map(r=>`<span style="display:inline-flex;gap:4px;align-items:center;min-width:0"><span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name)}: ${gmRuleSummary(r.cond)}">${gmRuleSummary(r.cond)}</span>${gmMatchChip(r.id)}</span>`).join(" ")
@@ -10083,7 +10104,7 @@ function gmWfRow(row){
     days:`<span class="muted2">${gmSeqDays(s)}</span>`,
     goal:`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">🎯 ${poEsc(s.goal)}</span>`,
     active:`<b>${s.active_threads||0}</b>`,
-    enrolled:`<span class="muted2">${st.enrolled??"—"}</span>`,
+    enrolled:`<span style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0" title="${T("عرض المسجّل والمقترح بكل الأعمدة · view enrolled + suggested packages with full columns")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')"><span class="muted2">${st.enrolled??"—"}</span>${prop.length?`<span class="pill" style="background:#fffbeb;border:1px solid #fde68a;color:#b45309;font-size:10px;font-weight:800;flex:none">⚡ ${prop.length}</span>`:""}</span>`,
     enr7d:`<span class="muted2">${st.enrolled_7d??"—"}</span>`,
     goalmet:`<span class="muted2">${st.goal_met??"—"}</span>`,
     sent:`<span class="muted2">${st.sent??"—"}</span>`,
@@ -10096,14 +10117,15 @@ function gmWfRow(row){
       [`🗑 ${T("أرشفة · Archive")}`,`gmSeqDelete('${s.id}')`,true],
     ]):"",
   };
-  return `<div class="poc-row wf-row${s.paused?" wf-off":""}" style="cursor:pointer" onclick="if(event.target.closest('.pop,button,input,.tglsw'))return;gmSeqEdit('${s.id}')">
+  return `<div class="poc-row wf-row${s.paused?" wf-off":""}${open?" wf-openrow":""}" style="cursor:pointer" onclick="if(event.target.closest('.pop,button,input,.tglsw,.caret'))return;gmSeqEdit('${s.id}')">
     <div class="bt-pin">
+      <span class="caret" title="${T("عرض التسجيلات · view the enrollments")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')">▸</span>
       <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s.name)}</b>
       ${CAN_ADMIN?`<span class="wf-acts"><button class="minibtn" style="padding:1px 7px" title="${T("تعديل · edit")}" onclick="event.stopPropagation();gmSeqEdit('${s.id}')">✎</button>
       <button class="minibtn" style="padding:1px 7px" title="${T("نسخ · clone")}" onclick="event.stopPropagation();gmWfClone('${s.id}')">⧉</button></span>`:""}
     </div>
     ${lxtCells("wf",cells)}
-  </div>`;
+  </div>${open?`<div class="wf-exp" data-seq="${s.id}"></div>`:""}`;
 }
 function gmRenderSeq(){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
@@ -10166,6 +10188,20 @@ function gmRenderSeq(){
       ${CAN_ADMIN?`<button class="minibtn" style="margin-top:8px" onclick="gmRuleNew()">＋ ${T("قاعدة جديدة · New rule")}</button>`:""}
     </div>`;
   lxtGridApply("wf",$("gmSeqPane"));
+  // expansion boxes live inside the h-scrolling wrap whose .pkg is CANVAS-wide —
+  // size each to the visible width and translate by scrollLeft so it stays put
+  const wwrap=$("gmSeqPane").querySelector(".bt-wrap");
+  if(wwrap){
+    const pinX=()=>{ const w=wwrap.clientWidth;
+      wwrap.querySelectorAll(":scope > .pkg > .pkg-body > .wf-exp").forEach(x=>{
+        x.style.width=w+"px"; x.style.transform=`translateX(${wwrap.scrollLeft}px)`; }); };
+    wwrap.addEventListener("scroll",pinX,{passive:true}); pinX();
+    const onRes=()=>{ if(!wwrap.isConnected){ window.removeEventListener("resize",onRes); return; } pinX(); };
+    window.addEventListener("resize",onRes);
+    gmRenderSeq._pinX=pinX;
+  }
+  if(GM.wfOpen&&GM.wfOpen.size)
+    rows.forEach(r=>{ if(GM.wfOpen.has(r.s.id)) gmWfExpRender(r.s.id); });
 }
 // ── 🧭 Overview tab: summary tiles across all workflows ──
 function gmOvRender(){
