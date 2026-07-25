@@ -474,6 +474,26 @@ def main():
           gm._fill("{name_id}", "GWD009000022") == "111222333")
     check("unmapped name → empty, not literal",
           gm._fill("x{name_id}y", "GWD009000023") == "xy")
+    # {id_number} = the customer's own ID, falling back to the on-package name's —
+    # one token covering Purchases (CRM hit) and Leluxe (name map)
+    check("{id_number} falls back to the name map when the customer has none",
+          gm._id_number_for("GWD009000021") == ""
+          and gm._fill("{id_number}", "GWD009000021") == "999888777")
+    db.upsert_customer({"customer_id": "CUS-NIDT", "match_key": "nidtest",
+                        "name": "ID Fallback Test", "whatsapp": "+970599000777",
+                        "id_number": "CRM-777"})
+    with db.connect() as c:
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','NID crm','on hold',?,?)""",
+                  (now_ms, json.dumps({"tracking_number": "GWD009000024",
+                   "fields": {"NAME ON PACKAGEE": "FAISAL",
+                              "PHONE IN SHIPPING": "+970599000777"}})))
+    check("the customer's OWN ID wins over the name map",
+          gm._fill("{id_number}", "GWD009000024") == "CRM-777"
+          and gm._fill("{name_id}", "GWD009000024") == "999888777")
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders WHERE name='NID crm'")
+        c.execute("DELETE FROM customers WHERE customer_code='CUS-NIDT'")
     with db.connect() as c:
         c.execute("DELETE FROM leluxe_orders WHERE name LIKE 'NID %'")
     rcf = gm.rule_save({"name": "gold rings", "cond": {"groups": [{"crits": [

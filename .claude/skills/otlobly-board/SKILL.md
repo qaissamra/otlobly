@@ -369,7 +369,19 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   match `/^name\s*on\s*packag/i` tolerates the typo being fixed) + saved keys
   + a free-add pair. Resolution `_name_on_pkg_for(gwd)`: every row carrying
   the GWD → their parent orders → (Purchases fallback via `_cf_for_gwd`);
-  `_name_id_for` compares `_fold`ed, empty (not literal) when unmapped. Editor
+  `_name_id_for` compares `_fold`ed, empty (not literal) when unmapped.
+  **The two boards need DIFFERENT ID sources** (measured 2026-07-25, don't
+  re-derive): an Otlobly/**Purchases** parcel is addressed to the CUSTOMER, and
+  `_id_number_for` resolves it automatically (pkg → item.customer_order_id →
+  order phone → CRM `id_number`) — verified end-to-end. A **Leluxe** parcel is
+  bulk-bought under an AZ account, so GAASH wants the ACCOUNT HOLDER's ID:
+  `_id_number_for` returns "" there (its `PHONE IN SHIPPING` values are AZ
+  shipping numbers, matching no CRM customer), and `_name_id_for` supplies it.
+  So `{id_number}` = `_id_number_for(gwd) or _name_id_for(gwd)` — customer ID
+  first, name map as fallback — and ONE template serves both boards.
+  `{name_id}` stays available to force the on-package name's ID only. Purchases
+  has no "NAME ON PACKAGEE" column and its `profile_box` pool (B19/B22/B27…) is
+  disjoint from Leluxe's, so profile→name can't be auto-derived across boards. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

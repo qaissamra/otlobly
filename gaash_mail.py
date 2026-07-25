@@ -1227,8 +1227,9 @@ def _name_id_for(gwd):
 TPL_CORE_TOKENS = [
     ("gwd", "رقم التتبع · tracking number"),
     ("customer", "اسم العميل · customer name"),
-    ("id_number", "رقم هوية العميل · customer ID number"),
-    ("name_id", "رقم هوية الاسم على الطرد · ID # of the on-package name"),
+    ("id_number", "رقم الهوية — هوية العميل، أو هوية الاسم على الطرد إن لم توجد "
+                  "· ID number — the customer's, else the on-package name's"),
+    ("name_id", "رقم هوية الاسم على الطرد فقط · ID # of the on-package name only"),
     ("upload_link", "رابط رفع المستندات · document-upload link"),
     ("id_name", "اسم مستند الهوية · attached ID name"),
     ("days_waiting", "أيام الانتظار · days waiting"),
@@ -1284,9 +1285,13 @@ def _fill(tpl, gwd, thread=None, step=None):
             .replace("{id_name}", id_name)
             .replace("{days_waiting}", days)
             .replace("{step}", str(step or (thread or {}).get("step") or "")))
-    if "{id_number}" in text:                   # the customer's submitted ID number
-        text = text.replace("{id_number}", _id_number_for(gwd))
-    if "{name_id}" in text:                     # Settings-mapped ID of the on-package name
+    # {id_number}: the customer's OWN submitted ID (Request-ID link → CRM) and, when
+    # the package has none, the Settings-mapped ID of the name it ships under. That
+    # covers both boards with one token — Otlobly/Purchases parcels go to the
+    # customer (CRM hit), Leluxe parcels ship under an AZ account holder (name map).
+    if "{id_number}" in text:
+        text = text.replace("{id_number}", _id_number_for(gwd) or _name_id_for(gwd))
+    if "{name_id}" in text:                     # force the on-package name's ID only
         text = text.replace("{name_id}", _name_id_for(gwd))
     if "{" not in text:                        # no board-column tokens left
         return text
