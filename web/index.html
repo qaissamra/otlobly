@@ -4870,6 +4870,7 @@ async function lxDiagOpen(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       ${tile(T("خارج التطابق · out of step"),d.stale_count||0,(d.stale_count?"color:#b45309":""))}
       ${tile(T("حالة خاطئة · wrong status"),d.status_differs||0,(d.status_differs?"color:#b42318":""))}
+      ${tile(T("متجمّد · frozen"),d.frozen||0,(d.frozen?"color:#b42318":""))}
       ${tile(T("لم تُسحب أبداً · never pulled"),d.az2_unlinked_count||0,(d.az2_unlinked_count?"color:#b45309":""))}
       ${tile(T("بانتظار الرفع · queued"),(c.dirty||0)+(c.pushing||0))}
       ${tile(T("تعارض · conflict"),c.conflict||0,(c.conflict?"color:#b42318":""))}

@@ -359,7 +359,7 @@ def diagnose(config=None):
     src, lid = source_list_id(config), list_id(config)
     out = {"list_id": lid, "source_list_id": src, "counts": sync_counts(),
            "checked": 0, "stale": [], "stale_count": 0, "stale_by_reason": {},
-           "status_differs": 0}
+           "status_differs": 0, "frozen": 0}
     if not src:
         out["error"] = "leluxe.source_list_id (AZ 2) is not set"
         return out
@@ -400,20 +400,31 @@ def diagnose(config=None):
                 and rcu == str(data.get("source_cu_updated") or "")):
             continue                          # in step with AZ (2)
         state = d["sync_state"]
+        differs = rstatus != (d["status"] or "")
+        # The merge's fast path trusts the timestamp: _merge_row returns
+        # "unchanged" as soon as source_cu_updated == the task's date_updated,
+        # WITHOUT comparing values. So a row whose stamp is already current but
+        # whose value differs is frozen — no future sync will ever look at it
+        # again (a conflict park advances the stamp without applying, which is
+        # one way to land here). That is invisible in a "+0 updated" result line.
+        frozen = differs and rcu == str(data.get("source_cu_updated") or "")
         why = ("blocked: mid-push (skipped by every pull)" if state == "pushing"
                else "blocked: parked conflict" if state == "conflict"
                else "blocked: push error" if state == "error"
                else "waiting: queued to push" if state == "dirty"
+               else "FROZEN: AZ (2) stamp already current but the value differs "
+                    "— no sync will re-check this row" if frozen
                else "would apply on next sync (pull has not run)")
         out["stale_by_reason"][why] = out["stale_by_reason"].get(why, 0) + 1
-        differs = rstatus != (d["status"] or "")
+        if frozen:
+            out["frozen"] += 1
         if differs:
             out["status_differs"] += 1
         if len(out["stale"]) < 100:
             out["stale"].append(
                 {"id": d["id"], "kind": d["kind"], "name": (d["name"] or "")[:70],
                  "source_task_id": srcid, "sync_state": state, "why": why,
-                 "status_differs": differs,
+                 "status_differs": differs, "frozen": frozen,
                  "local_status": d["status"] or "", "az2_status": rstatus})
     out["stale_count"] = sum(out["stale_by_reason"].values())
     # the headline number: rows whose STATUS on the board is wrong right now
