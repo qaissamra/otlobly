@@ -238,6 +238,15 @@
   <!-- STATE 2 (auth v2): the shared "verify your phone" step — after Google (skippable,
        with the you-won't-see-your-orders disclaimer) or after a manual signup. -->
   <div id="s_link" style="display:none">
+    <!-- "Signed in as <you@gmail.com>" — which Google account got us here (+ a way
+         to switch). Hidden for manual signups, which have no Google identity. -->
+    <div id="lkWho" style="display:none;align-items:center;gap:9px;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px 13px;font-size:13px;margin-bottom:13px">
+      <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true" style="flex:none"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.7 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.2C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.4 6.9-17.7z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.6l-7.7-6c-2.1 1.4-4.8 2.3-7.5 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>
+      <span style="min-width:0;flex:1"><span id="t_signedas" style="color:var(--muted)"></span>
+        <b id="lkWhoMail" dir="ltr" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b></span>
+      <a href="#" id="t_notyou" onclick="logout();return false"
+         style="flex:none;color:var(--orange);font-weight:700;text-decoration:none;font-size:12.5px"></a>
+    </div>
     <p class="sub" id="t_linkhead"></p>
     <div id="linkEntry">
       <label id="t_linkphone"></label>
@@ -421,6 +430,7 @@ const T={
       lkverify:"تأكيد ودخول",
       linknoorders:"لا توجد طلبات مرتبطة بهذا الرقم — إذا كان الرقم خاطئاً اضغط «تعديل» وصحّحه.",
       lkskip:"التخطي الآن", linkskipnote:"⚠️ لن ترى طلباتك حتى تربط رقم جوالك.",
+      signedas:"مسجّل الدخول باسم", notyou:"لست أنت؟",
       banner:"رقم هاتفك غير مربوط — لن تظهر طلباتك حتى تربطه.", bannerbtn:"اربطه الآن",
       emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
@@ -459,6 +469,7 @@ const T={
       lkverify:"Verify & sign in",
       linknoorders:"No orders are linked to this number — if it's wrong, tap “Edit” and fix it.",
       lkskip:"Skip for now", linkskipnote:"⚠️ You won't see your orders until you link your phone number.",
+      signedas:"Signed in as", notyou:"Not you?",
       banner:"Your phone number is not connected — your orders won't appear until you link it.", bannerbtn:"Link it now",
       emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
       eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
@@ -497,6 +508,7 @@ function paint(){
   ["introphone","deliveries","orders","payments",
    "loginid","loginpw","remember","signhead","signname","signphone","signemail","signpw","signpw2",
    "linkhead","linkphone","linksent","linkcode","linknoorders","linkskipnote","banner",
+   "signedas","notyou",
    "qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
     .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
@@ -544,16 +556,20 @@ async function signupGo(){
   b.disabled=false; b.textContent=o;
   if(!d.ok){ $("sOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
   // Signup parked server-side — nothing exists until the phone verifies.
-  openLink($("sphone").value.trim(), false);
+  openLink($("sphone").value.trim(), false, "");   // manual signup = no Google identity
 }
 /* the shared verify-phone step. skippable=true only for Google (email-verified) sessions */
 let LKPHONE="";
-function openLink(prefill, skippable){
+async function openLink(prefill, skippable, email){
   $("lkOut").innerHTML=""; $("lkcode").value="";
   $("linkEntry").style.display="block"; $("linkCode").style.display="none";
   $("linkSkipBox").style.display=skippable?"block":"none";
   if(prefill) $("lkphone").value=prefill;
   paint(); show("s_link"); $("lkphone").focus();
+  // "Signed in as <google account>" — so it's obvious WHICH account this links to.
+  if(email===undefined){ try{ email=(await (await fetch("/api/customer/me")).json()).email; }catch(e){} }
+  if(email){ $("lkWhoMail").textContent=email; $("lkWho").style.display="flex"; }
+  else $("lkWho").style.display="none";
 }
 async function lkSend(){
   const p=($("lkphone").value||"").trim(); if(!p)return; LKPHONE=p;
@@ -759,7 +775,7 @@ async function init(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   if(me&&me.logged_in){
     if(me.phone_linked===false&&(lk==="phone"||me.pending_phone)){
-      openLink(me.pending_phone||"", !me.pending_phone);   // signup=required, google=skippable
+      openLink(me.pending_phone||"", !me.pending_phone, me.email||"");   // signup=required, google=skippable
     } else loadDashboard();
   }
   else { show("s_phone");

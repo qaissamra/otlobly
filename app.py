@@ -4503,6 +4503,10 @@ def api_customer_me():
         return jsonify({"logged_in": True, "phone_linked": False,
                         "name": session.get("cust_name") or "",
                         "pending_phone": session.get("cust_pending") or None,
+                        # full address (not masked): it's the visitor's OWN Google
+                        # account, echoed back so they can see WHICH one they used
+                        # before linking a phone to it.
+                        "email": session.get("cust_email") or None,
                         "email_masked": _mask_email(session.get("cust_email") or "")
                         if session.get("cust_email") else None})
     return jsonify({"logged_in": False})
