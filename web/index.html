@@ -10095,6 +10095,7 @@ function gmNewOpen(preGwds){
   const known=new Set(cands.map(c=>c.gwd));
   pre.forEach(g=>{ if(!known.has(g)) cands.unshift({gwd:g,source:"manual",name:""}); });
   GM.newPre=new Set(pre);
+  GM_CAND.mode="all";                  // a fresh open always shows everything
   bulkOpen("📧 "+T("إرسال طرود إلى سير عمل · Enroll packages into a workflow"));
   GM.enrollCands=cands;
   GM.enrollSel=new Set(pre);          // survives re-render (sort / column change)
@@ -10105,6 +10106,14 @@ function gmNewOpen(preGwds){
       <input id="gmCandSearch" oninput="gmEnrollRender()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
       <button class="minibtn" onclick="gmEnrollSelectShown(true)">${T("اختر الظاهر · select shown")}</button>
       <button class="minibtn" onclick="gmEnrollSelectShown(false)">${T("إلغاء الكل · clear")}</button>
+    </div>
+    <!-- narrow the list to the parcels that still need attention; "select shown"
+         then acts on exactly those, so fixing a batch is one pass -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      ${[["all",T("الكل · All"),cands.length],
+         ["noid","⚠ "+T("بلا هوية · no ID"),cands.filter(c=>!c.pname_id).length],
+         ["default","⚡ "+T("اسم افتراضي · default name"),cands.filter(c=>c.pname_src==="default").length]]
+        .map(([k,lab,n])=>`<button class="minibtn gmCandChip${k==="all"?" accent":""}" data-m="${k}" style="padding:2px 10px;font-size:11.5px" onclick="gmCandMode('${k}')">${lab} <b>${n}</b></button>`).join("")}
     </div>
     <div id="gmEnrollTbl"><div class="muted2" style="padding:10px">${T("جارِ التحميل… · loading…")}</div></div>
     <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
@@ -10141,7 +10150,16 @@ function gmEnrollFiltered(){
   const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
   return (GM.enrollCands||[]).filter(c=>!q||
     (c.gwd+" "+(c.name||"")+" "+(c.pname||"")+" "+(c.pname_id||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||""))
-      .toLowerCase().includes(q));
+      .toLowerCase().includes(q))
+    .filter(c=>GM_CAND.mode==="all"
+      ||(GM_CAND.mode==="noid"&&!c.pname_id)
+      ||(GM_CAND.mode==="default"&&c.pname_src==="default"));
+}
+let GM_CAND={mode:"all"};              // all | noid | default
+function gmCandMode(m){
+  GM_CAND.mode=m;
+  document.querySelectorAll(".gmCandChip").forEach(b=>b.classList.toggle("accent",b.dataset.m===m));
+  gmEnrollRender();
 }
 function gmEnrollSelectShown(on){
   gmEnrollFiltered().forEach(c=>on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd));
