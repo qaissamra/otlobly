@@ -779,6 +779,14 @@ def set_customer_email(row_id, email, verified_at):
         return False
 
 
+def set_customer_whatsapp(row_id, e164):
+    """Repair/normalise the phone column only (never touches data_json). Used when a
+    verified login proves the proper E.164 for a row stored in a looser format."""
+    with connect() as c:
+        c.execute("UPDATE customers SET whatsapp=?, updated_at=? WHERE id=?",
+                  (e164, now_iso(), row_id))
+
+
 def set_customer_password(row_id, pw_hash):
     """Set the portal password hash (manual-account login). Applied only AFTER the
     phone was verified by SMS — never from an unverified signup claim."""

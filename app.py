@@ -4973,6 +4973,17 @@ def api_customer_google_callback():
     row = db.get_customer_by_email(email)
     core = normalize.phone_core((row or {}).get("whatsapp") or "")
     if not row or not row.get("email_verified_at") or not core:
+        # Not the row's PRIMARY email — check the login-identity map: any address
+        # that once proved itself alongside a verified phone signs in forever after.
+        # (A customer can hold several Gmail accounts; `customers.email` holds one.)
+        alt = db.get_setting(_email_identity_key(email)) or {}
+        acore, abid = alt.get("core") or "", alt.get("bid") or 1
+        if acore:
+            db.set_current_business(abid)
+            arow = _customer_row_for_core(acore)
+            if arow:
+                row, core, ebid = arow, acore, abid
+    if not row or not core:
         # Auth v2 — Google is the FRONT DOOR for everyone: a proven-owned Google
         # email with no linked customer gets an email-only session and lands on
         # the "verify your phone" step (linkable, or skippable with the
@@ -4998,6 +5009,14 @@ def api_customer_google_callback():
 # the phone; only then is the row attached/created and the password applied.
 PW_MIN = 8
 SIGNUP_TTL = 1800                     # pending signup valid for 30 minutes
+
+
+def _email_identity_key(email):
+    """KV key for the login-identity map: a proven email → the customer's phone core.
+    Written only when BOTH were proven in one flow (Google verified the address, SMS
+    verified the phone), so it is exactly as trustworthy as the login itself. Lets a
+    customer keep several sign-in emails without clobbering `customers.email`."""
+    return "custemail:" + hashlib.sha256((email or "").strip().lower().encode()).hexdigest()[:16]
 
 
 @app.route("/api/customer/signup", methods=["POST"])
@@ -5131,13 +5150,25 @@ def api_customer_phone_link_verify():
     db.set_current_business(bid)
     row = _customer_row_for_core(core)
     known = bool(row) or _match_customer(core)[0]
+    # proper E.164 (+970…) — NOT "+"+core, which drops the country code and stores a
+    # number staff/WhatsApp/GAASH can't use.
+    pin = normalize.normalize_phone(b.get("phone") or "")
+    e164 = (pin or {}).get("e164") or ("+" + core)
     if not row:
         db.upsert_customer({"customer_id": db.next_customer_code(), "match_key": core,
-                            "whatsapp": "+" + core,
+                            "whatsapp": e164,
                             "name": session.get("cust_name") or ""})
         row = _customer_row_for_core(core)
+    elif row.get("whatsapp") and len(re.sub(r"\D", "", row["whatsapp"])) < len(re.sub(r"\D", "", e164)):
+        # self-heal a row stored without its country code (same core, shorter digits)
+        db.set_customer_whatsapp(row["id"], e164)
+        row = _customer_row_for_core(core) or row
     if row and session.get("cust_email"):
-        # Link the Google-verified email — but NEVER clobber a different verified one.
+        # Remember this address as a sign-in identity for the phone — so the NEXT
+        # login (any device) goes straight in even if it isn't the row's primary email.
+        db.set_setting(_email_identity_key(session["cust_email"]),
+                       {"core": core, "bid": bid})
+        # Link it as the primary email too — but NEVER clobber a different verified one.
         cur = (row.get("email") or "").strip().lower()
         if cur and row.get("email_verified_at") and cur != session["cust_email"]:
             app.logger.warning("phone-link: row %s keeps existing verified email", row["id"])
