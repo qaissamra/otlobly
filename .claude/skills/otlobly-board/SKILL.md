@@ -116,6 +116,23 @@ Later additions to the system:
   packages flat (table `"pok"`) · products flat (`"pop"`) · customers
   (`poRenderCustomers`); `poSearch` free-text filter (`poSearchMatch`);
   `poJumpOrder` = back to tree + open that card.
+  **👤 Customers group header = TWO TIERS** (since 2026-07-25). A group header
+  row is pin + `lxtCells` like every other one — never stuff meta into the pin,
+  it is `flex:0 0 var(--btpin)` + `overflow:hidden` and silently CLIPS the
+  overflow (that bug hid the status + money chips here for weeks). Line 1: pin =
+  👤 name only (`.pkg-title.cust` ellipsizes, full name in `title=`), cells =
+  `collect` Σ quoted · `ostatus` status pill (or "N orders") · `qty` Σ. Line 2 =
+  `.poc-meta` strip (📦 counts · ☎ wa.me phone · 📍 city · 🏠 address · 🪪 ID ·
+  عربون · ≈ cost), rendered open AND collapsed, empty fields omitted; its `.in`
+  is `position:sticky;inset-inline-start:0` so it survives horizontal scroll
+  (same trick as `.poc-cust`). Contact data = `poCustInfo(cust,ords)`:
+  `PO_CUSTMAP` (built in `loadPurchases` from the `/api/customers` call that was
+  ALREADY being made and discarded — keyed by both `normName` and
+  `phoneCoreJs`), falling back to the matched customer orders
+  (`phone`/`wa`/`address`/`id_number` — but NOT `city`, which `report._row`
+  omits) so a role without `view_customers` still gets contact info. No API/DB
+  change. `ostatus` is also a real `pop` column (order-level data on a product
+  table — same precedent as `collect`/`idnum`).
 - **🔎 Bulk search view** (`bulksearch` / `#bulkSearchView`, nav `bulkSearchBtn`):
   paste many GWDs → a full LXT ClickUp table (**table id `"bs"`**, pin = tracking
   #) locating each in BOTH data sets — Purchases (`bsFindPo`: exact
