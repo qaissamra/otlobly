@@ -4831,24 +4831,38 @@ async function lxSync(btn){
     +(r.conflicts?` · ⚠ ${r.conflicts} conflict${r.conflicts===1?'':'s'}`:"")
     +(r.new_items?` · +${r.new_items} product${r.new_items===1?'':'s'} added`:"")
     +(r.kept?` · 🕔 ${r.kept} of your edits kept`:"");
-  // the details button exists from the FIRST repaint — the photo/tracking phases
-  // can run for minutes, and the owner must be able to open the report during them
+  // the details AND conflict buttons exist from the FIRST repaint — the photo
+  // phase can run for minutes, and the owner must be able to open the report or
+  // act on a parked conflict during it (he hit exactly this: 5 conflicts
+  // reported, no way to reach them while the banner said "updating tracking…")
   const total=(r.report_changes||0)+(r.new_items||0)+(r.orders||0)+(r.kept||0);
   const seeBtn=total?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxSyncReportOpen()">👁 See details (${total})</button>`:"";
+  const confBtn=r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 Approve changes":"⚠ Review conflicts"} (${r.conflicts})</button>`:"";
   let done=0,rem=1;
-  while(rem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · fetching product photos… ${done}`;
+  while(rem>0){ pr.innerHTML=`✓ ${poEsc(head)}${confBtn}${seeBtn} · fetching product photos… ${done}`;
     let ir; try{ ir=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
     if(!ir.ok) break; done+=ir.done; rem=ir.remaining; if(ir.done===0&&rem>0) break; }
-  let tc=0,trem=1;
-  while(trem>0){ pr.innerHTML=`✓ ${poEsc(head)}${seeBtn} · updating live GAASH tracking… ${tc}`;
-    let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
-    if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
-  pr.innerHTML=`✅ Synced — ${poEsc(head)}.`
-    +(r.conflicts?` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2;margin-inline-start:8px" onclick="lxConflictsOpen()">${LX_SYNC_REVIEW?"🛡 Approve changes":"⚠ Review conflicts"} (${r.conflicts})</button>`:"")
-    +seeBtn
-    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new orders (${LX_LAST_MIGRATED.length})</button>`:"");
+  // Tracking is NOT automatic any more (owner: "I do not need to run the
+  // tracking check"). It still mirrors the GASH STATUS field and refreshes the
+  // deadlines behind the Telegram alerts, and NOTHING else refreshes those —
+  // the background pusher only pushes — so it stays one click away.
+  pr.innerHTML=`✅ Synced — ${poEsc(head)}.`+confBtn+seeBtn
+    +(LX_LAST_MIGRATED.length?` <button class="minibtn" style="margin-inline-start:8px" onclick="lxViewMigrated()">👁 View new orders (${LX_LAST_MIGRATED.length})</button>`:"")
+    +` <button class="minibtn" style="margin-inline-start:8px" onclick="lxTrackNow(this)" title="${T("يجلب حالة غاش/جرزيم الحيّة — ويحدّث حقل GASH STATUS والمهل التي تُشغّل التنبيهات · fetch live GAASH/Gerizim status — also mirrors the GASH STATUS field and refreshes the deadlines behind the alerts")}">🚚 ${T("حدّث تتبّع غاش · Update GAASH tracking")}</button>`;
   btn.disabled=false; await loadLeluxe(); lxPollStart();
   if(LX_SYNC_REVIEW&&r.conflicts) lxConflictsOpen();   // 🛡 straight to approve/deny
+}
+// 🚚 GAASH tracking on demand — the post-sync phase the owner asked to stop
+// running by itself. Same batches-of-10 server side; the button is its own
+// progress readout so nothing blocks the banner.
+async function lxTrackNow(btn){
+  btn.disabled=true;
+  let tc=0,trem=1;
+  while(trem>0){ btn.textContent=`🚚 ${T("جارٍ التحديث · updating")}… ${tc}`;
+    let tr; try{ tr=await post("/api/leluxe/migrate",{phase:"tracking"}); }catch(e){ break; }
+    if(!tr.ok) break; tc+=tr.checked; trem=tr.remaining; if(tr.checked===0&&trem>0) break; }
+  btn.textContent=`✓ ${T("حُدِّث · updated")} ${tc}`;
+  await loadLeluxe();
 }
 // ── Last-sync report: every applied change (old → new), new rows, parked rows ──
 function lxSyncReportClose(){ $("lxSyncReportModal").classList.add("hidden"); }
