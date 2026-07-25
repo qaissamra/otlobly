@@ -1143,11 +1143,93 @@ def _id_number_for(gwd):
     return ""
 
 
+def _name_on_pkg_for(gwd):
+    """The 'NAME ON PACKAGEE' board value for this GWD — the account-holder name
+    GAASH sees on the parcel (FAISAL / QAIS / Nuray…). The field lives on item and
+    parent rows (never package rows), so every row carrying the GWD is checked
+    first, then their parent orders. Label match tolerates the typo being fixed."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return ""
+
+    def pick(fields):
+        for k, v in (fields or {}).items():
+            if _fold(k).startswith("name on packag"):
+                s = _cf_stringify(v).strip()
+                if s:
+                    return s
+        return ""
+
+    parents = []
+    try:
+        with db.connect() as c:
+            rows = c.execute(
+                "SELECT parent_local_id, data_json FROM leluxe_orders "
+                "WHERE deleted=0 AND data_json LIKE ?", (f"%{g}%",)).fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                continue
+            f = d.get("fields") or {}
+            tn = str(d.get("tracking_number") or "").strip().upper()
+            if not tn:
+                for k, v in f.items():
+                    if k.strip().lower() == "tracking number":
+                        tn = str(v or "").strip().upper()
+                        break
+            if tn != g:
+                continue
+            nm = pick(f)
+            if nm:
+                return nm
+            if r["parent_local_id"]:
+                parents.append(r["parent_local_id"])
+        if parents:
+            marks = ",".join("?" * len(set(parents)))
+            with db.connect() as c:
+                prows = c.execute(
+                    f"SELECT data_json FROM leluxe_orders WHERE id IN ({marks})",
+                    tuple(set(parents))).fetchall()
+            for pr in prows:
+                try:
+                    nm = pick((json.loads(pr["data_json"] or "{}") or {}).get("fields"))
+                except Exception:  # noqa
+                    nm = ""
+                if nm:
+                    return nm
+    except Exception:  # noqa
+        pass
+    return ""
+
+
+def _name_id_for(gwd):
+    """The ID number mapped (Settings → gaash_mail.name_ids) to this package's
+    on-package name — folded compare, so FAISAL / faisal / Faisal all hit."""
+    ids = _setts().get("name_ids") or {}
+    if not isinstance(ids, dict) or not ids:
+        return ""
+    nm = _fold(_name_on_pkg_for(gwd))
+    if not nm:                       # Purchases boards: same column as a PO custom field
+        for k, v in _cf_for_gwd(gwd).items():
+            if _fold(k).startswith("name on packag"):
+                nm = _fold(v)
+                break
+    if not nm:
+        return ""
+    for k, v in ids.items():
+        if _fold(k) == nm:
+            return str(v or "").strip()
+    return ""
+
+
 # the fixed personalization tokens (name → friendly label for the UI picker)
 TPL_CORE_TOKENS = [
     ("gwd", "رقم التتبع · tracking number"),
     ("customer", "اسم العميل · customer name"),
-    ("id_number", "رقم هوية العميل · customer ID number"),
+    ("id_number", "رقم الهوية — هوية العميل، أو هوية الاسم على الطرد إن لم توجد "
+                  "· ID number — the customer's, else the on-package name's"),
+    ("name_id", "رقم هوية الاسم على الطرد فقط · ID # of the on-package name only"),
     ("upload_link", "رابط رفع المستندات · document-upload link"),
     ("id_name", "اسم مستند الهوية · attached ID name"),
     ("days_waiting", "أيام الانتظار · days waiting"),
@@ -1203,8 +1285,14 @@ def _fill(tpl, gwd, thread=None, step=None):
             .replace("{id_name}", id_name)
             .replace("{days_waiting}", days)
             .replace("{step}", str(step or (thread or {}).get("step") or "")))
-    if "{id_number}" in text:                   # the customer's submitted ID number
-        text = text.replace("{id_number}", _id_number_for(gwd))
+    # {id_number}: the customer's OWN submitted ID (Request-ID link → CRM) and, when
+    # the package has none, the Settings-mapped ID of the name it ships under. That
+    # covers both boards with one token — Otlobly/Purchases parcels go to the
+    # customer (CRM hit), Leluxe parcels ship under an AZ account holder (name map).
+    if "{id_number}" in text:
+        text = text.replace("{id_number}", _id_number_for(gwd) or _name_id_for(gwd))
+    if "{name_id}" in text:                     # force the on-package name's ID only
+        text = text.replace("{name_id}", _name_id_for(gwd))
     if "{" not in text:                        # no board-column tokens left
         return text
     cf = {_fold(k): v for k, v in _cf_for_gwd(gwd).items()}
