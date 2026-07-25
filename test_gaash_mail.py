@@ -499,6 +499,30 @@ def main():
     gm.sequence_toggle(sq["id"], False)
     check("back ON: the same trigger enrolls again",
           gm.run_rules() == 1 and gm.thread_get("GWD009000007"))
+    # approve / dismiss — surfaced ONLY in the Workflows table's per-row
+    # expansion now (the old top banner is gone), so lock the whole loop
+    ov = gm.overview()
+    check("overview splits proposed (with its seq_id) out of threads",
+          any(p["gwd"] == "GWD009000007" and p.get("seq_id") == sq["id"]
+              for p in ov["proposed"])
+          and all(t["gwd"] != "GWD009000007" for t in ov["threads"]))
+    r = co3.post("/api/gaash/thread",
+                 json={"gwd": "GWD009000007", "action": "dismiss"})
+    check("dismiss deletes the proposed thread",
+          r.get_json().get("ok") and not gm.thread_get("GWD009000007"))
+    check("the trigger re-proposes it on the next rules run",
+          gm.run_rules() == 1
+          and gm.thread_get("GWD009000007")["state"] == "proposed")
+    r = co3.post("/api/gaash/thread",
+                 json={"gwd": "GWD009000007", "action": "approve"})
+    th7 = gm.thread_get("GWD009000007")
+    check("approve starts a real thread in the thread's own workflow",
+          r.get_json().get("ok") and th7 and th7["state"] != "proposed"
+          and th7["seq_id"] == sq["id"])
+    check("approve rejects a non-proposed thread",
+          co3.post("/api/gaash/thread",
+                   json={"gwd": "GWD009000007",
+                         "action": "approve"}).status_code == 400)
     gm.rule_remove(rp["id"]); _del_thread("GWD009000007"); _del_thread("GWD600")
     # clone: copies steps, starts paused
     cl = gm.sequence_clone(sq["id"])
