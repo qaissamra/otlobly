@@ -10059,11 +10059,12 @@ function gmNewOpen(preGwds){
   const known=new Set(cands.map(c=>c.gwd));
   pre.forEach(g=>{ if(!known.has(g)) cands.unshift({gwd:g,source:"manual",name:""}); });
   GM.newPre=new Set(pre);
+  GM_CAND.mode="all";                  // a fresh open always shows everything
   bulkOpen("📧 "+T("إرسال طرود إلى سير عمل · Enroll packages into a workflow"));
   const badge=s=>s==="leluxe"?`<span class="pill" style="background:#eef;border:1px solid var(--line);font-size:9.5px">⌚</span>`
     :s==="purchases"?`<span class="pill" style="background:#fef3ec;border:1px solid var(--line);font-size:9.5px">📦</span>`
     :`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">✎</span>`;
-  const row=c=>`<label class="gmCandRow" data-gwd="${poEsc(c.gwd)}" data-hay="${poEsc((c.gwd+" "+(c.pname||"")+" "+(c.pname_id||"")+" "+(c.name||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||"")).toLowerCase())}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
+  const row=c=>`<label class="gmCandRow" data-gwd="${poEsc(c.gwd)}" data-noid="${c.pname_id?"0":"1"}" data-psrc="${poEsc(c.pname_src||"")}" data-hay="${poEsc((c.gwd+" "+(c.pname||"")+" "+(c.pname_id||"")+" "+(c.name||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||"")).toLowerCase())}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
       <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}" ${GM.newPre.has(c.gwd)?"checked":""} onchange="gmNewCount()">
       ${badge(c.source)}
       <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
@@ -10080,6 +10081,14 @@ function gmNewOpen(preGwds){
       <input id="gmCandSearch" oninput="gmCandFilter()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
       <label style="display:flex;gap:5px;align-items:center;font-size:11.5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="gmCandAll" onchange="gmCandSelectAll(this.checked)"> ${T("اختر الظاهر · select shown")}</label>
     </div>
+    <!-- narrow the list to the parcels that still need attention; "select shown"
+         then acts on exactly those, so fixing a batch is one pass -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      ${[["all",T("الكل · All"),cands.length],
+         ["noid","⚠ "+T("بلا هوية · no ID"),cands.filter(c=>!c.pname_id).length],
+         ["default","⚡ "+T("اسم افتراضي · default name"),cands.filter(c=>c.pname_src==="default").length]]
+        .map(([k,lab,n])=>`<button class="minibtn gmCandChip${k==="all"?" accent":""}" data-m="${k}" style="padding:2px 10px;font-size:11.5px" onclick="gmCandMode('${k}')">${lab} <b>${n}</b></button>`).join("")}
+    </div>
     <div style="display:flex;gap:8px;align-items:center;padding:0 6px 3px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
       <span style="width:15px;flex:none"></span><span style="width:22px;flex:none"></span>
       <span style="width:88px;flex:none">${T("رقم التتبع · tracking")}</span>
@@ -10089,6 +10098,7 @@ function gmNewOpen(preGwds){
     </div>
     <div id="gmCandList" style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px">
       ${cands.length?cands.map(row).join(""):`<div class="muted2" style="padding:8px">${T("لا مرشحين — الصق أرقاماً تحت · no candidates — paste numbers below")}</div>`}
+      <div id="gmCandEmpty" class="muted2" style="display:none;padding:8px;font-size:12px">${T("لا شيء هنا — كل الطرود المعروضة بخير 👌 · nothing here — every shown package is fine 👌")}</div>
     </div>
     <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
     <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("الهوية المرفقة مع الإيميل الأول · ID attached to email #1")}</b>
@@ -10111,10 +10121,27 @@ function gmNewOpen(preGwds){
     <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ · Start")}</button></div>`;
   gmNewCount();
 }
+let GM_CAND={mode:"all"};              // all | noid | default
+function gmCandMode(m){
+  GM_CAND.mode=m;
+  document.querySelectorAll(".gmCandChip").forEach(b=>b.classList.toggle("accent",b.dataset.m===m));
+  gmCandFilter();
+}
 function gmCandFilter(){
-  const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
+  const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase(), m=GM_CAND.mode;
+  let shown=0;
   document.querySelectorAll("#gmCandList .gmCandRow").forEach(r=>{
-    r.style.display=(!q||r.dataset.hay.includes(q))?"":"none"; });
+    const okQ=!q||r.dataset.hay.includes(q);
+    const okM=m==="all"||(m==="noid"&&r.dataset.noid==="1")
+                       ||(m==="default"&&r.dataset.psrc==="default");
+    const on=okQ&&okM;
+    // "flex", NOT "": the row's inline style IS display:flex, so clearing it
+    // drops the label back to inline and the columns run together
+    r.style.display=on?"flex":"none";
+    if(on) shown++;
+  });
+  const empty=$("gmCandEmpty");
+  if(empty) empty.style.display=shown?"none":"block";
   const all=$("gmCandAll"); if(all) all.checked=false;
 }
 function gmCandSelectAll(on){
