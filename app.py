@@ -4496,7 +4496,9 @@ def api_customer_me():
                         "name": session.get("cust_name") or "",
                         "phone": core,
                         "whatsapp": row.get("whatsapp") or None,   # e164 for form prefill
-                        "email_masked": _mask_email(email) if email else None,
+                        # full address, not masked: it's the visitor's OWN email,
+                        # echoed back so they can see which one is on the account.
+                        "email": email or None,
                         "email_verified": bool(email and row.get("email_verified_at")),
                         # drives the Settings "change password" box — only accounts
                         # that actually registered one can change it.
@@ -4508,12 +4510,7 @@ def api_customer_me():
         return jsonify({"logged_in": True, "phone_linked": False,
                         "name": session.get("cust_name") or "",
                         "pending_phone": session.get("cust_pending") or None,
-                        # full address (not masked): it's the visitor's OWN Google
-                        # account, echoed back so they can see WHICH one they used
-                        # before linking a phone to it.
-                        "email": session.get("cust_email") or None,
-                        "email_masked": _mask_email(session.get("cust_email") or "")
-                        if session.get("cust_email") else None})
+                        "email": session.get("cust_email") or None})
     return jsonify({"logged_in": False})
 
 

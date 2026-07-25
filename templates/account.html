@@ -666,8 +666,8 @@ async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}
   D=null; navSetName(""); show("s_phone"); }
 async function refreshEmailLine(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
-  const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
-  $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
+  const st=me.email?`${esc(me.email)} ${me.email_verified?"✓":""}`:t("enolink");
+  $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${me.email?t("echange"):t("elink")}</a>`;
   // the phone the account's orders hang off (or a prompt to link one)
   const ph=me.whatsapp||me.phone;
   const chg=`<a href="#" onclick="openLink('',true);return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("pwchange")}</a>`;
