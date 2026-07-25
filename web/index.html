@@ -4887,8 +4887,9 @@ async function lxDiagOpen(){
            <b style="flex:0 0 34px">${n}</b><span>${poEsc(why)}</span></div>`).join("")}</div>`:''}
     ${rows.length?`<div class="subhead" style="margin:4px 0 6px">${T("حالات خاطئة على اللوحة · statuses wrong on the board")} (${rows.length})</div>
       <div style="max-height:320px;overflow:auto">${rows.map(s=>
-        `<div style="display:flex;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line);font-size:12.5px">
-           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(s.name)}">${poEsc(s.name)}</span>
+        `<div style="display:flex;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line);font-size:12.5px"
+              title="${poEsc(s.why||"")}${s.base_status?` — ${T("أساس الدمج · merge base")}: ${poEsc(s.base_status)}`:""}">
+           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.frozen?'<span title="frozen" style="color:#b42318">❄</span> ':''}${poEsc(s.name)}</span>
            ${lxStatusPill(s.local_status)} <span class="muted2">→</span> ${lxStatusPill(s.az2_status)}
          </div>`).join("")}</div>`
       :`<div style="padding:14px;text-align:center;color:var(--good)">✅ ${T("كل الحالات مطابقة · every status matches AZ (2)")}</div>`}`;

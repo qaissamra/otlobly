@@ -401,6 +401,7 @@ def diagnose(config=None):
             continue                          # in step with AZ (2)
         state = d["sync_state"]
         differs = rstatus != (d["status"] or "")
+        bstatus = ((data.get("source_base") or {}).get("status") or "")
         # The merge's fast path trusts the timestamp: _merge_row returns
         # "unchanged" as soon as source_cu_updated == the task's date_updated,
         # WITHOUT comparing values. So a row whose stamp is already current but
@@ -408,13 +409,24 @@ def diagnose(config=None):
         # again (a conflict park advances the stamp without applying, which is
         # one way to land here). That is invisible in a "+0 updated" result line.
         frozen = differs and rcu == str(data.get("source_cu_updated") or "")
-        why = ("blocked: mid-push (skipped by every pull)" if state == "pushing"
-               else "blocked: parked conflict" if state == "conflict"
-               else "blocked: push error" if state == "error"
-               else "waiting: queued to push" if state == "dirty"
-               else "FROZEN: AZ (2) stamp already current but the value differs "
-                    "— no sync will re-check this row" if frozen
-               else "would apply on next sync (pull has not run)")
+        # Verdict order MIRRORS the engine. Only `pushing` (early return) and
+        # `conflict` (parked) stop an inbound value; `dirty`/`error` are about the
+        # OUTBOUND push and never block a pull, so they must not outrank the
+        # frozen verdict — otherwise the panel blames the queue for a row that is
+        # actually stuck forever. Past those, the fast path wins over everything,
+        # and only then does _merge_decide's base comparison apply.
+        if state == "pushing":
+            why = "blocked: mid-push (skipped by every pull)"
+        elif state == "conflict":
+            why = "blocked: parked conflict"
+        elif frozen:
+            why = ("FROZEN: AZ (2) stamp already current but the value differs "
+                   "— no sync will re-check this row")
+        elif differs and rstatus == bstatus:
+            why = ("kept: the app's own edit wins (AZ (2) matches our merge base, "
+                   "so the local value is deliberately preserved)")
+        else:
+            why = "would apply on next sync (pull has not run)"
         out["stale_by_reason"][why] = out["stale_by_reason"].get(why, 0) + 1
         if frozen:
             out["frozen"] += 1
@@ -425,7 +437,8 @@ def diagnose(config=None):
                 {"id": d["id"], "kind": d["kind"], "name": (d["name"] or "")[:70],
                  "source_task_id": srcid, "sync_state": state, "why": why,
                  "status_differs": differs, "frozen": frozen,
-                 "local_status": d["status"] or "", "az2_status": rstatus})
+                 "local_status": d["status"] or "", "az2_status": rstatus,
+                 "base_status": bstatus})
     out["stale_count"] = sum(out["stale_by_reason"].values())
     # the headline number: rows whose STATUS on the board is wrong right now
     out["stale"].sort(key=lambda s: (not s["status_differs"], s["name"]))
