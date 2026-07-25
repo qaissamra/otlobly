@@ -289,7 +289,23 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   leluxe date_created ms, purchases PO created_at ISO; None fails closed).
   UI `gmRuleOpen` builder modal (datalists fed from GM.ov.candidates,
   value input morphs by type), ✎ `gmRuleEdit` pre-fills, `gmRuleSummary`
-  renders the strip line. **Surfaced in the sequence builder (2026-07-24):**
+  renders the strip line. **⚙️ Workflows page (2026-07-25, HubSpot Automation
+  layout):** tabs 💬 Conversations · 🧭 Overview · ⚙️ Workflows (was Sequences)
+  · 📝 Templates · 📊 Analyze (was Dashboard). Workflows = an lxt TABLE
+  (`LXT_COLS.wf`, registered across LX_TABLES/LXT_CLS/LXT_PINCLS/init/lxtRender
+  + .wf-cols/.wf-colhead CSS): onoff switch · trigger + ⚡chip · steps/days/
+  goal/active · enrolled/enr7d/goalmet/sent/open%/reply% · description · ⋯.
+  Search + All/On/Off/has-trigger quick filters (GM_WF), hover ✎ ⧉ actions.
+  On/Off = `gaash_sequences.paused` (ALTER + description): run_once guard 0
+  skips paused-seq threads BEFORE claim (nothing lost), run_rules skips their
+  triggers; `sequence_toggle`/`sequence_clone` (clone starts Off) via
+  /api/gaash/sequence/toggle|clone (admin). ⚡ match counts: `rule_matches`/
+  `rules_match_map` (one candidates scan) via GET /api/gaash/rules/matches +
+  POST /rules/preview (modal's debounced live count `gmRulePreviewKick`);
+  chip click → `gmMatchesView(gwds)` = Bulk search prefilled (full columns).
+  `stats()` has enrolled_7d; builder shows a stats strip + description input;
+  Overview tab `gmOvRender` tiles. Caches GM.stats/GM.matches cleared each
+  gmLoad, lazy-fetched by `gmWfEnsureData`. **Surfaced in the sequence builder (2026-07-24):**
   `gmRenderBuilder` shows an ⚡ Enrollment-trigger card at the top (HubSpot
   "when this happens") listing rules where seq_id=this seq, ＋ New trigger
   `gmRuleNew(seqId)` pre-sets enroll-into; `gmAfterRule()` re-renders builder
