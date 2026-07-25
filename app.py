@@ -2529,6 +2529,16 @@ def api_leluxe_sync_report():
     return jsonify({"ok": True, **rep})
 
 
+@app.route("/api/leluxe/diag")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_diag():
+    """Read-only sync health: which rows are out of step with AZ (2) and WHY
+    the next sync would skip them (mid-push / parked conflict / never pulled).
+    Writes nothing — safe to open at any time, mid-sync included."""
+    return jsonify({"ok": True, **leluxe_mod.diagnose()})
+
+
 @app.route("/api/leluxe/conflicts")
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

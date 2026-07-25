@@ -345,6 +345,90 @@ def sync_counts():
             "last_errors": errors, "conflict_rows": conflict_rows}
 
 
+def diagnose(config=None):
+    """READ-ONLY sync health report — answers "why hasn't this AZ (2) change
+    landed?". Writes NOTHING, so it is safe to run at any time, mid-sync
+    included. Fetches AZ (2) exactly the way sync_from_source does, then
+    compares every locally-linked row with its live source task and buckets
+    each difference by the reason the next sync would (or would not) apply it.
+
+    The buckets mirror the real skip paths: `pushing` returns early in
+    _merge_row, `conflict` rows are parked until resolved, `error`/`dirty` are
+    waiting on the pusher. Anything left is a change the next sync WILL apply
+    — i.e. the pull simply has not run."""
+    src, lid = source_list_id(config), list_id(config)
+    out = {"list_id": lid, "source_list_id": src, "counts": sync_counts(),
+           "checked": 0, "stale": [], "stale_count": 0, "stale_by_reason": {},
+           "status_differs": 0}
+    if not src:
+        out["error"] = "leluxe.source_list_id (AZ 2) is not set"
+        return out
+    if not _token():
+        out["error"] = "CLICKUP_API_TOKEN is not set"
+        return out
+    remote, page = {}, 0
+    while True:                              # same URL + pagination as the sync
+        st, body = _http(f"{CLICKUP_API}/list/{src}/task?include_closed=true"
+                         f"&subtasks=true&page={page}")
+        if st != 200:
+            out["error"] = f"AZ (2) fetch failed ({st})"
+            return out
+        batch = body.get("tasks") or []
+        for t in batch:
+            remote[t["id"]] = t
+        if body.get("last_page", True) or not batch:
+            break
+        page += 1
+    out["az2_tasks"] = len(remote)
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    seen = set()
+    for d in rows:
+        data = d["data"] or {}
+        srcid = data.get("source_task_id")
+        if not srcid:
+            continue
+        out["checked"] += 1
+        seen.add(srcid)
+        t = remote.get(srcid)
+        if not t:
+            continue
+        rstatus = (t.get("status") or {}).get("status") or ""
+        rcu = str(t.get("date_updated") or "")
+        if (rstatus == (d["status"] or "")
+                and rcu == str(data.get("source_cu_updated") or "")):
+            continue                          # in step with AZ (2)
+        state = d["sync_state"]
+        why = ("blocked: mid-push (skipped by every pull)" if state == "pushing"
+               else "blocked: parked conflict" if state == "conflict"
+               else "blocked: push error" if state == "error"
+               else "waiting: queued to push" if state == "dirty"
+               else "would apply on next sync (pull has not run)")
+        out["stale_by_reason"][why] = out["stale_by_reason"].get(why, 0) + 1
+        differs = rstatus != (d["status"] or "")
+        if differs:
+            out["status_differs"] += 1
+        if len(out["stale"]) < 100:
+            out["stale"].append(
+                {"id": d["id"], "kind": d["kind"], "name": (d["name"] or "")[:70],
+                 "source_task_id": srcid, "sync_state": state, "why": why,
+                 "status_differs": differs,
+                 "local_status": d["status"] or "", "az2_status": rstatus})
+    out["stale_count"] = sum(out["stale_by_reason"].values())
+    # the headline number: rows whose STATUS on the board is wrong right now
+    out["stale"].sort(key=lambda s: (not s["status_differs"], s["name"]))
+    # AZ (2) top-level tasks with NO local row — the `skipped` bucket the sync
+    # result line never shows (created before `since`, so never inserted).
+    out["az2_unlinked_orders"] = [
+        {"id": t["id"], "name": (t.get("name") or "")[:70],
+         "date_created": t.get("date_created")}
+        for tid, t in remote.items() if not t.get("parent") and tid not in seen][:50]
+    out["az2_unlinked_count"] = sum(
+        1 for tid, t in remote.items() if not t.get("parent") and tid not in seen)
+    return out
+
+
 def _insert_row(kind, name, *, status="", due_date=None, fields=None, desc="",
                 tags=None, parent_local_id=None, parent_task_id=None,
                 date_created=None, extra=None):

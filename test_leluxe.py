@@ -790,6 +790,42 @@ def endpoints_gated():
           brk.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
           and sales.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
           and sales.get("/api/leluxe/az2_pushes").status_code == 403)
+    check("diag route blocked for broker + sales",
+          brk.get("/api/leluxe/diag").status_code == 403
+          and sales.get("/api/leluxe/diag").status_code == 403)
+
+
+def diagnose_readonly():
+    """🩺 Diagnose sync is READ-ONLY and never throws: with no ClickUp token it
+    reports the reason instead of failing, and it writes nothing (the row count
+    and every sync_state are identical before and after)."""
+    import app as appmod
+    import auth
+    import leluxe
+
+    def snapshot():
+        with db.connect() as c:
+            return [tuple(r) for r in c.execute(
+                "SELECT id, status, sync_state, data_json FROM leluxe_orders "
+                "ORDER BY id")]
+
+    before = snapshot()
+    out = leluxe.diagnose()
+    check("diagnose returns a dict even with no token", isinstance(out, dict))
+    check("diagnose reports WHY it could not run",
+          bool(out.get("error")) or "stale_count" in out)
+    check("diagnose carries the counts block", isinstance(out.get("counts"), dict))
+    check("diagnose wrote NOTHING", snapshot() == before)
+
+    db.create_user("dg-otlo", auth.hash_pw("secret1"), "admin", "O", business_id=1)
+    c = appmod.app.test_client()
+    c.post("/login", data={"username": "dg-otlo", "password": "secret1"})
+    r = c.get("/api/leluxe/diag")
+    check("diag endpoint answers 200 for an Otlobly admin", r.status_code == 200)
+    j = r.get_json()
+    check("diag payload is ok-shaped",
+          j.get("ok") is True and "counts" in j and "list_id" in j)
+    check("diag still wrote nothing via the route", snapshot() == before)
 
 
 def pkgmail_tracking():
@@ -1146,6 +1182,7 @@ def main():
     print("sync kept report:");  sync_kept_report()
     print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
+    print("diagnose read-only:"); diagnose_readonly()
     print("pkg mail:");          pkgmail_tracking()
     print()
     if fails:

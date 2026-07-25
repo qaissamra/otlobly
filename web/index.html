@@ -1365,6 +1365,7 @@
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
           <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
+          <button class="pop-item" id="lxDiagBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiagOpen()" title="لماذا لم تصل تغييرات كليك أب؟ — يقارن كل صف مع AZ (2) الحيّة ويشرح سبب التخطي · why hasn't a ClickUp change landed? compares every row against live AZ (2) and says what is blocking it (read-only)">🩺 Diagnose sync</button>
           <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
           <button class="pop-item" id="lxAz2HistBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2HistoryOpen()" title="كل دفعة رفعتها إلى AZ (2) — مع تراجع · every push you made INTO AZ (2), with undo">⤴ AZ (2) push history</button>
           <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
@@ -4851,6 +4852,48 @@ async function lxSync(btn){
 }
 // ── Last-sync report: every applied change (old → new), new rows, parked rows ──
 function lxSyncReportClose(){ $("lxSyncReportModal").classList.add("hidden"); }
+// 🩺 Sync health — answers "why hasn't my ClickUp change shown up?". Compares
+// every locally-linked row with the LIVE AZ (2) task and groups the differences
+// by what would block them (mid-push / parked conflict / never pulled). The
+// endpoint writes nothing, so this is safe to open mid-sync.
+async function lxDiagOpen(){
+  bulkOpen(T("🩺 تشخيص المزامنة · Sync diagnosis"));
+  $("bulkBody").innerHTML='<div class="muted2" style="padding:16px">⏳ '+T("يقارن مع AZ (2) الحيّة… · comparing against live AZ (2)…")+'</div>';
+  let d; try{ d=await (await fetch("/api/leluxe/diag")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok||d.error){ $("bulkBody").innerHTML=`<div style="padding:16px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر التحميل · could not load"))}</div>`; return; }
+  const c=d.counts||{};
+  const tile=(lab,val,tone)=>`<div style="border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:104px;background:var(--bg2)">
+    <div class="muted2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">${lab}</div>
+    <div style="font-size:19px;font-weight:800;${tone||''}">${val}</div></div>`;
+  const rows=(d.stale||[]).filter(s=>s.status_differs);
+  $("bulkBody").innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      ${tile(T("خارج التطابق · out of step"),d.stale_count||0,(d.stale_count?"color:#b45309":""))}
+      ${tile(T("حالة خاطئة · wrong status"),d.status_differs||0,(d.status_differs?"color:#b42318":""))}
+      ${tile(T("لم تُسحب أبداً · never pulled"),d.az2_unlinked_count||0,(d.az2_unlinked_count?"color:#b45309":""))}
+      ${tile(T("بانتظار الرفع · queued"),(c.dirty||0)+(c.pushing||0))}
+      ${tile(T("تعارض · conflict"),c.conflict||0,(c.conflict?"color:#b42318":""))}
+      ${tile(T("أخطاء · errors"),c.error||0,(c.error?"color:#b42318":""))}
+    </div>
+    <div class="muted2" style="font-size:12px;margin-bottom:10px">
+      ${T("المصدر · source")}: <span class="mono">${poEsc(d.source_list_id||"—")}</span> (AZ 2) →
+      ${T("قائمة العمل · working list")}: <span class="mono">${poEsc(d.list_id||"—")}</span> ·
+      ${d.az2_tasks||0} ${T("مهمة · tasks")} · ${d.checked||0} ${T("مرتبطة · linked")}
+    </div>
+    ${Object.keys(d.stale_by_reason||{}).length?`<div style="margin-bottom:12px">${
+      Object.entries(d.stale_by_reason).map(([why,n])=>
+        `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+           <b style="flex:0 0 34px">${n}</b><span>${poEsc(why)}</span></div>`).join("")}</div>`:''}
+    ${rows.length?`<div class="subhead" style="margin:4px 0 6px">${T("حالات خاطئة على اللوحة · statuses wrong on the board")} (${rows.length})</div>
+      <div style="max-height:320px;overflow:auto">${rows.map(s=>
+        `<div style="display:flex;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line);font-size:12.5px">
+           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(s.name)}">${poEsc(s.name)}</span>
+           ${lxStatusPill(s.local_status)} <span class="muted2">→</span> ${lxStatusPill(s.az2_status)}
+         </div>`).join("")}</div>`
+      :`<div style="padding:14px;text-align:center;color:var(--good)">✅ ${T("كل الحالات مطابقة · every status matches AZ (2)")}</div>`}`;
+  bulkFoot(`<span class="muted2" style="font-size:11.5px">${T("قراءة فقط — لم يُكتب شيء · read-only, nothing was written")}</span>
+    <span class="spacer"></span><button class="po-btn" onclick="bulkClose()">${T("إغلاق · Close")}</button>`);
+}
 async function lxSyncReportOpen(){
   $("lxSyncReportModal").classList.remove("hidden");
   const body=$("lxSyncReportBody");
