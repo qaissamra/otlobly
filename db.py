@@ -453,6 +453,10 @@ def migrate():
         # step + open/click tracking counters (bumped by /api/gaash/px|r).
         if "seq_id" not in _columns(c, "gaash_threads"):
             c.execute("ALTER TABLE gaash_threads ADD COLUMN seq_id TEXT")
+        # the name this parcel ships under, PICKED by the owner — overrides what
+        # the boards say (a package can carry a wrong/blank NAME ON PACKAGEE)
+        if "pname" not in _columns(c, "gaash_threads"):
+            c.execute("ALTER TABLE gaash_threads ADD COLUMN pname TEXT")
         if "seq_id" not in _columns(c, "gaash_msgs"):
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN seq_id TEXT")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN step_id TEXT")

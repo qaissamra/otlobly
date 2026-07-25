@@ -491,14 +491,103 @@ def main():
     check("the customer's OWN ID wins over the name map",
           gm._fill("{id_number}", "GWD009000024") == "CRM-777"
           and gm._fill("{name_id}", "GWD009000024") == "999888777")
-    print("— 🪪 enroll picker: name_on_pkg per candidate + the one-pair writer —")
+    # the picker/conversation columns must show what the email will ACTUALLY send
+    pm, em = gm.parcel_name_map(), gm.effective_id_map()
+    check("parcel_name_map reads Leluxe's own field AND the parent's",
+          pm.get("GWD009000021") == "faisal" and pm.get("GWD009000022") == "NURAY HTAB")
+    check("Purchases parcels are named by the PO's Main name",
+          gm.parcel_name("GWD009000001") == "Test Buyer")
+    check("effective_id_map matches _fill on every GWD",
+          all(em.get(g, "") == gm._fill("{id_number}", g)
+              for g in ("GWD009000021", "GWD009000022", "GWD009000023",
+                        "GWD009000024", "GWD009000001")))
     cands = {c["gwd"]: c for c in gm.candidates()}
-    check("candidate carries the on-package name from its OWN field",
-          cands.get("GWD009000021", {}).get("name_on_pkg") == "faisal")
-    check("candidate falls back to the PARENT order's field",
-          cands.get("GWD009000022", {}).get("name_on_pkg") == "NURAY HTAB")
-    check("every candidate has the key (empty when the column is absent)",
-          all("name_on_pkg" in c for c in cands.values()))
+    if "GWD009000021" in cands:
+        check("candidates carry the parcel name + the ID its email will send",
+              cands["GWD009000021"]["pname"] == "faisal"
+              and cands["GWD009000021"]["pname_id"] == "999888777")
+
+    print("— picking the name per package (overrides what the boards say) —")
+    _mk_thread("GWD009000023", step=0, state="active")     # board name: 'yahia', unmapped
+    r = co.post("/api/gaash/thread", json={"gwd": "GWD009000023",
+                                           "action": "set_name",
+                                           "pname": "  Nuray   htab "}).get_json()
+    check("set_name pins the name, trimmed, and reports its ID",
+          r.get("ok") and r["pname"] == "Nuray htab" and r["pname_id"] == "111222333")
+    check("the pinned name drives {id_number} and {name_id}",
+          gm._fill("{id_number}", "GWD009000023") == "111222333"
+          and gm.parcel_name("GWD009000023") == "Nuray htab")
+    # a pick must beat even a customer's own CRM ID — that's the point of picking
+    _mk_thread("GWD009000024", step=0, state="active")
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                       "action": "set_name", "pname": "FAISAL"})
+    check("a pinned name outranks the customer's CRM ID",
+          gm._id_number_for("GWD009000024") == "CRM-777"
+          and gm._fill("{id_number}", "GWD009000024") == "999888777")
+    check("effective_id_map still agrees with _fill once names are pinned",
+          all(gm.effective_id_map().get(g, "") == gm._fill("{id_number}", g)
+              for g in ("GWD009000021", "GWD009000023", "GWD009000024")))
+    # pinning a name with no ID must stay blank, NOT fall back to the customer's
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                       "action": "set_name", "pname": "nobody"})
+    check("a pinned but unmapped name yields no ID (no silent fallback)",
+          gm._fill("{id_number}", "GWD009000024") == ""
+          and gm.effective_id_map().get("GWD009000024", "") == "")
+    r = co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                           "action": "set_name", "pname": ""}).get_json()
+    check("clearing the pick falls back to the board again",
+          r["pname"] == "FAISAL" and r["pname_id"] == "CRM-777")
+    _del_thread("GWD009000023"); _del_thread("GWD009000024")
+
+    print("— default name: only where NEITHER board names the parcel —")
+    with db.connect() as c:      # a parcel no board names at all
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','NID nameless','on hold',?,?)""",
+                  (now_ms, json.dumps({"tracking_number": "GWD009000025",
+                                       "fields": {"BRAND": "x"}})))
+    check("no default set → a nameless parcel stays nameless",
+          gm.parcel_name("GWD009000025") == ""
+          and gm._fill("{id_number}", "GWD009000025") == "")
+    r = co.post("/api/settings", json={"gaash_mail":
+                                       {"default_name": "  FAISAL  "}}).get_json()
+    check("default_name saved + trimmed", r.get("ok")
+          and gm._setts().get("default_name") == "FAISAL")
+    check("the nameless parcel now takes the default, flagged as such",
+          gm.parcel_name("GWD009000025") == "FAISAL"
+          and gm._fill("{id_number}", "GWD009000025") == "999888777"
+          and gm.parcel_name_src("GWD009000025") == "default")
+    check("a parcel the BOARD names ignores the default",
+          gm.parcel_name("GWD009000021") == "faisal"
+          and gm.parcel_name_src("GWD009000021") == "board")
+    check("Purchases keeps its Main name, never the default",
+          gm.parcel_name("GWD009000001") == "Test Buyer"
+          and gm.parcel_name_src("GWD009000001") == "board")
+    _mk_thread("GWD009000025", step=0, state="active")   # a pick lives ON the thread
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000025", "action": "set_name",
+                                       "pname": "Nuray htab"})
+    check("an owner pick outranks the default",
+          gm.parcel_name("GWD009000025") == "Nuray htab"
+          and gm.parcel_name_src("GWD009000025") == "pick"
+          and gm._fill("{id_number}", "GWD009000025") == "111222333")
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000025", "action": "set_name",
+                                       "pname": ""})
+    # the batched maps the picker/list draw from must agree with the per-GWD truth
+    pm2 = gm.parcel_name_map()
+    check("batched maps agree with _fill and parcel_name_src once a default is set",
+          all(gm.effective_id_map(pm2).get(g, "") == gm._fill("{id_number}", g)
+              and gm.parcel_src_map(pm2).get(g, "") == gm.parcel_name_src(g)
+              for g in ("GWD009000021", "GWD009000025", "GWD009000001")))
+    check("the customer's own ID still beats the default",
+          gm._fill("{id_number}", "GWD009000022") == "111222333")
+    co.post("/api/settings", json={"gaash_mail": {"default_name": ""}})
+    check("clearing the default returns those parcels to blank",
+          gm.parcel_name("GWD009000025") == ""
+          and gm._fill("{id_number}", "GWD009000025") == "")
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders WHERE name='NID nameless'")
+    _del_thread("GWD009000025")
+
+    print("— 🪪 the one-pair name→ID writer (enroll picker's editable column) —")
     # set_name_id must MERGE — settings.apply replaces name_ids wholesale, so a
     # naive one-pair writer would wipe every other mapping
     gm.set_name_id("yahia", "444555666")

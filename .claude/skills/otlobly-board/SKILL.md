@@ -381,7 +381,45 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   first, name map as fallback — and ONE template serves both boards.
   `{name_id}` stays available to force the on-package name's ID only. Purchases
   has no "NAME ON PACKAGEE" column and its `profile_box` pool (B19/B22/B27…) is
-  disjoint from Leluxe's, so profile→name can't be auto-derived across boards. Editor
+  disjoint from Leluxe's, so profile→name can't be auto-derived across boards.
+  **Parcel name is one concept across both boards (2026-07-25):**
+  `parcel_name(gwd)` = Leluxe NAME ON PACKAGEE (row → parent) → a Purchases
+  column of that name → the PO's Main name `ship_to`. `name_id_of(name)` does
+  the folded name_ids lookup. Batched twins for list rendering:
+  `parcel_name_map()` (one scan of both boards) and `effective_id_map()` —
+  which MUST mirror `_fill`'s `{id_number}` chain exactly (customer CRM ID via
+  Purchases order-phone AND via a Leluxe `phone` field AND the order-name
+  fallback, then the name map), because the picker's ID column is a promise of
+  what the email will send; a test asserts the two agree on every GWD. Both are
+  attached to `candidates()` rows and `overview()` threads as `pname`/`pname_id`
+  → the enroll picker's NAME + ID NUMBER columns (green pill = ready, amber
+  ⚠ no ID = unmapped) and the 👤/⚠ name tag on each conversation row.
+  **Per-package name PICK (2026-07-26):** boards are sometimes blank or
+  self-contradicting (one GWD had two item rows disagreeing), so the NAME cell
+  is a `<select>` — mapped names + the detected one, ⚠ marking unmapped
+  options. Stored in `gaash_threads.pname` (ALTER); `set_parcel_name` /
+  `picked_name_map` / `_picked_name`, route action `set_name`, and
+  `start_threads(..., names={gwd: name})` pins it BEFORE email 1 renders. The
+  precedence is centralised in `id_number_for_email()` — **a pick outranks even
+  the customer's CRM ID, and a pick whose name has no ID stays BLANK rather
+  than silently falling back** (effective_id_map guards picked GWDs out of its
+  later passes to match). The picker only sends names the owner actually
+  changed (`value !== data-auto`), so untouched rows keep following the board.
+  Also editable after enrollment from the conversation header.
+  **Default name (2026-07-26)** — measured: **92 of 105 Leluxe parcels carry NO
+  `NAME ON PACKAGEE`**, while Purchases names 12/12 from `ship_to`. So Settings
+  `gaash_mail.default_name` fills ONLY parcels neither board names; the full
+  chain is `pick → customer CRM ID → board name → default`, and
+  `parcel_name = _picked_name or _board_name or _default_name` (the board logic
+  lives once, in `_board_name`). Batched twins: `_board_name_map` (raw scan),
+  `parcel_name_map` (board + picks + default over `_all_parcel_gwds`),
+  `parcel_src_map`/`parcel_name_src` → `pick|board|default` and
+  `parcel_board_map` → `leluxe|purchases`; both ship on candidates and threads
+  as `pname_src`/`source`. **A default-sourced name is marked `· default`
+  everywhere** (picker, conversation row, chat header) — assuming an identity on
+  a customs document must never read as a board fact. **Don't re-propose keying
+  IDs by Amazon order number**: Leluxe averages 1.06 parcels/order, so it needs
+  ~110 keys vs 12 by name, and 8 Leluxe roots have no order number at all. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

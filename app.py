@@ -2909,7 +2909,8 @@ def api_gaash_start():
     b = request.get_json(force=True, silent=True) or {}
     res = gaash_mail.start_threads(b.get("gwds") or [], b.get("id_doc_id"),
                                    b.get("account_id"),
-                                   seq_id=(b.get("seq_id") or "").strip() or None)
+                                   seq_id=(b.get("seq_id") or "").strip() or None,
+                                   names=b.get("names") if isinstance(b.get("names"), dict) else None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
@@ -2979,6 +2980,8 @@ def api_gaash_thread():
                                        b.get("account_id"),
                                        seq_id=th.get("seq_id"))
         return jsonify({"ok": True, "results": res})
+    elif action == "set_name":      # pin the name this parcel ships under ("" clears)
+        return jsonify(gaash_mail.set_parcel_name(gwd, b.get("pname")))
     elif action == "dismiss":
         if th.get("state") != "proposed":
             return jsonify({"ok": False, "error": "not a proposed thread"}), 400
