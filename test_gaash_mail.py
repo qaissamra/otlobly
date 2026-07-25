@@ -438,6 +438,44 @@ def main():
     toks = {t["token"]: t for t in gm.overview()["tpl_tokens"]}
     check("tpl_tokens lists core + every board column",
           toks.get("{gwd}", {}).get("source") == "core" and "{PRODUCT}" in toks)
+
+    print("— {name_id}: on-package name → its Settings-mapped ID number —")
+    r = co.post("/api/settings", json={"gaash_mail": {"name_ids": {
+        "FAISAL": "999888777", "  Nuray  htab ": "111222333",
+        "noid": "", "": "555"}}}).get_json()
+    check("name_ids saved + sanitized (trim, drop empties)",
+          r.get("ok") and gm._setts().get("name_ids") ==
+          {"FAISAL": "999888777", "Nuray htab": "111222333"})
+    check("{name_id} listed in tpl_tokens", "{name_id}" in
+          {t["token"] for t in gm.overview()["tpl_tokens"]})
+    now_ms = str(int(now.timestamp() * 1000))
+    with db.connect() as c:
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','NID direct','on hold',?,?)""",
+                  (now_ms, json.dumps({"tracking_number": "GWD009000021",
+                   "fields": {"NAME ON PACKAGEE": "faisal"}})))
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('parent','NID order','on hold',?,?)""",
+                  (now_ms, json.dumps({"fields": {"NAME ON PACKAGEE": "NURAY HTAB"}})))
+        pid = c.execute("SELECT id FROM leluxe_orders WHERE name='NID order'"
+                        ).fetchone()["id"]
+        c.execute("""INSERT INTO leluxe_orders
+            (kind,name,status,date_created,parent_local_id,data_json)
+            VALUES ('item','NID child','on hold',?,?,?)""",
+                  (now_ms, pid, json.dumps({"tracking_number": "GWD009000022",
+                   "fields": {"BRAND": "x"}})))
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','NID unmapped','on hold',?,?)""",
+                  (now_ms, json.dumps({"tracking_number": "GWD009000023",
+                   "fields": {"NAME ON PACKAGEE": "yahia"}})))
+    check("{name_id} resolves case-blind from the row's own field",
+          gm._fill("id={name_id}", "GWD009000021") == "id=999888777")
+    check("{name_id} falls back to the PARENT order's field",
+          gm._fill("{name_id}", "GWD009000022") == "111222333")
+    check("unmapped name → empty, not literal",
+          gm._fill("x{name_id}y", "GWD009000023") == "xy")
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders WHERE name LIKE 'NID %'")
     rcf = gm.rule_save({"name": "gold rings", "cond": {"groups": [{"crits": [
         {"field": "cf:product", "op": "contains", "value": "ring"}]}]},
         "seq_id": sq["id"], "mode": "queue", "enabled": True})

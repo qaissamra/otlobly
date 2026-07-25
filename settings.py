@@ -131,6 +131,9 @@ DEFAULT_GAASH_MAIL = {
     "resend_hour": 9,                # Israel time
     "missing_doc_keywords": ["kmt", "missing document", "additional document"],
     "daily_send_cap": 40,
+    # on-package name (ClickUp "NAME ON PACKAGEE": FAISAL / QAIS / Nuray…) → that
+    # person's ID number; templates insert it via {name_id}
+    "name_ids": {},
 }
 
 
@@ -409,6 +412,16 @@ def apply(body, config=None, persist=True):
                         if str(x or "").strip()][:15]
                 if vals:
                     cfg.set_path(config, f"gaash_mail.{k}", vals)
+        if isinstance(gm.get("name_ids"), dict):
+            # on-package name → ID number; the whole dict is replaced each save, so
+            # a cleared input in the modal deletes that name's mapping
+            m = {}
+            for k, v in list(gm["name_ids"].items())[:80]:
+                k2 = re.sub(r"\s+", " ", str(k or "")).strip()
+                v2 = str(v or "").strip()
+                if k2 and v2 and len(k2) <= 60 and len(v2) <= 40:
+                    m[k2] = v2
+            cfg.set_path(config, "gaash_mail.name_ids", m)
         if isinstance(gm.get("steps"), list):
             steps = []
             for i, s in enumerate(gm["steps"][:4]):

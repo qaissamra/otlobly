@@ -359,7 +359,17 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   columns were blank). **Template variables (2026-07-24):** `_fill` resolves any
   `{Column}` token from THAT package's data (`_cf_for_gwd`: Leluxe fields or the
   Purchases PO custom by label; unknown tokens left literal) on top of the 6
-  fixed tokens; overview ships `tpl_tokens` (core + every column). Editor
+  fixed tokens; overview ships `tpl_tokens` (core + every column).
+  **`{name_id}` (2026-07-25):** the AZ-account holder's ID number by the
+  package's ClickUp "NAME ON PACKAGEE" value (FAISAL/QAIS/Nuray… — the field
+  lives on item/parent rows, never package rows). Mapping = Settings
+  `gaash_mail.name_ids` {name: id_number} (sanitizer trims + drops empties,
+  whole-dict replace each save so a cleared input deletes); edited in the ⚙
+  Accounts & templates modal — rows auto-listed from `field_values` (label
+  match `/^name\s*on\s*packag/i` tolerates the typo being fixed) + saved keys
+  + a free-add pair. Resolution `_name_on_pkg_for(gwd)`: every row carrying
+  the GWD → their parent orders → (Purchases fallback via `_cf_for_gwd`);
+  `_name_id_for` compares `_fold`ed, empty (not literal) when unmapped. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

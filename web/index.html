@@ -10040,6 +10040,13 @@ async function gmNewStart(btn){
 // ── ⚙ Accounts + templates + behavior ──
 function gmSettingsOpen(){
   const ov=GM.ov||{}; const s=ov.settings||{}, accts=ov.accounts||[], steps=s.steps||[];
+  // 🪪 on-package name → ID number: observed ClickUp "NAME ON PACKAGEE" values
+  // (tolerant to the typo being fixed) merged with the already-saved mapping
+  const nids=s.name_ids||{}, gmNfold=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
+  const nField=(ov.cf_fields||[]).find(f=>/^name\s*on\s*packag/i.test(f.label||""));
+  const nNames=[...(nField?(((ov.field_values||{})[nField.key])||[]):[])];
+  Object.keys(nids).forEach(k=>{ if(!nNames.some(n=>gmNfold(n)===gmNfold(k))) nNames.push(k); });
+  const nidVal=n=>{ const k=Object.keys(nids).find(k=>gmNfold(k)===gmNfold(n)); return k?nids[k]:""; };
   bulkOpen("⚙ "+T("حسابات وقوالب غاش · GAASH accounts & templates"));
   $("bulkBody").innerHTML=`
     <div style="margin:6px 0"><b style="font-size:13px">✉ ${T("حسابات Gmail · Gmail accounts")}</b>
@@ -10060,8 +10067,19 @@ function gmSettingsOpen(){
       <label>${T("إلى · to")}: <input id="gmSetTo" value="${poEsc(s.to_address||"")}" style="width:210px"></label>
       <label>${T("الأيام بين الإيميلات · days between emails")}: <input id="gmSetCad" value="${(s.cadence_days||[2,2,2]).join(",")}" style="width:70px"></label>
     </div>
+    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("رقم الهوية لكل اسم على الطرد · ID number per on-package name")}</b>
+      <div class="muted2" style="font-size:11px">${T("الأسماء من عمود NAME ON PACKAGEE في كليك أب — املأ رقم هوية كل اسم ثم استخدم {name_id} في القوالب · names come from the ClickUp NAME ON PACKAGEE column — fill each name's ID number, then use {name_id} in templates")}</div>
+      ${nNames.map(n=>`<div style="display:flex;gap:8px;align-items:center;margin-top:5px;font-size:12.5px">
+        <b style="min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(n)}">${poEsc(n)}</b>
+        <input class="gmNid" data-name="${poEsc(n)}" value="${poEsc(nidVal(n))}" placeholder="${T("رقم الهوية · ID number")}" dir="ltr" style="flex:1;min-width:140px"></div>`).join("")
+        ||`<div class="muted2" style="font-size:12px;padding:4px 0">${T("لا أسماء بعد — تظهر تلقائياً من كليك أب · no names yet — they appear automatically from ClickUp")}</div>`}
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input id="gmNidNewName" placeholder="${T("اسم جديد · new name")}" style="flex:1;min-width:110px">
+        <input id="gmNidNewNum" placeholder="${T("رقم الهوية · ID number")}" dir="ltr" style="flex:1;min-width:140px">
+      </div>
+    </div>
     <div style="margin-top:10px"><b style="font-size:13px">📝 ${T("القوالب الأربعة · the 4 templates")}</b>
-      <div class="muted2" style="font-size:11px">{gwd} {customer} {upload_link} {id_name} {days_waiting} {step}</div>
+      <div class="muted2" style="font-size:11px">{gwd} {customer} {id_number} {name_id} {upload_link} {id_name} {days_waiting} {step}</div>
       ${[0,1,2,3].map(i=>{const st=steps[i]||{};return `
         <div style="margin-top:8px;font-size:12px"><b>#${i+1}</b>
           <input id="gmStS${i}" value="${poEsc(st.subject_tpl||"")}" style="width:100%;margin:3px 0" placeholder="subject">
@@ -10093,6 +10111,13 @@ async function gmSettingsSave(btn){
   const gm={dry_run:!!($("gmSetDry")||{}).checked, to_address:($("gmSetTo")||{}).value,
     steps:[0,1,2,3].map(i=>({subject_tpl:($("gmStS"+i)||{}).value, body_tpl:($("gmStB"+i)||{}).value}))};
   if(cad.length===3) gm.cadence_days=cad;
+  // 🪪 the FULL name→ID dict every save (server replaces wholesale) — an emptied
+  // input therefore deletes that name's mapping
+  const nid={};
+  document.querySelectorAll(".gmNid").forEach(i=>{ const n=i.dataset.name, v=(i.value||"").trim(); if(n&&v) nid[n]=v; });
+  const nn=(($("gmNidNewName")||{}).value||"").trim(), nv=(($("gmNidNewNum")||{}).value||"").trim();
+  if(nn&&nv) nid[nn]=nv;
+  gm.name_ids=nid;
   btn.disabled=true;
   const r=await post("/api/settings",{gaash_mail:gm});
   btn.disabled=false;
