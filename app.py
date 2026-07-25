@@ -5000,7 +5000,8 @@ def api_customer_google_callback():
         session["cust_name"] = (res.get("name") or "").strip()
         session["cust_business"] = ebid or 1
         session.permanent = remember
-        return redirect("/account?link=phone")
+        # g=1 marks a SUCCESSFUL Google sign-in so /account can tag it "last used"
+        return redirect("/account?link=phone&g=1")
     bid = _business_for_phone(core) or ebid or 1
     db.set_current_business(bid)
     session["cust_phone"] = core
@@ -5008,7 +5009,7 @@ def api_customer_google_callback():
     session["cust_business"] = bid
     session["cust_name"] = (row.get("name") or "").strip() or _match_customer(core)[1]
     session.permanent = remember
-    return redirect("/account")
+    return redirect("/account?g=1")             # g=1 → tag Google as "last used"
 
 
 # ---- Auth v2: manual accounts + the shared "verify your phone" step ------------- #
@@ -5341,6 +5342,9 @@ def api_customer_orders():
                  "amount_usd": r.get("amount_usd"), "order_code": r.get("order_code")}
                 for r in pay_rows[:50]]
     return jsonify({"name": session.get("cust_name") or "",
+                    # the session's own phone (core digits) — lets the orders search
+                    # recognise "my number" without a second /me round-trip
+                    "phone": core,
                     "orders": orders, "totals": {"deposited_usd": deposited,
                                                  "remaining_usd": remaining,
                                                  "credit_usd": credit},
