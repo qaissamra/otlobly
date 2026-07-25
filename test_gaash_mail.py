@@ -457,6 +457,69 @@ def main():
     gm.rule_remove(rcf2["id"])
     _del_thread("GWD009000001"); _del_thread("GWD009000003")
 
+    print("— workflows: On/Off, clone, match counts, 7d stats —")
+    co3, ce3 = client("otlo"), client("emp")
+    # description round-trips through sequence save
+    seq0 = gm.sequence_get(sq["id"])
+    r = co3.post("/api/gaash/sequences", json={
+        "id": sq["id"], "name": seq0["name"], "goal": seq0["goal"],
+        "description": "chase GAASH until cleared",
+        "steps": [{"id": s["id"], "kind": s["kind"], "template_id": s["template_id"],
+                   "task_note": s["task_note"], "delay_days": s["delay_days"]}
+                  for s in seq0["steps"]]}).get_json()
+    check("description saved on the workflow", r.get("ok")
+          and gm.sequence_get(sq["id"])["description"] == "chase GAASH until cleared")
+    # match counts: cond → count + gwds (the ⚡ chip / modal preview)
+    mm = gm.rule_matches({"groups": [{"crits": [
+        {"field": "cf:product", "op": "contains", "value": "ring"}]}]})
+    check("rule_matches counts the matching packages",
+          mm["count"] >= 1 and "GWD009000007" in mm["gwds"])
+    rr = ce3.post("/api/gaash/rules/preview", json={"cond": {"groups": [{"crits": [
+        {"field": "cf:product", "op": "contains", "value": "ring"}]}]}}).get_json()
+    check("rules/preview route mirrors it", rr.get("ok") and rr["count"] == mm["count"])
+    # On/Off: paused blocks the sequencer (no claim burned) AND trigger enrollment
+    gm.sequence_toggle(sq["id"], True)
+    check("toggle persists", gm.sequence_get(sq["id"])["paused"] == 1)
+    _mk_thread("GWD600", step=0, state="active",
+               next_send_at=(now - timedelta(minutes=3)).isoformat(timespec="seconds"))
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET seq_id=? WHERE gwd='GWD600'", (sq["id"],))
+    gm.run_once()
+    th6 = gm.thread_get("GWD600")
+    with db.connect() as c:
+        burned = c.execute("SELECT 1 FROM settings WHERE key=?",
+                           ("gaashmail:GWD600:step1",)).fetchone()
+    check("paused workflow: due thread untouched, claim not burned",
+          th6["step"] == 0 and th6["state"] == "active" and burned is None)
+    rp = gm.rule_save({"name": "paused target", "cond": {"groups": [{"crits": [
+        {"field": "cf:product", "op": "contains", "value": "ring"}]}]},
+        "seq_id": sq["id"], "mode": "queue", "enabled": True})
+    check("triggers of a paused workflow don't enroll",
+          gm.run_rules() == 0 and not gm.thread_get("GWD009000007"))
+    gm.sequence_toggle(sq["id"], False)
+    check("back ON: the same trigger enrolls again",
+          gm.run_rules() == 1 and gm.thread_get("GWD009000007"))
+    gm.rule_remove(rp["id"]); _del_thread("GWD009000007"); _del_thread("GWD600")
+    # clone: copies steps, starts paused
+    cl = gm.sequence_clone(sq["id"])
+    cseq = gm.sequence_get(cl["id"])
+    check("clone copies steps and starts Off", cl["ok"] and cseq["paused"] == 1
+          and len(cseq["steps"]) == len(seq0["steps"])
+          and cseq["name"].endswith(seq0["name"]))
+    with db.connect() as c:                       # drop the clone (test hygiene)
+        c.execute("DELETE FROM gaash_steps WHERE seq_id=?", (cl["id"],))
+        c.execute("DELETE FROM gaash_sequences WHERE id=?", (cl["id"],))
+    # perms: toggle/clone are admin-only; matches is fulfillment-readable
+    check("employee cannot toggle/clone",
+          ce3.post("/api/gaash/sequence/toggle",
+                   json={"id": sq["id"], "paused": True}).status_code == 403
+          and ce3.post("/api/gaash/sequence/clone",
+                       json={"id": sq["id"]}).status_code == 403)
+    check("employee reads rules/matches",
+          ce3.get("/api/gaash/rules/matches").get_json().get("ok") is True)
+    check("stats carries enrolled_7d",
+          gm.stats()["overall"].get("enrolled_7d", 0) >= 1)
+
     print("— v2: open/click tracking tokens + public endpoints —")
     with db.connect() as c:
         cur = c.execute("""INSERT INTO gaash_msgs

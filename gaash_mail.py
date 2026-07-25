@@ -420,15 +420,20 @@ def sequence_save(s):
     if not steps:
         return {"ok": False, "error": "a sequence needs at least one step"}
     with db.connect() as c:
+        # NOTE: paused is deliberately untouched here — the On/Off switch owns it
         c.execute("""INSERT INTO gaash_sequences
-            (id,name,to_address,goal,send_window_json,created_at,updated_at,archived)
-            VALUES (?,?,?,?,?,?,?,0)
+            (id,name,to_address,goal,send_window_json,description,
+             created_at,updated_at,archived)
+            VALUES (?,?,?,?,?,?,?,?,0)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,
               to_address=excluded.to_address, goal=excluded.goal,
               send_window_json=excluded.send_window_json,
+              description=excluded.description,
               updated_at=excluded.updated_at, archived=0""",
                   (sid, name, str(s.get("to_address") or "").strip() or None,
-                   goal, json.dumps(win), now_iso(), now_iso()))
+                   goal, json.dumps(win),
+                   str(s.get("description") or "").strip()[:300] or None,
+                   now_iso(), now_iso()))
         c.execute("DELETE FROM gaash_steps WHERE seq_id=?", (sid,))
         for i, st in enumerate(steps):
             c.execute("""INSERT INTO gaash_steps
@@ -451,6 +456,49 @@ def sequence_archive(seq_id):
         c.execute("UPDATE gaash_sequences SET archived=1, updated_at=? WHERE id=?",
                   (now_iso(), seq_id))
     return {"ok": True}
+
+
+def sequence_toggle(seq_id, paused):
+    """HubSpot-style On/Off. OFF (paused=1) = the sequencer skips this workflow's
+    threads (they stay due, nothing is lost) AND its triggers stop enrolling."""
+    if not sequence_get(seq_id):
+        return {"ok": False, "error": "workflow not found"}
+    with db.connect() as c:
+        c.execute("UPDATE gaash_sequences SET paused=?, updated_at=? WHERE id=?",
+                  (1 if paused else 0, now_iso(), seq_id))
+    return {"ok": True, "paused": 1 if paused else 0}
+
+
+def sequence_clone(seq_id):
+    """Duplicate a workflow + its steps. The copy starts PAUSED (HubSpot clones
+    start Off) so it can be tweaked before anything sends."""
+    src = sequence_get(seq_id)
+    if not src:
+        return {"ok": False, "error": "workflow not found"}
+    nid = f"seq_{int(time.time() * 1000)}"
+    with db.connect() as c:
+        c.execute("""INSERT INTO gaash_sequences
+            (id,name,to_address,goal,send_window_json,description,
+             created_at,updated_at,archived,paused)
+            VALUES (?,?,?,?,?,?,?,?,0,1)""",
+                  (nid, f"نسخة من · Copy of {src['name']}"[:120],
+                   src.get("to_address"), src.get("goal") or "cleared",
+                   src.get("send_window_json"), src.get("description"),
+                   now_iso(), now_iso()))
+        for i, st in enumerate(src.get("steps") or []):
+            c.execute("""INSERT INTO gaash_steps
+                (id,seq_id,pos,kind,template_id,task_note,delay_days)
+                VALUES (?,?,?,?,?,?,?)""",
+                      (f"stp_{int(time.time() * 1000)}{i}", nid, i,
+                       st["kind"], st.get("template_id"), st.get("task_note"),
+                       st.get("delay_days") or 0))
+    return {"ok": True, "id": nid}
+
+
+def _paused_seq_ids():
+    with db.connect() as c:
+        return {r["id"] for r in c.execute(
+            "SELECT id FROM gaash_sequences WHERE paused=1")}
 
 
 def default_sequence_id():
@@ -666,7 +714,9 @@ def rule_remove(rid):
 def run_rules():
     """Evaluate enabled auto-enroll rules against the candidates. mode=queue →
     a 'proposed' thread (approval chip + bell); mode=auto → real enrollment."""
-    rules = [r for r in rules_list() if r.get("enabled")]
+    paused = _paused_seq_ids()           # OFF workflows don't enroll anything
+    rules = [r for r in rules_list()
+             if r.get("enabled") and r.get("seq_id") not in paused]
     if not rules:
         return 0
     cands = candidates()
@@ -695,6 +745,31 @@ def run_rules():
                               (cd["gwd"], r["seq_id"], now_iso(), now_iso()))
             made += 1
     return made
+
+
+def rule_matches(cond, cands=None):
+    """How many enrollable packages a criteria set matches RIGHT NOW (+ their
+    GWDs, capped) — powers the ⚡ match chips and the trigger modal's live count."""
+    cands = candidates() if cands is None else cands
+    ages = {}
+
+    def age_fn(cd):
+        if cd["gwd"] not in ages:
+            ages[cd["gwd"]] = _cand_age_days(cd)
+        return ages[cd["gwd"]]
+
+    cond = _cond_norm(cond)
+    gwds = [cd["gwd"] for cd in cands if _cond_match(cond, cd, age_fn)]
+    return {"count": len(gwds), "gwds": gwds[:500]}
+
+
+def rules_match_map():
+    """{rule_id: {count, gwds}} for every ENABLED rule, in one candidates scan."""
+    rules = [r for r in rules_list() if r.get("enabled")]
+    if not rules:
+        return {}
+    cands = candidates()
+    return {r["id"]: rule_matches(r["cond"], cands) for r in rules}
 
 
 # ── open + click tracking (self-hosted pixel + redirect) ──
@@ -776,21 +851,25 @@ PIXEL_GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
 def stats():
     with db.connect() as c:
         seqs = {s["id"]: {"seq_id": s["id"], "name": s["name"],
-                          "enrolled": 0, "active": 0, "goal_met": 0,
-                          "exhausted": 0, "replied": 0, "sent": 0,
-                          "opened": 0, "clicked": 0, "bounces": 0,
+                          "enrolled": 0, "enrolled_7d": 0, "active": 0,
+                          "goal_met": 0, "exhausted": 0, "replied": 0,
+                          "sent": 0, "opened": 0, "clicked": 0, "bounces": 0,
                           "steps": []}
                 for s in sequences_list(include_archived=True)}
-        overall = {"enrolled": 0, "active": 0, "goal_met": 0, "exhausted": 0,
-                   "replied": 0, "sent": 0, "opened": 0, "clicked": 0,
-                   "bounces": 0}
+        overall = {"enrolled": 0, "enrolled_7d": 0, "active": 0, "goal_met": 0,
+                   "exhausted": 0, "replied": 0, "sent": 0, "opened": 0,
+                   "clicked": 0, "bounces": 0}
         LIVE = ("active", "waiting_reply", "missing_docs", "paused",
                 "waiting_task")
-        for t in c.execute("SELECT seq_id, state FROM gaash_threads "
+        wk_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        for t in c.execute("SELECT seq_id, state, created_at FROM gaash_threads "
                            "WHERE state!='proposed'"):
             tgt = seqs.get(t["seq_id"])
+            made = _parse_iso(t["created_at"] or "")
             for d in ([overall, tgt] if tgt else [overall]):
                 d["enrolled"] += 1
+                if made and made >= wk_ago:
+                    d["enrolled_7d"] += 1
                 if t["state"] in LIVE:
                     d["active"] += 1
                 if t["state"] in ("goal_met", "cleared"):
@@ -1795,6 +1874,10 @@ def run_once():
         seq = sequence_get(th.get("seq_id")) or sequence_get(default_sequence_id())
         if not seq or int(th.get("step") or 0) >= len(seq["steps"]):
             _thread_set(gwd, state="exhausted", next_send_at=None)
+            continue
+        # guard 0: workflow switched OFF — skip entirely (thread stays due;
+        # everything resumes untouched when it's switched back ON)
+        if seq.get("paused"):
             continue
         # guard 1: already cleared/delivered → the goal is met, stop
         if package_terminal(gwd):

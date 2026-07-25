@@ -2967,6 +2967,25 @@ def api_gaash_sequence_delete():
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
+@app.route("/api/gaash/sequence/toggle", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_sequence_toggle():
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.sequence_toggle((b.get("id") or "").strip(),
+                                     bool(b.get("paused")))
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/sequence/clone", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_sequence_clone():
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.sequence_clone((b.get("id") or "").strip())
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
 @app.route("/api/gaash/templates", methods=["GET", "POST", "DELETE"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
@@ -3004,6 +3023,23 @@ def api_gaash_rules():
 @auth.require_feature("leluxe")
 def api_gaash_rules_run():
     return jsonify({"ok": True, "proposed": gaash_mail.run_rules()})
+
+
+@app.route("/api/gaash/rules/preview", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_rules_preview():
+    """Live 'matches now: N' for a criteria set being edited (nothing is saved)."""
+    b = request.get_json(force=True, silent=True) or {}
+    return jsonify({"ok": True, **gaash_mail.rule_matches(b.get("cond"))})
+
+
+@app.route("/api/gaash/rules/matches")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_rules_matches():
+    """⚡ chips: {rule_id: {count, gwds}} for every enabled trigger."""
+    return jsonify({"ok": True, "matches": gaash_mail.rules_match_map()})
 
 
 @app.route("/api/gaash/stats")

@@ -198,8 +198,8 @@
      got the same grid cells (806c25f): clicking a package row's status button
      opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
      white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -426,17 +426,18 @@
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -547,7 +548,12 @@
   .bt-wrap:not(.pin-md):not(.pin-lg) .pkg-body>.poc-group+.poc-group{border-top:2px solid #f7680833}
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
-  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin{background:var(--bg);align-self:auto}
+  /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
+  .wf-row:hover{background:var(--bg2)}
+  .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
+  .wf-row:hover .wf-acts{visibility:visible}
+  .wf-off .bt-pin b,.wf-off .wf-cols{opacity:.55}
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
   /* the pin floats over scrolled content → its background must mirror every
      row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
@@ -1418,17 +1424,19 @@
     <div id="gmBanner"></div>
     <div style="display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px" id="gmTabs">
       <button class="minibtn accent" id="gmTabConv" style="border:0;border-radius:0" onclick="gmTab('conv')" data-en="💬 Conversations" data-ar="💬 المحادثات">💬 Conversations</button>
-      <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="🧬 Sequences" data-ar="🧬 التسلسلات">🧬 Sequences</button>
+      <button class="minibtn" id="gmTabOv" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ov')" data-en="🧭 Overview" data-ar="🧭 نظرة عامة">🧭 Overview</button>
+      <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="⚙️ Workflows" data-ar="⚙️ الأتمتة">⚙️ Workflows</button>
       <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
-      <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Dashboard" data-ar="📊 لوحة الأرقام">📊 Dashboard</button>
+      <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
     </div>
     <div id="gmProposed"></div>
     <div id="gmConvPane">
       <div class="gm-wrap">
         <div class="gm-list panel" id="gmList"></div>
-        <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new sequence." data-ar="اختر محادثة — أو ابدأ تسلسلاً جديداً.">Pick a conversation — or start a new sequence.</div></div>
+        <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new workflow." data-ar="اختر محادثة — أو ابدأ سير عمل جديداً.">Pick a conversation — or start a new workflow.</div></div>
       </div>
     </div>
+    <div id="gmOvPane" class="hidden"></div>
     <div id="gmSeqPane" class="hidden"></div>
     <div id="gmTplPane" class="hidden"></div>
     <div id="gmDashPane" class="hidden"></div>
@@ -2803,6 +2811,7 @@ const LX_TABLES={
   "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree", mins:{7:84}},
   "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults", mins:{}},
+  "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane", mins:{}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -3316,14 +3325,30 @@ const LXT_COLS={
     {key:"status",    label:"استثناء · exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
+  "wf":[    // 📧 GAASH mail → ⚙️ Workflows table (HubSpot Automation style)
+    {key:"onoff",    label:"تشغيل · on / off",       w:74,  sortable:true},
+    {key:"trigger",  label:"المُشغّل · trigger",      w:210},
+    {key:"steps",    label:"خطوات · steps",          w:58,  sortable:true},
+    {key:"days",     label:"أيام · days",            w:56,  sortable:true},
+    {key:"goal",     label:"الهدف · goal",           w:86,  sortable:true},
+    {key:"active",   label:"نشط · active",           w:60,  sortable:true},
+    {key:"enrolled", label:"مسجّل · enrolled",       w:70,  sortable:true},
+    {key:"enr7d",    label:"آخر ٧ أيام · last 7d",   w:74,  sortable:true},
+    {key:"goalmet",  label:"🎯 تحقق · goal met",     w:76,  sortable:true},
+    {key:"sent",     label:"مرسل · sent",            w:56,  sortable:true},
+    {key:"open",     label:"فتح · open %",           w:64,  sortable:true},
+    {key:"reply",    label:"رد · reply %",           w:62,  sortable:true},
+    {key:"desc",     label:"الوصف · description",    w:170},
+    {key:"menu",     label:"",             w:28,  locked:true},
+  ],
 };
 const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
                "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"],
-               "bs":["bs-colhead","bs-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":""};
+               "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop","bs"].forEach(t=>{
+["","p","k","po","pok","pop","bs","wf"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -3351,7 +3376,7 @@ function lxtCols(tbl){
   return lxtOrderApply(tbl,cols);
 }
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
-function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():renderLeluxe()); }
+function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():(tbl==="wf"?gmRenderSeq():renderLeluxe())); }
 function lxtColToggle(tbl,key){
   const h=LXT_HIDDEN[tbl]; h.has(key)?h.delete(key):h.add(key);
   try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}
@@ -9546,11 +9571,13 @@ const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594",
   exhausted:["#f76808","انتهى بلا رد · no reply"], done:["#8d8d8d","منجز · done"]};
 function gmTab(t){
   GM.tab=t;
-  [["conv","gmTabConv","gmConvPane"],["seq","gmTabSeq","gmSeqPane"],
+  [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
+   ["seq","gmTabSeq","gmSeqPane"],
    ["tpl","gmTabTpl","gmTplPane"],["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
     $(b).classList.toggle("accent",k===t);
     $(p).classList.toggle("hidden",k!==t);
   });
+  if(t==="ov") gmOvRender();
   if(t==="seq") gmRenderSeq();
   if(t==="tpl") gmRenderTpl();
   if(t==="dash") gmDashLoad();
@@ -9567,6 +9594,7 @@ async function gmLoad(){
   let d; try{ d=await (await fetch("/api/gaash/overview")).json(); }catch(e){ d=null; }
   if(!d||!d.ok){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
   GM.ov=d;
+  GM.stats=null; GM.matches=null;      // workflow stats + ⚡ match counts refetch lazily
   const s=d.settings||{};
   const warn=[];
   if(!(d.accounts||[]).length) warn.push(T("لا يوجد حساب Gmail بعد — أضِف واحداً من ⚙ · no Gmail account yet — add one via ⚙"));
@@ -9598,7 +9626,7 @@ async function gmPropAct(gwd,action){
 }
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
-  if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — ＋ تسلسل جديد · no conversations yet — ＋ New sequence")}</div>`; return; }
+  if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
   $("gmList").innerHTML=ths.map(t=>{
     const last=t.last_msg||{};
     const prev=last.body?poEsc(last.body):(t.last_error?`⚠ ${poEsc(t.last_error)}`:"");
@@ -9716,7 +9744,7 @@ function gmNewOpen(preGwds){
   const known=new Set(cands.map(c=>c.gwd));
   pre.forEach(g=>{ if(!known.has(g)) cands.unshift({gwd:g,source:"manual",name:""}); });
   GM.newPre=new Set(pre);
-  bulkOpen("📧 "+T("إرسال طرود إلى تسلسل · Enroll packages into a sequence"));
+  bulkOpen("📧 "+T("إرسال طرود إلى سير عمل · Enroll packages into a workflow"));
   const badge=s=>s==="leluxe"?`<span class="pill" style="background:#eef;border:1px solid var(--line);font-size:9.5px">⌚</span>`
     :s==="purchases"?`<span class="pill" style="background:#fef3ec;border:1px solid var(--line);font-size:9.5px">📦</span>`
     :`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">✎</span>`;
@@ -9745,8 +9773,8 @@ function gmNewOpen(preGwds){
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
       </div></div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <b style="font-size:13px">🧬 ${T("التسلسل · sequence")}</b>
-      <select id="gmNewSeq">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)} (${(s.steps||[]).length} ${T("خطوة · steps")})</option>`).join("")||`<option value="">${T("لا تسلسل — أنشئ واحداً · none — build one first")}</option>`}</select>
+      <b style="font-size:13px">⚙️ ${T("سير العمل · workflow")}</b>
+      <select id="gmNewSeq">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)} (${(s.steps||[]).length} ${T("خطوة · steps")})</option>`).join("")||`<option value="">${T("لا سير عمل — أنشئ واحداً · none — build one first")}</option>`}</select>
       <b style="font-size:13px">✉ ${T("الحساب المُرسِل · sending account")}</b>
       <select id="gmNewAcct">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select>
     </div>`;
@@ -9808,7 +9836,7 @@ async function gmNewStart(btn){
   bulkClose();
   const res=(r&&r.results)||[];
   const bad=res.filter(x=>x.send_error&&!x.dry_run);
-  toast(`${res.filter(x=>x.ok).length} ${T("تسلسل بدأ · sequences started")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
+  toast(`${res.filter(x=>x.ok).length} ${T("سير عمل بدأ · workflows started")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
   gmLoad();
 }
 // ── ⚙ Accounts + templates + behavior ──
@@ -9878,27 +9906,139 @@ const GM_DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];   // python wee
 const GM_TZS=[["Asia/Hebron","توقيت فلسطين · Palestine time"],["Asia/Jerusalem","Jerusalem"],
   ["Asia/Amman","Amman"],["Europe/Istanbul","Istanbul"],["UTC","UTC"]];
 function gmSeqDays(s){ const st=(s.steps||[]); let d=0; st.forEach(x=>d+=Number(x.delay_days)||0); return Math.round(d*10)/10; }
+// ── ⚙️ Workflows table (HubSpot Automation style) ──
+let GM_WF={q:"",state:"all"};                  // search + quick filter
+// stats + trigger match-counts are fetched lazily and cached until the next gmLoad
+async function gmWfEnsureData(){
+  if(GM.wfLoading||(GM.stats&&GM.matches)) return;
+  GM.wfLoading=true;
+  try{
+    const [st,mt]=await Promise.all([
+      GM.stats?null:fetch("/api/gaash/stats").then(r=>r.json()).catch(()=>null),
+      GM.matches?null:fetch("/api/gaash/rules/matches").then(r=>r.json()).catch(()=>null)]);
+    if(st) GM.stats=st;
+    if(mt&&mt.ok) GM.matches=mt.matches||{};
+  }catch(e){}
+  GM.wfLoading=false;
+  if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
+  else if(GM.edit) gmRenderBuilder();
+  else if(GM.tab==="ov") gmOvRender();
+}
+function gmWfPct(a,b){ return b?Math.round(a/b*100)+"%":"—"; }
+// ⚡ the live "N match now" chip; clicking opens the GWDs in Bulk search (full columns)
+function gmMatchChip(ruleId){
+  const m=(GM.matches||{})[ruleId];
+  if(!m) return "";
+  return `<button class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:10px;cursor:${m.count?"pointer":"default"}" title="${T("طرود تطابق هذا المُشغّل الآن — انقر لعرضها بكل الأعمدة · packages matching this trigger now — click to view with full columns")}" onclick="event.stopPropagation();gmMatchesViewRule('${ruleId}')">⚡ ${m.count}</button>`;
+}
+function gmMatchesViewRule(id){ const m=(GM.matches||{})[id]; if(m&&m.count) gmMatchesView(m.gwds); }
+function gmMatchesView(gwds){
+  setView("bulksearch");
+  // bsInit (kicked by setView) loads its data async — drop the GWDs in and run
+  setTimeout(()=>{ const i=$("bsInput"); if(!i) return;
+    i.value=(gwds||[]).join("\n"); bsRun(); },350);
+}
+async function gmWfToggle(id){
+  const s=((GM.ov&&GM.ov.sequences)||[]).find(x=>x.id===id); if(!s) return;
+  const want=s.paused?0:1;
+  s.paused=want; gmRenderSeq();                 // optimistic flip
+  const r=await post("/api/gaash/sequence/toggle",{id,paused:!!want});
+  if(!r||!r.ok){ s.paused=want?0:1; gmRenderSeq(); toast((r&&r.error)||"failed"); }
+  else toast(want?T("أُوقف — لا إرسال ولا تسجيل جديد · OFF — no sends, no new enrollment"):T("شُغِّل ✓ · ON ✓"));
+}
+async function gmWfClone(id){
+  const r=await post("/api/gaash/sequence/clone",{id});
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
+  toast(T("نُسخ — يبدأ موقوفاً · cloned — starts Off"));
+  await gmLoad(); gmRenderSeq();
+}
+function gmWfRow(row){
+  const s=row.s, st=row.st||{}, myRules=row.rules;
+  const onoff=`<span style="display:inline-flex;align-items:center;gap:5px;${CAN_ADMIN?"cursor:pointer":""}" ${CAN_ADMIN?`onclick="event.stopPropagation();gmWfToggle('${s.id}')"`:""} title="${T("تشغيل/إيقاف — الإيقاف يمنع الإرسال والتسجيل الجديد · On/Off — Off stops sends and new enrollment")}"><span class="tglsw${s.paused?"":" on"}"></span><span class="muted2" style="font-size:10px">${s.paused?"Off":"On"}</span></span>`;
+  const trig=myRules.length
+    ?myRules.map(r=>`<span style="display:inline-flex;gap:4px;align-items:center;min-width:0"><span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name)}: ${gmRuleSummary(r.cond)}">${gmRuleSummary(r.cond)}</span>${gmMatchChip(r.id)}</span>`).join(" ")
+    :`<span class="muted2" style="opacity:.5;font-size:11px">${T("يدوي · manual")}</span>`;
+  const cells={
+    onoff, trigger:trig,
+    steps:`<span class="muted2">${(s.steps||[]).length}</span>`,
+    days:`<span class="muted2">${gmSeqDays(s)}</span>`,
+    goal:`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">🎯 ${poEsc(s.goal)}</span>`,
+    active:`<b>${s.active_threads||0}</b>`,
+    enrolled:`<span class="muted2">${st.enrolled??"—"}</span>`,
+    enr7d:`<span class="muted2">${st.enrolled_7d??"—"}</span>`,
+    goalmet:`<span class="muted2">${st.goal_met??"—"}</span>`,
+    sent:`<span class="muted2">${st.sent??"—"}</span>`,
+    open:`<span class="muted2">${gmWfPct(st.opened||0,st.sent||0)}</span>`,
+    reply:`<span class="muted2">${gmWfPct(st.replied||0,st.enrolled||0)}</span>`,
+    desc:`<span class="muted2" style="font-size:11px" title="${poEsc(s.description||"")}">${poEsc(s.description||"")}</span>`,
+    menu:CAN_ADMIN?popMenu([
+      [`✎ ${T("تعديل سير العمل · Edit workflow")}`,`gmSeqEdit('${s.id}')`],
+      [`⧉ ${T("نسخ · Clone")}`,`gmWfClone('${s.id}')`],
+      [`🗑 ${T("أرشفة · Archive")}`,`gmSeqDelete('${s.id}')`,true],
+    ]):"",
+  };
+  return `<div class="poc-row wf-row${s.paused?" wf-off":""}" style="cursor:pointer" onclick="if(event.target.closest('.pop,button,input,.tglsw'))return;gmSeqEdit('${s.id}')">
+    <div class="bt-pin">
+      <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s.name)}</b>
+      ${CAN_ADMIN?`<span class="wf-acts"><button class="minibtn" style="padding:1px 7px" title="${T("تعديل · edit")}" onclick="event.stopPropagation();gmSeqEdit('${s.id}')">✎</button>
+      <button class="minibtn" style="padding:1px 7px" title="${T("نسخ · clone")}" onclick="event.stopPropagation();gmWfClone('${s.id}')">⧉</button></span>`:""}
+    </div>
+    ${lxtCells("wf",cells)}
+  </div>`;
+}
 function gmRenderSeq(){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
   if(GM.edit) return gmRenderBuilder();
   const rules=(GM.ov&&GM.ov.rules)||[];
+  gmWfEnsureData();
+  const stMap={}; ((GM.stats&&GM.stats.sequences)||[]).forEach(x=>stMap[x.seq_id]=x);
+  let rows=seqs.map(s=>({s, st:stMap[s.id], rules:rules.filter(r=>r.seq_id===s.id)}));
+  const q=(GM_WF.q||"").toLowerCase();
+  rows=rows.filter(r=>{
+    if(GM_WF.state==="on"&&r.s.paused) return false;
+    if(GM_WF.state==="off"&&!r.s.paused) return false;
+    if(GM_WF.state==="trig"&&!r.rules.length) return false;
+    if(q&&!((r.s.name+" "+(r.s.description||"")+" "+r.rules.map(x=>x.name).join(" ")).toLowerCase().includes(q))) return false;
+    return true;
+  });
+  lxtSortApply("wf",rows,(r,key)=>{
+    const st=r.st||{};
+    if(key==="onoff") return r.s.paused?1:0;
+    if(key==="steps") return (r.s.steps||[]).length;
+    if(key==="days") return gmSeqDays(r.s);
+    if(key==="goal") return String(r.s.goal||"");
+    if(key==="active") return r.s.active_threads||0;
+    if(key==="enrolled") return st.enrolled||0;
+    if(key==="enr7d") return st.enrolled_7d||0;
+    if(key==="goalmet") return st.goal_met||0;
+    if(key==="sent") return st.sent||0;
+    if(key==="open") return st.sent?(st.opened||0)/st.sent:0;
+    if(key==="reply") return st.enrolled?(st.replied||0)/st.enrolled:0;
+    return String(r.s.name||"").toLowerCase();
+  });
+  const chip=(k,lab)=>`<button class="minibtn${GM_WF.state===k?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="GM_WF.state='${k}';gmRenderSeq()">${lab}</button>`;
+  const onN=seqs.filter(s=>!s.paused).length;
+  const table=rows.length
+    ?lxtHead("wf","سير العمل · workflow")+lxtWrap("wf",`<div class="pkg open"><div class="pkg-body">${rows.map(gmWfRow).join("")}</div></div>`)
+    :`<div class="muted2 panel">${T("لا نتائج — عدّل الفلاتر · no results — adjust the filters")}</div>`;
   $("gmSeqPane").innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <b style="font-size:14px">🧬 ${T("التسلسلات · Sequences")}</b><span class="spacer"></span>
-      ${CAN_ADMIN?`<button class="accent" onclick="gmSeqNew()">＋ ${T("تسلسل جديد · New sequence")}</button>`:""}
-    </div>
-    ${seqs.map(s=>`<div class="panel" style="display:flex;gap:10px;align-items:center;margin-bottom:8px;cursor:pointer" onclick="gmSeqEdit('${s.id}')">
-      <b>${poEsc(s.name)}</b>
-      <span class="muted2" style="font-size:12px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم عمل · business days")} · 🎯 ${poEsc(s.goal)}</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <b style="font-size:14px">⚙️ ${T("الأتمتة · Workflows")}</b>
+      <span class="muted2" style="font-size:11px">${onN} ${T("مشغّل · on")} · ${seqs.length-onN} ${T("موقوف · off")}</span>
       <span class="spacer"></span>
-      <span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${s.active_threads||0} ${T("نشط · active")}</span>
-      ${CAN_ADMIN?`<button class="minibtn" onclick="event.stopPropagation();gmSeqDelete('${s.id}')">🗑</button>`:""}
-    </div>`).join("")||`<div class="muted2 panel">${T("لا تسلسلات بعد · no sequences yet")}</div>`}
+      ${CAN_ADMIN?`<button class="accent" onclick="gmSeqNew()">＋ ${T("سير عمل جديد · New workflow")}</button>`:""}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+      <input id="gmWfSearch" placeholder="🔍 ${T("ابحث في سير العمل · Search workflows")}" value="${poEsc(GM_WF.q)}" style="width:210px;font-size:12px" oninput="GM_WF.q=this.value;clearTimeout(gmRenderSeq._t);gmRenderSeq._t=setTimeout(()=>{gmRenderSeq();const i=$('gmWfSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">
+      ${chip("all",T("الكل · All"))}${chip("on","On")}${chip("off","Off")}${chip("trig","⚡ "+T("بمُشغّل · has trigger"))}
+    </div>
+    <div class="panel" style="padding:0">${table}</div>
     <div style="margin-top:16px"><b style="font-size:14px">⚡ ${T("قواعد التسجيل التلقائي · auto-enroll triggers")}</b>
       ${rules.map(r=>`<div class="panel" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px">
         <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
         <b>${poEsc(r.name)}</b>
         <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)} → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
+        ${gmMatchChip(r.id)}
         <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
         <span class="spacer"></span>
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button>
@@ -9906,9 +10046,41 @@ function gmRenderSeq(){
       </div>`).join("")}
       ${CAN_ADMIN?`<button class="minibtn" style="margin-top:8px" onclick="gmRuleNew()">＋ ${T("قاعدة جديدة · New rule")}</button>`:""}
     </div>`;
+  lxtGridApply("wf",$("gmSeqPane"));
+}
+// ── 🧭 Overview tab: summary tiles across all workflows ──
+function gmOvRender(){
+  gmWfEnsureData();
+  const st=GM.stats, o=st&&st.overall;
+  const seqs=(GM.ov&&GM.ov.sequences)||[];
+  const onN=seqs.filter(s=>!s.paused).length;
+  const tile=(v,l)=>`<div class="gm-tile"><b>${v}</b><span>${l}</span></div>`;
+  const list=seqs.map(s=>{
+    const x=((st&&st.sequences)||[]).find(y=>y.seq_id===s.id)||{};
+    return `<div class="panel" style="display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12.5px;cursor:pointer" onclick="gmTab('seq');gmSeqEdit('${s.id}')">
+      <span class="tglsw${s.paused?"":" on"}" style="flex:none"></span>
+      <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s.name)}</b>
+      <span class="spacer"></span>
+      <span class="muted2" style="font-size:11px">${x.enrolled||0} ${T("مسجل · enrolled")} · ${s.active_threads||0} ${T("نشط · active")} · 🎯 ${x.goal_met||0}</span>
+    </div>`;
+  }).join("");
+  $("gmOvPane").innerHTML=o?`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${tile(seqs.length,T("سير عمل · workflows"))}
+      ${tile(onN+" / "+seqs.length,"On")}
+      ${tile(o.enrolled,T("مسجل · enrolled"))}
+      ${tile(o.enrolled_7d??0,T("آخر ٧ أيام · last 7 days"))}
+      ${tile(o.active,T("نشط · active"))}
+      ${tile(o.sent,T("مرسل · sent"))}
+      ${tile(gmWfPct(o.opened,o.sent),T("فتح · open"))}
+      ${tile(gmWfPct(o.replied,o.enrolled),T("رد · reply"))}
+      ${tile(gmWfPct(o.goal_met,o.enrolled),T("الهدف · goal"))}
+    </div>
+    <b style="font-size:13px">⚙️ ${T("سير العمل · Workflows")}</b>${list}`
+    :`<div class="muted2 panel">${T("جارِ التحميل… · loading…")}</div>`;
 }
 function gmSeqNew(){
-  GM.edit={id:"", name:"", to_address:"", goal:"cleared",
+  GM.edit={id:"", name:"", to_address:"", goal:"cleared", description:"",
     send_window:{tz:"Asia/Hebron",days:[6,0,1,2,3],start:"09:00",end:"17:00"}, steps:[]};
   gmRenderBuilder();
 }
@@ -9916,12 +10088,13 @@ function gmSeqEdit(id){
   const s=((GM.ov&&GM.ov.sequences)||[]).find(x=>x.id===id); if(!s) return;
   let win={}; try{ win=JSON.parse(s.send_window_json||"{}"); }catch(e){}
   GM.edit={id:s.id, name:s.name, to_address:s.to_address||"", goal:s.goal||"cleared",
+    description:s.description||"",
     send_window:{tz:win.tz||"Asia/Hebron",days:win.days||[6,0,1,2,3],start:win.start||"09:00",end:win.end||"17:00"},
     steps:(s.steps||[]).map(x=>({kind:x.kind,template_id:x.template_id,task_note:x.task_note,delay_days:x.delay_days}))};
   gmRenderBuilder();
 }
 async function gmSeqDelete(id){
-  if(!confirm(T("أرشفة هذا التسلسل؟ · archive this sequence?"))) return;
+  if(!confirm(T("أرشفة سير العمل هذا؟ · archive this workflow?"))) return;
   const r=await post("/api/gaash/sequence/delete",{id});
   if(!r.ok) toast(r.error||"failed");
   await gmLoad(); gmRenderSeq();
@@ -9956,6 +10129,7 @@ function gmRenderBuilder(){
       <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
       <b>${poEsc(r.name)}</b>
       <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)}</span>
+      ${gmMatchChip(r.id)}
       <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
       <span class="spacer"></span>
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button><button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
@@ -9963,34 +10137,39 @@ function gmRenderBuilder(){
   const trigCard=`<div class="panel" style="margin-bottom:12px;font-size:12.5px">
       <div style="display:flex;align-items:center;gap:6px">
         <b>⚡ ${T("مُشغّل التسجيل · Enrollment trigger")}</b>
-        ${gmHelp("يقرر أي الطرود تدخل هذا التسلسل تلقائياً (اختياري) — بدونه تُسجّل الطرود يدوياً · decides which packages auto-enter this sequence (optional) — without one, packages are enrolled by hand")}
+        ${gmHelp("يقرر أي الطرود تدخل سير العمل هذا تلقائياً (اختياري) — بدونه تُسجّل الطرود يدوياً · decides which packages auto-enter this workflow (optional) — without one, packages are enrolled by hand")}
         <span class="spacer"></span>
         ${CAN_ADMIN&&e.id?`<button class="minibtn" onclick="gmRuleNew('${e.id}')">＋ ${T("مُشغّل · New trigger")}</button>`:""}
       </div>
       ${!e.id
-        ? `<div class="muted2" style="font-size:11.5px;margin-top:5px">${T("احفظ التسلسل أولاً لربط مُشغّل به · save the sequence first to attach a trigger")}</div>`
+        ? `<div class="muted2" style="font-size:11.5px;margin-top:5px">${T("احفظ سير العمل أولاً لربط مُشغّل به · save the workflow first to attach a trigger")}</div>`
         : (trigs.length ? trigs.map(trigRow).join("")
             : `<div class="muted2" style="font-size:11.5px;margin-top:5px">${T("لا مُشغّل بعد — الطرود تُسجَّل يدوياً · no trigger yet — packages are enrolled manually")}</div>`)}
     </div>`;
+  gmWfEnsureData();
+  const myStats=((GM.stats&&GM.stats.sequences)||[]).find(x=>x.seq_id===e.id)||null;
+  const statTile=(v,l)=>`<div><b style="font-size:22px">${v}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${l}</div></div>`;
   $("gmSeqPane").innerHTML=`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <button class="minibtn" onclick="GM.edit=null;gmRenderSeq()">‹ ${T("رجوع · Back")}</button>
-      <input id="gmSeqName" value="${poEsc(e.name)}" placeholder="${T("اسم التسلسل · sequence name")}" style="font-weight:800;font-size:15px;min-width:220px" ${CAN_ADMIN?"":"disabled"}>
+      <input id="gmSeqName" value="${poEsc(e.name)}" placeholder="${T("اسم سير العمل · workflow name")}" style="font-weight:800;font-size:15px;min-width:220px" ${CAN_ADMIN?"":"disabled"}>
       <span class="spacer"></span>
       ${CAN_ADMIN?`<button class="accent" onclick="gmSeqSave(this)">💾 ${T("حفظ · Save")}</button>`:""}
     </div>
     ${trigCard}
-    <div class="panel" style="display:flex;gap:26px;justify-content:center;text-align:center;margin-bottom:12px">
-      <div><b style="font-size:22px">${e.steps.length}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("خطوات · total steps")}</div></div>
-      <div><b style="font-size:22px">${gmSeqDays(e)+1}</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("أيام للإكمال · days to complete")}</div></div>
-      <div><b style="font-size:22px">${e.steps.length?Math.round(emails/e.steps.length*100):0}%</b><div class="muted2" style="font-size:10.5px;text-transform:uppercase;font-weight:700">${T("أتمتة · automation")}</div></div>
+    <div class="panel" style="display:flex;gap:26px;justify-content:center;text-align:center;margin-bottom:12px;flex-wrap:wrap">
+      ${statTile(e.steps.length,T("خطوات · total steps"))}
+      ${statTile(gmSeqDays(e)+1,T("أيام للإكمال · days to complete"))}
+      ${statTile((e.steps.length?Math.round(emails/e.steps.length*100):0)+"%",T("أتمتة · automation"))}
+      ${myStats?statTile(myStats.enrolled,T("مسجل · enrolled"))+statTile(myStats.enrolled_7d??0,T("آخر ٧ أيام · last 7d"))+statTile(myStats.active,T("نشط · active"))+statTile(myStats.goal_met,"🎯 "+T("تحقق · goal met")):""}
     </div>
     <div class="gsq-tree">
       ${e.steps.map((st,i)=>between(i)+stepCard(st,i)).join("")}
       <div class="gsq-mid"><div class="gsq-line"></div>${CAN_ADMIN?`<button class="gsq-add" onclick="gmStepAdd(${e.steps.length})">＋</button>`:""}</div>
     </div>
     <div class="panel" style="margin-top:14px;font-size:12.5px;display:flex;flex-direction:column;gap:10px">
-      <b>⚙ ${T("إعدادات التسلسل · sequence settings")}</b>
+      <b>⚙ ${T("إعدادات سير العمل · workflow settings")}</b>
+      <label>${T("الوصف · description")}: <input id="gmSeqDesc" value="${poEsc(e.description||"")}" placeholder="${T("لماذا هذا السير؟ (يظهر عموداً في الجدول) · what is this workflow for? (shows as a table column)")}" style="width:min(420px,100%)" ${CAN_ADMIN?"":"disabled"}></label>
       <label>${T("إلى (أي منصة) · recipient (any platform)")}: <input id="gmSeqTo" value="${poEsc(e.to_address||"")}" placeholder="GaashWW@glassix.support" style="width:260px" ${CAN_ADMIN?"":"disabled"}></label>
       <label>🎯 ${T("الهدف — متى يُعد ناجحاً · goal — when is it a success")}:
         <select id="gmSeqGoal" ${CAN_ADMIN?"":"disabled"}>
@@ -10013,7 +10192,7 @@ function gmStepAdd(i){
   const tpls=(GM.ov&&GM.ov.templates)||[];
   $("bulkBody").innerHTML=`
     <button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:8px 0" onclick="gmStepPick(${i},'auto_email')"><span style="font-size:18px">✈️</span><b>${T("إيميل تلقائي · Automated email")}</b><span class="muted2" style="font-size:11.5px">${T("يُرسل تلقائياً من قالب · sends a template automatically")}</span></button>
-    <button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:8px 0" onclick="gmStepPick(${i},'task')"><span style="font-size:18px">📋</span><b>${T("مهمة · Task")}</b><span class="muted2" style="font-size:11.5px">${T("تذكير يوقف التسلسل حتى تنجزه · a to-do that pauses until you tick it")}</span></button>
+    <button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:8px 0" onclick="gmStepPick(${i},'task')"><span style="font-size:18px">📋</span><b>${T("مهمة · Task")}</b><span class="muted2" style="font-size:11.5px">${T("تذكير يوقف سير العمل حتى تنجزه · a to-do that pauses until you tick it")}</span></button>
     ${tpls.length?"":`<div class="muted2" style="font-size:12px">${T("لا قوالب بعد — أنشئ واحداً في تبويب القوالب · no templates yet — create one in the Templates tab")}</div>`}`;
   $("bulkFoot").innerHTML=`<button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>`;
 }
@@ -10054,6 +10233,7 @@ async function gmSeqSave(btn){
   const e=GM.edit;
   e.name=($("gmSeqName")||{}).value||e.name;
   e.to_address=($("gmSeqTo")||{}).value||"";
+  e.description=($("gmSeqDesc")||{}).value||"";
   e.goal=($("gmSeqGoal")||{}).value||"cleared";
   e.send_window={tz:($("gmWinTz")||{}).value||"Asia/Hebron",
     days:[...document.querySelectorAll(".gmWinDay:checked")].map(x=>parseInt(x.value)),
@@ -10158,7 +10338,7 @@ function gmRuleNew(presetSeqId){ gmRuleOpen(null, presetSeqId); }
 function gmRuleEdit(id){ const r=((GM.ov&&GM.ov.rules)||[]).find(x=>x.id===id); if(r) gmRuleOpen(r); }
 function gmRuleOpen(r, presetSeqId){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
-  if(!seqs.length){ toast(T("أنشئ تسلسلاً أولاً · build a sequence first")); return; }
+  if(!seqs.length){ toast(T("أنشئ سير عمل أولاً · build a workflow first")); return; }
   GM.ruleEdit={id:r?r.id:"", name:r?r.name:"", seq_id:r?r.seq_id:(presetSeqId||seqs[0].id),
     mode:r?r.mode:"queue", enabled:r?!!r.enabled:true,
     groups:(r&&r.cond&&(r.cond.groups||[]).length)
@@ -10172,10 +10352,11 @@ function gmRuleOpen(r, presetSeqId){
         ${gmHelp("المُشغِّل يفحص كل طرد قابل للتسجيل؛ عند تطابق الشروط يُقترح/يُسجَّل تلقائياً · the trigger scans every enrollable package; when the conditions match it's proposed/enrolled automatically")}</div>
       <div class="muted2" style="font-size:11px">${T("كل معايير المجموعة معاً (و)، وتكفي أي مجموعة (أو) · all criteria in a group must match (and); any one group is enough (or)")}</div>
       <div id="gmRuleCrit"></div>
+      <div id="gmRuleMatch" class="muted2" style="font-size:12px"></div>
       <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${T("سجّل في · enroll into")}: <select id="gmRuleSeq">${seqs.map(s=>`<option value="${s.id}" ${s.id===GM.ruleEdit.seq_id?"selected":""}>${poEsc(s.name)}</option>`).join("")}</select>
-        ${gmHelp("التسلسل الذي تدخله الطرود المطابقة · the sequence matching packages are enrolled into")}</label>
+        ${gmHelp("سير العمل الذي تدخله الطرود المطابقة · the workflow matching packages are enrolled into")}</label>
       <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${T("الوضع · mode")}: <select id="gmRuleMode"><option value="queue" ${GM.ruleEdit.mode!=="auto"?"selected":""}>${T("بموافقتي أولاً · my approval first")}</option><option value="auto" ${GM.ruleEdit.mode==="auto"?"selected":""}>${T("تلقائي بالكامل · fully automatic")}</option></select>
-        ${gmHelp("بموافقتي أولاً = يظهر اقتراح تضغط ✓ لبدئه؛ تلقائي بالكامل = يبدأ التسلسل فوراً دون سؤال · my approval first = a suggestion appears and you press ✓ to start it; fully automatic = the sequence starts immediately without asking")}</label>
+        ${gmHelp("بموافقتي أولاً = يظهر اقتراح تضغط ✓ لبدئه؛ تلقائي بالكامل = يبدأ سير العمل فوراً دون سؤال · my approval first = a suggestion appears and you press ✓ to start it; fully automatic = the workflow starts immediately without asking")}</label>
     </div>`;
   gmRuleCritRender();
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
@@ -10218,6 +10399,21 @@ function gmRuleCritRender(){
     </div>`).join("")+
     `<div style="display:flex;align-items:center;gap:6px;margin-top:8px"><button class="minibtn" onclick="gmRuleGroupAdd()">＋ ${T("مجموعة (أو) · Add OR group")}</button>
       ${gmHelp("مجموعة بديلة — يكفي أن تتطابق أي مجموعة واحدة لتسجيل الطرد · an alternative group — matching any one group is enough to enroll the package")}</div>${dls}`;
+  gmRulePreviewKick();
+}
+// debounced live "matches now: N" while building/editing a trigger (nothing saved)
+function gmRulePreviewKick(){
+  clearTimeout(gmRulePreviewKick._t);
+  const el=$("gmRuleMatch"); if(!el) return;
+  el.innerHTML=`⚡ ${T("جارِ الحساب… · counting…")}`;
+  gmRulePreviewKick._t=setTimeout(async()=>{
+    let r; try{ r=await post("/api/gaash/rules/preview",{cond:{groups:(GM.ruleEdit||{}).groups||[]}}); }catch(e){ r=null; }
+    const el2=$("gmRuleMatch"); if(!el2) return;
+    if(!r||!r.ok){ el2.innerHTML=""; return; }
+    GM.rulePrev=r;
+    el2.innerHTML=`⚡ <b>${r.count}</b> ${T("طرداً يطابق الآن · packages match right now")}`
+      +(r.count?` <a style="cursor:pointer;color:var(--accent);font-weight:700" onclick="bulkClose();gmMatchesView(GM.rulePrev.gwds)">${T("عرضها · view them")} ↗</a>`:"");
+  },400);
 }
 function gmRuleSet(gi,ci,key,val){
   const cr=GM.ruleEdit.groups[gi].crits[ci];
@@ -10351,7 +10547,7 @@ async function gmDashLoad(){
       ${tile(o.bounces,T("ارتداد · bounces"))}
     </div>
     <div class="panel" style="padding:0"><div class="tbl-scroll"><table>
-      <thead><tr><th>${T("التسلسل · sequence")}</th><th>${T("مسجل · enrolled")}</th><th>${T("مرسل · sent")}</th>
+      <thead><tr><th>${T("سير العمل · workflow")}</th><th>${T("مسجل · enrolled")}</th><th>${T("مرسل · sent")}</th>
         <th>${T("فتح · open")}</th><th>${T("نقر · click")}</th><th>${T("رد · reply")}</th><th>🎯</th>
         <th>${T("ارتداد · bounce")}</th><th>${T("قمع الخطوات · step funnel")}</th></tr></thead>
       <tbody>${seqRows||`<tr><td colspan="9" class="muted2">${T("لا بيانات بعد · no data yet")}</td></tr>`}</tbody>

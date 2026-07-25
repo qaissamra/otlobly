@@ -455,6 +455,11 @@ def migrate():
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_open_at TEXT")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_click_at TEXT")
+        # ⚙️ Workflows page: HubSpot-style On/Off (paused stops sending AND
+        # trigger enrollment) + a free-text description column.
+        if "paused" not in _columns(c, "gaash_sequences"):
+            c.execute("ALTER TABLE gaash_sequences ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
+            c.execute("ALTER TABLE gaash_sequences ADD COLUMN description TEXT")
         # Seed business #1 (owner of all pre-tenancy data) exactly once.
         if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
             c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "
