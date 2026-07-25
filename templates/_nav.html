@@ -11,19 +11,24 @@
       <span class="word">Otlob<em>ly</em></span>
     </a>
 
+    {# signed-in customer: greet by FIRST name so the bar proves the session #}
+    {% set _cn = (session.get('cust_name') or '').strip() %}
+    {% set _first = _cn.split()[0] if _cn else '' %}
+
     <div class="otlnav-links">
       <a id="nv-order" href="/order">اطلب الآن</a>
       <a id="nv-plans" href="/pricing">الباقات</a>
       <a id="nv-track" href="/track">تتبّع</a>
       <a id="nv-how" href="/#how">كيف تعمل</a>
+      <a class="otlnav-contact" id="nv-wa" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
+        <span id="nv-wa-t">تواصل معنا</span>
+      </a>
     </div>
 
     <div class="otlnav-actions">
-      <a class="otlnav-login" id="nv-login" href="/account">حسابي</a>
-      <a class="otlnav-wa" id="nv-wa" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
-        <span id="nv-wa-t">واتساب</span>
-      </a>
+      <a class="otlnav-login{% if _first %} signedin{% endif %}" id="nv-login" href="/account"
+         {% if _first %}data-name="1" title="{{ _cn }}"{% endif %}>{{ _first or 'حسابي' }}</a>
       <div class="otlnav-lang">
         <button class="nvlang on" data-l="ar" onclick="navLang('ar')">عربي</button>
         <button class="nvlang" data-l="en" onclick="navLang('en')">EN</button>
@@ -40,7 +45,7 @@
     <a href="/pricing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span id="nvm-plans">الباقات</span></a>
     <a href="/track"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg><span id="nvm-track">تتبّع</span></a>
     <a href="/#how"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg><span id="nvm-how">كيف تعمل</span></a>
-    <a href="/account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span id="nvm-login">حسابي</span></a>
+    <a href="/account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span id="nvm-login"{% if _first %} data-name="1" title="{{ _cn }}"{% endif %}>{{ _first or 'حسابي' }}</span></a>
     <a class="otlnav-wa-m" id="nv-wa-m" href="#" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"></path></svg>
       <span id="nvm-wa">واتساب</span>
@@ -73,16 +78,18 @@
     font-weight:800;font-size:13.5px;color:#e6410c;background:#fff;border:1.5px solid #ffd0b8;
     padding:8px 16px;border-radius:999px;white-space:nowrap;transition:.15s}
   .otlnav-login:hover{background:#fff5ef;border-color:#ff5a1f}
-  /* WhatsApp — deliberately NOT green, so it doesn't over-stand-out (owner's call) */
-  .otlnav-wa{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
-    font-weight:700;font-size:13.5px;color:#5a5348;background:#f4f1ea;
-    border:1px solid #e8e2d6;padding:8px 14px;border-radius:999px;white-space:nowrap;transition:.15s}
-  .otlnav-wa svg{width:16px;height:16px;opacity:.85}
-  .otlnav-wa:hover{background:#ece7dd}
-  .otlnav-lang{display:inline-flex;background:#f4f1ea;border:1px solid #e8e2d6;border-radius:999px;padding:3px;flex-shrink:0}
+  /* signed in: filled pill carrying the customer's first name (truncated if long) */
+  .otlnav-login.signedin{display:inline-block;max-width:132px;overflow:hidden;
+    text-overflow:ellipsis;background:#fff5ef;border-color:#ffb894}
+  /* WhatsApp lives in the links row as "Contact us" — same wa.me action, quieter slot */
+  .otlnav-contact{display:inline-flex;align-items:center;gap:6px}
+  .otlnav-contact svg{width:15px;height:15px;opacity:.8}
+  /* language: a plain text switch, not a CTA — the active one is just darker */
+  .otlnav-lang{display:inline-flex;align-items:center;gap:1px;flex-shrink:0}
   .otlnav-lang .nvlang{border:none;background:transparent;cursor:pointer;font-family:inherit;
-    font-weight:700;font-size:12.5px;color:#8a7f6d;padding:4px 11px;border-radius:999px;transition:.15s}
-  .otlnav-lang .nvlang.on{background:#15140f;color:#fff}
+    font-weight:600;font-size:11.5px;color:#a0968a;padding:3px 7px;border-radius:7px;transition:.15s}
+  .otlnav-lang .nvlang:hover{background:#f7f4ef;color:#15140f}
+  .otlnav-lang .nvlang.on{color:#15140f;font-weight:800}
   .otlnav-burger{display:none;background:none;border:none;cursor:pointer;color:#15140f;
     padding:6px;border-radius:8px;flex-shrink:0;margin-inline-start:auto}
   .otlnav-burger:hover{background:#f7f4ef}
@@ -96,10 +103,10 @@
   .otlnav-wa-m{background:#f4f1ea !important;border:1px solid #e8e2d6;border-radius:999px;
     justify-content:center;margin-top:10px;padding:12px 16px !important;border-bottom:none !important;color:#5a5348 !important}
   .otlnav-wa-m svg{opacity:.85}
-  .otlnav-langrow{display:flex;justify-content:center;gap:6px;padding:12px 0 2px;margin-top:8px;border-top:1px solid #f4f1ec}
-  .otlnav-langrow .nvlang{border:1px solid #e8e2d6;background:#fff;cursor:pointer;font-family:inherit;
-    font-weight:700;font-size:13px;color:#8a7f6d;padding:6px 16px;border-radius:999px}
-  .otlnav-langrow .nvlang.on{background:#15140f;color:#fff;border-color:#15140f}
+  .otlnav-langrow{display:flex;justify-content:center;gap:2px;padding:10px 0 0;margin-top:4px}
+  .otlnav-langrow .nvlang{border:none;background:transparent;cursor:pointer;font-family:inherit;
+    font-weight:600;font-size:12px;color:#a0968a;padding:5px 12px;border-radius:8px}
+  .otlnav-langrow .nvlang.on{color:#15140f;font-weight:800;background:#f4f1ea}
   .otlnav.open .otlnav-drop{display:flex}
   /* ── responsive: ☰ + dropdown on mobile, full bar on desktop ── */
   @media (max-width:767px){
@@ -127,8 +134,10 @@
   /* language: translate the nav's own labels, sync all toggles, and hand off to
      the page's setLang() (if it defines one) so page content translates too */
   var LBL = {
-    ar:{order:"اطلب الآن",plans:"الباقات",track:"تتبّع",how:"كيف تعمل",login:"حسابي",wa:"واتساب"},
-    en:{order:"Order",plans:"Pricing",track:"Track",how:"How it works",login:"Account",wa:"WhatsApp"}
+    ar:{order:"اطلب الآن",plans:"الباقات",track:"تتبّع",how:"كيف تعمل",login:"حسابي",
+        wa:"تواصل معنا",wam:"واتساب"},
+    en:{order:"Order",plans:"Pricing",track:"Track",how:"How it works",login:"Account",
+        wa:"Contact us",wam:"WhatsApp"}
   };
   window.navLang = function(lang){
     var D = LBL[lang] || LBL.ar;
@@ -136,11 +145,13 @@
     document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
     var _nav = document.getElementById("otlnav");        // keep the bar's own direction in sync
     if(_nav) _nav.dir = (lang === "ar") ? "rtl" : "ltr";
-    var set = function(id,t){ var e=document.getElementById(id); if(e) e.textContent=t; };
+    // data-name = the server rendered the signed-in customer's name here; never translate over it
+    var set = function(id,t){ var e=document.getElementById(id);
+      if(e && !e.getAttribute("data-name")) e.textContent=t; };
     set("nv-order",D.order); set("nv-plans",D.plans); set("nv-track",D.track); set("nv-how",D.how);
     set("nv-login",D.login); set("nv-wa-t",D.wa);
     set("nvm-order",D.order); set("nvm-plans",D.plans); set("nvm-track",D.track); set("nvm-how",D.how);
-    set("nvm-login",D.login); set("nvm-wa",D.wa);
+    set("nvm-login",D.login); set("nvm-wa",D.wam);
     document.querySelectorAll(".nvlang").forEach(function(b){ b.classList.toggle("on", b.getAttribute("data-l")===lang); });
     if(typeof window.setLang === "function" && window.setLang !== window.navLang){
       try{ window.setLang(lang); }catch(err){}

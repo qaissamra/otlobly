@@ -31,8 +31,11 @@
   .navmenu .menulang{display:flex;justify-content:center;padding:12px 0 6px;margin-top:4px;border-top:1px solid #f4f1ec}
   .sub{color:var(--muted);font-size:13px;margin:6px 0 16px;text-align:start}
   label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;text-align:start;font-weight:600}
-  input{width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;
-    background:#fbfaf6;text-align:center;letter-spacing:1px;font-family:inherit}
+  /* text fields read left-to-right-normal; only the 6-digit codes get the spaced,
+     centred treatment (.code) — name/email/password centred felt wrong to type into */
+  input{width:100%;font-size:16px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;
+    background:#fbfaf6;text-align:start;font-family:inherit}
+  input.code{text-align:center;letter-spacing:6px;font-size:19px;font-weight:800}
   input:focus{outline:none;border-color:var(--orange);background:#fff}
   button{width:100%;margin-top:14px;font-size:15px;font-weight:800;color:#fff;background:var(--orange);
     border:0;border-radius:999px;padding:14px;cursor:pointer;font-family:var(--head),sans-serif;
@@ -175,7 +178,24 @@
   .navmenu .wa-menu{background:#25D366;color:#fff;border-radius:999px;justify-content:center;
     margin:8px 0;padding:11px 16px;border-bottom:none}
   .navmenu .wa-menu svg{opacity:1}
+  /* settings rows: real rows, not 11.5px hint text crammed together */
+  .setrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--ink);
+    padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#fbfaf6;margin:0 0 10px}
+  .setrow a{margin-inline-start:auto}
+  .setrow b{font-weight:800}
   @media (max-width:420px){ .card{padding:18px 14px} .qa .qart{width:66px;height:56px} }
+  /* ── desktop: give the DASHBOARD room. Login/signup/verify keep the focused
+       560px column (they're single-task screens); only body.hasnav widens. ── */
+  @media (min-width:768px){
+    body.hasnav .card{max-width:900px;padding:28px 32px}
+    body.hasnav .hello b{font-size:22px}
+    body.hasnav .hello small{font-size:13px}
+    body.hasnav h2.sec{font-size:16.5px;margin:24px 0 12px}
+    body.hasnav .setrow{font-size:14.5px;padding:14px 16px}
+    body.hasnav .qacts{gap:16px}
+    body.hasnav .stat{min-width:170px;padding:14px 18px}
+    body.hasnav .ord{padding:13px 16px}
+  }
 </style>
 </head>
 <body>
@@ -215,6 +235,16 @@
        NOTHING is created server-side until the phone verifies on the next step. -->
   <div id="s_signup" style="display:none">
     <p class="sub" id="t_signhead"></p>
+    {% if google_enabled %}
+    <!-- signing up WITH Google is one tap vs five fields — offer it here too.
+         Distinct id (t_googlebtn2): a duplicate id would leave one label blank. -->
+    <button id="b_google2" onclick="googleGo()"
+            style="width:100%;background:#fff;color:#1a160f;border:1.5px solid var(--line);border-radius:999px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px rgba(35,24,10,.08)">
+      <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.7 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.2C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.4 6.9-17.7z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.6l-7.7-6c-2.1 1.4-4.8 2.3-7.5 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>
+      <span id="t_googlebtn2"></span></button>
+    <div style="display:flex;align-items:center;gap:10px;color:#9aa3af;font-size:12px;margin:16px 0 2px">
+      <span style="flex:1;height:1px;background:#e5e7eb"></span>أو · or<span style="flex:1;height:1px;background:#e5e7eb"></span></div>
+    {% endif %}
     <label id="t_signname"></label>
     <input id="sname" placeholder="" style="letter-spacing:0"
            onkeydown="if(event.key==='Enter')signupGo()">
@@ -264,7 +294,7 @@
       <div id="lkKnown" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:11px 13px;font-size:13px;margin-top:8px">
         ℹ️ <span id="t_linknoorders"></span></div>
       <label id="t_linkcode"></label>
-      <input id="lkcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
+      <input id="lkcode" class="code" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●"
              onkeydown="if(event.key==='Enter')lkVerify()">
       <button id="b_lkverify" onclick="lkVerify()"></button>
     </div>
@@ -290,6 +320,9 @@
 
     <!-- HOME tab -->
     <div id="sec_home">
+      <!-- which phone this account's orders hang off — reassurance at a glance.
+           Mutually exclusive with #linkbanner below (that covers the NOT-linked case). -->
+      <div id="homePhone" class="setrow" style="display:none"></div>
       <!-- Auth v2: standing disclaimer for phone-less (Google-skip) sessions -->
       <div id="linkbanner" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;border-radius:14px;padding:13px 15px;font-size:13.5px;margin-bottom:12px">
         📵 <span id="t_banner"></span>
@@ -349,10 +382,10 @@
     <div id="sec_set" style="display:none">
       <h2 class="sec" id="t_sethead"></h2>
       <!-- the phone this account's orders are keyed on (or a prompt to link one) -->
-      <div id="phoneLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
-      <div id="emailLine" class="hint" style="text-align:start;margin:-2px 0 10px"></div>
+      <div id="phoneLine" class="setrow"></div>
+      <div id="emailLine" class="setrow"></div>
       <!-- password: shown ONLY for accounts that registered one (has_password) -->
-      <div id="pwLine" class="hint" style="display:none;text-align:start;margin:-2px 0 10px"></div>
+      <div id="pwLine" class="setrow" style="display:none"></div>
       <div id="pwMgr" class="setbox" style="display:none">
         <input id="pwcur" type="password" placeholder="••••••••" style="letter-spacing:0">
         <input id="pwnew" type="password" placeholder="••••••••" style="letter-spacing:0;margin-top:8px">
@@ -363,7 +396,7 @@
       <div id="emailMgr" class="setbox" style="display:none">
         <input id="memail" type="email" inputmode="email" placeholder="name@example.com" style="letter-spacing:0">
         <div id="mcodeBox" style="display:none">
-          <input id="mcode" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" style="margin-top:8px">
+          <input id="mcode" class="code" type="tel" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" style="margin-top:8px">
         </div>
         <button id="b_mgo" onclick="linkGo()" style="margin-top:10px;padding:11px"></button>
         <div id="out4"></div>
@@ -427,9 +460,10 @@ const T={
       sethead:"⚙️ الإعدادات", bellhead:"تحديثات شحناتك", bellnone:"لا تحديثات جديدة 👌",
       navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
       emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
-      googlebtn:"الدخول بحساب Google",
+      googlebtn:"الدخول بحساب Google", googlesignup:"إنشاء حساب بـ Google",
       gerrnomatch:"حساب Google هذا غير مربوط بأي حساب لدينا — سجّل الدخول برقم جوالك أولاً، ثم اربط بريدك من لوحة حسابك.",
       gerrfail:"تعذّر تسجيل الدخول عبر Google — حاول مرة أخرى.",
+      navaccount:"حسابي",
       loginid:"رقم الجوال أو البريد الإلكتروني", loginpw:"كلمة المرور", loginbtn:"تسجيل الدخول",
       remember:"تذكّرني — ابقَ مسجلاً للدخول", mksignup:"إنشاء حساب جديد",
       signhead:"أنشئ حسابك — وسنؤكد رقم جوالك في الخطوة التالية.", signname:"الاسم الكامل",
@@ -470,9 +504,10 @@ const T={
       sethead:"⚙️ Settings", bellhead:"Shipment updates", bellnone:"No new updates 👌",
       navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
       emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
-      googlebtn:"Sign in with Google",
+      googlebtn:"Sign in with Google", googlesignup:"Sign up with Google",
       gerrnomatch:"This Google account isn't linked to any customer yet — sign in with your phone first, then link your email from your dashboard.",
       gerrfail:"Google sign-in failed — please try again.",
+      navaccount:"Account",
       loginid:"Mobile number or email", loginpw:"Password", loginbtn:"Log in",
       remember:"Remember me — keep me signed in", mksignup:"Create an account",
       signhead:"Create your account — we'll verify your phone in the next step.", signname:"Full name",
@@ -531,7 +566,9 @@ function paint(){
    "qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
     .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
-  if($("t_googlebtn")) $("t_googlebtn").textContent=t("googlebtn");   // Jinja-gated button
+  // Jinja-gated Google buttons (login screen + signup screen)
+  if($("t_googlebtn")) $("t_googlebtn").textContent=t("googlebtn");
+  if($("t_googlebtn2")) $("t_googlebtn2").textContent=t("googlesignup");
   $("b_login").textContent=t("loginbtn"); $("b_mksignup").textContent=t("mksignup");
   $("b_signup").textContent=t("signbtn"); $("b_sback").textContent=t("sback");
   $("b_lksend").textContent=t("lksend"); $("b_lkverify").textContent=t("lkverify");
@@ -615,18 +652,34 @@ async function lkVerify(){
 }
 function lkSkip(){ loadDashboard(); }
 function backToPhone(){ show("s_phone"); $("lid").focus(); }
-async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){} D=null; show("s_phone"); }
+/* The shared navbar renders the signed-in name SERVER-side, so keep it in step
+   when the session changes without a page load (login / logout in this SPA). */
+function navSetName(n){
+  const first=(n||"").trim().split(/\s+/)[0]||"";
+  ["nv-login","nvm-login"].forEach(id=>{ const e=document.getElementById(id); if(!e) return;
+    if(first){ e.textContent=first; e.setAttribute("data-name","1"); e.title=(n||"").trim(); }
+    else { e.removeAttribute("data-name"); e.removeAttribute("title"); e.textContent=t("navaccount"); }
+    if(id==="nv-login") e.classList.toggle("signedin", !!first);
+  });
+}
+async function logout(){ try{ await fetch("/api/customer/logout",{method:"POST"}); }catch(e){}
+  D=null; navSetName(""); show("s_phone"); }
 async function refreshEmailLine(){
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   const st=me.email_masked?`${esc(me.email_masked)} ${me.email_verified?"✓":""}`:t("enolink");
   $("emailLine").innerHTML=`✉️ ${st} <a href="#" onclick="toggleEmailMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${me.email_masked?t("echange"):t("elink")}</a>`;
   // the phone the account's orders hang off (or a prompt to link one)
   const ph=me.whatsapp||me.phone;
+  const chg=`<a href="#" onclick="openLink('',true);return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("pwchange")}</a>`;
   $("phoneLine").innerHTML=ph
-    ? `📱 ${t("phoneline")} <b dir="ltr">${esc(ph)}</b>`
+    ? `📱 ${t("phoneline")} <b dir="ltr">${esc(ph)}</b> ${chg}`
     : `📵 ${t("phonenone")} <a href="#" onclick="openLink('',true);return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("phonelink")}</a>`;
+  // same fact on the HOME tab, so the customer sees which number they're connected to
+  const hp=$("homePhone");
+  if(hp){ hp.style.display=ph?"flex":"none";
+    if(ph) hp.innerHTML=`📱 ${t("phoneline")} <b dir="ltr">${esc(ph)}</b> ${chg}`; }
   // password box only for accounts that registered one
-  $("pwLine").style.display=me.has_password?"block":"none";
+  $("pwLine").style.display=me.has_password?"flex":"none";   // flex: .setrow pushes the action to the end
   if(!me.has_password) $("pwMgr").style.display="none";
   else $("pwLine").innerHTML=`🔒 ${t("pwline")} ${t("pwset")} <a href="#" onclick="togglePwMgr();return false" style="color:var(--orange);font-weight:700;text-decoration:none">${t("pwchange")}</a>`;
 }
@@ -795,6 +848,7 @@ async function loadDashboard(){
   // Auth v2: phone-less (Google-skip) session → the standing "not connected" banner.
   $("linkbanner").style.display=(d.phone_linked===false)?"block":"none";
   $("t_hello").textContent=`${t("hello")} ${d.name||""} 👋`.trim();
+  navSetName(d.name||"");                      // nav greets by name straight after login
   refreshEmailLine();
   renderLists();
   bellCheck();

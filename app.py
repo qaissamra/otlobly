@@ -4070,7 +4070,8 @@ def api_bridge_draft():
 
 @app.route("/order/<draft_id>", methods=["GET"])
 def order_intake_page(draft_id):
-    return render_template("order.html")
+    # wa_number: without it the shared nav's WhatsApp/Contact link self-hides here
+    return render_template("order.html", wa_number=_wa_business_number())
 
 
 # A sample "Amazon checkout" screenshot for the /order/demo preview (so the big proof
