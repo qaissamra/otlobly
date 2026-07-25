@@ -29,6 +29,10 @@
   .lang span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   /* language toggle now lives at the bottom of the ☰ menu (was in the header) */
   .navmenu .menulang{display:flex;justify-content:center;padding:12px 0 6px;margin-top:4px;border-top:1px solid #f4f1ec}
+  /* screen title — answers "which page am I on". Sits directly above its .sub;
+     font/line-height/letter-spacing come from style.css's global h1 rule, which is
+     what makes the title swap Cairo→Poppins with the language. */
+  .ptitle{font-size:21px;font-weight:800;margin:12px 0 0;text-align:start}
   .sub{color:var(--muted);font-size:13px;margin:6px 0 16px;text-align:start}
   label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;text-align:start;font-weight:600}
   /* text fields read left-to-right-normal; only the 6-digit codes get the spaced,
@@ -50,6 +54,17 @@
     margin-top:10px;text-align:center;color:#8a6d00}
   .lhero{border-radius:20px;overflow:hidden;margin:14px 0 4px;aspect-ratio:16/8}
   .lhero img{width:100%;height:100%;object-fit:cover;display:block}
+  /* "last used" tag on the sign-in door THIS device came in through (luLast()).
+     Same metrics as .pill, but it lives INSIDE a button so it also needs
+     vertical-align + flex:none. Two variants: pale sky on the WHITE Google button;
+     frosted white on the ORANGE primary, where pale blue would sit near-
+     complementary and vibrate at 10.5px. */
+  .lastpill{display:inline-block;vertical-align:middle;flex:none;font-size:10.5px;font-weight:800;
+    border-radius:20px;padding:2px 8px;white-space:nowrap;background:var(--sky-2);color:#1c4f9e}
+  #b_login .lastpill{background:rgba(255,255,255,.24);color:#fff;margin-inline-start:8px}
+  /* smallest phones: the Arabic Google label + a full-size pill overflow the
+     button's line by a few px and wrap it onto two rows — shrink the pill instead */
+  @media (max-width:380px){ .lastpill{font-size:9.5px;padding:2px 6px} }
   /* ── dashboard header: greeting + bell ── */
   .hello{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 12px;position:relative}
   .hello b{font-family:var(--head),sans-serif;font-size:19px}
@@ -208,6 +223,7 @@
        endpoints stay alive for magic ?vt= links + the ManyChat relay. -->
   <div id="s_phone" style="display:none">
     <div class="lhero"><img src="/static/assets/truck.jpg" alt=""></div>
+    <h1 class="ptitle" id="t_logintitle"></h1>
     <p class="sub" id="t_introphone"></p>
     {% if google_enabled %}
     <button id="b_google" onclick="googleGo()"
@@ -234,6 +250,7 @@
   <!-- STATE 1b (auth v2): create an account — name, phone, optional email, password.
        NOTHING is created server-side until the phone verifies on the next step. -->
   <div id="s_signup" style="display:none">
+    <h1 class="ptitle" id="t_signtitle"></h1>
     <p class="sub" id="t_signhead"></p>
     {% if google_enabled %}
     <!-- signing up WITH Google is one tap vs five fields — offer it here too.
@@ -268,6 +285,7 @@
   <!-- STATE 2 (auth v2): the shared "verify your phone" step — after Google (skippable,
        with the you-won't-see-your-orders disclaimer) or after a manual signup. -->
   <div id="s_link" style="display:none">
+    <h1 class="ptitle" id="t_linktitle"></h1>
     <!-- "Signed in as <you@gmail.com>" — which Google account got us here (+ a way
          to switch). Hidden for manual signups, which have no Google identity. -->
     <div id="lkWho" style="display:none;align-items:center;gap:9px;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px 13px;font-size:13px;margin-bottom:13px">
@@ -441,7 +459,8 @@ document.addEventListener("click", function(e){
   else el.style.display="none"; })();
 let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false, D=null, TAB="home";
 const T={
-  ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"📱 أرسلوا لي رمزاً برسالة SMS",
+  ar:{logintitle:"تسجيل الدخول", introphone:"تابع شحناتك وطلباتك كلها في مكان واحد.",
+      phonelbl:"رقم الجوال", send:"📱 أرسلوا لي رمزاً برسالة SMS",
       phonehint:"سنرسل رسالة واتساب فيها زر «تأكيد الحساب» — اضغطه لتسجيل الدخول.",
       smshint:"ما وصلتك رسالة واتساب؟ نرسل لك رمزاً برسالة نصية على نفس الرقم أعلاه.",
       vlbtn:"📲 أرسلوا لي زر الدخول على واتساب",
@@ -461,15 +480,18 @@ const T={
       navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
       emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
       googlebtn:"الدخول بحساب Google", googlesignup:"إنشاء حساب بـ Google",
+      lastused:"آخر دخول", lastusedtip:"آخر مرة سجّلت الدخول بهذه الطريقة",
       gerrnomatch:"حساب Google هذا غير مربوط بأي حساب لدينا — سجّل الدخول برقم جوالك أولاً، ثم اربط بريدك من لوحة حسابك.",
       gerrfail:"تعذّر تسجيل الدخول عبر Google — حاول مرة أخرى.",
       navaccount:"حسابي",
       loginid:"رقم الجوال أو البريد الإلكتروني", loginpw:"كلمة المرور", loginbtn:"تسجيل الدخول",
       remember:"تذكّرني — ابقَ مسجلاً للدخول", mksignup:"إنشاء حساب جديد",
-      signhead:"أنشئ حسابك — وسنؤكد رقم جوالك في الخطوة التالية.", signname:"الاسم الكامل",
+      signtitle:"إنشاء حساب جديد",
+      signhead:"سنؤكد رقم جوالك في الخطوة التالية.", signname:"الاسم الكامل",
       signphone:"رقم الجوال", signemail:"البريد الإلكتروني (اختياري)", signpw:"كلمة المرور",
       signpw2:"تأكيد كلمة المرور", signbtn:"إنشاء الحساب", sback:"رجوع",
-      linkhead:"أكّد رقم جوالك — سنرسل لك رمزاً برسالة نصية لربط طلباتك بحسابك.",
+      linktitle:"تأكيد رقم الجوال",
+      linkhead:"سنرسل لك رمزاً برسالة نصية لنربط طلباتك بحسابك.",
       linkphone:"رقم الجوال", lksend:"إرسال رمز التأكيد",
       linksent:"أُرسلت رسالة نصية إلى", lkedit:"تعديل", linkcode:"رمز التأكيد",
       lkverify:"تأكيد ودخول",
@@ -485,7 +507,8 @@ const T={
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
       elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
-  en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"📱 Text me a code by SMS",
+  en:{logintitle:"Sign in", introphone:"Follow all your shipments and orders in one place.",
+      phonelbl:"Mobile number", send:"📱 Text me a code by SMS",
       phonehint:"We'll WhatsApp you a message with a “Verify account” button — tap it to sign in.",
       smshint:"No WhatsApp message? We'll text a code to the same number above.",
       vlbtn:"📲 Send me a login button on WhatsApp",
@@ -505,15 +528,18 @@ const T={
       navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
       emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
       googlebtn:"Sign in with Google", googlesignup:"Sign up with Google",
+      lastused:"Last used", lastusedtip:"You signed in this way last time",
       gerrnomatch:"This Google account isn't linked to any customer yet — sign in with your phone first, then link your email from your dashboard.",
       gerrfail:"Google sign-in failed — please try again.",
       navaccount:"Account",
       loginid:"Mobile number or email", loginpw:"Password", loginbtn:"Log in",
       remember:"Remember me — keep me signed in", mksignup:"Create an account",
-      signhead:"Create your account — we'll verify your phone in the next step.", signname:"Full name",
+      signtitle:"Create an account",
+      signhead:"We'll verify your phone number in the next step.", signname:"Full name",
       signphone:"Mobile number", signemail:"Email (optional)", signpw:"Password",
       signpw2:"Confirm password", signbtn:"Create account", sback:"Back",
-      linkhead:"Verify your phone — we'll text you a code to connect your orders to this account.",
+      linktitle:"Verify your phone",
+      linkhead:"We'll text you a code to connect your orders to this account.",
       linkphone:"Mobile number", lksend:"Send verification code",
       linksent:"An SMS has been sent to", lkedit:"Edit", linkcode:"Verification code",
       lkverify:"Verify & sign in",
@@ -559,9 +585,9 @@ function setLang(l){ LANG=l;
   if(D && $("s_dash").style.display!=="none") renderLists();  // re-render cards in the new language
 }
 function paint(){
-  ["introphone","deliveries","orders","payments",
-   "loginid","loginpw","remember","signhead","signname","signphone","signemail","signpw","signpw2",
-   "linkhead","linkphone","linksent","linkcode","linknoorders","linkskipnote","banner",
+  ["logintitle","introphone","deliveries","orders","payments",
+   "loginid","loginpw","remember","signtitle","signhead","signname","signphone","signemail","signpw","signpw2",
+   "linktitle","linkhead","linkphone","linksent","linkcode","linknoorders","linkskipnote","banner",
    "signedas","notyou",
    "qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
     .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
@@ -580,6 +606,7 @@ function paint(){
   $("osearch").placeholder=t("searchph");
   [["nb_home","navhome"],["nb_orders","navorders"],["nb_pay","navpay"],["nb_set","navset"]]
     .forEach(([id,k])=>{ $(id).title=t(k); $(id).setAttribute("aria-label",t(k)); });
+  luLast();   // MUST stay last: the textContent writes above wipe appended children
 }
 function show(state){ ["s_phone","s_signup","s_link","s_dash"].forEach(s=>$(s).style.display=s===state?"block":"none");
   const dash=state==="s_dash";
@@ -595,15 +622,35 @@ function switchTab(k){ TAB=k;
    the shared "verify your phone" step (send → sent-to <number> [Edit] → code). ---- */
 async function post(url,body){ try{ return await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json(); }catch(e){ return {error:"network"}; } }
 function rememberVal(){ const r=$("remember"); return (!r||r.checked)?1:0; }
+/* ── "last used" tag on the door this DEVICE came in through ────────────────────
+   Client-only on purpose: the server records nothing about HOW a customer signed
+   in, and "the door I used on this phone" is the useful fact anyway. Google is a
+   full-page redirect, so its success is marked server-side with ?g=1 (read in
+   init()). Deliberately NOT cleared on logout — surviving logout is the point. */
+const LU_KEY="otl_last_login";
+function luRead(){ try{ return localStorage.getItem(LU_KEY)||""; }catch(e){ return ""; } }  // private mode throws
+function luSet(v){ try{ localStorage.setItem(LU_KEY,v); }catch(e){} luLast(); }   // self-painting
+function luLast(){
+  document.querySelectorAll(".lastpill").forEach(e=>e.remove());
+  const v=luRead();
+  // sign-in screen only — never #b_google2, "last used" is meaningless when signing UP
+  const host=(v==="google")?$("b_google"):(v==="password")?$("b_login"):null;
+  if(!host) return;                  // #b_google is Jinja-gated; unknown value → no tag, no crash
+  const s=document.createElement("span");
+  s.className="lastpill"; s.textContent=t("lastused"); s.title=t("lastusedtip");
+  host.appendChild(s);
+}
 function googleGo(){ location.href="/api/customer/google/start?remember="+rememberVal(); }
 async function pwLogin(){
   const id=($("lid").value||"").trim(), pw=$("lpw").value||"";
   if(!id||!pw){ $("vlOut").innerHTML=`<div class="err">${t("loginid")} + ${t("loginpw")}</div>`; return; }
-  const b=$("b_login"); b.disabled=true; const o=b.textContent; b.textContent=t("sending");
+  // restore the label from t(), NEVER from a saved b.textContent: this button can
+  // carry the .lastpill child, which textContent would flatten into the label.
+  const b=$("b_login"); b.disabled=true; b.textContent=t("sending");
   const d=await post("/api/customer/pwlogin",{identifier:id,password:pw,remember:!!rememberVal()});
-  b.disabled=false; b.textContent=o;
+  b.disabled=false; b.textContent=t("loginbtn"); luLast();
   if(!d.ok){ $("vlOut").innerHTML=`<div class="err">${esc(d.error)||'Error'}</div>`; return; }
-  $("vlOut").innerHTML=""; loadDashboard();
+  $("vlOut").innerHTML=""; luSet("password"); loadDashboard();
 }
 function openSignup(){ $("sOut").innerHTML=""; paint(); show("s_signup"); $("sname").focus(); }
 async function signupGo(){
@@ -863,7 +910,10 @@ async function init(){
   const gerr=qs.get("gerr");
   // ?link=phone — fresh Google login with no linked phone → the verify-phone step.
   const lk=qs.get("link");
-  if(gerr||lk) history.replaceState(null,"",location.pathname);
+  // ?g=1 — a SUCCESSFUL Google round-trip (the callback stamps it). Only /me
+  // confirming a real session promotes it to the "last used" tag below.
+  const g=qs.get("g");
+  if(gerr||lk||g) history.replaceState(null,"",location.pathname);
   let vtErr="";
   if(vt){
     history.replaceState(null,"",location.pathname);
@@ -873,11 +923,17 @@ async function init(){
   }
   let me; try{ me=await (await fetch("/api/customer/me")).json(); }catch(e){ me={}; }
   if(me&&me.logged_in){
+    // incl. the ?link=phone path — Google DID authenticate, so the tag says Google
+    // even if they abandon at verify-phone.
+    if(g) luSet("google");
     if(me.phone_linked===false&&(lk==="phone"||me.pending_phone)){
       openLink(me.pending_phone||"", !me.pending_phone, me.email||"");   // signup=required, google=skippable
     } else loadDashboard();
   }
   else { show("s_phone");
+    // A cancelled/failed Google round-trip carries no ?g=1, so nothing is recorded —
+    // and otl_last_login is left ALONE: clearing it would strip the hint pointing at
+    // the door that actually works for this customer.
     if(vtErr)$("vlOut").innerHTML=`<div class="err">${esc(vtErr)}</div>`;
     else if(gerr)$("vlOut").innerHTML=`<div class="err">${esc(t("gerrfail"))}</div>`;
     $("lid").focus(); }
