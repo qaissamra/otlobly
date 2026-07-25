@@ -4905,11 +4905,13 @@ async function lxDiagOpen(){
   $("bulkBody").innerHTML='<div class="muted2" style="padding:16px">⏳ '+T("يقارن مع AZ (2) الحيّة… · comparing against live AZ (2)…")+'</div>';
   let d; try{ d=await (await fetch("/api/leluxe/diag")).json(); }catch(e){ d=null; }
   if(!d||!d.ok||d.error){ $("bulkBody").innerHTML=`<div style="padding:16px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر التحميل · could not load"))}</div>`; return; }
+  LX_DIAG=d;
   const c=d.counts||{};
   const tile=(lab,val,tone)=>`<div style="border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:104px;background:var(--bg2)">
     <div class="muted2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">${lab}</div>
     <div style="font-size:19px;font-weight:800;${tone||''}">${val}</div></div>`;
   const rows=(d.stale||[]).filter(s=>s.status_differs);
+  const miss=d.az2_unlinked_orders||[];
   $("bulkBody").innerHTML=`
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       ${tile(T("خارج التطابق · out of step"),d.stale_count||0,(d.stale_count?"color:#b45309":""))}
@@ -4937,9 +4939,35 @@ async function lxDiagOpen(){
            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.frozen?'<span title="frozen" style="color:#b42318">❄</span> ':''}${poEsc(s.name)}</span>
            ${lxStatusPill(s.local_status)} <span class="muted2">→</span> ${lxStatusPill(s.az2_status)}
          </div>`).join("")}</div>`
-      :`<div style="padding:14px;text-align:center;color:var(--good)">✅ ${T("كل الحالات مطابقة · every status matches AZ (2)")}</div>`}`;
+      :`<div style="padding:14px;text-align:center;color:var(--good)">✅ ${T("كل الحالات مطابقة · every status matches AZ (2)")}</div>`}
+    ${miss.length?`<div class="subhead" style="margin:14px 0 6px">${T("في AZ (2) ولم تُستورد أبداً · in AZ (2), never imported here")} (${d.az2_unlinked_count||miss.length})</div>
+      <div style="max-height:200px;overflow:auto">${miss.map(o=>
+        `<div style="display:flex;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line);font-size:12.5px">
+           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(o.name)}">${poEsc(o.name)}</span>
+           <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxMs(o.date_created)}</span>
+           <a href="https://app.clickup.com/t/${poEsc(o.id)}" target="_blank" rel="noopener" title="${T("افتح في كليك أب · open in ClickUp")}">↗</a>
+         </div>`).join("")}</div>
+      <div style="margin-top:8px"><button class="po-btn accent" onclick="lxImportOlder(this)">📥 ${T("استوردها الآن · Import them now")} (${miss.length})</button></div>`:""}`;
   bulkFoot(`<span class="muted2" style="font-size:11.5px">${T("قراءة فقط — لم يُكتب شيء · read-only, nothing was written")}</span>
     <span class="spacer"></span><button class="po-btn" onclick="bulkClose()">${T("إغلاق · Close")}</button>`);
+}
+let LX_DIAG=null;
+// 📥 pull the AZ (2) orders that predate the routine 30-day window. Runs a
+// NORMAL sync (applies changes — never the 🛡 park-everything mode) with `since`
+// set to the OLDEST missing order, so nothing older sneaks in unannounced.
+async function lxImportOlder(btn){
+  const miss=(LX_DIAG&&LX_DIAG.az2_unlinked_orders)||[];
+  if(!miss.length) return;
+  const oldest=miss.reduce((a,o)=>Math.min(a,Number(o.date_created)||Infinity),Infinity);
+  const since=lxMs(oldest);
+  if(!since){ toast("⚠ no date on those orders"); return; }
+  if(!confirm(`${T("استيراد · Import")} ${miss.length} ${T("طلب · order(s)")} — ${T("من · from")} ${since}?`)) return;
+  btn.disabled=true; btn.textContent="⏳ …";
+  let r; try{ r=await post("/api/leluxe/migrate",{phase:"sync",since,limit:25,review_all:false,
+                 source_list_id:(LX&&LX.source_list_id)||""}); }catch(e){ r={}; }
+  if(!r.ok){ btn.disabled=false; btn.textContent="⚠ "+((r&&r.error)||"failed"); return; }
+  toast(`✓ +${r.orders||0} ${T("طلب · orders")} · ${r.updated||0} ${T("محدّث · updated")}`);
+  bulkClose(); await loadLeluxe();
 }
 async function lxSyncReportOpen(){
   $("lxSyncReportModal").classList.remove("hidden");
