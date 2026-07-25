@@ -49,6 +49,7 @@ import customers as cust_mod
 import db
 import estimate
 import settings as settings_mod
+import google_login
 import mailer
 import messages
 import money
@@ -4462,8 +4463,11 @@ def account_page():
     #   sms      → Twilio creds + SMS_OTP_ENABLED=1 (no Meta verification needed)
     #   whatsapp → Cloud API creds + WHATSAPP_OTP_ENABLED=1 (needs an APPROVED auth
     #              template — blocked until the Meta business is verified, tested 2026-07)
+    # google_enabled shows "Sign in with Google" once the OAuth client env is set —
+    # the free-per-login door for returning customers with a linked email.
     return render_template("account.html", wa_number=_wa_business_number(),
-                           otp_enabled=notify.otp_available())
+                           otp_enabled=notify.otp_available(),
+                           google_enabled=google_login.configured())
 
 
 @app.route("/api/customer/me")
@@ -4894,6 +4898,56 @@ def api_customer_email_login_verify():
     session["cust_name"] = rec.get("name") or _match_customer(rec["core"])[1]
     session.permanent = True
     return jsonify({"ok": True, "name": session["cust_name"]})
+
+
+# ---- Sign in with Google (OAuth) — email login where Google does the verifying --- #
+# Same eligibility as the email-code login: the Google email must match a customer
+# whose email is linked & verified and whose record has a phone (orders key on phone).
+def _google_redirect_uri():
+    return f"{_portal_base()}/api/customer/google/callback"
+
+
+@app.route("/api/customer/google/start")
+@limiter.limit("10 per minute")
+def api_customer_google_start():
+    if not google_login.configured():
+        return redirect("/account")
+    state = google_login.new_state()
+    session["g_state"] = state
+    return redirect(google_login.auth_url(_google_redirect_uri(), state))
+
+
+@app.route("/api/customer/google/callback")
+@limiter.limit("10 per minute")
+def api_customer_google_callback():
+    # CSRF check: the state must round-trip through THIS browser session.
+    state = request.args.get("state") or ""
+    if not state or state != session.pop("g_state", None):
+        return redirect("/account?gerr=state")
+    code = request.args.get("code")
+    if not code:                                    # user cancelled on Google
+        return redirect("/account")
+    res = google_login.exchange_code(code, _google_redirect_uri())
+    if not res.get("ok") or not res.get("email_verified"):
+        app.logger.warning("google login failed: %s", res.get("error") or "unverified email")
+        return redirect("/account?gerr=fail")
+    email = res["email"]
+    ebid = db.find_business_for_email(email)        # cross-tenant → the customer's broker
+    if ebid:
+        db.set_current_business(ebid)
+    row = db.get_customer_by_email(email)
+    core = normalize.phone_core((row or {}).get("whatsapp") or "")
+    if not row or not row.get("email_verified_at") or not core:
+        # Owner of the Google account proved the email is theirs — but no linked
+        # customer. Bootstrap stays phone-first (link the email from the dashboard).
+        return redirect("/account?gerr=nomatch")
+    bid = _business_for_phone(core) or ebid or 1
+    db.set_current_business(bid)
+    session["cust_phone"] = core
+    session["cust_business"] = bid
+    session["cust_name"] = (row.get("name") or "").strip() or _match_customer(core)[1]
+    session.permanent = True
+    return redirect("/account")
 
 
 @app.route("/api/admin/whatsapp_test", methods=["GET", "POST"])

@@ -203,6 +203,15 @@
     <div id="waStatus" style="margin-top:10px"></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
             style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
+    {% if google_enabled %}
+    <!-- Sign in with Google — free per-login (no SMS cost, no Meta). Same eligibility
+         as email login: works once the customer linked their email from the dashboard.
+         Rendered only when the OAuth client env (GOOGLE_CLIENT_ID/SECRET) is set. -->
+    <button class="ghost" id="b_google" onclick="location.href='/api/customer/google/start'"
+            style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.7 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.2C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.4 6.9-17.7z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.6l-7.7-6c-2.1 1.4-4.8 2.3-7.5 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>
+      <span id="t_googlebtn"></span></button>
+    {% endif %}
     <!-- Typed code (SMS/WhatsApp): visible only when the server can actually deliver
          on the selected channel (otp_enabled = notify.otp_available()). Kept LAST and
          styled as a secondary outline button on purpose — the WhatsApp/email doors above
@@ -377,6 +386,9 @@ const T={
       sethead:"⚙️ الإعدادات", bellhead:"تحديثات شحناتك", bellnone:"لا تحديثات جديدة 👌",
       navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
       emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
+      googlebtn:"الدخول بحساب Google",
+      gerrnomatch:"حساب Google هذا غير مربوط بأي حساب لدينا — سجّل الدخول برقم جوالك أولاً، ثم اربط بريدك من لوحة حسابك.",
+      gerrfail:"تعذّر تسجيل الدخول عبر Google — حاول مرة أخرى.",
       emaillbl:"البريد الإلكتروني", ecodelbl:"رمز الدخول (من بريدك)", esend:"إرسال الرمز", everify:"دخول",
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
       elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
@@ -400,6 +412,9 @@ const T={
       sethead:"⚙️ Settings", bellhead:"Shipment updates", bellnone:"No new updates 👌",
       navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
       emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
+      googlebtn:"Sign in with Google",
+      gerrnomatch:"This Google account isn't linked to any customer yet — sign in with your phone first, then link your email from your dashboard.",
+      gerrfail:"Google sign-in failed — please try again.",
       emaillbl:"Email", ecodelbl:"Login code (from your email)", esend:"Send code", everify:"Sign in",
       eback:"Back", esent:"If this email is linked to an account, a code is on its way.", enolink:"Email: not linked",
       elink:"Link email", echange:"Change", elinked:"Email linked ✓",
@@ -441,6 +456,7 @@ function paint(){
   $("b_send").textContent=t("send"); $("b_verify").textContent=t("verify"); $("b_resend").textContent=t("resend");
   $("b_logout").textContent=t("logout"); $("t_foot").textContent=t("foot");
   $("b_email").textContent=t("emailbtn"); $("b_eback").textContent=t("eback");
+  if($("t_googlebtn")) $("t_googlebtn").textContent=t("googlebtn");   // Jinja-gated button
   $("b_esend").textContent=ECODE?t("everify"):t("esend");
   $("b_mgo").textContent=MCODE?t("everify"):t("esend");
   $("osearch").placeholder=t("searchph");
@@ -697,7 +713,11 @@ async function init(){
   setLang("ar");
   // ?vt= — one-time login token from the WhatsApp "Verify account" button or the
   // email magic link. Strip it from the URL/history first, then redeem via POST.
-  const vt=new URLSearchParams(location.search).get("vt");
+  const qs=new URLSearchParams(location.search);
+  const vt=qs.get("vt");
+  // ?gerr= — a failed "Sign in with Google" round-trip (nomatch/fail/state).
+  const gerr=qs.get("gerr");
+  if(gerr) history.replaceState(null,"",location.pathname);
   let vtErr="";
   if(vt){
     history.replaceState(null,"",location.pathname);
@@ -709,6 +729,7 @@ async function init(){
   if(me&&me.logged_in){ loadDashboard(); }
   else { show("s_phone");
     if(vtErr)$("vlOut").innerHTML=`<div class="err">${esc(vtErr)}</div>`;
+    else if(gerr)$("vlOut").innerHTML=`<div class="err">${esc(t(gerr==="nomatch"?"gerrnomatch":"gerrfail"))}</div>`;
     $("phone").focus(); }
 }
 init();
