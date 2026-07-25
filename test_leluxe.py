@@ -735,6 +735,155 @@ def frozen_row_thaws():
         leluxe._http = real
 
 
+def _fresh_src(tasks):
+    """Reset the local mirror + point the sync fixtures at SRC/L1."""
+    global SRC_TASKS
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.set_path(config, "leluxe.list_id", "L1")
+    cfg.save(config)
+    SRC_TASKS = tasks
+    for t in SRC_TASKS:
+        t["date_created"] = "1780000000000"   # _task defaults to "1" = pre-since
+
+
+def conflict_review_flow():
+    """A REAL both-sides conflict parks, is visible everywhere the owner looks
+    (chip count == modal list), survives a re-sync without duplicating, and
+    resolves to ClickUp's value on request."""
+    _fresh_src([
+        _task("CO1", "Order # CONF-1", "order number", updated="100"),
+        _task("CC1", "7 Watch", "oredered", parent="CO1", updated="100",
+              fields=[("Tracking Number", "GWD-C1")]),
+    ])
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        leluxe.sync_from_source("2026-01-01", limit=25)
+        cid = leluxe._row_id_by_source("CC1")
+        # both sides move the SAME field to DIFFERENT values
+        leluxe.set_status(cid, "sent rd")                       # app side
+        SRC_TASKS[1]["status"] = {"status": "rd"}               # AZ (2) side
+        SRC_TASKS[1]["date_updated"] = "200"
+        r = leluxe.sync_from_source("2026-01-01")
+        check("both-sides change parks a conflict", r.get("conflicts", 0) >= 1)
+        row = leluxe.get_row(cid)
+        check("row is in conflict state, local value untouched",
+              row["sync_state"] == "conflict" and row["status"] == "sent rd")
+        lst = leluxe.list_conflicts()
+        sc = leluxe.sync_counts()
+        check("chip count agrees with the review modal",
+              sc["conflict"] == len(lst) == 1
+              and lst[0]["row_id"] == cid
+              and any(c["field"] == "status" and c["remote"] == "rd"
+                      for c in lst[0]["conflicts"]))
+        leluxe.sync_from_source("2026-01-01")                   # re-sync: stable
+        lst2 = leluxe.list_conflicts()
+        check("re-sync neither clears nor duplicates the parked conflict",
+              leluxe.sync_counts()["conflict"] == 1 and len(lst2) == 1
+              and len(lst2[0]["conflicts"]) == len(lst[0]["conflicts"]))
+        leluxe.resolve_conflict(cid, choice="remote")
+        row = leluxe.get_row(cid)
+        check("resolve→remote applies ClickUp's value and queues the push",
+              row["status"] == "rd" and row["sync_state"] == "dirty")
+        check("nothing left to review", leluxe.sync_counts()["conflict"] == 0)
+    finally:
+        leluxe._http = real
+
+
+def review_park_amnesty():
+    """🛡 review-mode parks EVERY change — including plain AZ (2)-only updates.
+    The owner hit OK on that confirm by reflex and got '0 updated · 5 conflicts'.
+    A later NORMAL sync must re-decide those parked applies and land them."""
+    _fresh_src([
+        _task("AO1", "Order # AMN-1", "order number", updated="100"),
+        _task("AC1", "4 Watch", "oredered", parent="AO1", updated="100",
+              fields=[("Tracking Number", "GWD-A1")]),
+    ])
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        leluxe.sync_from_source("2026-01-01", limit=25)
+        cid = leluxe._row_id_by_source("AC1")
+        SRC_TASKS[1]["status"] = {"status": "rd"}               # AZ (2)-only change
+        SRC_TASKS[1]["date_updated"] = "300"
+        r = leluxe.sync_from_source("2026-01-01", review_all=True)
+        check("review mode parks the pending apply instead of writing",
+              r.get("updated") == 0 and r.get("conflicts", 0) >= 1
+              and leluxe.get_row(cid)["status"] == "oredered")
+        r2 = leluxe.sync_from_source("2026-01-01")              # normal sync
+        check("amnesty: the next normal sync applies the parked change",
+              leluxe.get_row(cid)["status"] == "rd" and r2.get("updated", 0) >= 1)
+        check("and the conflict evaporates", leluxe.sync_counts()["conflict"] == 0)
+    finally:
+        leluxe._http = real
+
+
+def malformed_conflict_heals():
+    """A row stuck in sync_state='conflict' with an EMPTY conflicts list made
+    the ⚠ chip say N while the modal said 'no conflicts to review'. The count
+    must ignore it and the heal must repair it."""
+    _fresh_src([
+        _task("HO1", "Order # HEAL-1", "order number", updated="100"),
+        _task("HC1", "2 Watch", "oredered", parent="HO1", updated="100",
+              fields=[("Tracking Number", "GWD-H1")]),
+    ])
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        leluxe.sync_from_source("2026-01-01", limit=25)
+        cid = leluxe._row_id_by_source("HC1")
+        with db.connect() as c:                                 # forge the malform
+            c.execute("UPDATE leluxe_orders SET sync_state='conflict' WHERE id=?",
+                      (cid,))
+        check("chip count ignores the empty-list row",
+              leluxe.sync_counts()["conflict"] == 0)
+        check("modal payload is empty for it", leluxe.list_conflicts() == [])
+        check("and opening the review healed the row",
+              leluxe.get_row(cid)["sync_state"] == "synced")
+    finally:
+        leluxe._http = real
+
+
+def auto_pull_pass():
+    """⏱ background sync: off by default, runs at most once per interval, and
+    respects the same mutex as the manual Sync button."""
+    _fresh_src([
+        _task("PO9", "Order # PULL-1", "order number", updated="100"),
+    ])
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    db.set_setting("leluxe:auto_pull", None)
+    db.set_setting("leluxe:auto_pull_last", None)
+    db.set_setting("leluxe:import_running", 0)
+    try:
+        check("disabled by default",
+              leluxe.run_pull_pass(now=1e9).get("skipped") == "disabled")
+        db.set_setting("leluxe:auto_pull", {"enabled": True, "minutes": 30})
+        r = leluxe.run_pull_pass(now=1e9)
+        check("enabled → the tick runs a real sync", r.get("ran") is True)
+        last = db.get_setting("leluxe:auto_pull_last") or {}
+        check("last-run is recorded for the Tools label",
+              float(last.get("ts") or 0) == 1e9 and last.get("error") == "")
+        check("mutex released after the run",
+              (db.get_setting("leluxe:import_running") or 0) == 0)
+        check("not due again within the interval",
+              leluxe.run_pull_pass(now=1e9 + 60).get("skipped") == "not due")
+        check("due again after the interval",
+              leluxe.run_pull_pass(now=1e9 + 31 * 60).get("ran") is True)
+        db.set_setting("leluxe:import_running", 1e9 + 62 * 60)
+        check("a running manual sync blocks the tick",
+              leluxe.run_pull_pass(now=1e9 + 63 * 60).get("skipped")
+              == "sync already running")
+    finally:
+        leluxe._http = real
+        db.set_setting("leluxe:auto_pull", None)
+        db.set_setting("leluxe:auto_pull_last", None)
+        db.set_setting("leluxe:import_running", 0)
+
+
 AZ2_STATE = {"status": "rd"}
 
 
@@ -1243,6 +1392,10 @@ def main():
     print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
     print("frozen row thaws:"); frozen_row_thaws()
+    print("conflict review flow:"); conflict_review_flow()
+    print("review-park amnesty:"); review_park_amnesty()
+    print("malformed conflict heals:"); malformed_conflict_heals()
+    print("auto-pull pass:"); auto_pull_pass()
     print("diagnose read-only:"); diagnose_readonly()
     print("pkg mail:");          pkgmail_tracking()
     print()

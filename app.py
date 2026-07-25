@@ -2215,10 +2215,37 @@ def api_notifications():
                                    "sub": r["gwd"], "view": "gaashmail"})
     except Exception:  # noqa - the bell must never break on a fresh DB
         pass
+    # ⌚ Leluxe sync conflicts waiting for review — one bell item whose ts is the
+    # newest parked row's updated_at, so new parks re-surface it and an idle
+    # backlog doesn't re-ping on every poll. Auto-sync can park these while
+    # nobody is looking, so the bell is how the owner finds out.
+    try:
+        import features
+        if current_user.has("admin_actions") and features.has(db.current_business(), "leluxe"):
+            with db.connect() as _c:
+                row = _c.execute(
+                    "SELECT COUNT(*) n, MAX(updated_at) ts FROM leluxe_orders "
+                    "WHERE sync_state='conflict' AND deleted=0 AND "
+                    "json_array_length(json_extract(data_json,'$.conflicts'))>0"
+                ).fetchone()
+            if row and row["n"]:
+                events.append({"ts": row["ts"] or "", "type": "lx_conflict",
+                               "icon": "⚠️",
+                               "title": "تعارض مزامنة يحتاج مراجعة · sync conflicts need review",
+                               "sub": f"{row['n']} صف · rows — Leluxe ⚠",
+                               "view": "leluxe"})
+    except Exception:  # noqa - same rule: the bell never breaks
+        pass
     events.sort(key=lambda e: e["ts"], reverse=True)
+    out = events[:30]
+    # standing alerts survive the recency cap: parked sync conflicts can be DAYS
+    # old (that is the whole problem) — sorting by ts pushed them off the list
+    stand = next((e for e in events if e["type"] == "lx_conflict"), None)
+    if stand and stand not in out:
+        out.insert(0, stand)
     needs_quote = sum(1 for o in db.list_orders()
                       if o.get("status") == "REQUESTED" and not o.get("quoted_at"))
-    return jsonify({"ok": True, "needs_quote": needs_quote, "events": events[:30]})
+    return jsonify({"ok": True, "needs_quote": needs_quote, "events": out})
 
 
 @app.route("/api/po_image", methods=["GET", "POST"])
@@ -2414,7 +2441,25 @@ def api_leluxe_orders():
                     "token": bool(os.environ.get("CLICKUP_API_TOKEN")),
                     "ready": leluxe_mod.ready(config),
                     "push_disabled": leluxe_mod.push_disabled(),
-                    "sync": leluxe_mod.sync_counts()})
+                    "sync": leluxe_mod.sync_counts(),
+                    "auto_pull": {**leluxe_mod.auto_pull_settings(),
+                                  "last": db.get_setting("leluxe:auto_pull_last") or {}}})
+
+
+@app.route("/api/leluxe/auto_pull", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_auto_pull():
+    """⏱ toggle the background sync-from-AZ (2). Stored in THIS instance's DB,
+    so flipping it on live never enables the stale local mirror's copy."""
+    b = request.get_json(force=True, silent=True) or {}
+    cur = leluxe_mod.auto_pull_settings()
+    new = {"enabled": bool(b.get("enabled")),
+           "minutes": max(5, int(b.get("minutes") or cur["minutes"]))}
+    db.set_setting("leluxe:auto_pull", new)
+    db.audit(auth.actor(), "leluxe_auto_pull", "settings", "",
+             f"enabled={new['enabled']} every {new['minutes']}m")
+    return jsonify({"ok": True, "auto_pull": new})
 
 
 @app.route("/api/leluxe/import", methods=["POST"])

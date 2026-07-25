@@ -22,7 +22,7 @@ import os
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib import request as urlrequest, error as urlerror
 from urllib.parse import quote as urlquote
 
@@ -331,9 +331,23 @@ def sync_counts():
                   for r in c.execute(
                       "SELECT id, name, sync_error FROM leluxe_orders "
                       "WHERE sync_state='error' AND deleted=0 LIMIT 10")]
-        conflict_rows = [{"id": r["id"], "name": r["name"]} for r in c.execute(
-            "SELECT id, name FROM leluxe_orders "
-            "WHERE sync_state='conflict' AND deleted=0 LIMIT 50")]
+        # the ⚠ chip count must AGREE with the review modal: count only rows the
+        # modal will actually list, i.e. those whose data.conflicts is non-empty.
+        # A state='conflict' row with an empty list is malformed (healed by
+        # heal_conflicts on the next sync / modal open) — counting it made the
+        # chip say N while the modal said "no conflicts to review".
+        conflict_rows, n_conf = [], 0
+        for r in c.execute("SELECT id, name, data_json FROM leluxe_orders "
+                           "WHERE sync_state='conflict' AND deleted=0"):
+            try:
+                has = bool((json.loads(r["data_json"] or "{}").get("conflicts") or []))
+            except ValueError:
+                has = False
+            if has:
+                n_conf += 1
+                if len(conflict_rows) < 50:      # display list stays capped
+                    conflict_rows.append({"id": r["id"], "name": r["name"]})
+        counts["conflict"] = n_conf
         dels = {r["state"]: r["n"] for r in c.execute(
             "SELECT state, COUNT(*) n FROM leluxe_cu_deletes GROUP BY state")}
     return {"synced": counts.get("synced", 0), "dirty": counts.get("dirty", 0),
@@ -409,7 +423,10 @@ def diagnose(config=None):
         # fast path is right to skip. Only base != AZ (2) means a real remote
         # change the timestamp shortcut will hide forever.
         stamp_current = rcu == str(data.get("source_cu_updated") or "")
-        frozen = differs and stamp_current and bstatus != rstatus
+        # parked conflicts are NOT frozen — they are visible in ⚠ Review and the
+        # merge re-examines them every pass; frozen means invisible-to-everything
+        frozen = (differs and stamp_current and bstatus != rstatus
+                  and state != "conflict")
         # Verdict order MIRRORS the engine. Only `pushing` (early return) and
         # `conflict` (parked) stop an inbound value; `dirty`/`error` are about the
         # OUTBOUND push and never block a pull, so they must not outrank the
@@ -419,7 +436,12 @@ def diagnose(config=None):
         if state == "pushing":
             why = "blocked: mid-push (skipped by every pull)"
         elif state == "conflict":
-            why = "blocked: parked conflict"
+            # base == local means the park came from 🛡 review mode (only AZ (2)
+            # moved) — the amnesty re-applies it on the next NORMAL sync. A real
+            # both-sides conflict stays until the owner picks a winner.
+            why = ("parked by 🛡 review — will auto-apply on the next sync"
+                   if bstatus == (d["status"] or "")
+                   else "parked conflict — open ⚠ Review conflicts and pick a winner")
         elif frozen:
             why = ("FROZEN: AZ (2) stamp already current but the value differs "
                    "— no sync will re-check this row")
@@ -1793,14 +1815,17 @@ def _merge_row(rid, src_task, sch, known, keep, review_all=False, changes=None):
                           (json.dumps(data, ensure_ascii=False), rid))
                 return "unchanged"
         elif (data.get("source_cu_updated") == src_cu
-              and (d["sync_state"] == "conflict"
-                   or _base_matches(base, remote, known))):
+              and _base_matches(base, remote, known)):
             # AZ (2) untouched since last sync AND our base still matches it, so
-            # there is genuinely nothing to merge. A parked conflict is exempt:
-            # it is waiting on the owner, and re-deciding it every pass would
-            # just re-park the same fields and inflate the conflict count.
-            # Without the _base_matches half, a row whose stamp was advanced
-            # without its value applied would be skipped here FOREVER.
+            # there is genuinely nothing to merge. Without the _base_matches
+            # half, a row whose stamp was advanced without its value applied
+            # would be skipped here FOREVER. NOTE: parked-conflict rows are NOT
+            # exempt any more — parking advances the stamp but not the base, so
+            # they always fall through to a full re-merge. That is the amnesty:
+            # a 🛡 review-parked "apply" (base == local, only AZ (2) moved) is
+            # re-decided as "apply" on the next NORMAL sync and lands; a REAL
+            # both-sides conflict re-derives the identical parked set (stable,
+            # no churn) and stays waiting for the owner.
             return "unchanged"
         local = {"name": r["name"], "status": r["status"] or "",
                  "due_date": r["due_date"],
@@ -2120,6 +2145,7 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
     overwritten); either way a pre-sync snapshot + a per-change report are
     written to the data dir."""
     config = config or cfg.load()
+    heal_conflicts()               # malformed parked rows repair before merging
     src, lid = source_list_id(config), list_id(config)
     if not _token():
         return {"error": "CLICKUP_API_TOKEN is not set"}
@@ -2321,9 +2347,34 @@ def az2_push_history(limit=200):
     return rows
 
 
+def heal_conflicts():
+    """Repair malformed parked rows: sync_state='conflict' with an EMPTY
+    data.conflicts list. Those rows were counted by the ⚠ chip but invisible in
+    the review modal — the owner saw "N conflicts" with nothing to review.
+    Healing flips them to 'synced'; that is safe because the merge fast path now
+    verifies the base against AZ (2), so anything genuinely unapplied re-merges
+    (and re-parks if it is a real conflict) on the very next sync."""
+    fixed = 0
+    with db.connect() as c:
+        for r in c.execute("SELECT id, data_json FROM leluxe_orders "
+                           "WHERE sync_state='conflict' AND deleted=0"):
+            try:
+                data = json.loads(r["data_json"] or "{}")
+            except ValueError:
+                data = {}
+            if data.get("conflicts"):
+                continue
+            data.pop("conflicts", None)
+            c.execute("UPDATE leluxe_orders SET data_json=?, sync_state='synced' "
+                      "WHERE id=?", (json.dumps(data, ensure_ascii=False), r["id"]))
+            fixed += 1
+    return fixed
+
+
 def list_conflicts():
     """Every row parked in a merge conflict, with its per-field diffs and the
     parent order's name (for grouping in the review panel)."""
+    heal_conflicts()                 # opening the review self-repairs stragglers
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE sync_state='conflict' AND deleted=0")]
@@ -3214,6 +3265,51 @@ def _interval_seconds():
         return 60
 
 
+def auto_pull_settings():
+    """⏱ Auto-sync from AZ (2): {"enabled": bool, "minutes": int}. Stored in
+    THIS instance's DB (like leluxe:az2), so enabling it on the live site never
+    turns it on for the stale local mirror — each DB opts in for itself."""
+    s = db.get_setting("leluxe:auto_pull") or {}
+    return {"enabled": bool(s.get("enabled")),
+            "minutes": max(5, int(s.get("minutes") or 30))}
+
+
+def run_pull_pass(config=None, now=None):
+    """One ⏱ auto-sync tick: at most one sync_from_source per `minutes`,
+    sharing the same leluxe:import_running mutex as the manual Sync button so
+    the two can never overlap. Never runs review_all. Records the outcome in
+    leluxe:auto_pull_last for the Tools label + the bell."""
+    ap = auto_pull_settings()
+    if not ap["enabled"]:
+        return {"skipped": "disabled"}
+    config = config or cfg.load()
+    if not (_token() and source_list_id(config) and list_id(config)
+            and source_list_id(config) != list_id(config)):
+        return {"skipped": "not configured"}
+    now = now if now is not None else time.time()
+    last = db.get_setting("leluxe:auto_pull_last") or {}
+    if now - float(last.get("ts") or 0) < ap["minutes"] * 60:
+        return {"skipped": "not due"}
+    flag = db.get_setting("leluxe:import_running") or 0
+    if isinstance(flag, (int, float)) and flag and now - flag < 120:
+        return {"skipped": "sync already running"}
+    db.set_setting("leluxe:import_running", now)
+    try:
+        since = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        r = sync_from_source(since, limit=25, config=config, review_all=False)
+    except Exception as e:  # noqa: BLE001 — the tick must never kill the loop
+        r = {"error": str(e)[:200]}
+    finally:
+        db.set_setting("leluxe:import_running", 0)
+    db.set_setting("leluxe:auto_pull_last", {
+        "ts": now, "at": db.now_iso(),
+        "orders": r.get("orders", 0), "updated": r.get("updated", 0),
+        "conflicts": r.get("conflicts", 0), "kept": r.get("kept", 0),
+        "error": r.get("error") or ""})
+    return {"ran": True, **{k: r.get(k) for k in
+                            ("orders", "updated", "conflicts", "kept", "error")}}
+
+
 def _loop():
     time.sleep(30)                     # let the app finish booting first
     while True:
@@ -3230,6 +3326,12 @@ def _loop():
                 print(f"leluxe: cu-delete queue {d}")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"leluxe: delete pass failed ({e})")
+        try:
+            p = run_pull_pass()
+            if p.get("ran"):
+                print(f"leluxe: auto-pull {p}")
+        except Exception as e:  # noqa: BLE001 - never let the thread die
+            print(f"leluxe: auto-pull failed ({e})")
         _KICK.wait(timeout=_interval_seconds())
         _KICK.clear()
 

@@ -1364,7 +1364,9 @@
         <div class="pop-menu" style="min-width:230px">
           <button class="pop-item" id="lxTrackBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxRefreshTracking(this)" title="fetch live GAASH status + deadline for every tracking number — also mirrors the Gerizim stage into the GASH STATUS field">🚚 Refresh tracking</button>
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
-          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية — الجديد يُضاف، المتغيّر يُحدَّث، وما تغيّر في الجهتين يُراجَع · pull + update every order from the real AZ (2): new added, changed updated, both-sides changes flagged for review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
+          <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية بدون أسئلة — الجديد يُضاف، المتغيّر يُحدَّث، وتعارضات الجهتين تُعرض للمراجعة · pull + update every order from the real AZ (2), no questions asked — new added, changed updated, both-sides conflicts wait for your review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
+          <button class="pop-item" id="lxSyncRevBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReviewAsk(this)" title="نفس المزامنة لكن كل تغيير يُعلَّق حتى توافق عليه — لا يُكتب شيء تلقائياً · same sync but EVERY change parks until you approve it — nothing is written automatically">🛡 Sync with review…</button>
+          <button class="pop-item" id="lxAutoPullBtn" onclick="lxAutoPullToggle(this)" title="مزامنة تلقائية من AZ (2) في الخلفية كل ٣٠ دقيقة — الحالات تبقى صحيحة بدون أي نقرة · background sync from AZ (2) every 30 minutes — statuses stay current with zero clicks">⏱ …</button>
           <button class="pop-item" id="lxDiagBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiagOpen()" title="لماذا لم تصل تغييرات كليك أب؟ — يقارن كل صف مع AZ (2) الحيّة ويشرح سبب التخطي · why hasn't a ClickUp change landed? compares every row against live AZ (2) and says what is blocking it (read-only)">🩺 Diagnose sync</button>
           <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
           <button class="pop-item" id="lxAz2HistBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2HistoryOpen()" title="كل دفعة رفعتها إلى AZ (2) — مع تراجع · every push you made INTO AZ (2), with undo">⤴ AZ (2) push history</button>
@@ -2504,6 +2506,7 @@ async function loadLeluxe(){
   lxRenderFilters();
   $("lxListInfo").textContent=d.list_id?`ClickUp list ${d.list_id}`:"not connected yet";
   lxChip(d.sync,d.push_disabled);
+  lxAutoPullLabel();
   lxSetupCard();
   renderLeluxe();
   loadGzRegistered().then(()=>renderLeluxe());   // durable Gerizim signs — repaint when they land
@@ -4802,22 +4805,48 @@ async function lxMigrate(btn){
 }
 // ── Sync from AZ (2): one pass that pulls new + updates existing, flagging any
 // order changed on BOTH sides for the conflict-review panel below. ────────────
+// Plain 🔄 Sync: ZERO dialogs. The old flow asked for a date and then a 🛡
+// confirm whose OK button parked EVERY change for approval — the owner clicked
+// OK reflexively and got "0 updated · 5 conflicts" with nothing applied. Now
+// Sync just syncs (new-order window = last 30 days); the review mode moved to
+// its own explicit Tools item below.
 function lxSyncAsk(btn){
-  let src=(LX&&LX.source_list_id)||"";
-  if(!src){   // never captured on this deployment yet — ask once, default to the real AZ (2)
-    src=prompt("رقم قائمة AZ (2) الأصلية — تُقرأ فقط ولا تُعدَّل أبداً\nAZ (2) SOURCE list id — read-only, never changed","901520351506");
-    if(src===null) return; src=src.trim();
-    if(!src){ toast("Need the AZ (2) list id"); return; }
-  }
+  const src=(LX&&LX.source_list_id)||"901520351506";
+  LX_MIG_SRC=src;
+  if(!$("lxMigrateSince").value)
+    $("lxMigrateSince").value=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  LX_SYNC_REVIEW=false;
+  lxSync(btn);
+}
+// 🛡 the old careful flow, now opt-in by NAME so nobody lands in it by accident
+function lxSyncReviewAsk(btn){
+  const src=(LX&&LX.source_list_id)||"901520351506";
   LX_MIG_SRC=src;
   const def=$("lxMigrateSince").value||new Date(Date.now()-30*864e5).toISOString().slice(0,10);
   const d=prompt("المزامنة تحدّث كل الطلبات الموجودة. هذا التاريخ يحدّد فقط الطلبات الجديدة التي تُضاف (YYYY-MM-DD)\nSync updates ALL existing orders; this date only limits which NEW orders get added",def);
   if(d===null) return;
   $("lxMigrateSince").value=(d||"").trim();
-  // 🛡 safety choice: OK = park EVERY change for approval (nothing overwritten);
-  // Cancel = apply automatic changes directly (true conflicts always park)
-  LX_SYNC_REVIEW=confirm("🛡 مراجعة كل تغيير قبل التطبيق؟ · Review EVERY change before applying?\n\nOK = راجِع كل شيء — لا يُكتب أي تغيير حتى توافق عليه\n        review everything — nothing is written until you approve it\n\nCancel = طبّق التغييرات التلقائية مباشرة (التعارضات تُعرض دائماً للمراجعة)\n            apply automatic changes now (real conflicts still wait for review)");
+  LX_SYNC_REVIEW=true;    // park EVERY change for approval — that's the point of this item
   lxSync(btn);
+}
+// ⏱ background sync-from-AZ (2) — per-DB setting, so turning it on on the live
+// site never wakes the stale local mirror. The menu row shows state + last run.
+function lxAutoPullLabel(){
+  const b=$("lxAutoPullBtn"); if(!b) return;
+  const ap=(LX&&LX.auto_pull)||{};
+  const last=ap.last&&ap.last.at?` · ${T("آخر مرة · last")} ${String(ap.last.at).slice(11,16)}${ap.last.error?" ⚠":" ✓"}`:"";
+  b.innerHTML=ap.enabled
+    ?`⏱ ${T("مزامنة تلقائية · Auto-sync")}: <b style="color:var(--good)">ON</b> · ${ap.minutes||30}m${last}`
+    :`⏱ ${T("مزامنة تلقائية · Auto-sync")}: <b style="color:var(--muted)">OFF</b>`;
+}
+async function lxAutoPullToggle(btn){
+  const ap=(LX&&LX.auto_pull)||{};
+  const to=!ap.enabled;
+  let r; try{ r=await post("/api/leluxe/auto_pull",{enabled:to,minutes:ap.minutes||30}); }catch(e){ r={}; }
+  if(!r.ok){ toast("⚠ could not save"); return; }
+  toast(to?T("✓ مزامنة تلقائية كل ٣٠ دقيقة · auto-sync ON — every 30 min")
+          :T("مزامنة تلقائية متوقفة · auto-sync OFF"));
+  await loadLeluxe();
 }
 let LX_SYNC_REVIEW=false;   // 🛡 review-everything choice for the next sync run
 async function lxSync(btn){
@@ -4830,7 +4859,8 @@ async function lxSync(btn){
   const head=`+${r.orders||0} new · ${r.updated||0} updated`
     +(r.conflicts?` · ⚠ ${r.conflicts} conflict${r.conflicts===1?'':'s'}`:"")
     +(r.new_items?` · +${r.new_items} product${r.new_items===1?'':'s'} added`:"")
-    +(r.kept?` · 🕔 ${r.kept} of your edits kept`:"");
+    +(r.kept?` · 🕔 ${r.kept} of your edits kept`:"")
+    +(r.skipped?` · ${r.skipped} older order${r.skipped===1?'':'s'} not imported`:"");
   // the details AND conflict buttons exist from the FIRST repaint — the photo
   // phase can run for minutes, and the owner must be able to open the report or
   // act on a parked conflict during it (he hit exactly this: 5 conflicts
@@ -4890,6 +4920,7 @@ async function lxDiagOpen(){
       ${tile(T("تعارض · conflict"),c.conflict||0,(c.conflict?"color:#b42318":""))}
       ${tile(T("أخطاء · errors"),c.error||0,(c.error?"color:#b42318":""))}
     </div>
+    ${c.conflict?`<div style="margin-bottom:10px"><button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2" onclick="bulkClose();lxConflictsOpen()">⚠ ${T("افتح مراجعة التعارضات · Open conflict review")} (${c.conflict})</button></div>`:""}
     <div class="muted2" style="font-size:12px;margin-bottom:10px">
       ${T("المصدر · source")}: <span class="mono">${poEsc(d.source_list_id||"—")}</span> (AZ 2) →
       ${T("قائمة العمل · working list")}: <span class="mono">${poEsc(d.list_id||"—")}</span> ·
