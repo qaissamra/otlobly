@@ -1203,24 +1203,175 @@ def _name_on_pkg_for(gwd):
     return ""
 
 
-def _name_id_for(gwd):
-    """The ID number mapped (Settings → gaash_mail.name_ids) to this package's
-    on-package name — folded compare, so FAISAL / faisal / Faisal all hit."""
+def parcel_name(gwd):
+    """The name this ONE parcel ships under — what GAASH reads off the label.
+    Leluxe: the ClickUp "NAME ON PACKAGEE" column. Otlobly/Purchases: the PO's
+    Main name (ship_to), with a same-named custom column winning if one exists."""
+    nm = _name_on_pkg_for(gwd)
+    if nm:
+        return nm
+    for k, v in _cf_for_gwd(gwd).items():       # a Purchases column of that name
+        if _fold(k).startswith("name on packag") and str(v or "").strip():
+            return str(v).strip()
+    g = (gwd or "").strip().upper()
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                if str(pk.get("tracking_number") or "").strip().upper() == g:
+                    return str(p.get("ship_to") or "").strip()
+    except Exception:  # noqa
+        pass
+    return ""
+
+
+def name_id_of(name):
+    """The Settings-mapped ID number for a parcel name — folded compare, so
+    FAISAL / faisal / Faisal all hit. "" when the name isn't mapped yet."""
     ids = _setts().get("name_ids") or {}
-    if not isinstance(ids, dict) or not ids:
-        return ""
-    nm = _fold(_name_on_pkg_for(gwd))
-    if not nm:                       # Purchases boards: same column as a PO custom field
-        for k, v in _cf_for_gwd(gwd).items():
-            if _fold(k).startswith("name on packag"):
-                nm = _fold(v)
-                break
-    if not nm:
+    nm = _fold(name)
+    if not nm or not isinstance(ids, dict):
         return ""
     for k, v in ids.items():
         if _fold(k) == nm:
             return str(v or "").strip()
     return ""
+
+
+def parcel_name_map():
+    """{GWD: parcel name} for BOTH boards in one scan — per-GWD parcel_name()
+    costs a query each, which the picker and the conversation list can't afford."""
+    out = {}
+    try:
+        with db.connect() as c:
+            rows = c.execute("SELECT id, parent_local_id, data_json "
+                             "FROM leluxe_orders WHERE deleted=0").fetchall()
+    except Exception:  # noqa
+        rows = []
+    parsed, by_id = [], {}
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:  # noqa
+            continue
+        f = d.get("fields") or {}
+        nm = ""
+        for k, v in f.items():
+            if _fold(k).startswith("name on packag"):
+                nm = _cf_stringify(v).strip()
+                break
+        by_id[r["id"]] = nm
+        tn = str(d.get("tracking_number") or "").strip().upper()
+        if not tn:
+            for k, v in f.items():
+                if k.strip().lower() == "tracking number":
+                    tn = str(v or "").strip().upper()
+                    break
+        if tn:
+            parsed.append((tn, nm, r["parent_local_id"]))
+    for tn, nm, pid in parsed:                  # own field, else the parent order's
+        v = nm or by_id.get(pid) or ""
+        if v and not out.get(tn):
+            out[tn] = v
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            ship = str(p.get("ship_to") or "").strip()
+            if not ship:
+                continue
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if tn and not out.get(tn):
+                    out[tn] = ship
+    except Exception:  # noqa
+        pass
+    return out
+
+
+def _name_id_for(gwd):
+    """The ID number mapped (Settings → gaash_mail.name_ids) to this parcel's name."""
+    return name_id_of(parcel_name(gwd))
+
+
+def effective_id_map(pmap=None):
+    """{GWD: the ID its email will actually carry} — the same customer-first,
+    name-map-second rule `_fill` applies to {id_number}, but batched: per-GWD
+    resolution reloads the CRM and the Purchases board every call, which the
+    picker (dozens of rows at once) can't afford."""
+    pmap = parcel_name_map() if pmap is None else pmap
+    out = {}
+    try:
+        import normalize
+        by_phone, by_name = {}, {}
+        for c in db.list_customers():
+            num = str(c.get("id_number") or "").strip()
+            if not num:
+                continue
+            core = normalize.phone_core(c.get("whatsapp") or "")
+            if core:
+                by_phone.setdefault(core, num)
+            nm = _fold(c.get("name"))
+            if nm:
+                by_name.setdefault(nm, num)
+        if by_phone or by_name:
+            # 1) Purchases: package → its items' order → that order's phone → CRM
+            import purchases
+            orders = {str(o.get("order_id") or ""): o for o in db.list_orders()}
+            for p in (purchases.load() or {}).get("purchase_orders") or []:
+                for pk in (p.get("packages") or []):
+                    tn = str(pk.get("tracking_number") or "").strip().upper()
+                    if not tn or out.get(tn):
+                        continue
+                    for it in (pk.get("items") or []):
+                        o = orders.get(str(it.get("customer_order_id") or ""))
+                        for ph in ((o or {}).get("customer") or {}).get("phones") or []:
+                            num = by_phone.get(normalize.phone_core(ph.get("e164") or ""))
+                            if num:
+                                out[tn] = num
+                                break
+                        if out.get(tn):
+                            break
+            # 2) Leluxe: a phone field on the row, else its order name — the same
+            #    two fallbacks _id_number_for applies, so this map can't disagree
+            with db.connect() as c:
+                rows = c.execute("SELECT parent_local_id, data_json FROM leluxe_orders "
+                                 "WHERE deleted=0").fetchall()
+            pnames = {}
+            with db.connect() as c:
+                for r in c.execute("SELECT id, name FROM leluxe_orders WHERE deleted=0"):
+                    pnames[r["id"]] = r["name"]
+            for r in rows:
+                try:
+                    d = json.loads(r["data_json"] or "{}")
+                except Exception:  # noqa
+                    continue
+                f = d.get("fields") or {}
+                tn = str(d.get("tracking_number") or "").strip().upper()
+                if not tn:
+                    for k, v in f.items():
+                        if k.strip().lower() == "tracking number":
+                            tn = str(v or "").strip().upper()
+                            break
+                if not tn or out.get(tn):
+                    continue
+                for k, v in f.items():
+                    if "phone" in str(k).lower():
+                        num = by_phone.get(normalize.phone_core(str(v or "")))
+                        if num:
+                            out[tn] = num
+                            break
+                if not out.get(tn):
+                    num = by_name.get(_fold(pnames.get(r["parent_local_id"])))
+                    if num:
+                        out[tn] = num
+    except Exception:  # noqa
+        pass
+    for gwd, nm in pmap.items():           # everything else falls back to the map
+        if not out.get(gwd):
+            v = name_id_of(nm)
+            if v:
+                out[gwd] = v
+    return out
 
 
 # the fixed personalization tokens (name → friendly label for the UI picker)
@@ -2031,9 +2182,13 @@ def overview():
                     f"WHERE id IN ({q})", list(by_gwd.values())):
                 last[r["gwd"]] = {"dir": r["dir"], "kind": r["kind"],
                                   "at": r["at"], "body": (r["body"] or "")[:140]}
+    pmap = parcel_name_map()            # one scan feeds every thread's name tag
+    emap = effective_id_map(pmap)
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
         th.pop("pending_files_json", None)
+        th["pname"] = pmap.get(th["gwd"], "")
+        th["pname_id"] = emap.get(th["gwd"], "")
     proposed = [t for t in threads if t.get("state") == "proposed"]
     return {"threads": [t for t in threads if t.get("state") != "proposed"],
             "proposed": proposed,
@@ -2134,6 +2289,13 @@ def candidates():
                         "status": pk.get("otlobly_status"), "gash_status": None,
                         "customers": "، ".join(custs)[:70], "bucket": None,
                         "label": None, "po_id": p.get("po_id"), "cf": dict(pcf)})
+    # the name each parcel ships under + the ID mapped to it — the picker shows
+    # both so the owner can see, before sending, which ID each email will carry
+    pmap = parcel_name_map()
+    emap = effective_id_map(pmap)
+    for cd in out:
+        cd["pname"] = pmap.get(cd["gwd"], "")
+        cd["pname_id"] = emap.get(cd["gwd"], "")
     # Leluxe first (has clearance status), then by GWD
     out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
     return out

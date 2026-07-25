@@ -381,7 +381,19 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   first, name map as fallback — and ONE template serves both boards.
   `{name_id}` stays available to force the on-package name's ID only. Purchases
   has no "NAME ON PACKAGEE" column and its `profile_box` pool (B19/B22/B27…) is
-  disjoint from Leluxe's, so profile→name can't be auto-derived across boards. Editor
+  disjoint from Leluxe's, so profile→name can't be auto-derived across boards.
+  **Parcel name is one concept across both boards (2026-07-25):**
+  `parcel_name(gwd)` = Leluxe NAME ON PACKAGEE (row → parent) → a Purchases
+  column of that name → the PO's Main name `ship_to`. `name_id_of(name)` does
+  the folded name_ids lookup. Batched twins for list rendering:
+  `parcel_name_map()` (one scan of both boards) and `effective_id_map()` —
+  which MUST mirror `_fill`'s `{id_number}` chain exactly (customer CRM ID via
+  Purchases order-phone AND via a Leluxe `phone` field AND the order-name
+  fallback, then the name map), because the picker's ID column is a promise of
+  what the email will send; a test asserts the two agree on every GWD. Both are
+  attached to `candidates()` rows and `overview()` threads as `pname`/`pname_id`
+  → the enroll picker's NAME + ID NUMBER columns (green pill = ready, amber
+  ⚠ no ID = unmapped) and the 👤/⚠ name tag on each conversation row. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

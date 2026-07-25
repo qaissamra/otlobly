@@ -491,6 +491,21 @@ def main():
     check("the customer's OWN ID wins over the name map",
           gm._fill("{id_number}", "GWD009000024") == "CRM-777"
           and gm._fill("{name_id}", "GWD009000024") == "999888777")
+    # the picker/conversation columns must show what the email will ACTUALLY send
+    pm, em = gm.parcel_name_map(), gm.effective_id_map()
+    check("parcel_name_map reads Leluxe's own field AND the parent's",
+          pm.get("GWD009000021") == "faisal" and pm.get("GWD009000022") == "NURAY HTAB")
+    check("Purchases parcels are named by the PO's Main name",
+          gm.parcel_name("GWD009000001") == "Test Buyer")
+    check("effective_id_map matches _fill on every GWD",
+          all(em.get(g, "") == gm._fill("{id_number}", g)
+              for g in ("GWD009000021", "GWD009000022", "GWD009000023",
+                        "GWD009000024", "GWD009000001")))
+    cands = {c["gwd"]: c for c in gm.candidates()}
+    if "GWD009000021" in cands:
+        check("candidates carry the parcel name + the ID its email will send",
+              cands["GWD009000021"]["pname"] == "faisal"
+              and cands["GWD009000021"]["pname_id"] == "999888777")
     with db.connect() as c:
         c.execute("DELETE FROM leluxe_orders WHERE name='NID crm'")
         c.execute("DELETE FROM customers WHERE customer_code='CUS-NIDT'")
