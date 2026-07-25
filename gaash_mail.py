@@ -1205,8 +1205,12 @@ def _name_on_pkg_for(gwd):
 
 def parcel_name(gwd):
     """The name this ONE parcel ships under — what GAASH reads off the label.
-    Leluxe: the ClickUp "NAME ON PACKAGEE" column. Otlobly/Purchases: the PO's
-    Main name (ship_to), with a same-named custom column winning if one exists."""
+    The owner's pick (gaash_threads.pname) wins; otherwise Leluxe's ClickUp
+    "NAME ON PACKAGEE" column, then a Purchases column of that name, then the
+    PO's Main name (ship_to)."""
+    picked = _picked_name(gwd)
+    if picked:
+        return picked
     nm = _name_on_pkg_for(gwd)
     if nm:
         return nm
@@ -1223,6 +1227,40 @@ def parcel_name(gwd):
     except Exception:  # noqa
         pass
     return ""
+
+
+def _picked_name(gwd):
+    """The name the owner explicitly picked for this package, or ""."""
+    try:
+        with db.connect() as c:
+            r = c.execute("SELECT pname FROM gaash_threads WHERE gwd=?",
+                          ((gwd or "").strip().upper(),)).fetchone()
+        return str((r["pname"] if r else "") or "").strip()
+    except Exception:  # noqa
+        return ""
+
+
+def picked_name_map():
+    """{GWD: owner-picked name} for every thread that has one — batched."""
+    out = {}
+    try:
+        with db.connect() as c:
+            for r in c.execute("SELECT gwd, pname FROM gaash_threads "
+                               "WHERE pname IS NOT NULL AND pname<>''"):
+                out[r["gwd"]] = str(r["pname"]).strip()
+    except Exception:  # noqa
+        pass
+    return out
+
+
+def set_parcel_name(gwd, name):
+    """Pin the name a package ships under (""/None clears it → back to the board)."""
+    g = (gwd or "").strip().upper()
+    nm = re.sub(r"\s+", " ", str(name or "")).strip()[:60]
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET pname=? WHERE gwd=?", (nm or None, g))
+    return {"ok": True, "gwd": g, "pname": parcel_name(g),   # cleared → back to the board
+            "pname_id": id_number_for_email(g)}
 
 
 def name_id_of(name):
@@ -1285,12 +1323,22 @@ def parcel_name_map():
                     out[tn] = ship
     except Exception:  # noqa
         pass
+    out.update(picked_name_map())      # the owner's pick beats both boards
     return out
 
 
 def _name_id_for(gwd):
     """The ID number mapped (Settings → gaash_mail.name_ids) to this parcel's name."""
     return name_id_of(parcel_name(gwd))
+
+
+def id_number_for_email(gwd):
+    """What {id_number} resolves to, in one place so the UI can't disagree:
+    an explicit pick is authoritative (that's the whole point of picking one),
+    else the customer's own submitted ID, else the auto-detected name's ID."""
+    if _picked_name(gwd):
+        return _name_id_for(gwd)
+    return _id_number_for(gwd) or _name_id_for(gwd)
 
 
 def effective_id_map(pmap=None):
@@ -1300,6 +1348,11 @@ def effective_id_map(pmap=None):
     picker (dozens of rows at once) can't afford."""
     pmap = parcel_name_map() if pmap is None else pmap
     out = {}
+    # an explicit pick short-circuits everything — including a blank result, so a
+    # pick whose name has no ID yet must NOT fall through to the customer's
+    picks = picked_name_map()
+    for gwd, nm in picks.items():
+        out[gwd] = name_id_of(nm)
     try:
         import normalize
         by_phone, by_name = {}, {}
@@ -1320,7 +1373,7 @@ def effective_id_map(pmap=None):
             for p in (purchases.load() or {}).get("purchase_orders") or []:
                 for pk in (p.get("packages") or []):
                     tn = str(pk.get("tracking_number") or "").strip().upper()
-                    if not tn or out.get(tn):
+                    if not tn or tn in picks or out.get(tn):
                         continue
                     for it in (pk.get("items") or []):
                         o = orders.get(str(it.get("customer_order_id") or ""))
@@ -1352,7 +1405,7 @@ def effective_id_map(pmap=None):
                         if k.strip().lower() == "tracking number":
                             tn = str(v or "").strip().upper()
                             break
-                if not tn or out.get(tn):
+                if not tn or tn in picks or out.get(tn):
                     continue
                 for k, v in f.items():
                     if "phone" in str(k).lower():
@@ -1367,7 +1420,7 @@ def effective_id_map(pmap=None):
     except Exception:  # noqa
         pass
     for gwd, nm in pmap.items():           # everything else falls back to the map
-        if not out.get(gwd):
+        if gwd not in picks and not out.get(gwd):
             v = name_id_of(nm)
             if v:
                 out[gwd] = v
@@ -1441,7 +1494,7 @@ def _fill(tpl, gwd, thread=None, step=None):
     # covers both boards with one token — Otlobly/Purchases parcels go to the
     # customer (CRM hit), Leluxe parcels ship under an AZ account holder (name map).
     if "{id_number}" in text:
-        text = text.replace("{id_number}", _id_number_for(gwd) or _name_id_for(gwd))
+        text = text.replace("{id_number}", id_number_for_email(gwd))
     if "{name_id}" in text:                     # force the on-package name's ID only
         text = text.replace("{name_id}", _name_id_for(gwd))
     if "{" not in text:                        # no board-column tokens left
@@ -1640,10 +1693,12 @@ def task_done(gwd):
     return {"ok": True, "thread": thread_get(gwd)}
 
 
-def start_threads(gwds, id_doc_id, account_id, seq_id=None):
+def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
-    to run step 1 immediately. Returns per-GWD results."""
+    to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
+    (and therefore the ID) before email 1 goes out. Returns per-GWD results."""
     seq_id = seq_id or default_sequence_id()
+    names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -1668,6 +1723,8 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None):
                       (gwd, account_id, id_doc_id or None,
                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
                        now_iso(), now_iso(), seq_id))
+        if names.get(gwd):                 # pin it BEFORE step 1 renders
+            set_parcel_name(gwd, names[gwd])
         if package_terminal(gwd):
             _thread_set(gwd, state="goal_met")
             out.append({"gwd": gwd, "ok": True, "state": "goal_met",
@@ -2402,6 +2459,10 @@ def thread_detail(gwd):
     msgs = msgs_for(gwd)
     for m in msgs:
         m["attachments"] = json.loads(m.pop("attachments_json") or "[]")
+    # the effective name/ID (pick → board), so the chat header shows what the
+    # next email will actually carry
+    th["pname"] = parcel_name(gwd)
+    th["pname_id"] = id_number_for_email(gwd)
     return {"thread": th, "messages": msgs}
 
 

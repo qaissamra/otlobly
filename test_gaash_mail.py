@@ -506,6 +506,38 @@ def main():
         check("candidates carry the parcel name + the ID its email will send",
               cands["GWD009000021"]["pname"] == "faisal"
               and cands["GWD009000021"]["pname_id"] == "999888777")
+
+    print("— picking the name per package (overrides what the boards say) —")
+    _mk_thread("GWD009000023", step=0, state="active")     # board name: 'yahia', unmapped
+    r = co.post("/api/gaash/thread", json={"gwd": "GWD009000023",
+                                           "action": "set_name",
+                                           "pname": "  Nuray   htab "}).get_json()
+    check("set_name pins the name, trimmed, and reports its ID",
+          r.get("ok") and r["pname"] == "Nuray htab" and r["pname_id"] == "111222333")
+    check("the pinned name drives {id_number} and {name_id}",
+          gm._fill("{id_number}", "GWD009000023") == "111222333"
+          and gm.parcel_name("GWD009000023") == "Nuray htab")
+    # a pick must beat even a customer's own CRM ID — that's the point of picking
+    _mk_thread("GWD009000024", step=0, state="active")
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                       "action": "set_name", "pname": "FAISAL"})
+    check("a pinned name outranks the customer's CRM ID",
+          gm._id_number_for("GWD009000024") == "CRM-777"
+          and gm._fill("{id_number}", "GWD009000024") == "999888777")
+    check("effective_id_map still agrees with _fill once names are pinned",
+          all(gm.effective_id_map().get(g, "") == gm._fill("{id_number}", g)
+              for g in ("GWD009000021", "GWD009000023", "GWD009000024")))
+    # pinning a name with no ID must stay blank, NOT fall back to the customer's
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                       "action": "set_name", "pname": "nobody"})
+    check("a pinned but unmapped name yields no ID (no silent fallback)",
+          gm._fill("{id_number}", "GWD009000024") == ""
+          and gm.effective_id_map().get("GWD009000024", "") == "")
+    r = co.post("/api/gaash/thread", json={"gwd": "GWD009000024",
+                                           "action": "set_name", "pname": ""}).get_json()
+    check("clearing the pick falls back to the board again",
+          r["pname"] == "FAISAL" and r["pname_id"] == "CRM-777")
+    _del_thread("GWD009000023"); _del_thread("GWD009000024")
     with db.connect() as c:
         c.execute("DELETE FROM leluxe_orders WHERE name='NID crm'")
         c.execute("DELETE FROM customers WHERE customer_code='CUS-NIDT'")

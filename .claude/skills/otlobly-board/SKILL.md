@@ -393,7 +393,19 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   what the email will send; a test asserts the two agree on every GWD. Both are
   attached to `candidates()` rows and `overview()` threads as `pname`/`pname_id`
   → the enroll picker's NAME + ID NUMBER columns (green pill = ready, amber
-  ⚠ no ID = unmapped) and the 👤/⚠ name tag on each conversation row. Editor
+  ⚠ no ID = unmapped) and the 👤/⚠ name tag on each conversation row.
+  **Per-package name PICK (2026-07-26):** boards are sometimes blank or
+  self-contradicting (one GWD had two item rows disagreeing), so the NAME cell
+  is a `<select>` — mapped names + the detected one, ⚠ marking unmapped
+  options. Stored in `gaash_threads.pname` (ALTER); `set_parcel_name` /
+  `picked_name_map` / `_picked_name`, route action `set_name`, and
+  `start_threads(..., names={gwd: name})` pins it BEFORE email 1 renders. The
+  precedence is centralised in `id_number_for_email()` — **a pick outranks even
+  the customer's CRM ID, and a pick whose name has no ID stays BLANK rather
+  than silently falling back** (effective_id_map guards picked GWDs out of its
+  later passes to match). The picker only sends names the owner actually
+  changed (`value !== data-auto`), so untouched rows keep following the board.
+  Also editable after enrollment from the conversation header. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

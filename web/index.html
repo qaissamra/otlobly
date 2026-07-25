@@ -9946,12 +9946,25 @@ function gmRenderChat(){
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
     </div>
+    <div class="gm-head" style="padding-top:0;gap:6px;font-size:12px">
+      <span class="muted2">${T("الاسم على الطرد · name on the parcel")}</span>
+      <select onchange="gmSetName(this.value)" style="font-size:11.5px;padding:2px 4px;max-width:150px" title="${T("يحدد رقم الهوية في الإيميلات القادمة · decides the ID number in the emails that follow")}">
+        ${gmNameOpts(th.pname||"")}
+      </select>
+      ${gmIdPill(th.pname_id||"")}
+    </div>
     <div class="gm-msgs" id="gmMsgs">${bubbles}</div>
     <div class="gm-compose">
       <textarea id="gmBody" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
       <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
     </div>`;
   const box=$("gmMsgs"); if(box) box.scrollTop=box.scrollHeight;
+}
+async function gmSetName(pname){        // re-pins the name → the NEXT emails carry its ID
+  const r=await post("/api/gaash/thread",{gwd:GM.cur,action:"set_name",pname});
+  if(r&&r.ok===false&&r.error){ toast(r.error); return; }
+  toast(r&&r.pname_id?`🪪 ${r.pname_id}`:T("بلا هوية لهذا الاسم · no ID for this name"));
+  await gmLoad(); if(GM.cur) gmOpen(GM.cur,true);
 }
 async function gmAct(action,extra){
   const r=await post("/api/gaash/thread",{gwd:GM.cur,action,...(extra||{})});
@@ -9994,6 +10007,35 @@ async function gmCheck(btn){
   gmLoad();
 }
 // ── ＋ New sequence: pick packages → ID → account → start ──
+/* ── the per-package name picker ────────────────────────────────────────────
+   The boards usually know the name, but not always (a blank NAME ON PACKAGEE,
+   or two item rows disagreeing). Picking one here pins it to THAT package, and
+   the ID follows — so the email can't go out under the wrong identity. */
+function gmFold(x){ return String(x||"").replace(/\s+/g," ").trim().toLowerCase(); }
+function gmNameId(name){
+  const ids=((GM.ov&&GM.ov.settings)||{}).name_ids||{};
+  const k=Object.keys(ids).find(k=>gmFold(k)===gmFold(name));
+  return k?String(ids[k]||"").trim():"";
+}
+function gmNameOpts(sel){                    // mapped names (they have IDs) + the detected one
+  const ids=((GM.ov&&GM.ov.settings)||{}).name_ids||{};
+  const names=Object.keys(ids);
+  if(sel&&!names.some(n=>gmFold(n)===gmFold(sel))) names.unshift(sel);
+  return `<option value=""${sel?"":" selected"}>— ${T("بلا اسم · no name")} —</option>`
+    +names.map(n=>`<option value="${poEsc(n)}"${gmFold(n)===gmFold(sel||"")?" selected":""}>${poEsc(n)}${gmNameId(n)?"":" ⚠"}</option>`).join("");
+}
+function gmIdPill(id){
+  return id
+    ?`<span class="pill mono" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle" title="${T("رقم الهوية الذي سيحمله إيميل هذا الطرد · the ID this package's email will carry")}">🪪 ${poEsc(id)}</span>`
+    :`<span class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#b45309;font-size:9.5px;display:inline-block;vertical-align:middle" title="${T("لا هوية لهذا الاسم — أضفها من ⚙ الحسابات والقوالب · no ID for this name — add it in ⚙ Accounts & templates")}">⚠ ${T("بلا هوية · no ID")}</span>`;
+}
+function gmCandName(sel){
+  // back to the detected name → show the ID it originally resolved to (which may
+  // be the customer's own CRM ID, not a mapped one); otherwise the picked name's
+  const id=(sel.value===sel.dataset.auto)?(sel.dataset.autoid||""):gmNameId(sel.value);
+  const cell=document.querySelector(`.gmCandId[data-gwd="${CSS.escape(sel.dataset.gwd)}"]`);
+  if(cell) cell.innerHTML=gmIdPill(id);
+}
 function gmNewOpen(preGwds){
   const ov=GM.ov||{}; const cands=(ov.candidates||[]).slice(), ids=ov.ids||[], accts=ov.accounts||[];
   const pre=[...new Set((preGwds||[]).map(g=>String(g||"").trim().toUpperCase()).filter(g=>/^GWD\d+$/.test(g)))];
@@ -10010,10 +10052,10 @@ function gmNewOpen(preGwds){
       <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}" ${GM.newPre.has(c.gwd)?"checked":""} onchange="gmNewCount()">
       ${badge(c.source)}
       <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
-      <span style="width:100px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700" title="${T("الاسم على الطرد · name on the parcel")}: ${poEsc(c.pname||"—")}">${poEsc(c.pname||"—")}</span>
-      ${c.pname_id
-        ?`<span class="pill mono" style="width:96px;flex:none;background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;overflow:hidden;text-overflow:ellipsis" title="${T("رقم الهوية الذي سيُرسل مع هذا الطرد · the ID number this package's email will carry")}">🪪 ${poEsc(c.pname_id)}</span>`
-        :`<span class="pill" style="width:96px;flex:none;background:#fff7ed;border:1px solid #fdba74;color:#b45309;font-size:9.5px;overflow:hidden;text-overflow:ellipsis" title="${T("لا هوية لهذا الاسم — أضفها من ⚙ الحسابات والقوالب · no ID for this name — add it in ⚙ Accounts & templates")}">⚠ ${T("بلا هوية · no ID")}</span>`}
+      <select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(c.pname||"")}" data-autoid="${poEsc(c.pname_id||"")}" onchange="gmCandName(this)" onclick="event.stopPropagation()" style="width:112px;flex:none;font-size:11.5px;padding:2px 4px" title="${T("الاسم الذي يُشحن الطرد باسمه — غيّره ليطابق الطرد الحقيقي · the name this parcel ships under — change it to match the actual parcel")}">
+        ${gmNameOpts(c.pname)}
+      </select>
+      <span class="gmCandId" data-gwd="${poEsc(c.gwd)}" style="width:96px;flex:none">${gmIdPill(c.pname_id)}</span>
       ${(c.gash_status||c.status)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status||c.status)}</span>`:""}
       <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||c.customers||"")}</span></label>`;
   $("bulkBody").innerHTML=`
@@ -10098,9 +10140,15 @@ async function gmNewStart(btn){
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   const idSel=document.querySelector('input[name="gmNewId"]:checked');
   const acct=($("gmNewAcct")||{}).value||"";
+  // only names the owner actually CHANGED get pinned — leaving a row alone keeps
+  // it following the board, so a later ClickUp correction still flows through
+  const names={};
+  document.querySelectorAll(".gmCandName").forEach(s=>{
+    if(gwds.includes(s.dataset.gwd)&&s.value!==s.dataset.auto) names[s.dataset.gwd]=s.value;
+  });
   btn.disabled=true;
   const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null,
-    seq_id:(($("gmNewSeq")||{}).value||null)});
+    seq_id:(($("gmNewSeq")||{}).value||null), names});
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];
