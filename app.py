@@ -5332,6 +5332,9 @@ def api_customer_orders():
                  "amount_usd": r.get("amount_usd"), "order_code": r.get("order_code")}
                 for r in pay_rows[:50]]
     return jsonify({"name": session.get("cust_name") or "",
+                    # the session's own phone (core digits) — lets the orders search
+                    # recognise "my number" without a second /me round-trip
+                    "phone": core,
                     "orders": orders, "totals": {"deposited_usd": deposited,
                                                  "remaining_usd": remaining,
                                                  "credit_usd": credit},

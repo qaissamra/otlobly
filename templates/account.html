@@ -475,7 +475,7 @@ const T={
       kdeposit:"عربون", kcollect:"دفعة", krefund:"استرجاع",
       qorder:"اطلب الآن", qordersub:"من أمازون إلى بابك", qtrack:"تتبّع شحنة", qtracksub:"برقم OTL أو جوالك",
       s1:"تم الطلب", s2:"تم الشحن", s3:"وصلت فلسطين", s4:"التسليم",
-      details:"التفاصيل ▾", detailsh:"إخفاء ▴", searchph:"ابحث باسم المنتج أو رقم الطلب…",
+      details:"التفاصيل ▾", detailsh:"إخفاء ▴", searchph:"ابحث باسم المنتج أو رقم الطلب أو جوالك…",
       sethead:"⚙️ الإعدادات", bellhead:"تحديثات شحناتك", bellnone:"لا تحديثات جديدة 👌",
       navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
       emailbtn:"✉️ الدخول بالبريد الإلكتروني", introemail:"أدخل بريدك الإلكتروني المربوط بحسابك وسنرسل لك رمز الدخول.",
@@ -523,7 +523,7 @@ const T={
       kdeposit:"Deposit", kcollect:"Payment", krefund:"Refund",
       qorder:"New order", qordersub:"Amazon to your door", qtrack:"Track package", qtracksub:"by OTL # or phone",
       s1:"Ordered", s2:"Shipped", s3:"In Palestine", s4:"Delivery",
-      details:"Details ▾", detailsh:"Hide ▴", searchph:"Search by product or order #…",
+      details:"Details ▾", detailsh:"Hide ▴", searchph:"Search by product, order # or your phone…",
       sethead:"⚙️ Settings", bellhead:"Shipment updates", bellnone:"No new updates 👌",
       navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
       emailbtn:"✉️ Sign in with email", introemail:"Enter the email linked to your account and we'll send a login code.",
@@ -843,11 +843,21 @@ function payRow(p){
     <div class="t" dir="auto"><b>${kind}</b><div style="color:var(--muted);font-weight:500;font-size:11px">${fmt(p.paid_at)} · ${where}</div></div>
     <span style="font-size:14px;font-weight:800;white-space:nowrap;color:${refund?"#b42318":"#15803d"}">${refund?"−":""}${money(Math.abs(p.amount_usd||0))}<small style="color:var(--muted);font-weight:600">${ils}</small></span></div>`;
 }
+/* digits-only "core" of a phone, so 0599…, +970599…, 00970599… and 599… all
+   compare equal (mirrors normalize.phone_core on the server) */
+function phCore(s){
+  return String(s||"").replace(/\D/g,"").replace(/^00/,"").replace(/^(970|972)/,"").replace(/^0+/,"");
+}
 function renderOrders(){
-  const q=($("osearch").value||"").trim().toLowerCase();
+  const raw=($("osearch").value||"").trim(), q=raw.toLowerCase();
   let list=(D&&D.orders)||[];
-  if(q) list=list.filter(o=>((o.items||[]).some(it=>(it.title||"").toLowerCase().includes(q)))
-                            ||((o.order_id||"").toLowerCase().includes(q)));
+  if(q){
+    // every order on the account shares its one verified phone, so typing THAT
+    // number lists them all; any other number simply matches nothing below.
+    const c=phCore(raw), mine=!!(c && D && D.phone && c===phCore(D.phone));
+    if(!mine) list=list.filter(o=>((o.items||[]).some(it=>(it.title||"").toLowerCase().includes(q)))
+                                  ||((o.order_id||"").toLowerCase().includes(q)));
+  }
   $("orders").innerHTML=list.length?list.map(orderRow).join(""):`<div class="empty">${t("noord")}</div>`;
 }
 function renderLists(){
