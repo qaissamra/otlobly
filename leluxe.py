@@ -402,13 +402,14 @@ def diagnose(config=None):
         state = d["sync_state"]
         differs = rstatus != (d["status"] or "")
         bstatus = ((data.get("source_base") or {}).get("status") or "")
-        # The merge's fast path trusts the timestamp: _merge_row returns
-        # "unchanged" as soon as source_cu_updated == the task's date_updated,
-        # WITHOUT comparing values. So a row whose stamp is already current but
-        # whose value differs is frozen — no future sync will ever look at it
-        # again (a conflict park advances the stamp without applying, which is
-        # one way to land here). That is invisible in a "+0 updated" result line.
-        frozen = differs and rcu == str(data.get("source_cu_updated") or "")
+        # FROZEN needs BOTH halves, and the second is easy to get wrong: the
+        # stamp must look current AND there must be an unapplied AZ (2) change,
+        # i.e. our merge base no longer matches AZ (2). If base == AZ (2) the
+        # row is merely "kept" — an app-side edit winning by design, which the
+        # fast path is right to skip. Only base != AZ (2) means a real remote
+        # change the timestamp shortcut will hide forever.
+        stamp_current = rcu == str(data.get("source_cu_updated") or "")
+        frozen = differs and stamp_current and bstatus != rstatus
         # Verdict order MIRRORS the engine. Only `pushing` (early return) and
         # `conflict` (parked) stop an inbound value; `dirty`/`error` are about the
         # OUTBOUND push and never block a pull, so they must not outrank the
@@ -1673,6 +1674,26 @@ def _merge_decide(field, base, local, remote):
     return "conflict"
 
 
+def _base_matches(base, remote, known):
+    """Is the stored merge base STILL identical to what AZ (2) holds right now?
+
+    The sync's fast path used to trust `source_cu_updated` on its own, but a
+    task's date_updated only says WHEN it last changed — never that we actually
+    applied that change. Anything that advances the stamp without writing the
+    value (parking a conflict does exactly that) left the row invisible to every
+    later sync: permanently stale while each run honestly reported "+0 updated".
+    Comparing the base to the live snapshot is the honest version of that check —
+    same cost class (pure CPU, the task JSON is already in hand)."""
+    for field in _SCALARS:
+        if not _vals_equal(field, base.get(field), remote.get(field)):
+            return False
+    bf, rf = (base.get("fields") or {}), (remote.get("fields") or {})
+    for fname in (set(bf) | set(rf)) & set(known or ()):
+        if not _vals_equal(fname, bf.get(fname), rf.get(fname)):
+            return False
+    return True
+
+
 def _snapshot(cols, data, keep):
     """The comparable AZ (2) shape stored as source_base / pushed."""
     return {"name": cols["name"], "status": cols["status"],
@@ -1771,8 +1792,16 @@ def _merge_row(rid, src_task, sch, known, keep, review_all=False, changes=None):
                 c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                           (json.dumps(data, ensure_ascii=False), rid))
                 return "unchanged"
-        elif data.get("source_cu_updated") == src_cu:
-            return "unchanged"              # AZ (2) task untouched since last sync
+        elif (data.get("source_cu_updated") == src_cu
+              and (d["sync_state"] == "conflict"
+                   or _base_matches(base, remote, known))):
+            # AZ (2) untouched since last sync AND our base still matches it, so
+            # there is genuinely nothing to merge. A parked conflict is exempt:
+            # it is waiting on the owner, and re-deciding it every pass would
+            # just re-park the same fields and inflate the conflict count.
+            # Without the _base_matches half, a row whose stamp was advanced
+            # without its value applied would be skipped here FOREVER.
+            return "unchanged"
         local = {"name": r["name"], "status": r["status"] or "",
                  "due_date": r["due_date"],
                  "description": data.get("description") or "",

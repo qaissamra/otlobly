@@ -675,6 +675,66 @@ def sync_kept_report():
         leluxe._http = real
 
 
+def frozen_row_thaws():
+    """REGRESSION: a row whose source_cu_updated already equals AZ (2)'s
+    date_updated, but whose stored base no longer matches AZ (2), used to be
+    skipped by the merge's timestamp fast path FOREVER — permanently stale while
+    every sync reported "+0 updated". The fast path must now also verify the
+    base still matches, so such a row thaws on the next sync. A row whose base
+    genuinely equals AZ (2) must still take the cheap path (app edits kept)."""
+    global SRC_TASKS
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.set_path(config, "leluxe.list_id", "L1")
+    cfg.save(config)
+    SRC_TASKS = [
+        _task("FO1", "Order # FROZEN-1", "order number", updated="500"),
+        _task("FC1", "9 Watch", "oredered", parent="FO1", updated="500",
+              fields=[("Tracking Number", "GWD-F1")]),
+    ]
+    for t in SRC_TASKS:
+        t["date_created"] = "1780000000000"
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        leluxe.sync_from_source("2026-01-01", limit=25)
+        cid = leluxe._row_id_by_source("FC1")
+        check("frozen fixture: product pulled in", bool(cid))
+
+        # Forge the exact frozen state: AZ (2) now says "rd" and its stamp has
+        # moved, but the row records that stamp while its base still says the
+        # OLD value — i.e. the stamp advanced without the value being applied.
+        SRC_TASKS[1]["status"] = {"status": "rd"}
+        SRC_TASKS[1]["date_updated"] = "900"
+        with db.connect() as c:
+            row = leluxe._row(c.execute(
+                "SELECT * FROM leluxe_orders WHERE id=?", (cid,)).fetchone())
+            data = row["data"]
+            data["source_cu_updated"] = "900"          # stamp says "up to date"
+            data["source_base"]["status"] = "oredered"  # base says otherwise
+            c.execute("UPDATE leluxe_orders SET data_json=?, status='oredered', "
+                      "sync_state='synced' WHERE id=?",
+                      (json.dumps(data, ensure_ascii=False), cid))
+        check("frozen fixture: row is stale with a current stamp",
+              leluxe.get_row(cid)["status"] == "oredered")
+
+        r = leluxe.sync_from_source("2026-01-01")
+        check("the frozen row thaws and takes AZ (2)'s value",
+              leluxe.get_row(cid)["status"] == "rd")
+        check("and the sync REPORTS it instead of saying +0 updated",
+              r.get("updated", 0) >= 1)
+
+        # the cheap path must survive: base == AZ (2) → an app edit is kept
+        leluxe.set_status(cid, "sent rd")
+        r2 = leluxe.sync_from_source("2026-01-01")
+        check("an app-side edit is still kept when the base matches AZ (2)",
+              leluxe.get_row(cid)["status"] == "sent rd" and r2.get("updated") == 0)
+    finally:
+        leluxe._http = real
+
+
 AZ2_STATE = {"status": "rd"}
 
 
@@ -1182,6 +1242,7 @@ def main():
     print("sync kept report:");  sync_kept_report()
     print("az2 push + undo:");   az2_push_and_undo()
     print("endpoint gates:");    endpoints_gated()
+    print("frozen row thaws:"); frozen_row_thaws()
     print("diagnose read-only:"); diagnose_readonly()
     print("pkg mail:");          pkgmail_tracking()
     print()
