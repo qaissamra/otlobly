@@ -9510,47 +9510,50 @@ function bsSortVal(m,key){
   }
   return String(m.tn);
 }
+// One bulk-search-style row for a {kind:"po"|"lx"|"miss"} model — shared by the
+// 🔎 Bulk-search results AND the GAASH ⚡ suggested-enrollments table.
+// pinExtra(m) → extra HTML appended to the pinned cell (e.g. ✓/✕ approve).
+function bsModelRow(m,pinExtra){
+  const pin=`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}><span class="mono" style="font-size:12px">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}${pinExtra?pinExtra(m):""}</div>`;
+  if(m.kind==="miss")
+    return {usd:0,ils:0,html:`<div class="poc-row" style="background:#fff7ed">${pin}${lxtCells("bs",{found:`<span style="color:#b45309;font-size:11.5px">${T("غير موجود · not found")}</span>`})}</div>`};
+  if(m.kind==="po"){
+    const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
+    return {usd:PO_MONEY?est.sum:0,ils:0,html:`<div class="poc-row">${pin}${lxtCells("bs",{
+      found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>${bsEnrollBtn(m.tn)}`,
+      oname: poNameCell(p.ship_to,true),
+      profile: poProfileCell(p),
+      imgs: poThumbStrip(pk.items),
+      cust:`<span style="font-size:11.5px" title="${poEsc(pkgWho(pk)||'')}">${poEsc(pkgWho(pk)||"—")}</span>`,
+      status: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>',
+      gash: pkgGaashPill(pk),
+      gashdate:'<span class="muted2" style="opacity:.45">—</span>',
+      value:(PO_MONEY&&est.priced)?`<span>≈ <b>${money(est.sum)}</b></span>`:'<span class="muted2">—</span>',
+    })}</div>`};
+  }
+  const lx=m.lx;
+  const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
+  const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
+  const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
+  return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${lxtCells("bs",{
+    found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${bsEnrollBtn(m.tn)}`,
+    oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
+    profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
+    imgs: lxThumbs(lx.items),
+    cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
+    status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
+    gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>'),
+    gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
+    value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
+  })}</div>`};
+}
 function bsRender(){
   const res=$("bsResults"); if(!res||!BS_LAST) return;
   const {models,nTok,found}=BS_LAST;
   const live=lxtSortApply("bs",models.filter(m=>m.kind!=="miss").slice(),bsSortVal)
     .concat(models.filter(m=>m.kind==="miss"));   // missing rows always last
   let sumUsd=0, sumIls=0;
-  const pin=m=>`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}><span class="mono" style="font-size:12px">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}</div>`;
-  const rows=live.map(m=>{
-    if(m.kind==="miss")
-      return `<div class="poc-row" style="background:#fff7ed">${pin(m)}${lxtCells("bs",{found:`<span style="color:#b45309;font-size:11.5px">${T("غير موجود · not found")}</span>`})}</div>`;
-    if(m.kind==="po"){
-      const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
-      if(PO_MONEY) sumUsd+=est.sum;
-      return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
-        found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>${bsEnrollBtn(m.tn)}`,
-        oname: poNameCell(p.ship_to,true),
-        profile: poProfileCell(p),
-        imgs: poThumbStrip(pk.items),
-        cust:`<span style="font-size:11.5px" title="${poEsc(pkgWho(pk)||'')}">${poEsc(pkgWho(pk)||"—")}</span>`,
-        status: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>',
-        gash: pkgGaashPill(pk),
-        gashdate:'<span class="muted2" style="opacity:.45">—</span>',
-        value:(PO_MONEY&&est.priced)?`<span>≈ <b>${money(est.sum)}</b></span>`:'<span class="muted2">—</span>',
-      })}</div>`;
-    }
-    const lx=m.lx; sumIls+=lx.tot;
-    const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
-    const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
-    const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
-    return `<div class="poc-row">${pin(m)}${lxtCells("bs",{
-      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${bsEnrollBtn(m.tn)}`,
-      oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
-      profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
-      imgs: lxThumbs(lx.items),
-      cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
-      status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
-      gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>'),
-      gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
-      value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
-    })}</div>`;
-  }).join("");
+  const rows=live.map(m=>{ const r=bsModelRow(m); sumUsd+=r.usd; sumIls+=r.ils; return r.html; }).join("");
   const missing=nTok-found;
   const totals=`<div class="poc-row bt-total">
       <div class="bt-pin">Σ ${nTok} · ${found} ${T("موجود · found")}${missing?` · <span style="color:#b45309">${missing} ${T("مفقود · missing")}</span>`:""}</div>
@@ -9603,15 +9606,22 @@ async function gmLoad(){
   $("gmBanner").innerHTML=warn.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${warn.join(" · ")}</div>`:"";
   const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
   $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
-  // trigger-proposed enrollments → approval chips (any tab)
+  // trigger-proposed enrollments → an orange COUNT that expands into a full
+  // Purchases-columns table (bulk-search rows) with ✓/✕ per package (any tab)
   const prop=d.proposed||[];
-  $("gmProposed").innerHTML=prop.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px">
-    ⚡ <b>${T("اقتراحات تسجيل · suggested enrollments")}</b>
-    ${prop.map(p=>`<span class="pill" style="background:#fff;border:1px solid var(--line);display:inline-flex;gap:6px;align-items:center">
-      <span class="mono">${poEsc(p.gwd)}</span>
-      <button class="minibtn" style="padding:0 6px" title="${T("موافقة وبدء · approve & start")}" onclick="gmPropAct('${p.gwd}','approve')">✓</button>
-      <button class="minibtn" style="padding:0 6px" title="${T("تجاهل · dismiss")}" onclick="gmPropAct('${p.gwd}','dismiss')">✕</button></span>`).join("")}
+  GM.propGwds=[...new Set(prop.map(p=>p.gwd))];
+  $("gmProposed").innerHTML=prop.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;margin-bottom:10px;font-size:12.5px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      ⚡ <b>${T("اقتراحات تسجيل · suggested enrollments")}</b>
+      <button class="pill" style="background:var(--accent);color:#fff;border:none;font-weight:800;font-size:12.5px;padding:2px 11px;cursor:pointer" title="${T("انقر لعرض الطرود بكل الأعمدة · click to view the packages with full columns")}" onclick="gmPropExpand()">${GM.propGwds.length} ${GM.propOpen?"▴":"▾"}</button>
+      <span class="muted2" style="font-size:11px">${T("طرود تطابق المُشغّلات وتنتظر موافقتك · packages matched your triggers and await approval")}</span>
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="gmPropAll('approve')">✓ ${T("موافقة الكل · approve all")}</button>
+      <button class="minibtn" onclick="gmPropAll('dismiss')">✕ ${T("تجاهل الكل · dismiss all")}</button>
+    </div>
+    <div id="gmPropTable" style="margin-top:8px;display:none"></div>
   </div>`:"";
+  if(prop.length&&GM.propOpen) gmPropRender();
   gmRenderList();
   if(GM.cur) gmOpen(GM.cur,true);
   if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
@@ -9622,6 +9632,43 @@ async function gmLoad(){
 async function gmPropAct(gwd,action){
   const r=await post("/api/gaash/thread",{gwd,action});
   if(r&&r.ok===false&&r.error) toast(r.error);
+  gmLoad();
+}
+// expand the orange count into a full-columns table (bulk-search rows + ✓/✕)
+function gmPropExpand(){ GM.propOpen=!GM.propOpen;
+  const el=$("gmPropTable");
+  if(!GM.propOpen){ if(el) el.style.display="none"; gmLoad(); return; }
+  gmPropRender();
+}
+async function gmPropRender(){
+  const el=$("gmPropTable"); if(!el) return;
+  el.style.display="block";
+  el.innerHTML=`<div class="muted2" style="padding:8px">${T("جارِ التحميل… · loading…")}</div>`;
+  await bsEnsureData();
+  const lxRows=bsLxRows(), models=[];
+  (GM.propGwds||[]).forEach(tn=>{
+    const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
+    if(!pos.length&&!lx){ models.push({kind:"miss",tn}); return; }
+    pos.forEach(({p,pk,pi})=>models.push({kind:"po",tn,p,pk,pi}));
+    if(lx) models.push({kind:"lx",tn,lx});
+  });
+  const seen=new Set();                       // ✓/✕ once per GWD (a PO+Leluxe double match acts on the same thread)
+  const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
+    return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">
+      <button class="minibtn" style="padding:0 7px" title="${T('موافقة وبدء · approve & start')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','approve')">✓</button>
+      <button class="minibtn" style="padding:0 7px" title="${T('تجاهل · dismiss')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','dismiss')">✕</button></span>`; };
+  el.innerHTML=lxtHead("bs","التتبع · tracking")
+    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${models.map(m=>bsModelRow(m,acts).html).join("")}</div></div>`);
+  lxtGridApply("bs",el);
+}
+async function gmPropAll(action){
+  const gwds=GM.propGwds||[];
+  if(!gwds.length) return;
+  if(!confirm((action==="approve"
+      ?T("موافقة وبدء لكل الاقتراحات؟ · approve & start ALL suggestions?")
+      :T("تجاهل كل الاقتراحات؟ · dismiss ALL suggestions?"))+` (${gwds.length})`)) return;
+  for(const g of gwds){ try{ await post("/api/gaash/thread",{gwd:g,action}); }catch(e){} }
+  toast(`${gwds.length} ${action==="approve"?T("بدأ ✓ · started ✓"):T("تم التجاهل · dismissed")}`);
   gmLoad();
 }
 function gmRenderList(){
