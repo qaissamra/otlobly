@@ -210,8 +210,8 @@
      got the same grid cells (806c25f): clicking a package row's status button
      opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
      white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open),.en-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -438,18 +438,27 @@
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
+  /* 📧 enroll picker: the ONLY .bt-* table that lives inside a modal. Its
+     sticky header is tuned to the page topbar (top:70px) — reset it to the
+     modal body, cap the scroll box, and let a cell dropdown escape the box. */
+  #bulkModal .bt-clip{top:0}
+  #bulkModal .bt-wrap{max-height:46vh;overflow-y:auto}
+  #bulkModal .az-box:has(.pop-menu.open){overflow:visible}
+  #bulkModal .en-cols .lxc>input{max-width:100%;min-width:0}
+  .en-wide .az-box{width:1180px;max-width:97vw}
+  .en-cols{display:grid;grid-template-columns:var(--engrid,132px 124px 126px 120px 78px 110px 120px 110px 130px 96px 92px);gap:6px;align-items:center;flex:0 0 auto}
   .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead,.en-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl,.en-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort,.en-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover,.en-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl,.en-colhead .en-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -565,7 +574,7 @@
   .bt-wrap .poc-meta{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
-  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin,.bs-colhead .bt-pin,.en-colhead .bt-pin{background:var(--bg);align-self:auto}
   /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
   .wf-row:hover{background:var(--bg2)}
   .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
@@ -2839,6 +2848,7 @@ const LX_TABLES={
   "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults", mins:{}},
   "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane", mins:{}},
+  "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl", mins:{}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -3338,6 +3348,19 @@ const LXT_COLS={
     {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
     {key:"value",    label:"القيمة · value",        w:96,  sortable:true},
   ],
+  "en":[    // 📧 Enroll picker — the Bulk-search columns + the editable 🪪 pair
+    {key:"found",    label:"موجود في · found in",   w:132, sortable:true},
+    {key:"pname",    label:"الاسم على الطرد · name on package", w:124, sortable:true},
+    {key:"nameid",   label:"🪪 رقم الهوية · ID number", w:126},
+    {key:"oname",    label:"الاسم · order name",    w:120, sortable:true},
+    {key:"profile",  label:"الحساب · profile",     w:78,  sortable:true},
+    {key:"imgs",     label:"الصور · images",        w:110},
+    {key:"cust",     label:"العملاء · customers",   w:120, sortable:true},
+    {key:"status",   label:"الحالة · status",       w:110, sortable:true},
+    {key:"gash",     label:"جمارك · GAASH",         w:130},
+    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
+    {key:"value",    label:"القيمة · value",        w:92,  sortable:true},
+  ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
     {key:"oname",     label:"الاسم · order name", w:120, sortable:true},
@@ -3373,10 +3396,11 @@ const LXT_COLS={
 const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
                "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"],
-               "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md"};
+               "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
+               "en":["en-colhead","en-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop","bs","wf"].forEach(t=>{
+["","p","k","po","pok","pop","bs","wf","en"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -3404,7 +3428,7 @@ function lxtCols(tbl){
   return lxtOrderApply(tbl,cols);
 }
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
-function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():(tbl==="wf"?gmRenderSeq():renderLeluxe())); }
+function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():(tbl==="wf"?gmRenderSeq():(tbl==="en"?gmEnrollRender():renderLeluxe()))); }
 function lxtColToggle(tbl,key){
   const h=LXT_HIDDEN[tbl]; h.has(key)?h.delete(key):h.add(key);
   try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}
@@ -6963,7 +6987,9 @@ async function poRefreshTracking(){
 }
 // ── Bulk progress popup: live rows for the check-all / estimate-all runs ──
 function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerHTML=""; $("bulkFoot").innerHTML=""; $("bulkModal").classList.remove("hidden"); }
-function bulkClose(){ $("bulkModal").classList.add("hidden"); }
+// en-wide is the enroll picker's 1180px override — drop it on close, or the
+// next consumer of this shared modal (shipping check, cost estimate…) inherits it
+function bulkClose(){ $("bulkModal").classList.add("hidden"); $("bulkModal").classList.remove("en-wide"); }
 function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
   if(!r){ r=document.createElement("div"); r.id="blk_"+id;
     r.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap";
@@ -9709,14 +9735,24 @@ function bsSortVal(m,key){
 // One bulk-search-style row for a {kind:"po"|"lx"|"miss"} model — shared by the
 // 🔎 Bulk-search results AND the GAASH ⚡ suggested-enrollments table.
 // pinExtra(m) → extra HTML appended to the pinned cell (e.g. ✓/✕ approve).
-function bsModelRow(m,pinExtra){
-  const pin=`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}><span class="mono" style="font-size:12px">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}${pinExtra?pinExtra(m):""}</div>`;
+// ONE row builder for every "packages as a table" surface: 🔎 Bulk search, the
+// ⚙️ Workflows expansion, and the 📧 enroll picker. opts.tbl renders the same
+// cells into a different column set, opts.extra adds that table's own cells
+// (the picker's 🪪 name/ID pair), opts.pinPre puts markup BEFORE the tracking
+// number in the pin (the picker's checkbox). Keep the three in sync via this.
+function bsModelRow(m,pinExtra,opts){
+  const O=opts||{}, TBL=O.tbl||"bs";
+  const CE=o=>lxtCells(TBL,Object.assign({},o,O.extra?O.extra(m):{}));
+  // 📧 in the enroll picker itself the per-row enroll button is re-entrant
+  // (it calls gmEnrollFrom → setView → gmNewOpen), so it is suppressed there
+  const EB=O.noEnroll?"":bsEnrollBtn(m.tn);
+  const pin=`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}>${O.pinPre?O.pinPre(m):""}<span class="mono" style="font-size:12px">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}${pinExtra?pinExtra(m):""}</div>`;
   if(m.kind==="miss")
-    return {usd:0,ils:0,html:`<div class="poc-row" style="background:#fff7ed">${pin}${lxtCells("bs",{found:`<span style="color:#b45309;font-size:11.5px">${T("غير موجود · not found")}</span>`})}</div>`};
+    return {usd:0,ils:0,html:`<div class="poc-row" style="background:#fff7ed">${pin}${CE({found:`<span style="color:#b45309;font-size:11.5px">${T("غير موجود · not found")}</span>`})}</div>`};
   if(m.kind==="po"){
     const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
-    return {usd:PO_MONEY?est.sum:0,ils:0,html:`<div class="poc-row">${pin}${lxtCells("bs",{
-      found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>${bsEnrollBtn(m.tn)}`,
+    return {usd:PO_MONEY?est.sum:0,ils:0,html:`<div class="poc-row">${pin}${CE({
+      found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:10.5px">pkg ${pk.package_no}</span>${EB}`,
       oname: poNameCell(p.ship_to,true),
       profile: poProfileCell(p),
       imgs: poThumbStrip(pk.items),
@@ -9731,8 +9767,8 @@ function bsModelRow(m,pinExtra){
   const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
   const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
   const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
-  return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${lxtCells("bs",{
-    found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${bsEnrollBtn(m.tn)}`,
+  return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${CE({
+    found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${EB}`,
     oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
     profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
     imgs: lxThumbs(lx.items),
@@ -10002,24 +10038,17 @@ function gmNewOpen(preGwds){
   pre.forEach(g=>{ if(!known.has(g)) cands.unshift({gwd:g,source:"manual",name:""}); });
   GM.newPre=new Set(pre);
   bulkOpen("📧 "+T("إرسال طرود إلى سير عمل · Enroll packages into a workflow"));
-  const badge=s=>s==="leluxe"?`<span class="pill" style="background:#eef;border:1px solid var(--line);font-size:9.5px">⌚</span>`
-    :s==="purchases"?`<span class="pill" style="background:#fef3ec;border:1px solid var(--line);font-size:9.5px">📦</span>`
-    :`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">✎</span>`;
-  const row=c=>`<label class="gmCandRow" data-gwd="${poEsc(c.gwd)}" data-hay="${poEsc((c.gwd+" "+(c.name||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||"")).toLowerCase())}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:12.5px;cursor:pointer">
-      <input type="checkbox" class="gmNewGwd" value="${poEsc(c.gwd)}" ${GM.newPre.has(c.gwd)?"checked":""} onchange="gmNewCount()">
-      ${badge(c.source)}
-      <b class="mono" style="font-size:11.5px">${poEsc(c.gwd)}</b>
-      ${(c.gash_status||c.status)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status||c.status)}</span>`:""}
-      <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||c.customers||"")}</span></label>`;
+  GM.enrollCands=cands;
+  GM.enrollSel=new Set(pre);          // survives re-render (sort / column change)
+  $("bulkModal").classList.add("en-wide");
   $("bulkBody").innerHTML=`
     <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <input id="gmCandSearch" oninput="gmCandFilter()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
-      <label style="display:flex;gap:5px;align-items:center;font-size:11.5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="gmCandAll" onchange="gmCandSelectAll(this.checked)"> ${T("اختر الظاهر · select shown")}</label>
+      <input id="gmCandSearch" oninput="gmEnrollRender()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
+      <button class="minibtn" onclick="gmEnrollSelectShown(true)">${T("اختر الظاهر · select shown")}</button>
+      <button class="minibtn" onclick="gmEnrollSelectShown(false)">${T("إلغاء الكل · clear")}</button>
     </div>
-    <div id="gmCandList" style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px">
-      ${cands.length?cands.map(row).join(""):`<div class="muted2" style="padding:8px">${T("لا مرشحين — الصق أرقاماً تحت · no candidates — paste numbers below")}</div>`}
-    </div>
+    <div id="gmEnrollTbl"><div class="muted2" style="padding:10px">${T("جارِ التحميل… · loading…")}</div></div>
     <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
     <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("الهوية المرفقة مع الإيميل الأول · ID attached to email #1")}</b>
       <div id="gmNewIds" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
@@ -10040,20 +10069,108 @@ function gmNewOpen(preGwds){
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
     <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ · Start")}</button></div>`;
   gmNewCount();
+  gmEnrollLoad();
 }
-function gmCandFilter(){
+// The picker renders the SAME columns as Bulk search (bsModelRow) plus the 🪪
+// pair: the package's on-package name and its editable ID. Data comes from the
+// same lazily-loaded POS/LX caches the bulk-search page uses.
+async function gmEnrollLoad(){
+  await bsEnsureData();
+  if(!$("gmEnrollTbl")) return;              // modal closed while loading
+  gmEnrollRender();
+}
+function gmEnrollFiltered(){
   const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
-  document.querySelectorAll("#gmCandList .gmCandRow").forEach(r=>{
-    r.style.display=(!q||r.dataset.hay.includes(q))?"":"none"; });
-  const all=$("gmCandAll"); if(all) all.checked=false;
+  return (GM.enrollCands||[]).filter(c=>!q||
+    (c.gwd+" "+(c.name||"")+" "+(c.name_on_pkg||"")+" "+(c.gash_status||c.status||"")+" "+(c.customers||""))
+      .toLowerCase().includes(q));
 }
-function gmCandSelectAll(on){
-  document.querySelectorAll("#gmCandList .gmCandRow").forEach(r=>{
-    if(r.style.display!=="none"){ const cb=r.querySelector(".gmNewGwd"); if(cb) cb.checked=on; } });
+function gmEnrollSelectShown(on){
+  gmEnrollFiltered().forEach(c=>on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd));
+  gmEnrollRender();
+}
+function gmEnrollToggle(gwd,on){
+  on?GM.enrollSel.add(gwd):GM.enrollSel.delete(gwd);
+  gmNewCount();                              // no re-render — keeps scroll + focus
+}
+function gmEnrollRender(){
+  const mount=$("gmEnrollTbl"); if(!mount) return;
+  const cands=gmEnrollFiltered();
+  const byGwd={}; cands.forEach(c=>byGwd[c.gwd]=c);
+  const lxRows=bsLxRows();
+  const models=[]; const seen=new Set();
+  cands.forEach(c=>{                          // ONE row per GWD (the unit we email)
+    if(seen.has(c.gwd)) return; seen.add(c.gwd);
+    const pos=bsFindPo(c.gwd), lx=bsFindLx(c.gwd,lxRows);
+    if(pos.length) models.push({kind:"po",tn:c.gwd,...pos[0]});
+    else if(lx) models.push({kind:"lx",tn:c.gwd,lx});
+    else models.push({kind:"miss",tn:c.gwd});
+  });
+  const nids=((GM.ov&&GM.ov.settings)||{}).name_ids||{};
+  const fold=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
+  const idOf=nm=>{ const k=Object.keys(nids).find(k=>fold(k)===fold(nm)); return k?nids[k]:""; };
+  const sorted=lxtSortApply("en",models.slice(),(m,key)=>{
+    const c=byGwd[m.tn]||{};
+    if(key==="pname") return fold(c.name_on_pkg)||"~";
+    return bsSortVal(m,key);
+  });
+  const pinPre=m=>`<input type="checkbox" class="gmEnCb" value="${poEsc(m.tn)}" ${GM.enrollSel.has(m.tn)?"checked":""}
+      onclick="event.stopPropagation()" onchange="gmEnrollToggle('${poEsc(m.tn)}',this.checked)"
+      style="flex:0 0 auto;margin-inline-end:2px">`;
+  const extra=m=>{
+    const c=byGwd[m.tn]||{}, nm=c.name_on_pkg||"";
+    const cur=idOf(nm);
+    return {
+      pname: nm?`<span title="${poEsc(nm)}">${poEsc(nm)}</span>`
+               :`<span class="muted2" style="opacity:.45" title="${T('لا يوجد عمود «الاسم على الطرد» لهذا الطرد · this package has no NAME ON PACKAGE column')}">—</span>`,
+      nameid: !nm?`<span class="muted2" style="opacity:.35">—</span>`
+        :`<span class="cf-cell" style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
+             title="${poEsc(nm)} — ${cur?T("انقر للتعديل · click to edit"):T("انقر لإضافة رقم الهوية · click to add the ID number")}"
+             ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(nm)}')"`:""}>${
+             cur?`<span class="mono" style="font-size:11.5px">${poEsc(cur)}</span>`
+                :`<span class="muted2" style="opacity:.45">＋ ${T("هوية · ID")}</span>`}</span>`,
+    };
+  };
+  mount.innerHTML=cands.length
+    ? lxtHead("en","التتبع · tracking")
+      +lxtWrap("en",`<div class="pkg open"><div class="pkg-body">${
+        sorted.map(m=>bsModelRow(m,null,{tbl:"en",extra,pinPre,noEnroll:true}).html).join("")}</div></div>`)
+    : `<div class="muted2" style="padding:10px">${T("لا مرشحين — الصق أرقاماً تحت · no candidates — paste numbers below")}</div>`;
+  if(cands.length){ lxColwApply(); lxtGridApply("en",mount); }
   gmNewCount();
 }
+// 🪪 inline edit of the on-package name's ID — merges into the Settings map, so
+// EVERY package under that name (now and later) fills {name_id} in the emails.
+function gmNameIdEdit(el,name){
+  const nids=((GM.ov&&GM.ov.settings)||{}).name_ids||{};
+  const fold=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
+  const key=Object.keys(nids).find(k=>fold(k)===fold(name));
+  const inp=document.createElement("input");
+  inp.value=key?nids[key]:""; inp.placeholder=T("رقم الهوية · ID number");
+  inp.style.cssText="width:100%;min-width:64px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
+  inp.onclick=e=>e.stopPropagation();
+  let done=false;
+  const save=async()=>{
+    if(done) return; done=true;
+    const v=(inp.value||"").trim();
+    if(v===(key?nids[key]:"")){ gmEnrollRender(); return; }   // unchanged
+    const r=await post("/api/gaash/name_id",{name,id_number:v});
+    if(!r||!r.ok){ toast("⚠ "+((r&&r.error)||"could not save")); gmEnrollRender(); return; }
+    // keep the local copy in step so the row (and every sibling row sharing this
+    // name) repaints immediately without a full gmLoad round-trip
+    GM.ov.settings=GM.ov.settings||{}; const m={...(GM.ov.settings.name_ids||{})};
+    Object.keys(m).forEach(k=>{ if(fold(k)===fold(name)) delete m[k]; });
+    if(v) m[r.name]=v;
+    GM.ov.settings.name_ids=m;
+    toast(v?`🪪 ${poEsc(r.name)} → ${poEsc(v)}`:T("أُزيلت الهوية · ID cleared"));
+    gmEnrollRender();
+  };
+  inp.onblur=save;
+  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; gmEnrollRender(); } };
+  el.replaceWith(inp); inp.focus(); inp.select();
+}
 function gmNewGwds(){
-  const set=new Set([...document.querySelectorAll(".gmNewGwd:checked")].map(x=>x.value));
+  const set=new Set([...(GM.enrollSel||[])]);
   ((($("gmNewPaste")||{}).value)||"").split(/[\s,;،]+/).forEach(t=>{
     t=t.trim().toUpperCase(); if(/^GWD\d+$/.test(t)) set.add(t); });
   return [...set];

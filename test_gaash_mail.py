@@ -491,6 +491,49 @@ def main():
     check("the customer's OWN ID wins over the name map",
           gm._fill("{id_number}", "GWD009000024") == "CRM-777"
           and gm._fill("{name_id}", "GWD009000024") == "999888777")
+    print("— 🪪 enroll picker: name_on_pkg per candidate + the one-pair writer —")
+    cands = {c["gwd"]: c for c in gm.candidates()}
+    check("candidate carries the on-package name from its OWN field",
+          cands.get("GWD009000021", {}).get("name_on_pkg") == "faisal")
+    check("candidate falls back to the PARENT order's field",
+          cands.get("GWD009000022", {}).get("name_on_pkg") == "NURAY HTAB")
+    check("every candidate has the key (empty when the column is absent)",
+          all("name_on_pkg" in c for c in cands.values()))
+    # set_name_id must MERGE — settings.apply replaces name_ids wholesale, so a
+    # naive one-pair writer would wipe every other mapping
+    gm.set_name_id("yahia", "444555666")
+    ids = gm._setts().get("name_ids") or {}
+    check("set_name_id merges — the other mappings survive",
+          ids.get("yahia") == "444555666" and ids.get("FAISAL") == "999888777"
+          and ids.get("Nuray htab") == "111222333")
+    check("...and the new pair immediately fills {name_id}",
+          gm._fill("{name_id}", "GWD009000023") == "444555666")
+    gm.set_name_id("  YAHIA ", "777")
+    ids = gm._setts().get("name_ids") or {}
+    check("a case/space variant REPLACES instead of duplicating",
+          [k for k in ids if k.strip().lower() == "yahia"] == ["YAHIA"]
+          and ids["YAHIA"] == "777")
+    gm.set_name_id("YAHIA", "")
+    check("an empty id clears the mapping",
+          not [k for k in (gm._setts().get("name_ids") or {})
+               if k.strip().lower() == "yahia"]
+          and gm._fill("x{name_id}y", "GWD009000023") == "xy")
+    check("a blank name is rejected", bool(gm.set_name_id("   ", "1").get("error")))
+    check("employee + sales cannot write the name map",
+          ce.post("/api/gaash/name_id",
+                  json={"name": "FAISAL", "id_number": "1"}).status_code == 403
+          and cs.post("/api/gaash/name_id",
+                      json={"name": "FAISAL", "id_number": "1"}).status_code == 403)
+    rn = co.post("/api/gaash/name_id", json={"name": "Amin Nagih",
+                                             "id_number": "401234567"})
+    check("admin writes one pair via the route",
+          rn.status_code == 200 and rn.get_json().get("ok")
+          and (gm._setts().get("name_ids") or {}).get("Amin Nagih") == "401234567"
+          and (gm._setts().get("name_ids") or {}).get("FAISAL") == "999888777")
+    check("the route rejects a blank name",
+          co.post("/api/gaash/name_id", json={"name": "", "id_number": "9"}
+                  ).status_code == 400)
+
     with db.connect() as c:
         c.execute("DELETE FROM leluxe_orders WHERE name='NID crm'")
         c.execute("DELETE FROM customers WHERE customer_code='CUS-NIDT'")

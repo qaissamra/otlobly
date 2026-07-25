@@ -1203,6 +1203,26 @@ def _name_on_pkg_for(gwd):
     return ""
 
 
+def set_name_id(name, id_number):
+    """Map ONE on-package name → ID number, merging into gaash_mail.name_ids.
+
+    settings.apply replaces that dict wholesale, so a caller who only knows one
+    pair (the enroll picker's 🪪 column) must not POST /api/settings directly —
+    it would wipe every other mapping. Read-modify-write here instead. An empty
+    id_number DELETES the mapping, which is how the picker clears one."""
+    nm = re.sub(r"\s+", " ", str(name or "")).strip()
+    if not nm:
+        return {"error": "name is required"}
+    val = str(id_number or "").strip()
+    ids = dict(_setts().get("name_ids") or {})
+    for k in [k for k in ids if _fold(k) == _fold(nm)]:
+        ids.pop(k)                      # replace any case/spacing variant
+    if val:
+        ids[nm] = val
+    settings_mod.apply({"gaash_mail": {"name_ids": ids}})
+    return {"ok": True, "name": nm, "id_number": val, "count": len(ids)}
+
+
 def _name_id_for(gwd):
     """The ID number mapped (Settings → gaash_mail.name_ids) to this package's
     on-package name — folded compare, so FAISAL / faisal / Faisal all hit."""
@@ -2065,6 +2085,24 @@ def candidates():
         rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
                          "data_json FROM leluxe_orders WHERE deleted=0").fetchall()
     names = {r["id"]: r["name"] for r in rows}
+    # the on-package name ("NAME ON PACKAGEE") lives on the item/parent row, never
+    # on the package row — pre-index every row's fields so a candidate can fall
+    # back to its parent WITHOUT the per-GWD LIKE query _name_on_pkg_for does.
+    flds = {}
+    for r in rows:
+        try:
+            flds[r["id"]] = (json.loads(r["data_json"] or "{}") or {}).get("fields") or {}
+        except Exception:  # noqa
+            flds[r["id"]] = {}
+
+    def _pick_nop(fmap):
+        for k, v in (fmap or {}).items():
+            if _fold(k).startswith("name on packag"):
+                s = _cf_stringify(v)
+                if s:
+                    return s
+        return ""
+
     for r in rows:
         try:
             d = json.loads(r["data_json"] or "{}")
@@ -2095,6 +2133,8 @@ def candidates():
               if str(k).strip() and _cf_stringify(v)}
         out.append({"gwd": tn, "source": "leluxe",
                     "name": (names.get(r["parent_local_id"]) or r["name"] or "")[:70],
+                    "name_on_pkg": (_pick_nop(f)
+                                    or _pick_nop(flds.get(r["parent_local_id"])))[:60],
                     "status": r["status"], "gash_status": gash,
                     "bucket": _bucket(ts) or None,
                     "label": (ts.get("label") if isinstance(ts, dict)
@@ -2131,6 +2171,7 @@ def candidates():
                             if (it.get("customer_name") or "").strip()})
             out.append({"gwd": tn, "source": "purchases",
                         "name": (p.get("ship_to") or "").strip()[:70],
+                        "name_on_pkg": _pick_nop(pcf)[:60],   # PO custom column
                         "status": pk.get("otlobly_status"), "gash_status": None,
                         "customers": "، ".join(custs)[:70], "bucket": None,
                         "label": None, "po_id": p.get("po_id"), "cf": dict(pcf)})

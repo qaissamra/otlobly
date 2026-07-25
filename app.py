@@ -2884,6 +2884,24 @@ def api_gaash_attachment():
     return send_file(p)
 
 
+@app.route("/api/gaash/name_id", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_name_id():
+    """Map one on-package name → ID number from the 🪪 column in the enroll
+    picker. Merges (never replaces) gaash_mail.name_ids. Writing settings is an
+    admin job — same gate as the ⚙ panel that owns the rest of that map."""
+    if not current_user.has("admin_actions"):
+        abort(403)
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.set_name_id(b.get("name"), b.get("id_number"))
+    if res.get("error"):
+        return jsonify({"ok": False, **res}), 400
+    db.audit(auth.actor(), "gaash_name_id", "settings", res["name"],
+             res["id_number"] or "(cleared)")
+    return jsonify({"ok": True, **res})
+
+
 @app.route("/api/gaash/start", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
