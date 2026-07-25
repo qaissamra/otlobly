@@ -156,6 +156,9 @@
   .pkg.open .pkg-title-row:hover{background:#ffeadf}
   #pkgInfoModal .az-box:has(.pop-menu.open),#lxInfoModal .az-box:has(.pop-menu.open){overflow:visible}
   .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  /* 👤 Customers view: a long name ellipsizes inside the fixed-width pin instead
+     of being sliced mid-word (full name in the title attribute) */
+  .pkg-head .pkg-title.cust{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .pkg-meta{display:flex;align-items:center;gap:7px 18px;flex-wrap:wrap;padding:7px 11px;background:var(--bg2);border-top:1px solid var(--line)}
   .pkg-meta .field{display:inline-flex;align-items:center;gap:6px}
   .pkg-meta .field>.lbl{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
@@ -163,6 +166,15 @@
   .pkg-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
   .pkg-body{padding:8px;overflow-x:auto;border-top:1px solid var(--line)}
   .poc-group{padding:2px 6px}
+  /* 👤 Customers view — the group header's second tier: ☎ phone · 📍 city ·
+     🏠 address · 🪪 ID. Tinted strip under the white/orange title row, exactly
+     like .po-title over .po-meta on the PO card. */
+  .poc-meta{background:var(--bg2);border-top:1px solid var(--line);padding:6px 11px;font-size:12px}
+  .poc-meta .in{display:inline-flex;align-items:baseline;gap:6px 16px}
+  .poc-meta .field{display:inline-flex;align-items:baseline;gap:6px;min-width:0}
+  .poc-meta .field>.lbl{color:var(--muted);font-size:11px;flex:0 0 auto}
+  .poc-meta .field>.v{color:var(--ink)}
+  .poc-meta .addr{display:inline-block;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
   .poc-cust{font-size:11.5px;font-weight:700;color:var(--muted);margin:9px 2px 2px}
   .poc-cust.nocust{color:#b45309}
   .poc-row{display:flex;align-items:center;gap:10px;padding:6px 2px;border-top:1px solid var(--line);font-size:13px}
@@ -547,6 +559,11 @@
      between consecutive order-groups — no redundant label row */
   .bt-wrap:not(.pin-md):not(.pin-lg) .pkg-body>.poc-group+.poc-group{border-top:2px solid #f7680833}
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}
+  /* the contact strip spans the whole (scrollable) row, but its content sticks to
+     the left edge so it stays readable while the columns scroll — same trick as
+     .poc-cust below */
+  .bt-wrap .poc-meta{width:max-content;min-width:100%;padding-inline:0}
+  .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
   .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin{background:var(--bg);align-self:auto}
   /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
@@ -3319,6 +3336,7 @@ const LXT_COLS={
     {key:"pkgstatus", label:"حالة الطرد · pkg status",  w:120},
     {key:"customer",  label:"العميل · customer",    w:112, sortable:true},
     {key:"collect",   label:"💵 يؤخذ · 💵 collect",  w:96,  sortable:true},
+    {key:"ostatus",   label:"حالة الطلب · order status", w:104, sortable:true},
     {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
     {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
     {key:"idnum",     label:"🪪 الهوية · ID number",  w:110, sortable:true},
@@ -6655,7 +6673,7 @@ async function saveSettings(b){
 
 let POS=null, PO_MONEY=true, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
 let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
-let PO_CUSTNAMES=[], PO_CUSTORDERS={}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
+let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function importClickup(btn){
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Importing…';
@@ -6754,7 +6772,17 @@ async function loadPurchases(){
   const d=await (await fetch("/api/purchases")).json();
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   PO_MONEY=d.money!==false;                     // false = COGS redacted for this role
-  try{ const c=await (await fetch("/api/customers")).json(); PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))]; }catch(e){}
+  // The CRM list — names for the customer cell's datalist, and the FULL records
+  // (phone/address/city/ID) keyed BOTH by normalized name and by phone core, so
+  // the 👤 Customers view can show a contact line without a second request.
+  // 403 for a role without view_customers → empty maps → poCustInfo falls back
+  // to the matched customer orders.
+  try{ const c=await (await fetch("/api/customers")).json();
+    PO_CUSTNAMES=[...new Set((c.customers||[]).map(x=>x.name).filter(Boolean))];
+    PO_CUSTMAP={byName:{},byCore:{}};
+    (c.customers||[]).forEach(x=>{ const nk=normName(x.name); if(nk&&!PO_CUSTMAP.byName[nk]) PO_CUSTMAP.byName[nk]=x;
+      const pc=phoneCoreJs(x.whatsapp||x.wa||""); if(pc&&!PO_CUSTMAP.byCore[pc]) PO_CUSTMAP.byCore[pc]=x; });
+  }catch(e){ PO_CUSTMAP={byName:{},byCore:{}}; }
   // The demand queue: customer → their pending (To-order + In-cart) products, plus
   // ORDERED orders (rescue: flipped by hand, still attachable — never SHIPPED+),
   // so picking a customer on a purchase row can auto-fill image/link/ASIN/qty.
@@ -7352,6 +7380,23 @@ function pkgIdNumber(pk){
   for(const it of (pk.items||[])){ const co=m[(it.customer_order_id||"").trim()]; if(co&&co.id_number) return co.id_number; }
   return "";
 }
+// ☎ contact info for a customer group (👤 Customers view). The CRM record is the
+// richest source (it alone carries `city`), but it needs view_customers — so fall
+// back to the matched customer ORDERS, which carry phone/wa/address/id_number on
+// every role. `ords` = [{id,o}] as built by poRenderCustomers' ordersOf().
+function poCustInfo(cust,ords){
+  const first=k=>{ for(const x of (ords||[])){ const v=x.o&&x.o[k]; if(v) return v; } return ""; };
+  const oPhone=first("phone");
+  const c=PO_CUSTMAP.byName[normName(cust)]
+        ||PO_CUSTMAP.byCore[phoneCoreJs(oPhone)]||null;
+  return {
+    phone:     (c&&c.whatsapp)||oPhone||"",
+    wa:        (c&&c.wa)||first("wa")||"",
+    city:      (c&&c.city)||"",                 // CRM-only — report rows omit city
+    address:   (c&&c.address)||first("address")||"",
+    id_number: (c&&c.id_number)||first("id_number")||"",
+  };
+}
 function poSearchMatch(p,q){
   if([p.po_id,p.amazon_order_number,p.ship_to,p.profile_box].some(v=>v&&String(v).toLowerCase().includes(q))) return true;
   return (p.packages||[]).some(pk=>String(pk.tracking_number||"").toLowerCase().includes(q)
@@ -7486,6 +7531,8 @@ function poRenderProdsFlat(mount,list){
     if(key==="pdue"){ const d=poPkgDue(pk); return d?(Date.parse(d)||Infinity):Infinity; }
     if(key==="collect"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
       return (co&&co.amount_to_collect_usd)||0; }
+    if(key==="ostatus"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
+      return String((co&&co.status)||"~").toLowerCase(); }
     return String(it.title||it.asin||"").toLowerCase();
   });
   const totQty=rows.reduce((a,[,,,it])=>a+(Number(it.qty)||1),0);
@@ -7520,6 +7567,7 @@ function poItFlatRow(p,pk,pi,it,ii){
     pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
     customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
     collect,
+    ostatus: co?statusPill(co.status):"",
     pdue: poPkgDueCell(p,pk,pi),
     qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
     idnum: idNumCell((co||{}).id_number),
@@ -7565,27 +7613,51 @@ function poRenderCustomers(mount,list){
   let totProds=0,totQty=0;
   const sections=names.map(cust=>{
     const byPo=groups.get(cust), collapsed=PO_CCOL.has(cust);
-    let n=0,est=0; const allTuples=[];
-    byPo.forEach(tuples=>tuples.forEach(t=>{ const it=t[3]; n++; totQty+=Number(it.qty)||1;
+    let n=0,est=0,qty=0; const allTuples=[];
+    byPo.forEach(tuples=>tuples.forEach(t=>{ const it=t[3]; n++; const q=Number(it.qty)||1; qty+=q; totQty+=q;
       allTuples.push(t);
       if(it.est_cost_usd!=null) est+=it.est_cost_usd*(it.qty||1); }));
     totProds+=n;
-    const estChip=(PO_MONEY&&est>0)?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Σ تقدير تكلفة منتجات هذا العميل · estimated cost of this customer's products">≈ ${money(Math.round(est*100)/100)}</span>`:"";
     const ords=ordersOf(allTuples);
     const anyQuoted=ords.some(x=>x.o&&x.o.amount_to_collect_usd!=null);
     const quoted=ords.reduce((a,x)=>a+((x.o&&x.o.amount_to_collect_usd)||0),0);
     const dep=ords.reduce((a,x)=>a+((x.o&&x.o.deposit_usd)||0),0);
-    const quotedChip=anyQuoted?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="السعر المعروض على العميل — مجموع طلباته · quoted price (Σ their matched orders)">💵 <b style="color:var(--ink)">${money(Math.round(quoted*100)/100)}</b></span>`:"";
-    const depChip=(anyQuoted&&dep>0)?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="العربون المدفوع · deposit paid">عربون ${money(Math.round(dep*100)/100)}</span>`:"";
-    const stChip=(ords.length===1&&ords[0].o)?statusPill(ords[0].o.status):"";
+    // Line 1 — the PIN carries identity only (it is fixed-width + overflow:hidden,
+    // so anything else gets silently clipped); the summaries go into the COLUMN
+    // GRID, aligned with the product rows below, like every other group header.
+    const cells=lxtCells("pop",{
+      collect: anyQuoted?`<b style="font-size:12px;color:var(--accent)" title="السعر المعروض على العميل — مجموع طلباته · quoted price (Σ their matched orders)">${money(Math.round(quoted*100)/100)}</b>`:"",
+      ostatus: (ords.length===1&&ords[0].o)?statusPill(ords[0].o.status)
+              :(ords.length>1?`<span class="muted2" style="font-size:11px" title="طلبات متعددة بحالات مختلفة · several orders — see the rows">${ords.length} ${T("طلبات · orders")}</span>`:""),
+      qty:`<b style="font-size:12px" title="مجموع كميات هذا العميل · Σ this customer's quantities">×${qty}</b>`,
+    });
+    // Line 2 — the contact strip (two-tier header, same idea as .po-title/.po-meta).
+    // Always rendered, open or collapsed, so phones/addresses are scannable.
+    const inf=cust===NOCUST?null:poCustInfo(cust,ords);
+    const fld=(lbl,val,style='')=>`<span class="field"><span class="lbl">${lbl}</span><span class="v"${style?` style="${style}"`:''}>${val}</span></span>`;
+    let meta="";
+    {
+      // the counts live here rather than in the pin — the pin is fixed-width and
+      // a long name + counts collided, cutting off mid-word
+      const bits=[fld("📦",`${n} product${n===1?"":"s"} · ${byPo.size} order${byPo.size===1?"":"s"}`)];
+      if(inf&&inf.phone) bits.push(fld("☎",inf.wa
+        ?`<a class="mono" href="https://wa.me/${poEsc(inf.wa)}" target="_blank" rel="noopener" title="واتساب · WhatsApp">${poEsc(inf.phone)}</a>`
+        :`<span class="mono">${poEsc(inf.phone)}</span>`));
+      if(inf&&inf.city) bits.push(fld("📍",poEsc(inf.city)));
+      if(inf&&inf.address) bits.push(fld("🏠",`<span class="addr" title="${poEsc(inf.address)}">${poEsc(inf.address)}</span>`));
+      if(inf&&inf.id_number) bits.push(fld("🪪",`<span class="mono">${poEsc(inf.id_number)}</span>`));
+      if(anyQuoted&&dep>0) bits.push(fld(T("عربون · deposit"),
+        `${money(Math.round(dep*100)/100)} · ${T("متبقّي · left")} ${money(Math.round((quoted-dep)*100)/100)}`,'color:#15803d;font-weight:700'));
+      if(PO_MONEY&&est>0) bits.push(fld("≈",`<span title="Σ تقدير تكلفة منتجات هذا العميل · estimated cost of this customer's products">${money(Math.round(est*100)/100)}</span>`));
+      if(bits.length) meta=`<div class="poc-meta"><div class="in">${bits.join("")}</div></div>`;
+    }
     const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;poCustToggle('${poEsc(cust)}')" style="cursor:pointer">
         <div class="bt-pin">
           <span class="caret">${collapsed?"▸":"▾"}</span>
-          <b class="pkg-title${cust===NOCUST?'" style="color:#b45309':''}" >👤 ${poEsc(cust)}</b>
-          <span class="muted2" style="font-size:11px;flex:0 0 auto">${n} product${n===1?"":"s"} · ${byPo.size} order${byPo.size===1?"":"s"}</span>
-          ${stChip}${quotedChip}${depChip}${estChip}
+          <b class="pkg-title cust" title="${poEsc(cust)}"${cust===NOCUST?' style="color:#b45309"':''}>👤 ${poEsc(cust)}</b>
         </div>
-      </div></div>`;
+        ${cells}
+      </div>${meta}</div>`;
     if(collapsed) return `<div class="pkg">${head}</div>`;
     // one order = one sub-block (separated by a hairline via CSS); NO redundant
     // label row — the order / package / pkg-status / 💵 collect columns on each
