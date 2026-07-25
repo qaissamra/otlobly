@@ -203,12 +203,15 @@
     <div id="waStatus" style="margin-top:10px"></div>
     <button class="ghost" id="b_email" onclick="emailOpen()"
             style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
-    <!-- Push-OTP (typed code): visible when the server has the WhatsApp Cloud API
-         configured (otp_enabled = token + phone id in env; WHATSAPP_OTP_TEMPLATE/
-         _KIND pick the carrier template). Hidden-but-in-DOM otherwise, because
-         paint()/sendCode() reference these ids. Reuses the #phone input above. -->
+    <!-- Typed code (SMS/WhatsApp): visible only when the server can actually deliver
+         on the selected channel (otp_enabled = notify.otp_available()). Kept LAST and
+         styled as a secondary outline button on purpose — the WhatsApp/email doors above
+         are free, this one costs per send, so it reads as the fallback. Hidden-but-in-DOM
+         otherwise, because paint()/sendCode() reference these ids. Reuses #phone above. -->
     <div{% if not otp_enabled %} style="display:none"{% endif %}>
-      <button id="b_send" onclick="sendCode()"></button>
+      <button class="ghost" id="b_send" onclick="sendCode()"
+              style="border:1px solid var(--line);border-radius:999px;width:100%;padding:12px;font-size:14px"></button>
+      <div class="hint" id="t_smshint"></div>
       <div id="out1"></div>
     </div>
   </div>
@@ -355,12 +358,13 @@ document.addEventListener("click", function(e){
   else el.style.display="none"; })();
 let LANG="ar", PHONE="", LEMAIL="", ECODE=false, MCODE=false, D=null, TAB="home";
 const T={
-  ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"إرسال رمز الدخول",
+  ar:{introphone:"سجّل الدخول لمتابعة شحناتك وطلباتك.", phonelbl:"رقم الجوال", send:"📱 أرسلوا لي رمزاً برسالة SMS",
       phonehint:"سنرسل رسالة واتساب فيها زر «تأكيد الحساب» — اضغطه لتسجيل الدخول.",
+      smshint:"ما وصلتك رسالة واتساب؟ نرسل لك رمزاً برسالة نصية على نفس الرقم أعلاه.",
       vlbtn:"📲 أرسلوا لي زر الدخول على واتساب",
       vlsent:"إذا كان رقمك مسجلاً لدينا، وصلتك رسالة واتساب الآن — اضغط زر «تأكيد الحساب» فيها.",
       vlwait:"⏳ بانتظار تسجيل دخولك…",
-      introcode:"أدخل الرمز المكوّن من 6 أرقام المُرسل إلى واتساب.", codelbl:"رمز الدخول",
+      introcode:"أدخل الرمز المكوّن من 6 أرقام المُرسل إلى جوالك.", codelbl:"رمز الدخول",
       verify:"دخول", resend:"تغيير الرقم", hello:"مرحباً", hellosub:"كل شحناتك وطلباتك هنا", logout:"خروج",
       deliveries:"📦 شحناتك الحالية", orders:"🧾 كل طلباتك", noship:"لا توجد شحنات بعد.", noord:"لا توجد طلبات بعد.",
       curr:"الحالة", track:"رقم التتبّع", eta:"🚚 الوصول المتوقّع", etalbl:"الوصول المتوقّع", prep:"نقوم بتجهيز طلبك",
@@ -377,12 +381,13 @@ const T={
       eback:"رجوع", esent:"إذا كان بريدك مربوطاً بحساب، وصلك رمز الآن.", enolink:"البريد الإلكتروني: غير مربوط",
       elink:"ربط بريد", echange:"تغيير", elinked:"تم ربط بريدك ✓",
       foot:"Otlobly · لأي استفسار تواصل معنا", sending:"…", verifying:"…"},
-  en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"Send login code",
+  en:{introphone:"Sign in to follow your shipments and orders.", phonelbl:"Mobile number", send:"📱 Text me a code by SMS",
       phonehint:"We'll WhatsApp you a message with a “Verify account” button — tap it to sign in.",
+      smshint:"No WhatsApp message? We'll text a code to the same number above.",
       vlbtn:"📲 Send me a login button on WhatsApp",
       vlsent:"If this number has an account, a WhatsApp message is on its way — tap its “Verify account” button.",
       vlwait:"⏳ Waiting for your sign-in…",
-      introcode:"Enter the 6-digit code sent to your WhatsApp.", codelbl:"Login code",
+      introcode:"Enter the 6-digit code sent to your phone.", codelbl:"Login code",
       verify:"Sign in", resend:"Change number", hello:"Hi", hellosub:"All your shipments & orders, in one place", logout:"Log out",
       deliveries:"📦 Current shipments", orders:"🧾 All your orders", noship:"No shipments yet.", noord:"No orders yet.",
       curr:"Status", track:"Tracking #", eta:"🚚 Expected arrival", etalbl:"Expected arrival", prep:"We're preparing your order",
@@ -429,7 +434,7 @@ function setLang(l){ LANG=l;
   if(D && $("s_dash").style.display!=="none") renderLists();  // re-render cards in the new language
 }
 function paint(){
-  ["introphone","phonelbl","phonehint","introcode","codelbl","deliveries","orders","payments",
+  ["introphone","phonelbl","phonehint","smshint","introcode","codelbl","deliveries","orders","payments",
    "introemail","emaillbl","ecodelbl","qorder","qordersub","qtrack","qtracksub","sethead","hellosub"]
     .forEach(k=>{const e=$("t_"+k);if(e)e.textContent=t(k);});
   $("b_vl").textContent=t("vlbtn");
