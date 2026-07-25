@@ -538,6 +538,54 @@ def main():
     check("clearing the pick falls back to the board again",
           r["pname"] == "FAISAL" and r["pname_id"] == "CRM-777")
     _del_thread("GWD009000023"); _del_thread("GWD009000024")
+
+    print("— default name: only where NEITHER board names the parcel —")
+    with db.connect() as c:      # a parcel no board names at all
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('item','NID nameless','on hold',?,?)""",
+                  (now_ms, json.dumps({"tracking_number": "GWD009000025",
+                                       "fields": {"BRAND": "x"}})))
+    check("no default set → a nameless parcel stays nameless",
+          gm.parcel_name("GWD009000025") == ""
+          and gm._fill("{id_number}", "GWD009000025") == "")
+    r = co.post("/api/settings", json={"gaash_mail":
+                                       {"default_name": "  FAISAL  "}}).get_json()
+    check("default_name saved + trimmed", r.get("ok")
+          and gm._setts().get("default_name") == "FAISAL")
+    check("the nameless parcel now takes the default, flagged as such",
+          gm.parcel_name("GWD009000025") == "FAISAL"
+          and gm._fill("{id_number}", "GWD009000025") == "999888777"
+          and gm.parcel_name_src("GWD009000025") == "default")
+    check("a parcel the BOARD names ignores the default",
+          gm.parcel_name("GWD009000021") == "faisal"
+          and gm.parcel_name_src("GWD009000021") == "board")
+    check("Purchases keeps its Main name, never the default",
+          gm.parcel_name("GWD009000001") == "Test Buyer"
+          and gm.parcel_name_src("GWD009000001") == "board")
+    _mk_thread("GWD009000025", step=0, state="active")   # a pick lives ON the thread
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000025", "action": "set_name",
+                                       "pname": "Nuray htab"})
+    check("an owner pick outranks the default",
+          gm.parcel_name("GWD009000025") == "Nuray htab"
+          and gm.parcel_name_src("GWD009000025") == "pick"
+          and gm._fill("{id_number}", "GWD009000025") == "111222333")
+    co.post("/api/gaash/thread", json={"gwd": "GWD009000025", "action": "set_name",
+                                       "pname": ""})
+    # the batched maps the picker/list draw from must agree with the per-GWD truth
+    pm2 = gm.parcel_name_map()
+    check("batched maps agree with _fill and parcel_name_src once a default is set",
+          all(gm.effective_id_map(pm2).get(g, "") == gm._fill("{id_number}", g)
+              and gm.parcel_src_map(pm2).get(g, "") == gm.parcel_name_src(g)
+              for g in ("GWD009000021", "GWD009000025", "GWD009000001")))
+    check("the customer's own ID still beats the default",
+          gm._fill("{id_number}", "GWD009000022") == "111222333")
+    co.post("/api/settings", json={"gaash_mail": {"default_name": ""}})
+    check("clearing the default returns those parcels to blank",
+          gm.parcel_name("GWD009000025") == ""
+          and gm._fill("{id_number}", "GWD009000025") == "")
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders WHERE name='NID nameless'")
+    _del_thread("GWD009000025")
     with db.connect() as c:
         c.execute("DELETE FROM leluxe_orders WHERE name='NID crm'")
         c.execute("DELETE FROM customers WHERE customer_code='CUS-NIDT'")

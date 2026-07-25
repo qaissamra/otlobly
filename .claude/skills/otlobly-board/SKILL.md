@@ -405,7 +405,21 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
   than silently falling back** (effective_id_map guards picked GWDs out of its
   later passes to match). The picker only sends names the owner actually
   changed (`value !== data-auto`), so untouched rows keep following the board.
-  Also editable after enrollment from the conversation header. Editor
+  Also editable after enrollment from the conversation header.
+  **Default name (2026-07-26)** — measured: **92 of 105 Leluxe parcels carry NO
+  `NAME ON PACKAGEE`**, while Purchases names 12/12 from `ship_to`. So Settings
+  `gaash_mail.default_name` fills ONLY parcels neither board names; the full
+  chain is `pick → customer CRM ID → board name → default`, and
+  `parcel_name = _picked_name or _board_name or _default_name` (the board logic
+  lives once, in `_board_name`). Batched twins: `_board_name_map` (raw scan),
+  `parcel_name_map` (board + picks + default over `_all_parcel_gwds`),
+  `parcel_src_map`/`parcel_name_src` → `pick|board|default` and
+  `parcel_board_map` → `leluxe|purchases`; both ship on candidates and threads
+  as `pname_src`/`source`. **A default-sourced name is marked `· default`
+  everywhere** (picker, conversation row, chat header) — assuming an identity on
+  a customs document must never read as a board fact. **Don't re-propose keying
+  IDs by Amazon order number**: Leluxe averages 1.06 parcels/order, so it needs
+  ~110 keys vs 12 by name, and 8 Leluxe roots have no order number at all. Editor
   (`gmRenderTpl`) has an insert-variable toolbar (core chips + searchable
   all-columns combobox `gmTokBar`/`gmTokPick`, insert-at-caret `gmTokInsert`/
   `gmTokCaret`), a big body (rows=22, min-height 48vh), and a `GM.tplEditId`

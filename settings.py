@@ -134,6 +134,10 @@ DEFAULT_GAASH_MAIL = {
     # on-package name (ClickUp "NAME ON PACKAGEE": FAISAL / QAIS / Nuray…) → that
     # person's ID number; templates insert it via {name_id}
     "name_ids": {},
+    # the account MOST parcels ship under — used only when neither board names a
+    # parcel (most Leluxe rows leave NAME ON PACKAGEE blank). Always overridable
+    # per package, and every surface marks a name that came from here.
+    "default_name": "",
 }
 
 
@@ -412,6 +416,9 @@ def apply(body, config=None, persist=True):
                         if str(x or "").strip()][:15]
                 if vals:
                     cfg.set_path(config, f"gaash_mail.{k}", vals)
+        if "default_name" in gm:
+            cfg.set_path(config, "gaash_mail.default_name",
+                         re.sub(r"\s+", " ", str(gm["default_name"] or "")).strip()[:60])
         if isinstance(gm.get("name_ids"), dict):
             # on-package name → ID number; the whole dict is replaced each save, so
             # a cleared input in the modal deletes that name's mapping

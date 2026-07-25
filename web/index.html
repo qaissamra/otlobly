@@ -9897,7 +9897,7 @@ function gmRenderList(){
         <span class="muted2" style="font-size:10.5px">${gmAgo(t.last_activity)}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
-        ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}</span>`:''}
+        ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
     </div>`;
@@ -9951,7 +9951,8 @@ function gmRenderChat(){
       <select onchange="gmSetName(this.value)" style="font-size:11.5px;padding:2px 4px;max-width:150px" title="${T("يحدد رقم الهوية في الإيميلات القادمة · decides the ID number in the emails that follow")}">
         ${gmNameOpts(th.pname||"")}
       </select>
-      ${gmIdPill(th.pname_id||"")}
+      ${gmDefMark(th.pname_src)}
+      ${gmIdPill(th.pname_id||"",th.source)}
     </div>
     <div class="gm-msgs" id="gmMsgs">${bubbles}</div>
     <div class="gm-compose">
@@ -10024,17 +10025,31 @@ function gmNameOpts(sel){                    // mapped names (they have IDs) + t
   return `<option value=""${sel?"":" selected"}>— ${T("بلا اسم · no name")} —</option>`
     +names.map(n=>`<option value="${poEsc(n)}"${gmFold(n)===gmFold(sel||"")?" selected":""}>${poEsc(n)}${gmNameId(n)?"":" ⚠"}</option>`).join("");
 }
-function gmIdPill(id){
+function gmIdPill(id,src){
+  // the ⚠ should say WHERE to fix it: an Otlobly purchase is addressed to the
+  // customer, so its ID lives on that customer's CRM record; a Leluxe parcel
+  // ships under an AZ account, so its ID lives in the ⚙ name list.
+  const where=src==="purchases"
+    ?T("طرد أطلبلي — أضف رقم هوية العميل من صفحته في العملاء · an Otlobly purchase — add the customer's ID number on their Customers page")
+    :T("لا هوية لهذا الاسم — أضفها من ⚙ الحسابات والقوالب · no ID for this name — add it in ⚙ Accounts & templates");
   return id
     ?`<span class="pill mono" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle" title="${T("رقم الهوية الذي سيحمله إيميل هذا الطرد · the ID this package's email will carry")}">🪪 ${poEsc(id)}</span>`
-    :`<span class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#b45309;font-size:9.5px;display:inline-block;vertical-align:middle" title="${T("لا هوية لهذا الاسم — أضفها من ⚙ الحسابات والقوالب · no ID for this name — add it in ⚙ Accounts & templates")}">⚠ ${T("بلا هوية · no ID")}</span>`;
+    :`<span class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#b45309;font-size:9.5px;display:inline-block;vertical-align:middle" title="${where}">⚠ ${T("بلا هوية · no ID")}</span>`;
+}
+// a name nobody put on the parcel — it came from the Settings default. Marked
+// everywhere it shows, because assuming an identity on a customs document
+// must never look like a fact the boards asserted.
+function gmDefMark(src){
+  return src==="default"
+    ?`<span class="muted2" style="font-size:9.5px;flex:none;opacity:.75" title="${T("لا لوحة تسمّي هذا الطرد — الاسم من الإعداد الافتراضي، غيّره إن لم يكن صحيحاً · no board names this parcel — the name comes from the Settings default; change it if that's wrong")}">${T("افتراضي · default")}</span>`
+    :"";
 }
 function gmCandName(sel){
   // back to the detected name → show the ID it originally resolved to (which may
   // be the customer's own CRM ID, not a mapped one); otherwise the picked name's
   const id=(sel.value===sel.dataset.auto)?(sel.dataset.autoid||""):gmNameId(sel.value);
   const cell=document.querySelector(`.gmCandId[data-gwd="${CSS.escape(sel.dataset.gwd)}"]`);
-  if(cell) cell.innerHTML=gmIdPill(id);
+  if(cell) cell.innerHTML=gmIdPill(id,cell.dataset.src);
 }
 function gmNewOpen(preGwds){
   const ov=GM.ov||{}; const cands=(ov.candidates||[]).slice(), ids=ov.ids||[], accts=ov.accounts||[];
@@ -10055,7 +10070,8 @@ function gmNewOpen(preGwds){
       <select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(c.pname||"")}" data-autoid="${poEsc(c.pname_id||"")}" onchange="gmCandName(this)" onclick="event.stopPropagation()" style="width:112px;flex:none;font-size:11.5px;padding:2px 4px" title="${T("الاسم الذي يُشحن الطرد باسمه — غيّره ليطابق الطرد الحقيقي · the name this parcel ships under — change it to match the actual parcel")}">
         ${gmNameOpts(c.pname)}
       </select>
-      <span class="gmCandId" data-gwd="${poEsc(c.gwd)}" style="width:96px;flex:none">${gmIdPill(c.pname_id)}</span>
+      ${gmDefMark(c.pname_src)}
+      <span class="gmCandId" data-gwd="${poEsc(c.gwd)}" data-src="${poEsc(c.source||"")}" style="width:96px;flex:none">${gmIdPill(c.pname_id,c.source)}</span>
       ${(c.gash_status||c.status)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${poEsc(c.gash_status||c.status)}</span>`:""}
       <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(c.name||c.customers||"")}</span></label>`;
   $("bulkBody").innerHTML=`
@@ -10188,6 +10204,14 @@ function gmSettingsOpen(){
     </div>
     <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("رقم الهوية لكل اسم على الطرد · ID number per on-package name")}</b>
       <div class="muted2" style="font-size:11px">${T("الأسماء من عمود NAME ON PACKAGEE في كليك أب. {id_number} يعطي هوية العميل نفسه، وإن لم تكن مسجّلة يرجع لهذه القائمة — فاملأها للطرود التي لا هوية لعميلها (طرود ليلوكس غالباً) · names come from the ClickUp NAME ON PACKAGEE column. {id_number} uses the customer's own ID and falls back to this list when they have none — fill it for packages with no customer ID (typically Leluxe)")}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:7px;font-size:12.5px;padding:7px 9px;background:var(--bg2);border:1px solid var(--line);border-radius:10px">
+        <b style="flex:none">${T("الاسم الافتراضي · Default name")}</b>
+        <span class="muted2" style="font-size:11px;flex:1;min-width:0">${T("للطرود التي لا تحمل اسماً على أي لوحة · for parcels neither board names")}</span>
+        <select id="gmDefName" style="width:150px;flex:none;font-size:12px">
+          <option value="">— ${T("بلا · none")} —</option>
+          ${nNames.map(n=>`<option value="${poEsc(n)}"${gmFold(n)===gmFold(s.default_name||"")?" selected":""}>${poEsc(n)}</option>`).join("")}
+        </select>
+      </div>
       ${nNames.map(n=>`<div style="display:flex;gap:8px;align-items:center;margin-top:5px;font-size:12.5px">
         <b style="min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(n)}">${poEsc(n)}</b>
         <input class="gmNid" data-name="${poEsc(n)}" value="${poEsc(nidVal(n))}" placeholder="${T("رقم الهوية · ID number")}" dir="ltr" style="flex:1;min-width:140px"></div>`).join("")
@@ -10237,6 +10261,7 @@ async function gmSettingsSave(btn){
   const nn=(($("gmNidNewName")||{}).value||"").trim(), nv=(($("gmNidNewNum")||{}).value||"").trim();
   if(nn&&nv) nid[nn]=nv;
   gm.name_ids=nid;
+  gm.default_name=(($("gmDefName")||{}).value||"").trim();
   btn.disabled=true;
   const r=await post("/api/settings",{gaash_mail:gm});
   btn.disabled=false;

@@ -1207,10 +1207,14 @@ def parcel_name(gwd):
     """The name this ONE parcel ships under — what GAASH reads off the label.
     The owner's pick (gaash_threads.pname) wins; otherwise Leluxe's ClickUp
     "NAME ON PACKAGEE" column, then a Purchases column of that name, then the
-    PO's Main name (ship_to)."""
-    picked = _picked_name(gwd)
-    if picked:
-        return picked
+    PO's Main name (ship_to), and finally the Settings default_name."""
+    # neither board names it (most Leluxe rows leave NAME ON PACKAGEE blank) →
+    # the Settings default, which every surface marks as assumed
+    return _picked_name(gwd) or _board_name(gwd) or _default_name()
+
+
+def _board_name(gwd):
+    """What the BOARDS say this parcel ships under, ignoring pick and default."""
     nm = _name_on_pkg_for(gwd)
     if nm:
         return nm
@@ -1223,10 +1227,26 @@ def parcel_name(gwd):
         for p in (purchases.load() or {}).get("purchase_orders") or []:
             for pk in (p.get("packages") or []):
                 if str(pk.get("tracking_number") or "").strip().upper() == g:
-                    return str(p.get("ship_to") or "").strip()
+                    ship = str(p.get("ship_to") or "").strip()
+                    if ship:
+                        return ship
     except Exception:  # noqa
         pass
     return ""
+
+
+def _default_name():
+    return str(_setts().get("default_name") or "").strip()
+
+
+def parcel_name_src(gwd):
+    """Where parcel_name's answer came from: pick | board | default | "" — so the
+    UI can flag an ASSUMED identity rather than presenting it as fact."""
+    if _picked_name(gwd):
+        return "pick"
+    if _board_name(gwd):
+        return "board"
+    return "default" if _default_name() else ""
 
 
 def _picked_name(gwd):
@@ -1276,9 +1296,8 @@ def name_id_of(name):
     return ""
 
 
-def parcel_name_map():
-    """{GWD: parcel name} for BOTH boards in one scan — per-GWD parcel_name()
-    costs a query each, which the picker and the conversation list can't afford."""
+def _board_name_map():
+    """{GWD: the name the BOARDS give it} in one scan — no picks, no default."""
     out = {}
     try:
         with db.connect() as c:
@@ -1323,7 +1342,85 @@ def parcel_name_map():
                     out[tn] = ship
     except Exception:  # noqa
         pass
-    out.update(picked_name_map())      # the owner's pick beats both boards
+    return out
+
+
+def parcel_name_map():
+    """{GWD: the name we'll actually use} — board scan, then the owner's picks on
+    top, then the Settings default for whatever neither board named."""
+    out = _board_name_map()
+    out.update(picked_name_map())          # a pick beats both boards
+    dflt = _default_name()
+    if dflt:                               # only fills gaps; never masks a board name
+        for gwd in set(_all_parcel_gwds()) - set(out):
+            out[gwd] = dflt
+    return out
+
+
+def _all_parcel_gwds():
+    """Every GWD either board knows about — the set the default may fill."""
+    out = set()
+    try:
+        with db.connect() as c:
+            for r in c.execute("SELECT data_json FROM leluxe_orders "
+                               "WHERE deleted=0 AND data_json LIKE '%GWD%'"):
+                try:
+                    d = json.loads(r["data_json"] or "{}")
+                except Exception:  # noqa
+                    continue
+                f = d.get("fields") or {}
+                tn = str(d.get("tracking_number") or "").strip().upper()
+                if not tn:
+                    for k, v in f.items():
+                        if k.strip().lower() == "tracking number":
+                            tn = str(v or "").strip().upper()
+                            break
+                if re.match(r"GWD\d+$", tn or ""):
+                    out.add(tn)
+    except Exception:  # noqa
+        pass
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if re.match(r"GWD\d+$", tn or ""):
+                    out.add(tn)
+    except Exception:  # noqa
+        pass
+    return out
+
+
+def parcel_board_map():
+    """{GWD: "purchases"|"leluxe"} — which board owns the parcel. Drives the
+    "where do I add the missing ID?" hint (customer CRM vs the ⚙ name list)."""
+    out = {}
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if tn:
+                    out[tn] = "purchases"
+    except Exception:  # noqa
+        pass
+    for gwd in _all_parcel_gwds():
+        out.setdefault(gwd, "leluxe")
+    return out
+
+
+def parcel_src_map(pmap=None):
+    """{GWD: pick|board|default} for the rows the UI is about to draw — batched
+    twin of parcel_name_src (which costs a query per GWD)."""
+    pmap = parcel_name_map() if pmap is None else pmap   # else default-only GWDs are missed
+    boards = _board_name_map()
+    picks = picked_name_map()
+    dflt = _default_name()
+    out = {}
+    for gwd in set(list(pmap.keys()) + list(boards) + list(picks)):
+        out[gwd] = ("pick" if picks.get(gwd)
+                    else "board" if boards.get(gwd)
+                    else ("default" if dflt else ""))
     return out
 
 
@@ -2240,12 +2337,15 @@ def overview():
                 last[r["gwd"]] = {"dir": r["dir"], "kind": r["kind"],
                                   "at": r["at"], "body": (r["body"] or "")[:140]}
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
-    emap = effective_id_map(pmap)
+    emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
+    bmap = parcel_board_map()
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
         th.pop("pending_files_json", None)
         th["pname"] = pmap.get(th["gwd"], "")
         th["pname_id"] = emap.get(th["gwd"], "")
+        th["pname_src"] = smap.get(th["gwd"], "")
+        th["source"] = bmap.get(th["gwd"], "")
     proposed = [t for t in threads if t.get("state") == "proposed"]
     return {"threads": [t for t in threads if t.get("state") != "proposed"],
             "proposed": proposed,
@@ -2349,10 +2449,11 @@ def candidates():
     # the name each parcel ships under + the ID mapped to it — the picker shows
     # both so the owner can see, before sending, which ID each email will carry
     pmap = parcel_name_map()
-    emap = effective_id_map(pmap)
+    emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     for cd in out:
         cd["pname"] = pmap.get(cd["gwd"], "")
         cd["pname_id"] = emap.get(cd["gwd"], "")
+        cd["pname_src"] = smap.get(cd["gwd"], "")
     # Leluxe first (has clearance status), then by GWD
     out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
     return out
@@ -2463,6 +2564,8 @@ def thread_detail(gwd):
     # next email will actually carry
     th["pname"] = parcel_name(gwd)
     th["pname_id"] = id_number_for_email(gwd)
+    th["pname_src"] = parcel_name_src(gwd)
+    th["source"] = parcel_board_map().get(gwd, "")
     return {"thread": th, "messages": msgs}
 
 
