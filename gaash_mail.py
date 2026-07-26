@@ -318,20 +318,35 @@ def templates_list():
     return tpls
 
 
-def template_save(t):
+def template_save(t, user=None):
     tid = (t.get("id") or "").strip() or f"tpl_{int(time.time() * 1000)}"
     name = str(t.get("name") or "").strip()
     if not name:
         return {"ok": False, "error": "template name required"}
     with db.connect() as c:
-        c.execute("""INSERT INTO gaash_templates (id,name,subject_tpl,body_tpl,updated_at)
-            VALUES (?,?,?,?,?)
+        # created_by is written on INSERT only — editing someone else's template
+        # does not make it yours, and the picker's Created-by column would lie
+        c.execute("""INSERT INTO gaash_templates
+            (id,name,subject_tpl,body_tpl,updated_at,created_by)
+            VALUES (?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,
               subject_tpl=excluded.subject_tpl, body_tpl=excluded.body_tpl,
               updated_at=excluded.updated_at""",
                   (tid, name, str(t.get("subject_tpl") or ""),
-                   str(t.get("body_tpl") or ""), now_iso()))
+                   str(t.get("body_tpl") or ""), now_iso(),
+                   (user or "").strip() or None))
     return {"ok": True, "id": tid}
+
+
+def template_touch(tid):
+    """Stamp 'last used'. A use is the template actually going into an email —
+    the sequencer sending it, or a human picking it into the reply box. Merely
+    opening the picker is not a use."""
+    if not tid:
+        return
+    with db.connect() as c:
+        c.execute("UPDATE gaash_templates SET last_used_at=? WHERE id=?",
+                  (now_iso(), tid))
 
 
 def template_remove(tid):
@@ -1159,6 +1174,51 @@ def thread_restart(gwd, fresh=False, at=None):
             **({} if res.get("ok") else
                {"send_error": res.get("error"),
                 "dry_run": res.get("dry_run", False)})}
+
+
+def thread_switch_seq(gwd, seq_id, at=None):
+    """Move a package to a DIFFERENT workflow.
+
+    `seq_id` was only ever written at enrollment (start_threads), so a package
+    was stuck in whatever workflow it started in — the sole way out being delete
+    + re-enroll, which is refused once real correspondence exists.
+
+    The move RESTARTS at email #1 of the new workflow: step numbers are
+    per-sequence, so carrying step 2 into a 3-step workflow would silently skip
+    its first two emails. The message history is kept — it is real
+    correspondence with the same recipient, and the next email threads onto it.
+    """
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    if th.get("state") == "proposed":
+        return {"ok": False, "error":
+                "اقتراح لم يبدأ — وافق عليه أولاً · "
+                "still a suggestion — approve it first"}
+    seq = sequence_get(seq_id)
+    if not seq:
+        return {"ok": False, "error": "workflow not found"}
+    if seq.get("paused"):
+        return {"ok": False, "error":
+                "هذا السير موقوف — شغّله أولاً · "
+                "that workflow is off — switch it on first"}
+    if (th.get("seq_id") or "") == seq["id"]:
+        return {"ok": False, "error": "already in that workflow"}
+    # subject too: _thread_send prefers the thread's stored base subject over the
+    # template's, so leaving it would send the NEW sequence under the OLD subject
+    _thread_set(g, seq_id=seq["id"], step=0, state="active", subject=None,
+                missing_docs=0, missing_note=None, resend_json=None,
+                last_error=None,
+                next_send_at=(at or datetime.now(timezone.utc)
+                              .isoformat(timespec="seconds")))
+    out = {"ok": True, "gwd": g, "seq_id": seq["id"], "seq_name": seq.get("name")}
+    if at:                                 # the daemon sends it when it's due
+        return {**out, "scheduled_at": at}
+    res = send_step(g)                     # same immediate send as start_threads
+    return {**out, **({} if res.get("ok") else
+                      {"send_error": res.get("error"),
+                       "dry_run": res.get("dry_run", False)})}
 
 
 def _msg_add(gwd, rec):
@@ -1998,6 +2058,7 @@ def send_step(gwd):
                        step=step + 1, subject=subject, step_id=st.get("id"))
     if not res.get("ok"):
         return res
+    template_touch(st.get("template_id"))          # it really went out → "last used"
     _schedule_next(gwd, seq, step + 1)
     return {"ok": True, "step": step + 1, **res}
 

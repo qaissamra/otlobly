@@ -3045,6 +3045,14 @@ def api_gaash_thread():
         res = gaash_mail.thread_restart(gwd, fresh=bool(b.get("fresh")),
                                         at=b.get("at"))
         return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "switch_seq":    # move this package to a different workflow
+        res = gaash_mail.thread_switch_seq(gwd, (b.get("seq_id") or "").strip(),
+                                           at=b.get("at"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"moved to workflow {res.get('seq_name') or ''}".strip(),
+                         user=_user())
+        return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
             return jsonify({"ok": False, "error": "not a proposed thread"}), 400
@@ -3138,8 +3146,55 @@ def api_gaash_templates():
     if request.method == "DELETE":
         res = gaash_mail.template_remove((b.get("id") or "").strip())
     else:
-        res = gaash_mail.template_save(b)
+        res = gaash_mail.template_save(b, user=_user())
     return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/template_render", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_template_render():
+    """One template, rendered for ONE package — the same _fill() the sequencer
+    sends with, so a template picked by hand carries exactly what an automated
+    email would. Renders only; nothing is sent.
+
+    Also reports which tokens did not survive: `unresolved` came back literal
+    (no such board column), `blank` resolved to nothing at all. A visible
+    {days_waiting} is a fixable mistake — a silently empty sentence is not.
+    """
+    b = request.get_json(force=True, silent=True) or {}
+    gwd = (b.get("gwd") or "").strip().upper()
+    tid = (b.get("template_id") or "").strip()
+    tpl = next((t for t in gaash_mail.templates_list() if t["id"] == tid), None)
+    if not tpl:
+        return jsonify({"ok": False, "error": "template not found"}), 404
+    th = gaash_mail.thread_get(gwd)
+    body_tpl = tpl.get("body_tpl") or ""
+    subj_tpl = tpl.get("subject_tpl") or ""
+    unresolved, blank = [], []
+    for tok in sorted(set(re.findall(r"\{([^{}]+)\}", body_tpl + " " + subj_tpl))):
+        one = gaash_mail._fill("{" + tok + "}", gwd, th)
+        if one == "{" + tok + "}":
+            unresolved.append(tok)
+        elif not one.strip():
+            blank.append(tok)
+
+    def render(text):
+        # a token that resolves to NOTHING is left standing as itself. _fill()
+        # substitutes "" — right for the sequencer, wrong here: it turns into
+        # "The ID document () is attached", a blank the writer cannot see. The
+        # token survives the fill behind a sentinel, so the writer meets
+        # "{id_name}" and can fix it. _fill itself is untouched.
+        for i, t in enumerate(blank):
+            text = text.replace("{" + t + "}", f"\x00{i}\x00")
+        text = gaash_mail._fill(text, gwd, th)
+        for i, t in enumerate(blank):
+            text = text.replace(f"\x00{i}\x00", "{" + t + "}")
+        return text
+
+    gaash_mail.template_touch(tid)          # picked into a real email → "last used"
+    return jsonify({"ok": True, "subject": render(subj_tpl), "body": render(body_tpl),
+                    "unresolved": unresolved, "blank": blank})
 
 
 @app.route("/api/gaash/rules", methods=["GET", "POST", "DELETE"])
