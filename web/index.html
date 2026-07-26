@@ -486,6 +486,13 @@
   .gm-dot.on{background:#f76808}
   .gm-unread{background:#e5484d;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 6px}
   .gm-prev{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* read receipt on a conversation row: grey = sent, nobody opened it yet;
+     green = somebody did. Absence of the pill means nothing was sent at all. */
+  .gm-read{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+    color:var(--muted);border:1px solid var(--line);background:var(--bg2);border-radius:999px;padding:2px 7px}
+  .gm-read i{width:6px;height:6px;border-radius:50%;background:var(--muted);opacity:.45}
+  .gm-read.on{color:#12a150;border-color:#12a15055;background:#12a1500f}
+  .gm-read.on i{background:#12a150;opacity:1}
   .gm-chat{padding:0;display:flex;flex-direction:column;max-height:calc(100vh - 210px)}
   .gm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
   .gm-msgs{flex:1;overflow:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
@@ -9961,6 +9968,14 @@ async function gmWfExpRender(seqId){
   if(html) lxtGridApply("bs",cur);
   if(gmRenderSeq._pinX) gmRenderSeq._pinX();   // keep the box inside the visible x-range
 }
+function gmReadPill(rd){                // 👁 did GAASH open what we sent?
+  if(!rd||!rd.sent) return "";          // nothing sent yet — no claim to make
+  const o=rd.opens||0;
+  const tip=o
+    ?`${T("فُتح · opened")} ${o}× ${rd.clicks?`· ${T("ضغط · clicks")} ${rd.clicks} `:""}· ${T("أول فتح · first")} ${relTime(rd.first_open_at)}`
+    :`${T("أُرسل ولم يُفتح بعد · sent, not opened yet")} — ${rd.sent}×`;
+  return `<span class="gm-read${o?" on":""}" title="${tip}"><i></i>${o||"0"}</span>`;
+}
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
   if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
@@ -9977,6 +9992,7 @@ function gmRenderList(){
         <span class="muted2" style="font-size:10.5px">${gmAgo(t.last_activity)}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
+        ${gmReadPill(t.reads)}
         ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}

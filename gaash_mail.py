@@ -2574,11 +2574,21 @@ def overview():
                     f"WHERE id IN ({q})", list(by_gwd.values())):
                 last[r["gwd"]] = {"dir": r["dir"], "kind": r["kind"],
                                   "at": r["at"], "body": (r["body"] or "")[:140]}
+        # did anyone READ what we sent? the same tracking the 🧭 tiles count,
+        # rolled up per parcel so the list can show it without opening a thread
+        reads = {r["gwd"]: {"sent": r["n"], "opens": r["opens"] or 0,
+                            "clicks": r["clicks"] or 0, "first_open_at": r["fo"]}
+                 for r in c.execute(
+                     "SELECT gwd, COUNT(*) n, SUM(opens) opens, SUM(clicks) clicks, "
+                     "MIN(first_open_at) fo FROM gaash_msgs "
+                     "WHERE dir='out' AND kind IN ('sent','resent') GROUP BY gwd")}
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     bmap = parcel_board_map()
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
+        th["reads"] = reads.get(th["gwd"]) or {"sent": 0, "opens": 0,
+                                               "clicks": 0, "first_open_at": None}
         th.pop("pending_files_json", None)
         th["pname"] = pmap.get(th["gwd"], "")
         th["pname_id"] = emap.get(th["gwd"], "")
