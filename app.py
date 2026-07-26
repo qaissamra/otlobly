@@ -2910,7 +2910,8 @@ def api_gaash_start():
     res = gaash_mail.start_threads(b.get("gwds") or [], b.get("id_doc_id"),
                                    b.get("account_id"),
                                    seq_id=(b.get("seq_id") or "").strip() or None,
-                                   names=b.get("names") if isinstance(b.get("names"), dict) else None)
+                                   names=b.get("names") if isinstance(b.get("names"), dict) else None,
+                                   schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
@@ -3029,8 +3030,9 @@ def api_gaash_thread():
             return jsonify({"ok": False, "error": "admin only"}), 403
         res = gaash_mail.thread_delete(gwd)
         return jsonify(res), (200 if res.get("ok") else 400)
-    elif action == "restart":       # 🔁 back to email #1 — sends immediately
-        res = gaash_mail.thread_restart(gwd)
+    elif action == "restart":       # 🔁 back to email #1 (now, or scheduled)
+        res = gaash_mail.thread_restart(gwd, fresh=bool(b.get("fresh")),
+                                        at=b.get("at"))
         return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
