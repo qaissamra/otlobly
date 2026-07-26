@@ -10962,9 +10962,11 @@ const GM_RULE_FIELDS=[
   {k:"label",       t:"text",   lab:"وصف التتبع · tracking label", help:"نص حالة التتبع الخام كما ورد · the raw tracking-status text as reported"},
   {k:"name",        t:"text",   lab:"الاسم · profile name", help:"اسم البروفايل / المُرسَل إليه على الطرد · the profile / ship-to name on the package"},
   {k:"customers",   t:"text",   lab:"العملاء · customers", help:"أسماء العملاء ضمن الطرد (مشتريات) · the customer names inside the package (Purchases)"},
-  {k:"source",      t:"enum",   lab:"المصدر · source", help:"من أي نظام أتى الطرد: ⌚ Leluxe أو 📦 مشتريات · which system the package comes from: ⌚ Leluxe or 📦 Purchases"},
+  {k:"source",      t:"enum",   lab:"المصدر · source", help:"من أي نظام أتى الطرد: ⌚ Leluxe أو 📦 مشتريات · which system the package comes from: ⌚ Leluxe or 📦 Purchases",
+    opts:[["leluxe","⌚ Leluxe"],["purchases","📦 مشتريات · Purchases"]]},
   {k:"age_days",    t:"number", lab:"عمر السجل · record age", help:"كم يوماً مضى منذ إنشاء السجل · how many days since the record was created"},
-  {k:"autoclear",   t:"enum",   lab:"✅ وسم التخليص داخل التطبيق · in-app AUTO CLEAR tag", help:"يساوي 1 عندما يحمل الطرد وسم ✅ من تبويب الجاهزية (لطرود المشتريات) — طرود ليلوكس توسم من عمود AUTO CLEAR في كليك أب · equals 1 when the parcel carries the ✅ tag from the Readiness tab (Purchases parcels) — Leluxe parcels are tagged via the ClickUp AUTO CLEAR column"}];
+  {k:"autoclear",   t:"enum",   lab:"✅ وسم التخليص داخل التطبيق · in-app AUTO CLEAR tag", help:"يساوي 1 عندما يحمل الطرد وسم ✅ من تبويب الجاهزية (لطرود المشتريات) — طرود ليلوكس توسم من عمود AUTO CLEAR في كليك أب · equals 1 when the parcel carries the ✅ tag from the Readiness tab (Purchases parcels) — Leluxe parcels are tagged via the ClickUp AUTO CLEAR column",
+    opts:[["1","✅ موسوم · tagged"]]}];
 // A small ? chip with a hover/tap tooltip (native title) — used across the builder.
 function gmHelp(txt){ return `<span class="gm-q" tabindex="0" title="${poEsc(T(txt))}" onclick="event.stopPropagation();alert(this.getAttribute('title'))">?</span>`; }
 const GM_RULE_OPS={
@@ -11067,8 +11069,8 @@ function gmRuleCritRender(){
     if(!noVal){
       if(fld.t==="number") val=`<input type="number" min="0" max="365" style="width:64px" value="${poEsc(String(cr.value==null?0:cr.value))}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
       else if(fld.t==="enum") val=`<select onchange="gmRuleSet(${gi},${ci},'value',this.value)">
-        <option value="leluxe" ${cr.value==="leluxe"?"selected":""}>⌚ Leluxe</option>
-        <option value="purchases" ${cr.value==="purchases"?"selected":""}>📦 ${T("مشتريات · Purchases")}</option></select>`;
+        ${(fld.opts||[["leluxe","⌚ Leluxe"],["purchases","📦 مشتريات · Purchases"]])
+          .map(([v,l])=>`<option value="${poEsc(v)}" ${cr.value===v?"selected":""}>${poEsc(T(l))}</option>`).join("")}</select>`;
       else val=`<input list="${gmDlId(fld.k)}" style="width:150px" value="${poEsc(String(cr.value==null?"":cr.value))}" placeholder="${T("قيمة · value")}" onchange="gmRuleSet(${gi},${ci},'value',this.value)">`;
     }
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
@@ -11114,9 +11116,10 @@ function gmRulePreviewKick(){
 function gmRuleSet(gi,ci,key,val){
   const cr=GM.ruleEdit.groups[gi].crits[ci];
   if(key==="field"&&val!==cr.field){
-    const t=gmRuleFld(val).t;
+    const f=gmRuleFld(val), t=f.t;
     cr.field=val; cr.op=GM_RULE_OPS[t][0][0];
-    cr.value=t==="number"?3:(t==="enum"?"leluxe":"");
+    // enum default = the field's own first option (source→leluxe, autoclear→1)
+    cr.value=t==="number"?3:(t==="enum"?((f.opts&&f.opts[0]&&f.opts[0][0])||"leluxe"):"");
   } else if(key==="op"){ cr.op=val; }
   else { cr.value=gmRuleFld(cr.field).t==="number"?parseInt(val||"0"):val; }
   gmRuleCritRender();
