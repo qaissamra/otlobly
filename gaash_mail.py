@@ -1049,6 +1049,30 @@ def thread_delete(gwd):
     return {"ok": True, "gwd": g}
 
 
+def thread_restart(gwd):
+    """🔁 back to email #1 and send it NOW. For threads whose 'sent' history
+    went to the wrong place (the test-inbox era) or where GAASH went silent —
+    history stays, only the sequence position resets. send_step re-renders
+    step 1 with the CURRENT recipient/template/ID resolution."""
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    if th.get("state") == "proposed":
+        return {"ok": False, "error":
+                "اقتراح لم يبدأ — وافق عليه بدلاً من الإعادة · "
+                "still a suggestion — approve it instead of restarting"}
+    _thread_set(g, step=0, state="active", missing_docs=0, missing_note=None,
+                resend_json=None, last_error=None,
+                next_send_at=datetime.now(timezone.utc)
+                .isoformat(timespec="seconds"))
+    res = send_step(g)                     # same immediate-send as start_threads
+    return {"ok": True, "gwd": g, "state": "active",
+            **({} if res.get("ok") else
+               {"send_error": res.get("error"),
+                "dry_run": res.get("dry_run", False)})}
+
+
 def _msg_add(gwd, rec):
     with db.connect() as c:
         c.execute("""INSERT INTO gaash_msgs
