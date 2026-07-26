@@ -843,6 +843,15 @@ def verify_token(token, url=""):
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 
 
+# **bold** in a template: <strong> in the HTML part, markers stripped from the
+# plain-text part — so a template stays readable and no reader sees asterisks
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.S)
+
+
+def strip_bold(text):
+    return _BOLD_RE.sub(r"\1", text or "")
+
+
 def _html_body(text, msg_db_id):
     """HTML alternative: escaped text with tracked links + an open pixel.
     Falls back to None (plain-text only) when no public base URL is set."""
@@ -859,6 +868,8 @@ def _html_body(text, msg_db_id):
         return (f'<a href="{base}/api/gaash/r/{t}?u={_uq(url)}">'
                 f"{html_mod.escape(url)}</a>")
     body = _URL_RE.sub(_sub, html_mod.escape(text or ""))
+    # escape ran first, so this can only bold — never inject markup
+    body = _BOLD_RE.sub(r"<strong>\1</strong>", body)
     body = body.replace("\n", "<br>\n")
     px = track_token(msg_db_id, 0, "")
     return (f'<div style="font-family:Arial,sans-serif;font-size:14px;'
@@ -1806,10 +1817,11 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
              attachments_json,notified,seq_id,step_id)
             VALUES (?,?,?,?,?,?,?,?,?, '[]',1,?,?)""",
                         (gwd, "out", kind, step, now, acct["email"], to_addr,
-                         subj, body or "", th.get("seq_id"), step_id))
+                         subj, strip_bold(body), th.get("seq_id"), step_id))
         mrow = cur.lastrowid
-    msg, mid = _build_msg(acct, to_addr, subj, body, attachments, chain,
-                          html=_html_body(body or "", mrow))
+    # plain part + stored copy carry no markers; the HTML part gets the <strong>
+    msg, mid = _build_msg(acct, to_addr, subj, strip_bold(body), attachments,
+                          chain, html=_html_body(body or "", mrow))
     try:
         _smtp_send(acct, msg)
     except smtplib.SMTPAuthenticationError:
