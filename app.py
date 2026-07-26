@@ -2884,6 +2884,18 @@ def api_gaash_declaration():
     in the 📄 Declarations folder and returns the library row so the caller can
     preview it and attach it to that package's first email."""
     b = request.get_json(force=True, silent=True) or {}
+    many = b.get("gwds")
+    if isinstance(many, list):
+        # one refusal must not sink the batch: a parcel with no name is reported
+        # by name with its reason, the rest are still generated
+        results = [{**gaash_mail.declaration_make(g), "gwd": str(g or "").strip().upper()}
+                   for g in many[:200]]
+        done = [r["gwd"] for r in results if r.get("ok")]
+        if done:
+            activity.log("create", "gaash", 0, ",".join(done[:10]),
+                         detail=f"generated {len(done)} customs declaration(s)",
+                         user=_user())
+        return jsonify({"ok": True, "results": results})
     res = gaash_mail.declaration_make(b.get("gwd"))
     if res.get("ok"):
         activity.log("create", "gaash", 0, res.get("gwd") or "",
@@ -3212,7 +3224,10 @@ def api_gaash_template_render():
             text = text.replace(f"\x00{i}\x00", "{" + t + "}")
         return text
 
-    gaash_mail.template_touch(tid)          # picked into a real email → "last used"
+    # previewing twenty packages before enrolling must not rewrite "last used"
+    # twenty times — only an actual pick counts as a use
+    if not b.get("preview"):
+        gaash_mail.template_touch(tid)
     return jsonify({"ok": True, "subject": render(subj_tpl), "body": render(body_tpl),
                     "unresolved": unresolved, "blank": blank})
 

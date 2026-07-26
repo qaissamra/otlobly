@@ -490,6 +490,36 @@
   /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
      picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
      whether it is already being chased. The compose header above says the rest. */
+  /* 📧 the enroll wizard: four short steps instead of one long scroll */
+  .wiz-strip{display:flex;gap:4px;padding:6px 0 10px;flex-wrap:wrap}
+  .wiz-tab{display:flex;align-items:center;gap:6px;border:1px solid var(--line);
+    background:var(--card);border-radius:999px;padding:5px 13px 5px 6px;cursor:pointer;
+    font:inherit;font-size:12px;font-weight:700;color:var(--muted)}
+  .wiz-tab i{font-style:normal;width:18px;height:18px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;
+    background:var(--bg2);color:var(--muted)}
+  .wiz-tab.done{color:var(--ink)} .wiz-tab.done i{background:#12a1501f;color:#12a150}
+  .wiz-tab.on{color:var(--ink);border-color:#f76808;background:#fff4ee}
+  .wiz-tab.on i{background:#f76808;color:#fff}
+  .wiz-tab:hover{color:var(--ink)}
+  /* the choices that used to scroll out of sight, pinned as one line */
+  .wiz-sum{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11.5px;
+    padding:7px 11px;margin-bottom:10px;border:1px solid var(--line);
+    border-radius:10px;background:var(--bg2)}
+  .wiz-opt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;cursor:pointer;
+    border:1px solid var(--line);border-radius:11px;background:var(--card)}
+  .wiz-opt:hover{border-color:#f7680855}
+  .wiz-opt input{margin-top:2px;flex:none}
+  .wiz-nav{display:flex;gap:9px;align-items:center;margin:4px 0 8px;font-size:12px}
+  /* the real email #1, as it will arrive */
+  .wiz-mail{border:1px solid var(--line);border-radius:11px;background:var(--card);overflow:hidden}
+  .wiz-mail-h{padding:7px 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .wiz-mail-h .muted2{display:inline-block;min-width:62px;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.05em}
+  .wiz-mail-b{padding:12px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;
+    max-height:30vh;overflow:auto}
+  .wiz-mail-f{padding:8px 12px;border-top:1px solid var(--line);display:flex;
+    gap:6px;flex-wrap:wrap;align-items:center}
   /* 🪪 the document library, in folders. A declaration is usually a PDF, and a
      PDF in an <img> is a broken-image icon — hence the typed face below. */
   .gm-folders{display:flex;gap:10px;flex-wrap:wrap}
@@ -3525,7 +3555,6 @@ const LXT_COLS={
   "en":[
     {key:"pname",    label:"الاسم على الطرد · name on package", w:150, sortable:true},
     {key:"nameid",   label:"🪪 رقم الهوية · ID number", w:126},
-    {key:"decl",     label:"📄 التصريح · declaration", w:132},
     {key:"status",   label:"حالة الطلب · order status", w:126, sortable:true},
     {key:"gash",     label:"حالة الجمارك · GAASH status", w:142, sortable:true},
     {key:"seq",      label:"🧵 التسلسل · sequence",   w:112, sortable:true},
@@ -10425,31 +10454,79 @@ function gmNewOpen(preGwds){
     const c=cands.find(x=>x.gwd===g); return !gmSeqBlock(c&&c.thread); }));
   // what step 2 has to remember: rendering the confirmation destroys step 1's
   // controls, so Back rebuilds them from here rather than from the DOM
-  GM.pickState={paste:"", q:"", names:{}};
+  GM.pickState={paste:"", q:"", names:{}, docIds:[], makeDecl:false, docs:{}};
   GM.idFolder=null; GM.idPending=null;   // a fresh open starts at the folder list
-  gmPickStep1();
+  GM.wiz={step:1};
+  gmWizRender();
 }
-function gmPickStep1(){
-  const ov=GM.ov||{}, accts=ov.accounts||[];   // the ID library renders itself (gmIdsRender)
-  const cands=GM.enrollCands||[], st=GM.pickState||{};
+// ── the enroll wizard ─────────────────────────────────────────────────────────
+// One scroll had grown to a compose header + search + chips + a full column
+// table + a paste box + the document folders. Four short steps instead, so the
+// workflow you pick is no longer 700px above the packages it applies to —
+// which is why choosing one used to feel like it did nothing.
+const GM_WIZ=[{n:1,lab:"الطرود · Packages"},{n:2,lab:"المستندات · Documents"},
+              {n:3,lab:"سير العمل · Workflow"},{n:4,lab:"المراجعة · Review"}];
+function gmWizRender(){
+  const step=((GM.wiz||{}).step)||1;
   $("bulkModal").classList.add("en-pick");
-  $("bulkBody").innerHTML=`
-    <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
-    <div class="gm-cmp">
-      <div class="gm-cmp-tabs">
-        <button onclick="gmEnrollTpl()" title="${T("اعرض نص الإيميلات — تُفتح فوق هذه النافذة · see what the emails say — opens over this dialog")}">📝 ${T("القوالب · Templates")}</button>
-        <button onclick="gmEnrollSeq()" title="${T("اختر سير العمل — تُفتح فوق هذه النافذة · pick the workflow — opens over this dialog")}">🧬 ${T("سير العمل · Sequences")}</button>
-        <button onclick="$('gmDocs').scrollIntoView({behavior:'smooth',block:'center'})" title="${T("الهويات والتصاريح المرفقة · the attached IDs and declarations")}">🪪 ${T("المستندات · Documents")}</button>
-      </div>
-      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("إلى · To")}</span><span id="gmCmpTo"></span></div>
-      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("من · From")}</span>
-        <select id="gmNewAcct" style="font-size:12px">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select></div>
-      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("الموضوع · Subject")}</span>
-        <span id="gmCmpSubj" style="font-size:12.5px;font-weight:600"></span></div>
-      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("سير العمل · Workflow")}</span>
-        <select id="gmNewSeq" onchange="gmComposeSync()" style="font-size:12px">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)}</option>`).join("")||`<option value="">${T("لا سير عمل — أنشئ واحداً · none — build one first")}</option>`}</select>
-        <span id="gmCmpSteps" class="muted2" style="font-size:11px"></span></div>
-    </div>
+  const strip=`<div class="wiz-strip">${GM_WIZ.map(s=>`
+    <button class="wiz-tab${s.n===step?" on":""}${s.n<step?" done":""}"
+      onclick="gmWizGo(${s.n})"><i>${s.n<step?"✓":s.n}</i>${T(s.lab)}</button>`).join("")}</div>`;
+  $("bulkBody").innerHTML=strip+`<div id="wizSummary" class="wiz-sum"></div><div id="wizBody"></div>`;
+  gmWizSummary();
+  ({1:gmWizPackages,2:gmWizDocs,3:gmWizFlow,4:gmWizReview}[step]||gmWizPackages)();
+}
+// what was scrolling out of sight is now one line that never leaves
+function gmWizSummary(){
+  const el=$("wizSummary"); if(!el) return;
+  const ov=GM.ov||{}, st=GM.pickState||{}, s=ov.settings||{};
+  const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
+  const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||(ov.accounts||[])[0]||{};
+  const to=((seq.to_address||s.to_address)||"").trim();
+  const nDoc=(st.docIds||[]).length+(st.makeDecl?1:0);
+  el.innerHTML=`<span><b>${gmNewGwds().length}</b> ${T("طرد · packages")}</span>
+    <span>🧬 ${poEsc(seq.name||"—")}</span>
+    <span>🪪 ${nDoc?`${nDoc} ${T("مستند · documents")}`:T("بلا مستندات · no documents")}</span>
+    <span class="spacer"></span>
+    <span class="muted2">${T("إلى · to")} ${gmToWarn(to)} ${acct.email?`· ${T("من · from")} ${poEsc(acct.email)}`:""}</span>`;
+}
+// "own inbox" = a sending account, or its sibling: same letters with only the
+// digits differing (qaisabusamra000 ↔ qaisabusamra001 — the test-inbox incident
+// this warning exists for). It rode the old compose header; the wizard carries
+// it instead, because a batch quietly mailing YOURSELF looks like success.
+function gmToWarn(to){
+  if(!to) return `<b style="color:#b45309">${T("لا مستلم · no recipient")}</b>`;
+  const stem=e=>String(e||"").trim().toLowerCase().split("@")[0].replace(/\d+/g,"");
+  const mine=new Set(), stems=new Set();
+  (((GM.ov||{}).accounts)||[]).forEach(a=>{ const e=String(a.email||"").trim().toLowerCase();
+    if(e){ mine.add(e); stems.add(stem(e)); } });
+  const own=mine.has(to.toLowerCase())||stems.has(stem(to));
+  return own
+    ?`<b style="color:#b45309" title="${T("هذا صندوقك أنت — تجربة، لن يصل لغاش · this is YOUR OWN inbox — a test, GAASH won't see it")}">⚠ ${poEsc(to)}</b>`
+    :poEsc(to);
+}
+function gmWizGo(n){
+  const st=GM.pickState||{};
+  if(n>1&&!gmNewGwds().length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
+  gmPickCapture();
+  if(n===4&&!st.gwdsSnapshot) GM.pickState.gwds=gmNewGwds();
+  GM.wiz={step:Math.max(1,Math.min(4,n))};
+  gmWizRender();
+}
+function gmWizFoot(back,next,nextLabel,extra){
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
+    <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
+    ${extra||""}
+    ${back?`<button class="minibtn" onclick="gmWizGo(${back})">← ${T("رجوع · Back")}</button>`:""}
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    ${next?`<button class="accent" id="gmStartBtn" data-lab="${poEsc(nextLabel||T("التالي · Next"))}"
+      onclick="gmWizGo(${next})">${nextLabel||T("التالي · Next")} →</button>`:""}</div>`;
+  gmNewCount();
+}
+function gmWizPackages(){
+  const cands=GM.enrollCands||[], st=GM.pickState||{};
+  $("wizBody").innerHTML=`
+    <div style="font-size:12.5px;color:var(--muted);margin:2px 0 8px">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <input id="gmCandSearch" oninput="gmEnrollRender()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
       <button class="minibtn" onclick="gmEnrollSelectShown(true)">${T("اختر الظاهر · select shown")}</button>
@@ -10465,27 +10542,89 @@ function gmPickStep1(){
         .map(([k,lab,n])=>`<button class="minibtn gmCandChip${k==="all"?" accent":""}" data-m="${k}" style="padding:2px 10px;font-size:11.5px" onclick="gmCandMode('${k}')">${lab} <b>${n}</b></button>`).join("")}
     </div>
     <div id="gmEnrollTbl"><div class="muted2" style="padding:10px">${T("جارِ التحميل… · loading…")}</div></div>
-    <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
-    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("المستندات — المرفق مع الإيميل الأول · Documents — attached to email #1")}</b>
-      <div id="gmDocs" style="margin-top:6px"></div></div>`;
-  gmIdsRender();
-  // put back everything the confirmation step blanked out
+    <input id="gmNewPaste" oninput="gmNewCount();gmWizSummary()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">`;
   if($("gmNewPaste")) $("gmNewPaste").value=st.paste||"";
   if($("gmCandSearch")) $("gmCandSearch").value=st.q||"";
-  if(st.seqId&&$("gmNewSeq")) $("gmNewSeq").value=st.seqId;
-  if(st.acctId&&$("gmNewAcct")) $("gmNewAcct").value=st.acctId;
-  if(st.idDocId){ const r=document.querySelector(`input[name="gmNewId"][value="${CSS.escape(st.idDocId)}"]`);
-    if(r) r.checked=true; }
   document.querySelectorAll(".gmCandChip").forEach(b=>b.classList.toggle("accent",b.dataset.m===GM_CAND.mode));
-  gmComposeSync();
-  // this button does NOT send — it opens the review step. Naming it "Start"
-  // here is how the owner once began four workflows trying to save a name.
-  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
-    <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
-    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
-    <button class="accent" id="gmStartBtn" onclick="gmNewConfirm()">${T("مراجعة · Review")} →</button></div>`;
-  gmNewCount();
+  gmWizFoot(0,2);
   gmEnrollRender();
+}
+// ── step 2 · documents ────────────────────────────────────────────────────────
+// Several documents per package now, and they ride EVERY email of the sequence:
+// a different person at GAASH may pick up each follow-up and should never have
+// to scroll back for the paperwork.
+function gmWizDocs(){
+  const st=GM.pickState||{}, n=gmNewGwds().length;
+  $("wizBody").innerHTML=`
+    <label class="wiz-opt">
+      <input type="checkbox" ${st.makeDecl?"checked":""} onchange="gmWizDeclToggle(this.checked)">
+      <span><b>📄 ${T("أنشئ تصريحاً لكل طرد · generate a declaration for each package")}</b>
+        <span class="muted2" style="display:block;font-size:11px">${T("يُملأ من اللوحات — الاسم، رقم الهوية، المحتويات · filled from the boards — name, ID number, contents")} · ${n} ${T("طرد · packages")}</span></span>
+    </label>
+    <div id="wizDeclOut"></div>
+    <div style="margin-top:14px"><b style="font-size:13px">🪪 ${T("أرفق مع كل طرد · attach to every package")}</b>
+      <div class="muted2" style="font-size:11px;margin-top:2px">${T("يُرفق مع كل إيميل في التسلسل، لا الأول فقط · rides every email in the sequence, not only the first")}</div>
+      <div id="gmDocs" style="margin-top:8px"></div></div>`;
+  gmIdsRender();
+  gmWizFoot(1,3);
+}
+function gmWizDeclToggle(on){
+  GM.pickState=GM.pickState||{}; GM.pickState.makeDecl=!!on;
+  gmWizSummary();
+  if(on) gmWizDeclMake(); else $("wizDeclOut").innerHTML="";
+}
+async function gmWizDeclMake(){
+  const out=$("wizDeclOut"), gwds=gmNewGwds(); if(!out) return;
+  out.innerHTML=`<div class="muted2" style="font-size:11.5px;padding:6px 2px">${T("جارِ الإنشاء… · generating…")}</div>`;
+  const r=await post("/api/gaash/declaration",{gwds});
+  if(!r||!r.ok){ out.innerHTML=`<div class="en-warn live" style="margin-top:8px">${poEsc((r&&r.error)||T("تعذّر الإنشاء · could not generate"))}</div>`; return; }
+  GM.pickState.docs=GM.pickState.docs||{};
+  const ok=[], bad=[];
+  (r.results||[]).forEach(x=>{
+    if(x.ok){ GM.pickState.docs[x.gwd]={id:x.id,name:x.name,filename:x.filename}; ok.push(x); }
+    else { delete GM.pickState.docs[x.gwd]; bad.push(x); }
+  });
+  // a refusal is named with its reason — a parcel silently missing its
+  // declaration is how a batch goes out half-papered
+  out.innerHTML=`<div style="margin-top:8px">
+    <div class="muted2" style="font-size:11.5px">✓ ${ok.length} ${T("تصريح جاهز · declarations ready")}</div>
+    ${bad.length?`<div class="en-warn live" style="margin-top:6px">
+      <b>${bad.length} ${T("لم يُنشأ · not generated")}</b>
+      ${bad.map(x=>`<div style="font-size:11.5px;margin-top:3px"><b class="mono">${poEsc(x.gwd)}</b> — ${poEsc(x.error||"")}</div>`).join("")}</div>`:""}</div>`;
+  await gmLoad(); gmIdsRender(); gmWizSummary();
+}
+// ── step 3 · workflow ─────────────────────────────────────────────────────────
+function gmWizFlow(){
+  const ov=GM.ov||{}, st=GM.pickState||{};
+  const seqs=(ov.sequences||[]).filter(s=>!s.archived);
+  const cur=st.seqId||((seqs[0]||{}).id)||"";
+  const accts=ov.accounts||[];
+  $("wizBody").innerHTML=`
+    <div class="muted2" style="font-size:12px;margin:2px 0 8px">${T("يحدد نص الإيميلات وعددها ومتى تخرج · decides what the emails say, how many, and when they go out")}</div>
+    <div class="en-list">${seqs.map(s=>{
+      const off=!!s.paused, on=s.id===cur;
+      const st0=(s.steps||[]).find(x=>x.template_id)||(s.steps||[])[0]||{};
+      const tpl=(ov.templates||[]).find(t=>t.id===st0.template_id)||{};
+      return `<div class="en-row${on?" on":""}${off?" off":""}"
+          ${off?`title="${T("موقوف · off")}"`:`onclick="gmWizPickSeq('${poEsc(s.id)}')"`}>
+        <input type="radio" name="wizSeq" ${on?"checked":""} ${off?"disabled":""}
+          onclick="event.stopPropagation()" onchange="gmWizPickSeq('${poEsc(s.id)}')">
+        <div class="en-main"><div class="en-top">
+          <b style="font-size:12.5px">${poEsc(s.name)}</b>
+          <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("إيميل على مدى · emails over")} ${gmSeqDays(s)} ${T("يوم · days")}</span>
+          <span class="spacer"></span>
+          ${off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
+        </div><div class="en-sub">${T("الإيميل الأول · email #1")}: ${poEsc(tpl.subject_tpl||"—")}</div></div></div>`;
+    }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b></div>`}</div>
+    <div class="en-cf-r" style="margin-top:14px"><b>${T("المُرسِل · Sends from")}</b>
+      <select id="gmNewAcct" onchange="gmPickCapture();gmWizSummary()" style="font-size:12px">${
+        accts.map(a=>`<option value="${poEsc(a.id)}" ${a.id===st.acctId?"selected":""}>${poEsc(a.email)}</option>`).join("")
+        ||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select></div>`;
+  gmWizFoot(2,4,T("مراجعة · Review"));
+}
+function gmWizPickSeq(id){
+  GM.pickState=GM.pickState||{}; GM.pickState.seqId=id;
+  gmWizFlow(); gmWizSummary();
 }
 // ── 🧵 sequence column: is this parcel already in a workflow? ──
 // block = its checkbox is disabled. Only a live thread blocks; a 'proposed'
@@ -10505,31 +10644,6 @@ function gmSeqPill(t,gwd){
 }
 // keep the compose header honest: To follows the SELECTED workflow (its
 // to_address, else Settings), Subject = that workflow's email-#1 template
-function gmComposeSync(){
-  const ov=GM.ov||{};
-  const sel=$("gmNewSeq");
-  const seq=(ov.sequences||[]).find(s=>s.id===((sel&&sel.value)||""))||(ov.sequences||[])[0];
-  const to=(((seq&&seq.to_address)||((ov.settings||{}).to_address))||"").trim();
-  // "own inbox" = a sending account, or its sibling: same letters with only
-  // the digits differing (qaisabusamra000 ↔ qaisabusamra001 — the test-inbox
-  // incident this warning exists for)
-  const stem=e=>String(e||"").trim().toLowerCase().split("@")[0].replace(/\d+/g,"");
-  const mine=new Set(), stems=new Set();
-  (ov.accounts||[]).forEach(a=>{ const e=String(a.email||"").trim().toLowerCase();
-    if(e){ mine.add(e); stems.add(stem(e)); } });
-  const own=!!to&&(mine.has(to.toLowerCase())||stems.has(stem(to)));
-  const toEl=$("gmCmpTo");
-  if(toEl) toEl.innerHTML=to
-    ?`<span class="pill" style="font-size:11.5px;${own?"color:#b45309;background:#fff7ed;border:1px solid #f59e0b55":"background:var(--bg2);border:1px solid var(--line)"}">${own?"⚠ ":""}${poEsc(to)}</span>`
-      +(own?` <span class="muted2" style="font-size:10.5px">${T("هذا صندوقك أنت — تجربة، لن يصل لغاش · this is YOUR OWN inbox — a test, GAASH won't see it")}</span>`:"")
-    :`<span class="muted2">${T("لا مستلم — حدّده على سير العمل أو في ⚙ · no recipient — set it on the workflow or in ⚙")}</span>`;
-  const steps=(seq&&seq.steps)||[];
-  const st0=steps.find(s=>s.template_id)||steps[0];
-  const tpl=st0&&((ov.templates||[]).find(t=>t.id===st0.template_id));
-  const sEl=$("gmCmpSubj"); if(sEl) sEl.textContent=(tpl&&tpl.subject_tpl)||"—";
-  const nEl=$("gmCmpSteps");
-  if(nEl) nEl.textContent=seq?`${steps.length} ${T("خطوة — المتابعات تُرسل تلقائياً · steps — follow-ups go automatically")}`:"";
-}
 function gmEnrollFiltered(){
   const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
   return (GM.enrollCands||[]).filter(c=>!q||
@@ -10607,7 +10721,6 @@ function gmEnrollRender(){
           style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
           ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
           >${gmIdPill(c.pname_id,c.source)}</span>`,
-      decl:gmDeclCell(c),
       status:gmOrderPill(c),
       gash:gmGashPill(c),
       seq:gmSeqPill(c.thread,c.gwd),
@@ -10622,39 +10735,6 @@ function gmEnrollRender(){
   lxColwApply(); lxtGridApply("en",mount);
   gmNewCount();
   gmEnrollColour();                   // Leluxe pill colours, without blocking
-}
-// ── 📄 the per-package customs declaration ────────────────────────────────────
-// Built from what the boards already say — the name the parcel ships under,
-// that name's ID, and its real contents — and attached to THAT package's first
-// email only. It is signed by nobody: the declarant block says in typed text
-// that Otlobly submitted it on the named person's behalf.
-function gmDeclCell(c){
-  const d=(((GM.pickState||{}).docs)||{})[c.gwd];
-  if(d) return `<span style="display:flex;gap:4px;align-items:center;min-width:0">
-    <a class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;text-decoration:none;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis"
-      href="/api/gaash/idfile?file=${encodeURIComponent(d.filename)}" target="_blank"
-      onclick="event.stopPropagation()" title="${T("افتح التصريح · open the declaration")}">📄 ${T("جاهز · ready")} ↗</a>
-    <button class="minibtn" style="padding:0 6px" title="${T("أزل · remove")}"
-      onclick="event.stopPropagation();gmDeclDrop('${poEsc(c.gwd)}')">✕</button></span>`;
-  return `<button class="minibtn" style="padding:1px 8px;font-size:10.5px"
-    onclick="event.stopPropagation();gmDeclMake('${poEsc(c.gwd)}',this)">📄 ${T("أنشئ · make")}</button>`;
-}
-async function gmDeclMake(gwd,btn){
-  btn.disabled=true; const old=btn.textContent; btn.textContent="…";
-  const r=await post("/api/gaash/declaration",{gwd});
-  if(!r||!r.ok){
-    // a name that cannot be printed is named out loud, not silently mangled
-    toast((r&&r.error)||T("تعذّر إنشاء التصريح · could not build the declaration"));
-    btn.disabled=false; btn.textContent=old; return;
-  }
-  GM.pickState=GM.pickState||{}; GM.pickState.docs=GM.pickState.docs||{};
-  GM.pickState.docs[gwd]={id:r.id,name:r.name,filename:r.filename};
-  await gmLoad();                    // the library gained a 📄 Declarations row
-  gmEnrollRender(); gmIdsRender();
-}
-function gmDeclDrop(gwd){
-  const d=((GM.pickState||{}).docs||{});
-  delete d[gwd]; gmEnrollRender();    // the file stays in the library, just unattached
 }
 // The board status. Purchases colours come from the static CU_COLOR map, so they
 // are right immediately; Leluxe needs LX.schema and starts grey (see gmEnrollColour).
@@ -10745,7 +10825,7 @@ function gmTplSheet(title){
       ? T("للعرض فقط — التعديل من تبويب القوالب · read-only here — edit them in the Templates tab")
       : T("الاختيار يضعه في صندوق الرد — لا يُرسل شيء · picking puts it in the reply box — nothing is sent")}</span>
     <span style="display:flex;gap:8px">
-      ${browse?`<button class="minibtn" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>`:""}
+      ${browse?`<button class="minibtn" onclick="gmWizRender()">← ${T("رجوع · Back")}</button>`:""}
       <button class="minibtn" onclick="bulkClose()">${browse?T("إغلاق · Close"):T("إلغاء · Cancel")}</button>
     </span></div>`;
   gmTplList();
@@ -10764,7 +10844,7 @@ function gmTplPreview(tid){
     </div>`;
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
     <button class="minibtn" style="margin-inline-end:auto" onclick="gmEnrollTpl()">← ${T("كل القوالب · All templates")}</button>
-    <button class="minibtn" onclick="gmPickStep1()">${T("رجوع للطرود · Back to packages")}</button></div>`;
+    <button class="minibtn" onclick="gmWizRender()">${T("رجوع للطرود · Back to packages")}</button></div>`;
 }
 function gmTplClearFilters(){          // works in either mode — no re-entry
   const s=$("gmTplSearch"); if(s) s.value="";
@@ -10992,10 +11072,11 @@ function gmNewCount(){
   GM.pickState=GM.pickState||{};
   GM.pickState.paste=(($("gmNewPaste")||{}).value)||"";   // survives step 2
   const el=$("gmNewCount"); if(el) el.textContent=`${n} ${T("طرد مختار · selected")}`;
-  // the button says exactly what it does — "Start" alone once read as "Save".
-  // On step 1 it only opens the review, so it must not promise a send.
+  // The button must say what THIS step does — it said "Review" on every step,
+  // including the one whose Next only opens Documents. gmWizFoot owns the word;
+  // the count is appended to it, and nothing here promises a send.
   const sb=$("gmStartBtn");
-  if(sb) sb.textContent=`${T("مراجعة · Review")} ${n} →`;
+  if(sb&&sb.dataset.lab) sb.textContent=`${sb.dataset.lab}${n?" "+n:""} →`;
 }
 // open the enroll picker from anywhere (bulk search, purchases…) pre-checked
 async function gmEnrollFrom(gwds){
@@ -11009,24 +11090,27 @@ async function gmEnrollFrom(gwds){
 // per-package declaration papers. They were one flat strip, and every
 // declaration rendered as a broken-image icon because a PDF is not an <img>.
 const GM_FOLDERS=[{k:"id",icon:"🪪",lab:"الهويات · IDs"},
-                  {k:"declaration",icon:"📄",lab:"التصاريح · Declarations"}];
+                  {k:"declaration",icon:"📄",lab:"التصاريح · Declarations"},
+                  // signed once, attached to whichever packages it covers
+                  {k:"certificate",icon:"📜",lab:"الشهادات · Certificates"}];
 function gmIdsRender(){
   const box=$("gmDocs"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
-  const sel=(GM.pickState||{}).idDocId||"";
+  const sel=((GM.pickState||{}).docIds)||[];       // several now, not one
   const inF=k=>ids.filter(x=>(x.folder||"id")===k);
-  const chosen=ids.find(x=>x.id===sel);
-  const head=chosen
-    ?`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("المرفق · attached")}:
-        <b>${poEsc(chosen.name)}</b>
-        <button class="minibtn" style="padding:0 7px" onclick="gmIdPick('')" title="${T("أزل المرفق · detach")}">✕</button></div>`
-    :`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("لا مرفق — الإيميل الأول يخرج بلا مستند · nothing attached — email #1 goes without a document")}</div>`;
+  const chosen=ids.filter(x=>sel.includes(x.id));
+  const head=chosen.length
+    ?`<div class="muted2" style="font-size:11.5px;margin-bottom:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${T("مرفق · attached")}: ${chosen.map(c=>`<span class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px">${poEsc(c.name)}
+          <button class="minibtn" style="padding:0 5px" onclick="gmIdPick('${poEsc(c.id)}')" title="${T("أزل · remove")}">✕</button></span>`).join("")}</div>`
+    :`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("لا مستند مشترك — التصريح وحده إن فعّلته · no shared document — just the declaration if you switched it on")}</div>`;
   if(!GM.idFolder){
-    box.innerHTML=head+`<div class="gm-folders">${GM_FOLDERS.map(f=>`
-      <button class="gm-folder" onclick="gmIdFolder('${f.k}')">
+    box.innerHTML=head+`<div class="gm-folders">${GM_FOLDERS.map(f=>{
+      const n=inF(f.k).length, on=inF(f.k).filter(x=>sel.includes(x.id)).length;
+      return `<button class="gm-folder" onclick="gmIdFolder('${f.k}')">
         <span class="gm-folder-i">${f.icon}</span>
         <span><b>${T(f.lab)}</b><span class="muted2" style="display:block;font-size:10.5px">${
-          inF(f.k).length} ${T("مستند · documents")}</span></span></button>`).join("")}
+          n} ${T("مستند · documents")}${on?` · ${on} ${T("مختار · picked")}`:""}</span></span></button>`;}).join("")}
       ${CAN_ADMIN?`<button class="gm-folder" onclick="gmIdUpload()">
         <span class="gm-folder-i">＋</span><span><b>${T("أضف مستنداً · add a document")}</b></span></button>`:""}
     </div>`;
@@ -11045,23 +11129,27 @@ function gmIdsRender(){
       ||`<span class="muted2" style="font-size:12px">${T("هذا المجلد فارغ · this folder is empty")}</span>`}</div>`;
 }
 function gmIdTile(x,sel){
+  const on=(sel||[]).includes(x.id);
   const url=`/api/gaash/idfile?file=${encodeURIComponent(x.filename)}`;
   const isImg=/\.(jpe?g|png|gif|webp|bmp)$/i.test(x.filename||"");
   // show a PDF for what it IS — an <img> pointed at one renders as a broken icon
   const face=isImg
     ? `<img src="${url}" alt="${poEsc(x.name)}" style="width:100%;height:100%;object-fit:cover">`
     : `<span class="gm-doc-face">📄<span>${poEsc(String(x.filename||"").split(".").pop()||"file").toUpperCase().slice(0,4)}</span></span>`;
-  return `<label class="gm-idtile${x.id===sel?" on":""}" title="${poEsc(x.name)}">
-    <input type="radio" name="gmNewId" value="${poEsc(x.id)}" ${x.id===sel?"checked":""}
+  return `<label class="gm-idtile${on?" on":""}" title="${poEsc(x.name)}">
+    <input type="checkbox" name="gmNewId" value="${poEsc(x.id)}" ${on?"checked":""}
       onchange="gmIdPick('${poEsc(x.id)}')">
     <a class="gm-idopen" href="${url}" target="_blank" title="${T("افتح · open")}">↗</a>
     <span class="gm-idthumb">${face}</span>
     <span class="gm-idname">${poEsc(x.name)}</span></label>`;
 }
-// the pick lives in pickState, not only in the radio — the radio is unmounted
-// whenever you browse to the other folder or step into the review
+// the picks live in pickState, not only in the boxes — those are unmounted
+// whenever you browse to another folder or move to the next step
 function gmIdPick(id){
-  GM.pickState=GM.pickState||{}; GM.pickState.idDocId=id||null; gmIdsRender();
+  GM.pickState=GM.pickState||{};
+  const cur=GM.pickState.docIds||[];
+  GM.pickState.docIds=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
+  gmIdsRender(); gmWizSummary();
 }
 function gmIdFolder(k){ GM.idFolder=k||null; gmIdsRender(); }
 async function gmIdUpload(){
@@ -11105,7 +11193,7 @@ async function gmIdSave(btn){
 // This used to be a native confirm() — a grey OS box that cannot name the
 // workflow, the recipient, or the parcels. That matters here: the button once
 // read as "save" and the owner started four workflows trying to save a name.
-function gmNewConfirm(){
+function gmWizReview(){
   const gwds=gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   const ov=GM.ov||{}, s=ov.settings||{};
@@ -11114,7 +11202,6 @@ function gmNewConfirm(){
   const st=GM.pickState;
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
   const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||{};
-  const idDoc=(ov.ids||[]).find(x=>x.id===st.idDocId);
   const to=((seq.to_address||s.to_address)||"").trim();
   const live=!s.dry_run&&(ov.accounts||[]).length;
   const steps=(seq.steps||[]).length, days=gmSeqDays(seq);
@@ -11128,37 +11215,64 @@ function gmNewConfirm(){
         <span class="muted2">${steps} ${T("إيميل على مدى · emails over")} ${days} ${T("يوم · days")}</span></div>
       <div class="en-cf-r"><b>${T("المُرسِل · Sends from")}</b>
         <span>${acct.email?poEsc(acct.email):`<span class="muted2">${T("لا حساب مُرسِل · no sending account")}</span>`}</span></div>
-      <div class="en-cf-r"><b>${T("الهوية المرفقة · ID attached")}</b>
-        <span>${idDoc?"🪪 "+poEsc(idDoc.name):`<span class="muted2">${T("بلا مرفق · none")}</span>`}</span></div>
-      <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span></div>
-      <div class="en-list" style="max-height:34vh">${gwds.map(g=>{
-        const c=byGwd[g]||{}, nm=(st.names||{})[g]||c.pname||"";
-        const dec=((st.docs||{})[g]);
-        return `<div class="en-row off" style="opacity:1;cursor:default">
-          <div class="en-main"><div class="en-top">
-            <span class="en-gwd">${poEsc(g)}</span>
-            <span style="font-size:11.5px">${nm?poEsc(nm):`<span class="muted2">${T("بلا اسم · no name")}</span>`}</span>
-            ${dec?`<a class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:9.5px;text-decoration:none"
-              href="/api/gaash/idfile?file=${encodeURIComponent(dec.filename)}" target="_blank">📄 ${T("تصريح · declaration")} ↗</a>`:""}
-            <span class="spacer"></span>${gmIdPill(c.pname_id,c.source)}
-          </div></div></div>`;
-      }).join("")}</div>
+      <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span>
+        <span class="spacer"></span>
+        <span class="muted2" style="font-size:11px">${T("المرفقات تتكرر مع كل إيميل · attachments repeat on every email")}</span></div>
+      <div id="wizPrev"></div>
     </div>`;
+  GM.wiz=GM.wiz||{}; GM.wiz.at=0;
+  gmWizPreview();
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
-    <button class="minibtn" style="margin-inline-end:auto" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmWizGo(3)">← ${T("رجوع · Back")}</button>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
     <button class="accent" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}</button></div>`;
+}
+// The real email #1, rendered for this package by the SAME _fill the sender
+// uses — so what you approve is what arrives, not an approximation of it.
+async function gmWizPreview(){
+  const box=$("wizPrev"); if(!box) return;
+  const ov=GM.ov||{}, st=GM.pickState||{}, s=ov.settings||{};
+  const gwds=st.gwds||gmNewGwds();
+  const at=Math.max(0,Math.min(gwds.length-1,((GM.wiz||{}).at)||0));
+  const gwd=gwds[at]; if(!gwd) return;
+  const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
+  const st0=(seq.steps||[]).find(x=>x.template_id)||{};
+  const to=((seq.to_address||s.to_address)||"").trim();
+  const atts=[...(st.docIds||[]),...((st.docs||{})[gwd]?[(st.docs[gwd]).id]:[])]
+    .map(id=>((st.docs||{})[gwd]&&st.docs[gwd].id===id)?st.docs[gwd]
+      :((ov.ids||[]).find(x=>x.id===id)||null)).filter(Boolean);
+  const nav=`<div class="wiz-nav">
+      <button class="minibtn" ${at<=0?"disabled":""} onclick="GM.wiz.at=${at-1};gmWizPreview()">◀</button>
+      <span class="mono">${poEsc(gwd)}</span>
+      <span class="muted2">${at+1} / ${gwds.length}</span>
+      <button class="minibtn" ${at>=gwds.length-1?"disabled":""} onclick="GM.wiz.at=${at+1};gmWizPreview()">▶</button></div>`;
+  box.innerHTML=nav+`<div class="muted2" style="padding:14px 2px;font-size:12px">${T("جارِ التحضير… · rendering…")}</div>`;
+  let r=null;
+  if(st0.template_id)
+    r=await post("/api/gaash/template_render",{gwd,template_id:st0.template_id,preview:true});
+  if($("wizPrev")!==box||(((GM.wiz||{}).at)||0)!==at) return;   // moved on already
+  const miss=[...(((r||{}).unresolved)||[]),...(((r||{}).blank)||[])];
+  box.innerHTML=nav+`<div class="wiz-mail">
+    <div class="wiz-mail-h"><span class="muted2">${T("إلى · To")}</span> ${poEsc(to||"—")}</div>
+    <div class="wiz-mail-h"><span class="muted2">${T("الموضوع · Subject")}</span>
+      <b>${poEsc((r&&r.subject)||T("لا قالب لهذا السير · this workflow has no template"))}</b></div>
+    <div class="wiz-mail-b">${poEsc((r&&r.body)||"")}</div>
+    ${atts.length?`<div class="wiz-mail-f">${atts.map(a=>`
+      <a class="gm-att" target="_blank" href="/api/gaash/idfile?file=${encodeURIComponent(a.filename)}">📎 ${poEsc(a.name)}</a>`).join("")}</div>`:
+      `<div class="wiz-mail-f muted2" style="font-size:11.5px">${T("بلا مرفقات · no attachments")}</div>`}
+    ${miss.length?`<div class="wiz-mail-f" style="color:#b45309;font-size:11px">⚠ ${T("لم يُملأ · not filled in")}: ${
+      miss.map(t=>`<b class="mono">{${poEsc(t)}}</b>`).join(" · ")}</div>`:""}</div>`;
 }
 // Snapshot step 1's controls. Any sheet opened OVER the enroll dialog replaces
 // #bulkBody, so Back has to rebuild from this rather than from the DOM. Missing
 // elements keep their previous value instead of blanking it.
 function gmPickCapture(){
   const st=GM.pickState||{};
-  const idSel=document.querySelector('input[name="gmNewId"]:checked');
   const val=(id,prev)=>{ const el=$(id); return el?el.value:prev; };
+  // docIds / makeDecl / docs live only in state — their controls belong to one
+  // step and are gone the moment you move to another
   GM.pickState={...st,
     seqId:val("gmNewSeq",st.seqId||""), acctId:val("gmNewAcct",st.acctId||""),
-    idDocId:idSel?idSel.value:(st.idDocId||null),
     paste:val("gmNewPaste",st.paste||""), q:val("gmCandSearch",st.q||"")};
 }
 // ── 📝 / 🧬 from INSIDE the enroll dialog ─────────────────────────────────────
@@ -11170,35 +11284,6 @@ function gmEnrollTpl(){
   gmPickCapture();
   GM_TPL={q:"", owner:"", sort:"name", dir:1, mode:"browse"};
   gmTplSheet(T("نصوص الإيميلات · What the emails say"));
-}
-function gmEnrollSeq(){
-  gmPickCapture();
-  const ov=GM.ov||{}, cur=(GM.pickState||{}).seqId||"";
-  const seqs=(ov.sequences||[]).filter(s=>!s.archived);
-  bulkOpen(T("اختر سير العمل · Select workflow"));
-  $("bulkModal").classList.remove("tpl-wide"); $("bulkModal").classList.add("en-pick");
-  $("bulkBody").innerHTML=`
-    <div class="muted2" style="font-size:12px;margin:4px 0 8px">${T("يحدد نص الإيميلات وعددها ومتى تخرج · decides what the emails say, how many, and when they go out")}</div>
-    <div class="en-list">${seqs.map(s=>{
-      const off=!!s.paused, isCur=s.id===cur;
-      return `<div class="en-row${isCur?" on":""}${off?" off":""}"
-          ${off?`title="${T("هذا السير موقوف · this workflow is off")}"`:`onclick="gmEnrollSeqPick('${poEsc(s.id)}')"`}>
-        <div class="en-main"><div class="en-top">
-          <b style="font-size:12.5px">${poEsc(s.name)}</b>
-          <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم · days")}</span>
-          <span class="spacer"></span>
-          ${isCur?`<span class="pill" style="background:#12a1500f;border:1px solid #12a15055;color:#12a150;font-size:9.5px">${T("مختار · selected")}</span>`
-            :off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
-        </div></div></div>`;
-    }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b></div>`}</div>`;
-  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
-    <button class="minibtn" style="margin-inline-end:auto" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>
-    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button></div>`;
-}
-function gmEnrollSeqPick(id){
-  GM.pickState=GM.pickState||{}; GM.pickState.seqId=id;
-  gmPickStep1();                         // back to the dialog, workflow applied
-  toast(`🧬 ${poEsc((((GM.ov||{}).sequences)||[]).find(s=>s.id===id)?.name||"")}`);
 }
 // only names the owner actually CHANGED get pinned — leaving a row alone keeps
 // it following the board, so a later ClickUp correction still flows through
@@ -11215,11 +11300,11 @@ async function gmNewStart(btn){
   const gwds=st.gwds||gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   btn.disabled=true;
-  // a declaration belongs to ONE parcel, so it goes per-GWD and beats the
-  // batch-wide ID doc for that parcel only
+  // a declaration belongs to ONE parcel and goes per-GWD; the ticked library
+  // documents are shared by the whole batch. The thread gets both.
   const docs={};
-  Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=d.id; });
-  const r=await post("/api/gaash/start",{gwds, id_doc_id:st.idDocId||null, account_id:st.acctId||null,
+  Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=[d.id]; });
+  const r=await post("/api/gaash/start",{gwds, id_doc_id:(st.docIds||[]), account_id:st.acctId||null,
     seq_id:st.seqId||null, names:st.names||{}, docs});
   btn.disabled=false;
   bulkClose();

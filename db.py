@@ -473,6 +473,12 @@ def migrate():
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_open_at TEXT")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_click_at TEXT")
+        # 🪪 A package can carry SEVERAL documents — a generated declaration and
+        # a shared ID scan and a dealer certificate — and they ride every email
+        # of the sequence, not only the first. id_doc_id stays as the first of
+        # them so {id_name} and the chat pill keep resolving.
+        if "docs_json" not in _columns(c, "gaash_threads"):
+            c.execute("ALTER TABLE gaash_threads ADD COLUMN docs_json TEXT")
         # 🪪 The document library splits into folders: reusable IDs vs the
         # per-package declaration papers. Existing rows are sorted once, by name —
         # the only signal there is — and anything ambiguous lands in 'id', which
