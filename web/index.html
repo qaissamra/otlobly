@@ -490,6 +490,27 @@
   /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
      picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
      whether it is already being chased. The compose header above says the rest. */
+  /* 🪪 the document library, in folders. A declaration is usually a PDF, and a
+     PDF in an <img> is a broken-image icon — hence the typed face below. */
+  .gm-folders{display:flex;gap:10px;flex-wrap:wrap}
+  .gm-folder{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+    border:1px solid var(--line);border-radius:12px;background:var(--card);
+    font:inherit;color:var(--ink);text-align:start}
+  .gm-folder:hover{border-color:#f7680855;background:#fff8f4}
+  .gm-folder-i{font-size:20px;line-height:1}
+  .gm-idtile{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;
+    width:96px;cursor:pointer;font-size:11px}
+  .gm-idtile input{position:absolute;inset-block-start:2px;inset-inline-start:2px;margin:0;z-index:2}
+  .gm-idthumb{width:92px;height:62px;border-radius:9px;border:1px solid var(--line);
+    overflow:hidden;background:var(--bg2);display:flex;align-items:center;justify-content:center}
+  .gm-idtile.on .gm-idthumb{border-color:#f76808;box-shadow:0 0 0 2px #f7680833}
+  .gm-idname{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+  .gm-doc-face{display:flex;flex-direction:column;align-items:center;gap:1px;font-size:19px;color:var(--muted)}
+  .gm-doc-face span{font-size:9px;font-weight:700;letter-spacing:.06em}
+  .gm-idopen{position:absolute;inset-block-start:2px;inset-inline-end:2px;z-index:2;
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    padding:0 4px;font-size:10px;text-decoration:none;color:var(--muted)}
+  .gm-idopen:hover{color:#f76808}
   /* the picker is a shared-machinery table again, so it needs table room */
   #bulkModal.en-pick .az-box{width:min(1180px,96vw);max-width:96vw}
   #bulkModal .poc-row{cursor:pointer}
@@ -10404,10 +10425,11 @@ function gmNewOpen(preGwds){
   // what step 2 has to remember: rendering the confirmation destroys step 1's
   // controls, so Back rebuilds them from here rather than from the DOM
   GM.pickState={paste:"", q:"", names:{}};
+  GM.idFolder=null; GM.idPending=null;   // a fresh open starts at the folder list
   gmPickStep1();
 }
 function gmPickStep1(){
-  const ov=GM.ov||{}, ids=ov.ids||[], accts=ov.accounts||[];
+  const ov=GM.ov||{}, accts=ov.accounts||[];   // the ID library renders itself (gmIdsRender)
   const cands=GM.enrollCands||[], st=GM.pickState||{};
   $("bulkModal").classList.add("en-pick");
   $("bulkBody").innerHTML=`
@@ -10416,7 +10438,7 @@ function gmPickStep1(){
       <div class="gm-cmp-tabs">
         <button onclick="gmEnrollTpl()" title="${T("اعرض نص الإيميلات — تُفتح فوق هذه النافذة · see what the emails say — opens over this dialog")}">📝 ${T("القوالب · Templates")}</button>
         <button onclick="gmEnrollSeq()" title="${T("اختر سير العمل — تُفتح فوق هذه النافذة · pick the workflow — opens over this dialog")}">🧬 ${T("سير العمل · Sequences")}</button>
-        <button onclick="$('gmNewIds').scrollIntoView({behavior:'smooth',block:'center'})" title="${T("الهويات المرفقة · the attached IDs")}">🪪 ${T("المستندات · Documents")}</button>
+        <button onclick="$('gmDocs').scrollIntoView({behavior:'smooth',block:'center'})" title="${T("الهويات والتصاريح المرفقة · the attached IDs and declarations")}">🪪 ${T("المستندات · Documents")}</button>
       </div>
       <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("إلى · To")}</span><span id="gmCmpTo"></span></div>
       <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("من · From")}</span>
@@ -10443,14 +10465,9 @@ function gmPickStep1(){
     </div>
     <div id="gmEnrollTbl"><div class="muted2" style="padding:10px">${T("جارِ التحميل… · loading…")}</div></div>
     <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
-    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("المستندات — الهوية المرفقة مع الإيميل الأول · Documents — ID attached to email #1")}</b>
-      <div id="gmNewIds" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        ${ids.map(x=>`<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px">
-          <input type="radio" name="gmNewId" value="${poEsc(x.id)}">
-          <img src="/api/gaash/idfile?file=${encodeURIComponent(x.filename)}" style="width:74px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
-          ${poEsc(x.name)}</label>`).join("")||`<span class="muted2" style="font-size:12px">${T("المكتبة فارغة · library is empty")}</span>`}
-        ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
-      </div></div>`;
+    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("المستندات — المرفق مع الإيميل الأول · Documents — attached to email #1")}</b>
+      <div id="gmDocs" style="margin-top:6px"></div></div>`;
+  gmIdsRender();
   // put back everything the confirmation step blanked out
   if($("gmNewPaste")) $("gmNewPaste").value=st.paste||"";
   if($("gmCandSearch")) $("gmCandSearch").value=st.q||"";
@@ -10952,18 +10969,102 @@ async function gmEnrollFrom(gwds){
   gmTab("conv");
   gmNewOpen(gwds);
 }
+// ── 🪪 the document library, in folders ───────────────────────────────────────
+// Two of them: reusable IDs (a passport scan used on every parcel) and the
+// per-package declaration papers. They were one flat strip, and every
+// declaration rendered as a broken-image icon because a PDF is not an <img>.
+const GM_FOLDERS=[{k:"id",icon:"🪪",lab:"الهويات · IDs"},
+                  {k:"declaration",icon:"📄",lab:"التصاريح · Declarations"}];
+function gmIdsRender(){
+  const box=$("gmDocs"); if(!box) return;
+  const ids=((GM.ov||{}).ids)||[];
+  const sel=(GM.pickState||{}).idDocId||"";
+  const inF=k=>ids.filter(x=>(x.folder||"id")===k);
+  const chosen=ids.find(x=>x.id===sel);
+  const head=chosen
+    ?`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("المرفق · attached")}:
+        <b>${poEsc(chosen.name)}</b>
+        <button class="minibtn" style="padding:0 7px" onclick="gmIdPick('')" title="${T("أزل المرفق · detach")}">✕</button></div>`
+    :`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("لا مرفق — الإيميل الأول يخرج بلا مستند · nothing attached — email #1 goes without a document")}</div>`;
+  if(!GM.idFolder){
+    box.innerHTML=head+`<div class="gm-folders">${GM_FOLDERS.map(f=>`
+      <button class="gm-folder" onclick="gmIdFolder('${f.k}')">
+        <span class="gm-folder-i">${f.icon}</span>
+        <span><b>${T(f.lab)}</b><span class="muted2" style="display:block;font-size:10.5px">${
+          inF(f.k).length} ${T("مستند · documents")}</span></span></button>`).join("")}
+      ${CAN_ADMIN?`<button class="gm-folder" onclick="gmIdUpload()">
+        <span class="gm-folder-i">＋</span><span><b>${T("أضف مستنداً · add a document")}</b></span></button>`:""}
+    </div>`;
+    return;
+  }
+  const f=GM_FOLDERS.find(x=>x.k===GM.idFolder)||GM_FOLDERS[0];
+  const docs=inF(f.k);
+  box.innerHTML=head+`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
+      <button class="minibtn" onclick="gmIdFolder('')">← ${T("كل المجلدات · all folders")}</button>
+      <b style="font-size:12.5px">${f.icon} ${T(f.lab)}</b>
+      <span class="spacer"></span>
+      ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
+    </div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap">${docs.map(x=>gmIdTile(x,sel)).join("")
+      ||`<span class="muted2" style="font-size:12px">${T("هذا المجلد فارغ · this folder is empty")}</span>`}</div>`;
+}
+function gmIdTile(x,sel){
+  const url=`/api/gaash/idfile?file=${encodeURIComponent(x.filename)}`;
+  const isImg=/\.(jpe?g|png|gif|webp|bmp)$/i.test(x.filename||"");
+  // show a PDF for what it IS — an <img> pointed at one renders as a broken icon
+  const face=isImg
+    ? `<img src="${url}" alt="${poEsc(x.name)}" style="width:100%;height:100%;object-fit:cover">`
+    : `<span class="gm-doc-face">📄<span>${poEsc(String(x.filename||"").split(".").pop()||"file").toUpperCase().slice(0,4)}</span></span>`;
+  return `<label class="gm-idtile${x.id===sel?" on":""}" title="${poEsc(x.name)}">
+    <input type="radio" name="gmNewId" value="${poEsc(x.id)}" ${x.id===sel?"checked":""}
+      onchange="gmIdPick('${poEsc(x.id)}')">
+    <a class="gm-idopen" href="${url}" target="_blank" title="${T("افتح · open")}">↗</a>
+    <span class="gm-idthumb">${face}</span>
+    <span class="gm-idname">${poEsc(x.name)}</span></label>`;
+}
+// the pick lives in pickState, not only in the radio — the radio is unmounted
+// whenever you browse to the other folder or step into the review
+function gmIdPick(id){
+  GM.pickState=GM.pickState||{}; GM.pickState.idDocId=id||null; gmIdsRender();
+}
+function gmIdFolder(k){ GM.idFolder=k||null; gmIdsRender(); }
 async function gmIdUpload(){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
-  inp.onchange=async()=>{
-    const f=inp.files[0]; if(!f) return;
-    const name=prompt(T("اسم الهوية (مثل: جواز قيس) · ID name (e.g. Qais passport)"),f.name.replace(/\.[^.]+$/,""));
-    if(name===null) return;
-    const b=await gmFileB64(f);
-    const r=await post("/api/gaash/ids",{name, filename:f.name, data_base64:b.data_base64});
-    if(!r.ok){ toast(r.error||"upload failed"); return; }
-    await gmLoad(); gmNewOpen();
-  };
+  inp.onchange=()=>{ const f=inp.files[0]; if(f) gmIdUploadForm(f); };
   inp.click();
+}
+// the folder is chosen AT upload, so IDs and declarations never mix
+function gmIdUploadForm(f){
+  const box=$("gmDocs"); if(!box) return;
+  GM.idPending=f;
+  const cur=GM.idFolder||"id";
+  box.innerHTML=`<div class="en-cf" style="padding:2px 0">
+    <div class="en-cf-r"><b>${T("الملف · File")}</b><span>${poEsc(f.name)} · ${gmSize(f.size)}</span></div>
+    <div class="en-cf-r"><b>${T("الاسم · Name")}</b>
+      <input id="gmIdName" value="${poEsc(f.name.replace(/\.[^.]+$/,""))}"
+        style="flex:1;min-width:200px;font-size:12.5px"></div>
+    <div class="en-cf-r"><b>${T("المجلد · Folder")}</b>
+      ${GM_FOLDERS.map(x=>`<label style="display:flex;gap:5px;align-items:center;cursor:pointer">
+        <input type="radio" name="gmIdFold" value="${x.k}" ${cur===x.k?"checked":""}>
+        ${x.icon} ${T(x.lab)}</label>`).join("")}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="minibtn" onclick="GM.idPending=null;gmIdsRender()">${T("إلغاء · Cancel")}</button>
+      <button class="accent" onclick="gmIdSave(this)">${T("حفظ · Save")}</button></div></div>`;
+}
+async function gmIdSave(btn){
+  const f=GM.idPending; if(!f) return;
+  const name=(($("gmIdName")||{}).value||"").trim();
+  const folder=(document.querySelector('input[name="gmIdFold"]:checked')||{}).value||"id";
+  btn.disabled=true;
+  const b=await gmFileB64(f);
+  const r=await post("/api/gaash/ids",{name, filename:f.name, data_base64:b.data_base64, folder});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||T("فشل الرفع · upload failed")); return; }
+  GM.idPending=null; GM.idFolder=folder;
+  await gmLoad();                       // refresh GM.ov.ids
+  gmIdPick(r.id);                       // the new one becomes the attachment
+  toast(`🪪 ${poEsc(name||f.name)}`);
 }
 // ── step 2: say EXACTLY what is about to happen, in the page ──────────────────
 // This used to be a native confirm() — a grey OS box that cannot name the

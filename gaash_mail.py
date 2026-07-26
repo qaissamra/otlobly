@@ -193,15 +193,34 @@ def ids_list():
             "SELECT * FROM gaash_ids ORDER BY uploaded_at")]
 
 
-def ids_add(name, filename, data):
+ID_FOLDERS = ("id", "declaration")      # reusable IDs · per-package papers
+
+
+def _folder(v):
+    v = str(v or "").strip().lower()
+    return v if v in ID_FOLDERS else "id"
+
+
+def ids_add(name, filename, data, folder=None):
     IDS_DIR.mkdir(parents=True, exist_ok=True)
     iid = f"id_{int(time.time() * 1000)}"
     fn = f"{iid}_{_safe_name(filename)}"
     (IDS_DIR / fn).write_bytes(data)
     with db.connect() as c:
-        c.execute("INSERT INTO gaash_ids (id,name,filename,uploaded_at) VALUES (?,?,?,?)",
-                  (iid, (name or "").strip() or _safe_name(filename), fn, now_iso()))
+        c.execute("INSERT INTO gaash_ids (id,name,filename,uploaded_at,folder) "
+                  "VALUES (?,?,?,?,?)",
+                  (iid, (name or "").strip() or _safe_name(filename), fn,
+                   now_iso(), _folder(folder)))
     return {"ok": True, "id": iid, "filename": fn}
+
+
+def ids_move(id_doc_id, folder):
+    """Re-file a document. The one-time backfill guessed from the name, so this
+    is how a wrong guess gets corrected."""
+    with db.connect() as c:
+        cur = c.execute("UPDATE gaash_ids SET folder=? WHERE id=?",
+                        (_folder(folder), id_doc_id))
+        return {"ok": cur.rowcount > 0, "folder": _folder(folder)}
 
 
 def ids_remove(id_doc_id):
