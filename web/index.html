@@ -442,11 +442,21 @@
      sticky header is tuned to the page topbar (top:70px) — reset it to the
      modal body, cap the scroll box, and let a cell dropdown escape the box. */
   #bulkModal .bt-clip{top:0}
-  #bulkModal .bt-wrap{max-height:46vh;overflow-y:auto}
+  #bulkModal .bt-wrap{max-height:50vh;overflow-y:auto}
+  /* 📧 compose header — the enroll dialog reads like the email it is about to
+     send: To / From / Subject visible BEFORE the send button, HubSpot-style.
+     (.gm-cmp, NOT .gm-compose — that class is the chat reply box) */
+  .gm-cmp{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:6px 14px 2px;margin:4px 0 10px}
+  .gm-cmp-tabs{display:flex;gap:16px;border-bottom:1px solid var(--line);padding:2px 0 7px;margin-bottom:2px}
+  .gm-cmp-tabs button{border:none;background:none;font-weight:700;font-size:12.5px;padding:0;cursor:pointer;color:inherit}
+  .gm-cmp-tabs button:hover{color:var(--accent)}
+  .gm-cmp-row{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px;flex-wrap:wrap}
+  .gm-cmp-row:last-child{border-bottom:none}
+  .gm-cmp-lbl{flex:0 0 64px;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
   #bulkModal .az-box:has(.pop-menu.open){overflow:visible}
   #bulkModal .en-cols .lxc>input{max-width:100%;min-width:0}
-  .en-wide .az-box{width:1180px;max-width:97vw}
-  .en-cols{display:grid;grid-template-columns:var(--engrid,132px 124px 126px 120px 78px 110px 120px 110px 130px 96px 92px);gap:6px;align-items:center;flex:0 0 auto}
+  .en-wide .az-box{width:min(1480px,97vw);max-width:97vw}
+  .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
   .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3384,17 +3394,18 @@ const LXT_COLS={
     {key:"value",    label:"القيمة · value",        w:96,  sortable:true},
   ],
   "en":[    // 📧 Enroll picker — the Bulk-search columns + the editable 🪪 pair
-    {key:"found",    label:"موجود في · found in",   w:132, sortable:true},
+    {key:"seq",      label:"🧵 التسلسل · sequence", w:112, sortable:true},
+    {key:"found",    label:"موجود في · found in",   w:116, sortable:true},
     {key:"pname",    label:"الاسم على الطرد · name on package", w:124, sortable:true},
     {key:"nameid",   label:"🪪 رقم الهوية · ID number", w:126},
-    {key:"oname",    label:"الاسم · order name",    w:120, sortable:true},
+    {key:"oname",    label:"الاسم · order name",    w:108, sortable:true},
     {key:"profile",  label:"الحساب · profile",     w:78,  sortable:true},
-    {key:"imgs",     label:"الصور · images",        w:110},
-    {key:"cust",     label:"العملاء · customers",   w:120, sortable:true},
-    {key:"status",   label:"الحالة · status",       w:110, sortable:true},
-    {key:"gash",     label:"جمارك · GAASH",         w:130},
-    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
-    {key:"value",    label:"القيمة · value",        w:92,  sortable:true},
+    {key:"imgs",     label:"الصور · images",        w:96},
+    {key:"cust",     label:"العملاء · customers",   w:106, sortable:true},
+    {key:"status",   label:"الحالة · status",       w:104, sortable:true},
+    {key:"gash",     label:"جمارك · GAASH",         w:124},
+    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:92, sortable:true},
+    {key:"value",    label:"القيمة · value",        w:88,  sortable:true},
   ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
@@ -10201,10 +10212,28 @@ function gmNewOpen(preGwds){
   GM_CAND.mode="all";                  // a fresh open always shows everything
   bulkOpen("📧 "+T("إرسال طرود إلى سير عمل · Enroll packages into a workflow"));
   GM.enrollCands=cands;
-  GM.enrollSel=new Set(pre);          // survives re-render (sort / column change)
+  // survives re-render (sort / column change); parcels already RUNNING in a
+  // workflow can't be pre-checked — their box is disabled, re-enroll is a lie
+  GM.enrollSel=new Set(pre.filter(g=>{
+    const c=cands.find(x=>x.gwd===g); return !gmSeqBlock(c&&c.thread); }));
   $("bulkModal").classList.add("en-wide");
   $("bulkBody").innerHTML=`
     <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
+    <div class="gm-cmp">
+      <div class="gm-cmp-tabs">
+        <button onclick="bulkClose();gmTab('tpl')" title="${T("عدّل نص الإيميلات · edit what the emails say")}">📝 ${T("القوالب · Templates")}</button>
+        <button onclick="bulkClose();gmTab('seq')" title="${T("عدّل سير العمل والمستلم · edit workflows & recipient")}">🧬 ${T("سير العمل · Sequences")}</button>
+        <button onclick="$('gmNewIds').scrollIntoView({behavior:'smooth',block:'center'})" title="${T("الهويات المرفقة · the attached IDs")}">🪪 ${T("المستندات · Documents")}</button>
+      </div>
+      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("إلى · To")}</span><span id="gmCmpTo"></span></div>
+      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("من · From")}</span>
+        <select id="gmNewAcct" style="font-size:12px">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select></div>
+      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("الموضوع · Subject")}</span>
+        <span id="gmCmpSubj" style="font-size:12.5px;font-weight:600"></span></div>
+      <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("سير العمل · Workflow")}</span>
+        <select id="gmNewSeq" onchange="gmComposeSync()" style="font-size:12px">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)}</option>`).join("")||`<option value="">${T("لا سير عمل — أنشئ واحداً · none — build one first")}</option>`}</select>
+        <span id="gmCmpSteps" class="muted2" style="font-size:11px"></span></div>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <input id="gmCandSearch" oninput="gmEnrollRender()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
       <button class="minibtn" onclick="gmEnrollSelectShown(true)">${T("اختر الظاهر · select shown")}</button>
@@ -10215,25 +10244,21 @@ function gmNewOpen(preGwds){
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
       ${[["all",T("الكل · All"),cands.length],
          ["noid","⚠ "+T("بلا هوية · no ID"),cands.filter(c=>!c.pname_id).length],
-         ["default","⚡ "+T("اسم افتراضي · default name"),cands.filter(c=>c.pname_src==="default").length]]
+         ["default","⚡ "+T("اسم افتراضي · default name"),cands.filter(c=>c.pname_src==="default").length],
+         ["inseq","🧵 "+T("في تسلسل · in a sequence"),cands.filter(c=>c.thread).length]]
         .map(([k,lab,n])=>`<button class="minibtn gmCandChip${k==="all"?" accent":""}" data-m="${k}" style="padding:2px 10px;font-size:11.5px" onclick="gmCandMode('${k}')">${lab} <b>${n}</b></button>`).join("")}
     </div>
     <div id="gmEnrollTbl"><div class="muted2" style="padding:10px">${T("جارِ التحميل… · loading…")}</div></div>
     <input id="gmNewPaste" oninput="gmNewCount()" style="width:100%;margin-top:8px" placeholder="${T("أو الصق GWDات إضافية · or paste extra GWDs")} — GWD004…, GWD004…">
-    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("الهوية المرفقة مع الإيميل الأول · ID attached to email #1")}</b>
+    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("المستندات — الهوية المرفقة مع الإيميل الأول · Documents — ID attached to email #1")}</b>
       <div id="gmNewIds" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         ${ids.map(x=>`<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px">
           <input type="radio" name="gmNewId" value="${poEsc(x.id)}">
           <img src="/api/gaash/idfile?file=${encodeURIComponent(x.filename)}" style="width:74px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
           ${poEsc(x.name)}</label>`).join("")||`<span class="muted2" style="font-size:12px">${T("المكتبة فارغة · library is empty")}</span>`}
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
-      </div></div>
-    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <b style="font-size:13px">⚙️ ${T("سير العمل · workflow")}</b>
-      <select id="gmNewSeq">${(ov.sequences||[]).map(s=>`<option value="${poEsc(s.id)}">${poEsc(s.name)} (${(s.steps||[]).length} ${T("خطوة · steps")})</option>`).join("")||`<option value="">${T("لا سير عمل — أنشئ واحداً · none — build one first")}</option>`}</select>
-      <b style="font-size:13px">✉ ${T("الحساب المُرسِل · sending account")}</b>
-      <select id="gmNewAcct">${accts.map(a=>`<option value="${poEsc(a.id)}">${poEsc(a.email)}</option>`).join("")||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select>
-    </div>`;
+      </div></div>`;
+  gmComposeSync();
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
     <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
@@ -10249,6 +10274,49 @@ async function gmEnrollLoad(){
   if(!$("gmEnrollTbl")) return;              // modal closed while loading
   gmEnrollRender();
 }
+// ── 🧵 sequence column: is this parcel already in a workflow? ──
+// block = its checkbox is disabled. Only a live thread blocks; a 'proposed'
+// suggestion stays selectable because start_threads converts it cleanly.
+function gmSeqBlock(t){ return !!(t&&t.state!=="proposed"); }
+function gmSeqPill(t,gwd){
+  if(!t) return `<span class="muted2" style="opacity:.5" title="${T("غير مسجل في أي سير عمل بعد · not in any workflow yet")}">—</span>`;
+  const jump=`onclick="event.stopPropagation();bulkClose();gmTab('conv');gmOpen('${poEsc(gwd)}')"`;
+  const stp=t.step||0;
+  if(t.state==="proposed")
+    return `<span class="pill" style="color:#b45309;background:#fff7ed;border:1px solid #f59e0b55;font-size:10.5px" title="${T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real")}">💡 ${T("مقترح · suggested")}</span>`;
+  if(t.state==="goal_met"||t.state==="done")
+    return `<span class="pill" style="color:#12a150;background:#12a1500f;border:1px solid #12a15055;font-size:10.5px;cursor:pointer" ${jump} title="${T("وصل هدفه — افتح محادثته · goal met — open its conversation")}">🏁 ${T("منجز · done")}</span>`;
+  if(t.state==="paused")
+    return `<span class="pill" style="color:#8d8d8d;background:#8d8d8d1a;border:1px solid #8d8d8d55;font-size:10.5px;cursor:pointer" ${jump} title="${T("له محادثة قائمة (موقوفة) — اضغط لفتحها · already has a conversation (paused) — click to open it")}">⏸ ${T("موقوف · paused")} · ${stp}</span>`;
+  return `<span class="pill" style="color:#12a150;background:#12a1500f;border:1px solid #12a15055;font-size:10.5px;cursor:pointer" ${jump} title="${T("يعمل الآن عند الإيميل رقم · running — at email #")} ${stp} — ${T("اضغط لفتح المحادثة · click to open the conversation")}">▶ ${T("جارٍ · running")} · ${stp}</span>`;
+}
+// keep the compose header honest: To follows the SELECTED workflow (its
+// to_address, else Settings), Subject = that workflow's email-#1 template
+function gmComposeSync(){
+  const ov=GM.ov||{};
+  const sel=$("gmNewSeq");
+  const seq=(ov.sequences||[]).find(s=>s.id===((sel&&sel.value)||""))||(ov.sequences||[])[0];
+  const to=(((seq&&seq.to_address)||((ov.settings||{}).to_address))||"").trim();
+  // "own inbox" = a sending account, or its sibling: same letters with only
+  // the digits differing (qaisabusamra000 ↔ qaisabusamra001 — the test-inbox
+  // incident this warning exists for)
+  const stem=e=>String(e||"").trim().toLowerCase().split("@")[0].replace(/\d+/g,"");
+  const mine=new Set(), stems=new Set();
+  (ov.accounts||[]).forEach(a=>{ const e=String(a.email||"").trim().toLowerCase();
+    if(e){ mine.add(e); stems.add(stem(e)); } });
+  const own=!!to&&(mine.has(to.toLowerCase())||stems.has(stem(to)));
+  const toEl=$("gmCmpTo");
+  if(toEl) toEl.innerHTML=to
+    ?`<span class="pill" style="font-size:11.5px;${own?"color:#b45309;background:#fff7ed;border:1px solid #f59e0b55":"background:var(--bg2);border:1px solid var(--line)"}">${own?"⚠ ":""}${poEsc(to)}</span>`
+      +(own?` <span class="muted2" style="font-size:10.5px">${T("هذا صندوقك أنت — تجربة، لن يصل لغاش · this is YOUR OWN inbox — a test, GAASH won't see it")}</span>`:"")
+    :`<span class="muted2">${T("لا مستلم — حدّده على سير العمل أو في ⚙ · no recipient — set it on the workflow or in ⚙")}</span>`;
+  const steps=(seq&&seq.steps)||[];
+  const st0=steps.find(s=>s.template_id)||steps[0];
+  const tpl=st0&&((ov.templates||[]).find(t=>t.id===st0.template_id));
+  const sEl=$("gmCmpSubj"); if(sEl) sEl.textContent=(tpl&&tpl.subject_tpl)||"—";
+  const nEl=$("gmCmpSteps");
+  if(nEl) nEl.textContent=seq?`${steps.length} ${T("خطوة — المتابعات تُرسل تلقائياً · steps — follow-ups go automatically")}`:"";
+}
 function gmEnrollFiltered(){
   const q=(($("gmCandSearch")||{}).value||"").trim().toLowerCase();
   return (GM.enrollCands||[]).filter(c=>!q||
@@ -10256,16 +10324,20 @@ function gmEnrollFiltered(){
       .toLowerCase().includes(q))
     .filter(c=>GM_CAND.mode==="all"
       ||(GM_CAND.mode==="noid"&&!c.pname_id)
-      ||(GM_CAND.mode==="default"&&c.pname_src==="default"));
+      ||(GM_CAND.mode==="default"&&c.pname_src==="default")
+      ||(GM_CAND.mode==="inseq"&&c.thread));
 }
-let GM_CAND={mode:"all"};              // all | noid | default
+let GM_CAND={mode:"all"};              // all | noid | default | inseq
 function gmCandMode(m){
   GM_CAND.mode=m;
   document.querySelectorAll(".gmCandChip").forEach(b=>b.classList.toggle("accent",b.dataset.m===m));
   gmEnrollRender();
 }
 function gmEnrollSelectShown(on){
-  gmEnrollFiltered().forEach(c=>on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd));
+  gmEnrollFiltered().forEach(c=>{
+    if(on&&gmSeqBlock(c.thread)) return;   // running/paused rows can't re-enroll
+    on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd);
+  });
   gmEnrollRender();
 }
 function gmEnrollToggle(gwd,on){
@@ -10292,17 +10364,22 @@ function gmEnrollRender(){
     const c=byGwd[m.tn]||{};
     if(key==="pname") return fold(c.pname)||"~";
     if(key==="nameid") return fold(c.pname_id)||"~";
+    if(key==="seq") return String(c.thread?(c.thread.state==="proposed"?1:2):0)+m.tn;
     return bsSortVal(m,key);
   });
-  const pinPre=m=>`<input type="checkbox" class="gmEnCb" value="${poEsc(m.tn)}" ${GM.enrollSel.has(m.tn)?"checked":""}
+  const pinPre=m=>{
+    const c=byGwd[m.tn]||{}, blocked=gmSeqBlock(c.thread);
+    return `<input type="checkbox" class="gmEnCb" value="${poEsc(m.tn)}" ${GM.enrollSel.has(m.tn)&&!blocked?"checked":""} ${blocked?"disabled":""}
       onclick="event.stopPropagation()" onchange="gmEnrollToggle('${poEsc(m.tn)}',this.checked)"
-      style="flex:0 0 auto;margin-inline-end:2px">`;
+      style="flex:0 0 auto;margin-inline-end:2px${blocked?";opacity:.35":""}"${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>`;
+  };
   const extra=m=>{
     const c=byGwd[m.tn]||{}, nm=c.pname||"";
     // the name is PICKED per parcel (owner's pick → board column → Settings
     // default); the ID follows whatever name is chosen. Both come from the
     // server so the picker agrees with what the email will actually carry.
     return {
+      seq: gmSeqPill(c.thread,m.tn),
       pname:`<select class="gmCandName" data-gwd="${poEsc(m.tn)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
                onchange="gmCandName(this)" onclick="event.stopPropagation()"
                style="width:100%;min-width:0;font-size:11.5px;padding:2px 4px"

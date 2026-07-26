@@ -2807,7 +2807,7 @@ def _gm_files(raw):
 @auth.require_feature("leluxe")
 def api_gaash_overview():
     return jsonify({"ok": True, **gaash_mail.overview(),
-                    "candidates": gaash_mail.candidates()})
+                    "candidates": gaash_mail.candidates(include_enrolled=True)})
 
 
 @app.route("/api/gaash/stat_detail")
