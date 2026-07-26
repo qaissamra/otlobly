@@ -2780,11 +2780,19 @@ def candidates(include_enrolled=False):
             custs = sorted({(it.get("customer_name") or "").strip()
                             for it in (pk.get("items") or [])
                             if (it.get("customer_name") or "").strip()})
+            # Purchases has no ClickUp GASH STATUS field, so its customs position
+            # comes from the STORED tracking status — the same value the filter
+            # above already read. Keeping it costs nothing and asks no carrier:
+            # it is whatever the last normal refresh wrote.
+            pts = pk.get("tracking_status")
             out.append({"gwd": tn, "source": "purchases",
                         "name": (p.get("ship_to") or "").strip()[:70],
                         "status": pk.get("otlobly_status"), "gash_status": None,
-                        "customers": "، ".join(custs)[:70], "bucket": None,
-                        "label": None, "po_id": p.get("po_id"), "cf": dict(pcf)})
+                        "customers": "، ".join(custs)[:70],
+                        "bucket": _bucket(pts) or None,
+                        "label": (pts.get("label") if isinstance(pts, dict)
+                                  else str(pts)[:40] if pts else None),
+                        "po_id": p.get("po_id"), "cf": dict(pcf)})
     # the name each parcel ships under + the ID mapped to it — the picker shows
     # both so the owner can see, before sending, which ID each email will carry
     pmap = parcel_name_map()

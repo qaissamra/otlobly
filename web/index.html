@@ -490,7 +490,12 @@
   /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
      picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
      whether it is already being chased. The compose header above says the rest. */
-  #bulkModal.en-pick .az-box{width:min(920px,96vw);max-width:96vw}
+  /* the picker is a shared-machinery table again, so it needs table room */
+  #bulkModal.en-pick .az-box{width:min(1180px,96vw);max-width:96vw}
+  #bulkModal .poc-row{cursor:pointer}
+  #bulkModal .poc-row:hover{background:var(--bg2)}
+  #bulkModal .poc-row.en-on{background:#fff4ee}
+  #bulkModal .poc-row .bt-pin{display:flex;align-items:center;gap:2px}
   .en-list{border:1px solid var(--line);border-radius:11px;background:var(--card);
     max-height:46vh;overflow:auto}
   .en-row{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;
@@ -3492,19 +3497,18 @@ const LXT_COLS={
     {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
     {key:"value",    label:"القيمة · value",        w:96,  sortable:true},
   ],
-  "en":[    // 📧 Enroll picker — the Bulk-search columns + the editable 🪪 pair
-    {key:"seq",      label:"🧵 التسلسل · sequence", w:112, sortable:true},
-    {key:"found",    label:"موجود في · found in",   w:116, sortable:true},
-    {key:"pname",    label:"الاسم على الطرد · name on package", w:124, sortable:true},
+  // 📧 Enroll picker. ONLY columns the candidate record fills on its own — the
+  // picker must paint before the Purchases/Leluxe caches load, so anything
+  // needing them (images, profile, value, gash date) would render half-empty.
+  // Hide/show is per-table and persisted, so the owner tunes this themselves.
+  "en":[
+    {key:"pname",    label:"الاسم على الطرد · name on package", w:150, sortable:true},
     {key:"nameid",   label:"🪪 رقم الهوية · ID number", w:126},
-    {key:"oname",    label:"الاسم · order name",    w:108, sortable:true},
-    {key:"profile",  label:"الحساب · profile",     w:78,  sortable:true},
-    {key:"imgs",     label:"الصور · images",        w:96},
-    {key:"cust",     label:"العملاء · customers",   w:106, sortable:true},
-    {key:"status",   label:"الحالة · status",       w:104, sortable:true},
-    {key:"gash",     label:"جمارك · GAASH",         w:124},
-    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:92, sortable:true},
-    {key:"value",    label:"القيمة · value",        w:88,  sortable:true},
+    {key:"status",   label:"حالة الطلب · order status", w:126, sortable:true},
+    {key:"gash",     label:"حالة الجمارك · GAASH status", w:142, sortable:true},
+    {key:"seq",      label:"🧵 التسلسل · sequence",   w:112, sortable:true},
+    {key:"found",    label:"موجود في · found in",    w:96,  sortable:true},
+    {key:"cust",     label:"العميل · customer",      w:130, sortable:true},
   ],
   "pop":[   // Purchases → ⫶ Products / 👤 Customers flat views
     {key:"order",     label:"الطلب · order",       w:88,  sortable:true},
@@ -10556,37 +10560,88 @@ function gmEnrollRender(){
     gmNewCount(); return;
   }
   const seen=new Set();
-  mount.innerHTML=`<div class="en-list">${cands.filter(c=>{   // ONE row per GWD (the unit we email)
-      if(seen.has(c.gwd)) return false; seen.add(c.gwd); return true;
-    }).map(c=>{
-      const nm=c.pname||"", blocked=gmSeqBlock(c.thread), on=GM.enrollSel.has(c.gwd)&&!blocked;
-      const src={leluxe:"Leluxe",purchases:"Purchases",manual:T("ملصوق · pasted")}[c.source]||c.source||"";
-      const sub=[src,c.gash_status||c.status,c.customers||c.po_id||c.name].filter(Boolean).join(" · ");
-      return `<div class="en-row${on?" on":""}${blocked?" off":""}" onclick="gmRowPick(this,'${poEsc(c.gwd)}')">
-        <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""} ${blocked?"disabled":""}
-          onclick="event.stopPropagation()" onchange="gmRowCb(this,'${poEsc(c.gwd)}')"
-          ${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>
-        <div class="en-main">
-          <div class="en-top">
-            <span class="en-gwd">${poEsc(c.gwd)}</span>
-            <select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
-              onchange="gmCandName(this)" onclick="event.stopPropagation()"
-              title="${T("الاسم الذي يُشحن الطرد باسمه · the name this parcel ships under")}">${gmNameOpts(nm)}</select>${gmDefMark(c.pname_src)}
-            <span class="gmCandId" data-gwd="${poEsc(c.gwd)}" data-src="${poEsc(c.source||"")}"
-              style="cursor:${CAN_ADMIN?"pointer":"default"}"
-              ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
-              >${gmIdPill(c.pname_id,c.source)}</span>
-            <span class="spacer"></span>
-            ${gmSeqPill(c.thread,c.gwd)}
-          </div>
-          <div class="en-sub">${poEsc(sub)}</div>
-        </div></div>`;
-    }).join("")}</div>`;
+  const list=cands.filter(c=>{               // ONE row per GWD (the unit we email)
+    if(seen.has(c.gwd)) return false; seen.add(c.gwd); return true; });
+  // the shared per-table sort — the header arrows and the right-click menu drive it
+  lxtSortApply("en",list,(c,key)=>{
+    if(key==="seq")    return c.thread?(c.thread.state==="proposed"?1:2):0;
+    if(key==="pname")  return (c.pname||"").toLowerCase()||"~";
+    if(key==="status") return (c.status||"").toLowerCase()||"~";
+    if(key==="gash")   return (c.gash_status||c.label||"").toLowerCase()||"~";
+    if(key==="found")  return c.source||"~";
+    if(key==="cust")   return (c.customers||c.po_id||c.name||"").toLowerCase()||"~";
+    return "";
+  });
+  const rows=list.map(c=>{
+    const nm=c.pname||"", blocked=gmSeqBlock(c.thread), on=GM.enrollSel.has(c.gwd)&&!blocked;
+    const pin=`<div class="bt-pin">
+      <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""} ${blocked?"disabled":""}
+        onclick="event.stopPropagation()" onchange="gmRowCb(this,'${poEsc(c.gwd)}')"
+        style="flex:0 0 auto;margin-inline-end:4px${blocked?";opacity:.35":""}"
+        ${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>
+      <span class="mono" style="font-size:12px">${poEsc(c.gwd)}</span></div>`;
+    return `<div class="poc-row${on?" en-on":""}" onclick="gmRowPick(this,'${poEsc(c.gwd)}')">${pin}${lxtCells("en",{
+      pname:`<select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
+          onchange="gmCandName(this)" onclick="event.stopPropagation()"
+          style="width:100%;min-width:0;font-size:11.5px;padding:2px 4px"
+          title="${T("الاسم الذي يُشحن الطرد باسمه · the name this parcel ships under")}">${gmNameOpts(nm)}</select>${gmDefMark(c.pname_src)}`,
+      nameid:`<span class="gmCandId" data-gwd="${poEsc(c.gwd)}" data-src="${poEsc(c.source||"")}"
+          style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
+          ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
+          >${gmIdPill(c.pname_id,c.source)}</span>`,
+      status:gmOrderPill(c),
+      gash:gmGashPill(c),
+      seq:gmSeqPill(c.thread,c.gwd),
+      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line);font-size:10.5px">${
+        {leluxe:"⌚ Leluxe",purchases:"📦 Purchases",manual:T("ملصوق · pasted")}[c.source]||poEsc(c.source||"—")}</span>`,
+      cust:`<span style="font-size:11.5px" title="${poEsc(c.customers||c.po_id||c.name||"")}">${
+        poEsc(c.customers||c.po_id||c.name||"—")}</span>`,
+    })}</div>`;
+  }).join("");
+  mount.innerHTML=lxtHead("en",T("التتبع · tracking"))
+    +lxtWrap("en",`<div class="pkg open"><div class="pkg-body">${rows}</div></div>`);
+  lxColwApply(); lxtGridApply("en",mount);
   gmNewCount();
+  gmEnrollColour();                   // Leluxe pill colours, without blocking
+}
+// The board status. Purchases colours come from the static CU_COLOR map, so they
+// are right immediately; Leluxe needs LX.schema and starts grey (see gmEnrollColour).
+function gmOrderPill(c){
+  const s=String(c.status||"").trim();
+  if(!s) return '<span class="muted2">—</span>';
+  if(c.source==="purchases") return hexPill(CU_COLOR[s]||"#8d8d8d",cuLabel(s));
+  // lxStatusPill/lxCfPill dereference LX.schema and LX is null until the Leluxe
+  // cache loads — which is exactly the window this list is designed to paint in
+  return gmLxReady() ? lxStatusPill(s) : gmPlainPill(s);
+}
+// LX is a top-level `let`, so it is NOT a window property — `window.LX` is
+// always undefined and would keep every pill grey forever
+function gmLxReady(){ return typeof LX!=="undefined" && !!(LX&&LX.schema); }
+function gmPlainPill(txt){
+  return `<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10.5px"
+    title="${poEsc(txt)}">${poEsc(txt)}</span>`;
+}
+// Where customs has got to. Leluxe stores it as a ClickUp field; Purchases has no
+// such field, so it comes from the STORED tracking status — no carrier is asked.
+function gmGashPill(c){
+  if(c.gash_status) return gmLxReady()
+    ? lxCfPill("gash status",c.gash_status) : gmPlainPill(c.gash_status);
+  if(c.bucket||c.label) return gaashMiniPill(c.bucket,c.label);
+  return '<span class="muted2">—</span>';
+}
+// lxStatusPill/lxCfPill read their colours from LX.schema, which only exists once
+// the Leluxe cache is loaded. Load it AFTER the first paint and re-render once —
+// waiting for it up front is what made this list take seconds.
+function gmEnrollColour(){
+  if(GM.enrollColouring||gmLxReady()) return;
+  GM.enrollColouring=true;
+  bsEnsureData().then(()=>{ if($("gmEnrollTbl")) gmEnrollRender(); })
+    .catch(()=>{})
+    .then(()=>{ GM.enrollColouring=false; });   // let a later open try again
 }
 function gmRowCb(cb,gwd){
   gmEnrollToggle(gwd,cb.checked);
-  const row=cb.closest(".en-row"); if(row) row.classList.toggle("on",cb.checked);
+  const row=cb.closest(".poc-row"); if(row) row.classList.toggle("en-on",cb.checked);
 }
 function gmRowPick(row,gwd){          // the whole row is the click target
   const cb=row.querySelector('input[type=checkbox]');
