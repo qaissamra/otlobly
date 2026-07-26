@@ -511,6 +511,13 @@
   .gm-tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:110px}
   .gm-tile b{font-size:22px;display:block}
   .gm-tile span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+  .gm-tile.click{cursor:pointer;transition:border-color .12s}
+  .gm-tile.click:hover{border-color:var(--accent)}
+  .gm-stat-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-top:1px solid var(--line);cursor:pointer;font-size:12.5px}
+  .gm-stat-row:first-child{border-top:none}
+  .gm-stat-row:hover{background:var(--bg2)}
+  .gm-stat-row b{flex:none}
+  .gm-stat-row .muted2{font-size:11px}
   .gm-fun{display:flex;align-items:flex-end;gap:6px;height:64px}
   .gm-fun>div{background:#f76808;border-radius:4px 4px 0 0;min-width:34px;position:relative}
   .gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;color:var(--muted)}
@@ -1550,6 +1557,13 @@
   <div class="az-box">
     <div class="az-head"><b id="azTitle">Profile</b><span class="az-x" onclick="closeAz()">✕</span></div>
     <div id="azBody"></div>
+  </div>
+</div>
+
+<div id="gmStatModal" class="az-modal hidden" onclick="if(event.target===this)gmStatClose()">
+  <div class="az-box" style="width:520px">
+    <div class="az-head"><b id="gmStatTitle">—</b><span class="az-x" onclick="gmStatClose()">✕</span></div>
+    <div id="gmStatBody" style="padding:10px 16px 16px;max-height:60vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -10760,6 +10774,7 @@ function gmOvRender(){
   const seqs=(GM.ov&&GM.ov.sequences)||[];
   const onN=seqs.filter(s=>!s.paused).length;
   const tile=(v,l)=>`<div class="gm-tile"><b>${v}</b><span>${l}</span></div>`;
+  const dtile=(v,l,kind)=>`<div class="gm-tile click" onclick="gmStatDrill('${kind}')"><b>${v}</b><span>${l}</span></div>`;
   const list=seqs.map(s=>{
     const x=((st&&st.sequences)||[]).find(y=>y.seq_id===s.id)||{};
     return `<div class="panel" style="display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12.5px;cursor:pointer" onclick="gmTab('seq');gmSeqEdit('${s.id}')">
@@ -10776,14 +10791,45 @@ function gmOvRender(){
       ${tile(o.enrolled,T("مسجل · enrolled"))}
       ${tile(o.enrolled_7d??0,T("آخر ٧ أيام · last 7 days"))}
       ${tile(o.active,T("نشط · active"))}
-      ${tile(o.sent,T("مرسل · sent"))}
-      ${tile(gmWfPct(o.opened,o.sent),T("فتح · open"))}
-      ${tile(gmWfPct(o.replied,o.enrolled),T("رد · reply"))}
+      ${dtile(o.sent,T("مرسل · sent"),"sent")}
+      ${dtile(gmWfPct(o.opened,o.sent),T("فتح · open"),"opened")}
+      ${dtile(gmWfPct(o.replied,o.enrolled),T("رد · reply"),"replied")}
       ${tile(gmWfPct(o.goal_met,o.enrolled),T("الهدف · goal"))}
     </div>
     <b style="font-size:13px">⚙️ ${T("سير العمل · Workflows")}</b>${list}`
     :`<div class="muted2 panel">${T("جارِ التحميل… · loading…")}</div>`;
 }
+// ── Overview drill-down: which exact parcel/email is behind a stat tile ──
+async function gmStatDrill(kind){
+  const titles={sent:T("📤 مرسل · Sent"),opened:T("👀 تم الفتح · Opened"),
+                replied:T("💬 تم الرد · Replied")};
+  $("gmStatTitle").textContent=titles[kind]||kind;
+  $("gmStatBody").innerHTML=`<div class="empty"><span class="spin"></span> ${T("جارِ التحميل… · loading…")}</div>`;
+  $("gmStatModal").classList.remove("hidden");
+  let d; try{ d=await(await fetch("/api/gaash/stat_detail?kind="+encodeURIComponent(kind))).json(); }
+  catch(e){ d={ok:false}; }
+  if(!d.ok||!(d.rows||[]).length){
+    $("gmStatBody").innerHTML=`<div class="muted2" style="padding:10px 0">${T("لا يوجد شيء بعد · nothing yet")}</div>`; return;
+  }
+  $("gmStatBody").innerHTML=d.rows.map(r=>{
+    const name=r.pname?poEsc(r.pname):"";
+    let detail;
+    if(kind==="opened")
+      detail=`${r.opens} ${T("مرة فتح · open"+(r.opens===1?"":"s"))} · ${T("أول فتح · first")} ${relTime(r.first_open_at)}`;
+    else if(kind==="replied")
+      detail=`${r.n_replies} ${T("رد · repl"+(r.n_replies===1?"y":"ies"))} · ${T("آخر · last")} ${relTime(r.at)}`;
+    else
+      detail=`${r.step?T("خطوة · step")+" "+r.step+" · ":""}${poEsc(r.subject||"")}`;
+    return `<div class="gm-stat-row" onclick="gmStatClose();gmTab('conv');gmOpen('${poEsc(r.gwd)}')">
+      <div style="flex:1;min-width:0">
+        <b class="mono" style="font-size:12px">${poEsc(r.gwd)}</b>${name?` <span class="muted2">${name}</span>`:""}
+        <div class="muted2">${detail}</div>
+      </div>
+      <span class="muted2" style="flex:none">${relTime(r.at)}</span>
+    </div>`;
+  }).join("");
+}
+function gmStatClose(){ $("gmStatModal").classList.add("hidden"); }
 function gmSeqNew(){
   GM.edit={id:"", name:"", to_address:"", goal:"cleared", description:"",
     send_window:{tz:"Asia/Hebron",days:[6,0,1,2,3],start:"09:00",end:"17:00"}, steps:[]};

@@ -2810,6 +2810,17 @@ def api_gaash_overview():
                     "candidates": gaash_mail.candidates()})
 
 
+@app.route("/api/gaash/stat_detail")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_stat_detail():
+    """Row list behind an 🧭 Overview tile — which exact parcel/email it counts."""
+    kind = (request.args.get("kind") or "").strip().lower()
+    if kind not in ("sent", "opened", "clicked", "replied"):
+        return jsonify({"ok": False, "error": "bad kind"}), 400
+    return jsonify({"ok": True, "kind": kind, "rows": gaash_mail.stat_detail(kind)})
+
+
 @app.route("/api/gaash/thread_detail")
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
