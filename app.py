@@ -3146,7 +3146,7 @@ def api_gaash_templates():
     if request.method == "DELETE":
         res = gaash_mail.template_remove((b.get("id") or "").strip())
     else:
-        res = gaash_mail.template_save(b)
+        res = gaash_mail.template_save(b, user=_user())
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
@@ -3192,6 +3192,7 @@ def api_gaash_template_render():
             text = text.replace(f"\x00{i}\x00", "{" + t + "}")
         return text
 
+    gaash_mail.template_touch(tid)          # picked into a real email → "last used"
     return jsonify({"ok": True, "subject": render(subj_tpl), "body": render(body_tpl),
                     "unresolved": unresolved, "blank": blank})
 

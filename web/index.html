@@ -455,11 +455,42 @@
   .gm-cmp-lbl{flex:0 0 64px;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
   #bulkModal .az-box:has(.pop-menu.open){overflow:visible}
   #bulkModal .en-cols .lxc>input{max-width:100%;min-width:0}
-  .en-wide .az-box{width:min(1480px,97vw);max-width:97vw}
+  /* the shared bulk modal's base size — every override below is id-scoped so it
+     actually beats this, the way the old inline width never let them */
+  #bulkModal .az-box{width:640px;max-width:96vw;max-height:86vh}
+  #bulkModal.en-wide .az-box{width:min(1480px,97vw);max-width:97vw}
+  /* 📝 template picker — a full-height sheet with a sortable table, so the
+     library reads the same way whether it holds 4 templates or 40 */
+  #bulkModal.tpl-wide .az-box{width:min(1060px,95vw);height:min(720px,88vh);max-height:88vh}
+  #bulkModal.tpl-wide #bulkBody{flex:1;min-height:0}     /* the table scrolls, the sheet doesn't */
+  .tpl-filters{display:flex;gap:12px;align-items:center;padding:4px 0 12px;flex-wrap:wrap}
+  .tpl-search{position:relative;flex:0 0 290px;max-width:100%}
+  .tpl-search input{width:100%;font-size:13px;padding:8px 32px 8px 11px}
+  .tpl-search span{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);
+    color:var(--muted);font-size:12px;pointer-events:none}
+  .tpl-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .tpl-tbl th{text-align:start;font-size:12px;color:var(--muted);font-weight:700;
+    padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;
+    position:sticky;top:0;background:var(--card);z-index:1}
+  .tpl-tbl th:hover{color:var(--ink)}
+  .tpl-tbl th i{font-style:normal;opacity:.45;margin-inline-start:4px}
+  .tpl-tbl th.on i{opacity:1;color:var(--accent)}
+  .tpl-tbl td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .tpl-tbl tbody tr{cursor:pointer}
+  .tpl-tbl tbody tr:hover{background:var(--bg2)}
+  .tpl-name{color:#0b8a75;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .tpl-sub{display:block;color:var(--muted);font-size:11.5px;font-weight:400;
+    text-decoration:none;margin-top:3px}
+  .tpl-dim{color:var(--muted)}
+  @media(max-width:640px){
+    #bulkModal.tpl-wide .az-box{width:calc(100vw - 14px);height:92vh}
+    .tpl-tbl th:nth-child(2),.tpl-tbl td:nth-child(2),
+    .tpl-tbl th:nth-child(4),.tpl-tbl td:nth-child(4){display:none}
+  }
   /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
      picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
      whether it is already being chased. The compose header above says the rest. */
-  .en-pick .az-box{width:min(920px,96vw);max-width:96vw}
+  #bulkModal.en-pick .az-box{width:min(920px,96vw);max-width:96vw}
   .en-list{border:1px solid var(--line);border-radius:11px;background:var(--card);
     max-height:46vh;overflow:auto}
   .en-row{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;
@@ -486,7 +517,7 @@
   .en-warn.live{background:#fff4ee;border:1px solid #f7680855}
   .en-warn.dry{background:var(--bg2);border:1px solid var(--line)}
   @media(max-width:640px){
-    .en-pick .az-box{width:calc(100vw - 14px)}
+    #bulkModal.en-pick .az-box{width:calc(100vw - 14px)}
     .en-top{flex-direction:column;align-items:flex-start;gap:4px}
     .en-cf-r>b:first-child{flex:1 1 100%}
   }
@@ -1616,7 +1647,9 @@
 
 <!-- Bulk progress popup: live rows for Check-all-shipping / Estimate-all-costs -->
 <div id="bulkModal" class="az-modal hidden" onclick="if(event.target===this)bulkClose()">
-  <div class="az-box" style="width:640px;max-width:96vw;max-height:86vh;overflow:auto;display:flex;flex-direction:column">
+  <!-- size lives in CSS, NOT inline: an inline width beats every class, which is
+       how en-wide / en-pick / tpl-wide all silently did nothing -->
+  <div class="az-box" style="overflow:auto;display:flex;flex-direction:column">
     <div class="az-head"><b id="bulkTitle">Working…</b><span class="az-x" onclick="bulkClose()">✕</span></div>
     <div id="bulkBody" style="padding:6px 16px 10px;overflow:auto"></div>
     <div id="bulkFoot" style="padding:10px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px"></div>
@@ -7102,7 +7135,7 @@ function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerH
 // en-pick is the enroll picker's width override — drop it on close, or the
 // next consumer of this shared modal (shipping check, cost estimate…) inherits it
 function bulkClose(){ $("bulkModal").classList.add("hidden");
-  $("bulkModal").classList.remove("en-wide","en-pick"); }
+  $("bulkModal").classList.remove("en-wide","en-pick","tpl-wide"); }
 function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
   if(!r){ r=document.createElement("div"); r.id="blk_"+id;
     r.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap";
@@ -10568,22 +10601,38 @@ function gmEnrollClearFilter(){
 // A popup OVER the conversation — not a jump to the Templates tab, which loses
 // your place and gives you no way back to the parcel you were writing about.
 // Nothing is ever sent from here: the text lands in the box for you to edit.
-let GM_TPL={q:""};
+let GM_TPL={q:"", owner:"", sort:"name", dir:1};
 function gmTplPick(){
   const th=(GM.detail||{}).thread; if(!th) return;
-  GM_TPL.q="";
-  bulkOpen("📝 "+T("اختر قالباً · Select template"));
-  $("bulkModal").classList.add("en-pick");
+  GM_TPL={q:"", owner:"", sort:"name", dir:1};
+  bulkOpen(T("اختر قالباً · Select template"));
+  $("bulkModal").classList.remove("en-pick");     // coming Back from the confirm
+  $("bulkModal").classList.add("tpl-wide");
+  const owners=[...new Set((((GM.ov||{}).templates)||[]).map(t=>t.created_by).filter(Boolean))];
   $("bulkBody").innerHTML=`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <input id="gmTplSearch" oninput="gmTplList()" style="flex:1;font-size:12.5px"
-        placeholder="🔎 ${T("ابحث في القوالب · Search templates")}">
+    <div class="tpl-filters">
+      <label class="tpl-search">
+        <input id="gmTplSearch" oninput="gmTplList()" placeholder="${T("ابحث في القوالب · Search templates")}">
+        <span>🔎</span>
+      </label>
+      ${owners.length?`<label style="display:flex;gap:6px;align-items:center;font-size:13px">
+        <span class="muted2">${T("المالك · Owner")}:</span>
+        <select onchange="GM_TPL.owner=this.value;gmTplList()" style="font-size:12.5px">
+          <option value="">${T("الكل · All owners")}</option>
+          ${owners.map(o=>`<option value="${poEsc(o)}">${poEsc(o)}</option>`).join("")}
+        </select></label>`:""}
+      <span class="spacer"></span>
+      <span class="muted2" style="font-size:11.5px">${T("يُملأ لـ · filled in for")} <b class="mono">${poEsc(th.gwd)}</b></span>
     </div>
-    <div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("يُملأ لهذا الطرد")} <b class="mono">${poEsc(th.gwd)}</b> — ${T("والموضوع يبقى موضوع هذه المحادثة · filled in for this package — the subject stays this conversation's")}</div>
     <div id="gmTplRows"></div>`;
-  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px;width:100%;align-items:center">
+    <span class="muted2" style="font-size:11.5px">${T("الاختيار يضعه في صندوق الرد — لا يُرسل شيء · picking puts it in the reply box — nothing is sent")}</span>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button></div>`;
   gmTplList();
+}
+function gmTplSort(k){
+  GM_TPL.dir=(GM_TPL.sort===k)?-GM_TPL.dir:1;
+  GM_TPL.sort=k; gmTplList();
 }
 function gmTplList(){
   const mount=$("gmTplRows"); if(!mount) return;
@@ -10591,24 +10640,39 @@ function gmTplList(){
   GM_TPL.q=q;
   const all=((GM.ov||{}).templates)||[];
   // name AND subject — the subject is often the only thing that tells #2 from #3
-  const rows=all.filter(t=>!q||((t.name||"")+" "+(t.subject_tpl||"")).toLowerCase().includes(q));
+  const rows=all.filter(t=>(!q||((t.name||"")+" "+(t.subject_tpl||"")).toLowerCase().includes(q))
+    &&(!GM_TPL.owner||t.created_by===GM_TPL.owner));
   if(!rows.length){
     mount.innerHTML=all.length
-      ? `<div class="en-none"><b>${T("لا قالب يطابق · No template matches")} “${poEsc(q)}”</b>
-          <div style="margin-top:9px"><button class="minibtn" onclick="$('gmTplSearch').value='';gmTplList()">${T("امسح البحث · clear search")}</button></div></div>`
+      ? `<div class="en-none"><b>${T("لا قالب يطابق · No template matches")}${q?` “${poEsc(q)}”`:""}</b>
+          <div style="margin-top:9px"><button class="minibtn" onclick="$('gmTplSearch').value='';GM_TPL.owner='';gmTplPick()">${T("امسح البحث · clear search")}</button></div></div>`
       : `<div class="en-none"><b>${T("لا قوالب بعد · No templates yet")}</b>
           <div style="margin-top:9px"><button class="minibtn" onclick="bulkClose();gmTab('tpl')">${T("أنشئ واحداً من تبويب القوالب · create one in the Templates tab")}</button></div></div>`;
     return;
   }
-  mount.innerHTML=`<div class="en-list">${rows.map(t=>`
-    <div class="en-row" onclick="gmTplUse('${poEsc(t.id)}')">
-      <div class="en-main"><div class="en-top">
-        <b style="font-size:12.5px">${poEsc(t.name)}</b>
-        <span class="spacer"></span>
-        <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">${t.used_by||0} ${T("مستخدم · used")}</span>
-      </div>
-      <div class="en-sub">${poEsc(t.subject_tpl||"")}</div></div>
-    </div>`).join("")}</div>`;
+  const key=t=>({name:(t.name||"").toLowerCase(), created_by:(t.created_by||"").toLowerCase(),
+    last_used_at:t.last_used_at||"", updated_at:t.updated_at||""})[GM_TPL.sort];
+  // blanks last whichever way you sort — an unknown is not "oldest"
+  rows.sort((a,b)=>{ const x=key(a),y=key(b);
+    if(!x&&!y) return 0; if(!x) return 1; if(!y) return -1;
+    return x<y?-GM_TPL.dir:x>y?GM_TPL.dir:0; });
+  const th=(k,lab)=>`<th class="${GM_TPL.sort===k?"on":""}" onclick="gmTplSort('${k}')">${lab}<i>${
+    GM_TPL.sort===k?(GM_TPL.dir>0?"↑":"↓"):"⇅"}</i></th>`;
+  const when=v=>v?`<span title="${poEsc(String(v).slice(0,16).replace("T"," "))}">${poEsc(relTime(v))}</span>`
+    :`<span class="tpl-dim">—</span>`;
+  mount.innerHTML=`<table class="tpl-tbl"><thead><tr>
+      ${th("name",T("الاسم · Name"))}
+      ${th("created_by",T("أنشأه · Created by"))}
+      ${th("last_used_at",T("آخر استخدام · Last used"))}
+      ${th("updated_at",T("آخر تعديل · Last modified"))}
+    </tr></thead><tbody>${rows.map(t=>`
+      <tr onclick="gmTplUse('${poEsc(t.id)}')">
+        <td><span class="tpl-name">${poEsc(t.name)}</span>
+          <span class="tpl-sub">${poEsc(t.subject_tpl||"")}</span></td>
+        <td>${t.created_by?poEsc(t.created_by):`<span class="tpl-dim">—</span>`}</td>
+        <td>${when(t.last_used_at)}</td>
+        <td>${when(t.updated_at)}</td>
+      </tr>`).join("")}</tbody></table>`;
 }
 async function gmTplUse(tid){
   const box=$("gmBody");
@@ -10618,6 +10682,8 @@ async function gmTplUse(tid){
 }
 function gmTplReplaceAsk(tid){
   const t=(((GM.ov||{}).templates)||[]).find(x=>x.id===tid)||{};
+  // a one-question confirm does not need the full-height library sheet
+  $("bulkModal").classList.remove("tpl-wide"); $("bulkModal").classList.add("en-pick");
   $("bulkBody").innerHTML=`
     <div class="en-cf">
       <div class="en-warn dry"><b>${T("تستبدل الرسالة التي بدأتها؟ · Replace the message you've started?")}</b><br>

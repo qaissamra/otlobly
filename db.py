@@ -473,6 +473,12 @@ def migrate():
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_open_at TEXT")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_click_at TEXT")
+        # 📝 Template picker columns: who wrote it, and when it was last actually
+        # used. Both are NULL on rows that predate this — unknowable after the
+        # fact, so the picker shows "—" rather than inventing a name or a date.
+        if "created_by" not in _columns(c, "gaash_templates"):
+            c.execute("ALTER TABLE gaash_templates ADD COLUMN created_by TEXT")
+            c.execute("ALTER TABLE gaash_templates ADD COLUMN last_used_at TEXT")
         # ⚙️ Workflows page: HubSpot-style On/Off (paused stops sending AND
         # trigger enrollment) + a free-text description column.
         if "paused" not in _columns(c, "gaash_sequences"):

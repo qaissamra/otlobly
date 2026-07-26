@@ -318,20 +318,35 @@ def templates_list():
     return tpls
 
 
-def template_save(t):
+def template_save(t, user=None):
     tid = (t.get("id") or "").strip() or f"tpl_{int(time.time() * 1000)}"
     name = str(t.get("name") or "").strip()
     if not name:
         return {"ok": False, "error": "template name required"}
     with db.connect() as c:
-        c.execute("""INSERT INTO gaash_templates (id,name,subject_tpl,body_tpl,updated_at)
-            VALUES (?,?,?,?,?)
+        # created_by is written on INSERT only — editing someone else's template
+        # does not make it yours, and the picker's Created-by column would lie
+        c.execute("""INSERT INTO gaash_templates
+            (id,name,subject_tpl,body_tpl,updated_at,created_by)
+            VALUES (?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,
               subject_tpl=excluded.subject_tpl, body_tpl=excluded.body_tpl,
               updated_at=excluded.updated_at""",
                   (tid, name, str(t.get("subject_tpl") or ""),
-                   str(t.get("body_tpl") or ""), now_iso()))
+                   str(t.get("body_tpl") or ""), now_iso(),
+                   (user or "").strip() or None))
     return {"ok": True, "id": tid}
+
+
+def template_touch(tid):
+    """Stamp 'last used'. A use is the template actually going into an email —
+    the sequencer sending it, or a human picking it into the reply box. Merely
+    opening the picker is not a use."""
+    if not tid:
+        return
+    with db.connect() as c:
+        c.execute("UPDATE gaash_templates SET last_used_at=? WHERE id=?",
+                  (now_iso(), tid))
 
 
 def template_remove(tid):
@@ -2043,6 +2058,7 @@ def send_step(gwd):
                        step=step + 1, subject=subject, step_id=st.get("id"))
     if not res.get("ok"):
         return res
+    template_touch(st.get("template_id"))          # it really went out → "last used"
     _schedule_next(gwd, seq, step + 1)
     return {"ok": True, "step": step + 1, **res}
 
