@@ -574,6 +574,10 @@
   .gm-actions button{border:none;background:none;font-weight:700;font-size:12.5px;
     padding:0;cursor:pointer;color:var(--muted)}
   .gm-actions button:hover{color:var(--accent)}
+  /* a token that did not resolve is named out loud under the box: a visible
+     {days_waiting} is a fixable mistake, a silently empty sentence is not */
+  .gm-warn{margin:0 12px 10px;padding:7px 10px;border-radius:9px;font-size:11.5px;
+    background:#fff7ed;border:1px solid #fdba74;color:#b45309}
   .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
   .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
   /* v2: sequence builder tree (HubSpot-style) + dashboard */
@@ -10200,12 +10204,14 @@ function gmRenderChat(){
     </div>
     <div class="gm-msgs" id="gmMsgs">${bubbles}</div>
     <div class="gm-actions">
+      <button onclick="gmTplPick()" title="${T("اختر قالباً — يُملأ باسم هذا الطرد ورقمه ثم تعدّله وترسله · pick a template — filled in for THIS package, then edit it and send")}">📝 ${T("القوالب · Templates")}</button>
       <button onclick="gmSeqPick()" title="${T("أي سير عمل يلاحق هذا الطرد — وانقله لغيره · which workflow is chasing this package — and move it to another")}">🧬 ${T("سير العمل · Sequences")}</button>
     </div>
     <div class="gm-compose">
       <textarea id="gmBody" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
       <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
-    </div>`;
+    </div>
+    <div id="gmTplWarn" class="gm-warn hidden"></div>`;
   const box=$("gmMsgs"); if(box) box.scrollTop=box.scrollHeight;
 }
 async function gmSetName(pname){        // re-pins the name → the NEXT emails carry its ID
@@ -10557,6 +10563,91 @@ function gmRowPick(row,gwd){          // the whole row is the click target
 function gmEnrollClearFilter(){
   const s=$("gmCandSearch"); if(s) s.value="";
   gmCandMode("all");                   // re-renders
+}
+// ── 📝 pick a template into the reply box ─────────────────────────────────────
+// A popup OVER the conversation — not a jump to the Templates tab, which loses
+// your place and gives you no way back to the parcel you were writing about.
+// Nothing is ever sent from here: the text lands in the box for you to edit.
+let GM_TPL={q:""};
+function gmTplPick(){
+  const th=(GM.detail||{}).thread; if(!th) return;
+  GM_TPL.q="";
+  bulkOpen("📝 "+T("اختر قالباً · Select template"));
+  $("bulkModal").classList.add("en-pick");
+  $("bulkBody").innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input id="gmTplSearch" oninput="gmTplList()" style="flex:1;font-size:12.5px"
+        placeholder="🔎 ${T("ابحث في القوالب · Search templates")}">
+    </div>
+    <div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("يُملأ لهذا الطرد")} <b class="mono">${poEsc(th.gwd)}</b> — ${T("والموضوع يبقى موضوع هذه المحادثة · filled in for this package — the subject stays this conversation's")}</div>
+    <div id="gmTplRows"></div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button></div>`;
+  gmTplList();
+}
+function gmTplList(){
+  const mount=$("gmTplRows"); if(!mount) return;
+  const q=((($("gmTplSearch")||{}).value)||"").trim().toLowerCase();
+  GM_TPL.q=q;
+  const all=((GM.ov||{}).templates)||[];
+  // name AND subject — the subject is often the only thing that tells #2 from #3
+  const rows=all.filter(t=>!q||((t.name||"")+" "+(t.subject_tpl||"")).toLowerCase().includes(q));
+  if(!rows.length){
+    mount.innerHTML=all.length
+      ? `<div class="en-none"><b>${T("لا قالب يطابق · No template matches")} “${poEsc(q)}”</b>
+          <div style="margin-top:9px"><button class="minibtn" onclick="$('gmTplSearch').value='';gmTplList()">${T("امسح البحث · clear search")}</button></div></div>`
+      : `<div class="en-none"><b>${T("لا قوالب بعد · No templates yet")}</b>
+          <div style="margin-top:9px"><button class="minibtn" onclick="bulkClose();gmTab('tpl')">${T("أنشئ واحداً من تبويب القوالب · create one in the Templates tab")}</button></div></div>`;
+    return;
+  }
+  mount.innerHTML=`<div class="en-list">${rows.map(t=>`
+    <div class="en-row" onclick="gmTplUse('${poEsc(t.id)}')">
+      <div class="en-main"><div class="en-top">
+        <b style="font-size:12.5px">${poEsc(t.name)}</b>
+        <span class="spacer"></span>
+        <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px">${t.used_by||0} ${T("مستخدم · used")}</span>
+      </div>
+      <div class="en-sub">${poEsc(t.subject_tpl||"")}</div></div>
+    </div>`).join("")}</div>`;
+}
+async function gmTplUse(tid){
+  const box=$("gmBody");
+  // half-typed GAASH messages are common and losing one is worse than a click
+  if(box&&box.value.trim()){ gmTplReplaceAsk(tid); return; }
+  gmTplInsert(tid);
+}
+function gmTplReplaceAsk(tid){
+  const t=(((GM.ov||{}).templates)||[]).find(x=>x.id===tid)||{};
+  $("bulkBody").innerHTML=`
+    <div class="en-cf">
+      <div class="en-warn dry"><b>${T("تستبدل الرسالة التي بدأتها؟ · Replace the message you've started?")}</b><br>
+        ${T("سيحل محلها نص · it will be replaced by")} <b>${poEsc(t.name||"")}</b></div>
+      <div class="en-cf-r"><b>${T("ما كتبته · What you wrote")}</b>
+        <span class="muted2">${poEsc((($("gmBody")||{}).value||"").trim().slice(0,90))}…</span></div>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmTplPick()">← ${T("رجوع · Back")}</button>
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    <button class="accent" onclick="gmTplInsert('${poEsc(tid)}')">${T("استبدل · Replace")}</button></div>`;
+}
+async function gmTplInsert(tid){
+  const th=(GM.detail||{}).thread; if(!th) return;
+  // the SAME _fill() the sequencer sends with — a hand-picked template must not
+  // resolve its tokens differently from an automated one
+  const r=await post("/api/gaash/template_render",{gwd:th.gwd,template_id:tid});
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر تجهيز القالب · could not prepare the template")); return; }
+  bulkClose();
+  const box=$("gmBody"); if(!box) return;
+  box.value=r.body||"";
+  box.focus(); box.setSelectionRange(box.value.length,box.value.length);
+  const warn=$("gmTplWarn"); if(!warn) return;
+  const miss=[...(r.unresolved||[]),...(r.blank||[])];
+  warn.classList.toggle("hidden",!miss.length);
+  warn.innerHTML=miss.length                     // cleared, not just hidden
+    ?`⚠ ${T("لم يُملأ · not filled in")}: `
+      +miss.map(t=>`<b class="mono">{${poEsc(t)}}</b>`).join(" · ")
+      +` — ${T("اكتبها بنفسك قبل الإرسال · type them in yourself before sending")}`
+    :"";
 }
 // ── 🧬 this conversation's workflow ───────────────────────────────────────────
 // A conversation IS an enrollment, so this never enrolls — it says which
