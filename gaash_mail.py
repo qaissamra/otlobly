@@ -843,13 +843,16 @@ def verify_token(token, url=""):
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 
 
-# **bold** in a template: <strong> in the HTML part, markers stripped from the
-# plain-text part — so a template stays readable and no reader sees asterisks
+# **bold** and ##big## in a template: <strong> / large+bold in the HTML part,
+# markers stripped from the plain-text part — a template stays readable and no
+# reader ever sees a marker. ##big## is for the one line that must not be
+# missed at a glance: the tracking number.
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.S)
+_BIG_RE = re.compile(r"##(.+?)##", re.S)
 
 
 def strip_bold(text):
-    return _BOLD_RE.sub(r"\1", text or "")
+    return _BIG_RE.sub(r"\1", _BOLD_RE.sub(r"\1", text or ""))
 
 
 def _html_body(text, msg_db_id):
@@ -868,7 +871,9 @@ def _html_body(text, msg_db_id):
         return (f'<a href="{base}/api/gaash/r/{t}?u={_uq(url)}">'
                 f"{html_mod.escape(url)}</a>")
     body = _URL_RE.sub(_sub, html_mod.escape(text or ""))
-    # escape ran first, so this can only bold — never inject markup
+    # escape ran first, so these can only emphasise — never inject markup
+    body = _BIG_RE.sub(r'<span style="font-size:20px;font-weight:800;'
+                       r'letter-spacing:.3px">\1</span>', body)
     body = _BOLD_RE.sub(r"<strong>\1</strong>", body)
     body = body.replace("\n", "<br>\n")
     px = track_token(msg_db_id, 0, "")
@@ -1073,8 +1078,10 @@ def thread_restart(gwd):
         return {"ok": False, "error":
                 "اقتراح لم يبدأ — وافق عليه بدلاً من الإعادة · "
                 "still a suggestion — approve it instead of restarting"}
+    # subject too: _thread_send prefers the thread's stored base subject over
+    # the template's, so leaving it would resend email #1 under the OLD subject
     _thread_set(g, step=0, state="active", missing_docs=0, missing_note=None,
-                resend_json=None, last_error=None,
+                resend_json=None, last_error=None, subject=None,
                 next_send_at=datetime.now(timezone.utc)
                 .isoformat(timespec="seconds"))
     res = send_step(g)                     # same immediate-send as start_threads
