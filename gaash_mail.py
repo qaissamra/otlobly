@@ -963,6 +963,34 @@ def stats():
     return {"overall": overall, "sequences": list(seqs.values())}
 
 
+# ── Overview drill-down: which exact email is behind a stat tile ──
+def stat_detail(kind, limit=300):
+    """Row list backing an 🧭 Overview tile ('sent'|'opened'|'clicked'|'replied')
+    so the owner can see WHICH parcel/email, not just a count."""
+    pmap = parcel_name_map()
+    with db.connect() as c:
+        if kind in ("sent", "opened", "clicked"):
+            where = {"sent": "opens>=0", "opened": "opens>0",
+                     "clicked": "clicks>0"}[kind]
+            order = {"sent": "at", "opened": "first_open_at",
+                     "clicked": "first_click_at"}[kind]
+            rows = [dict(r) for r in c.execute(
+                f"SELECT gwd, subject, step, at, to_addr, opens, clicks, "
+                f"first_open_at, first_click_at FROM gaash_msgs "
+                f"WHERE dir='out' AND kind IN ('sent','resent') AND {where} "
+                f"ORDER BY {order} DESC LIMIT ?", (limit,))]
+        elif kind == "replied":
+            rows = [dict(r) for r in c.execute(
+                "SELECT gwd, MAX(at) AS at, COUNT(*) AS n_replies FROM gaash_msgs "
+                "WHERE dir='in' AND kind='reply' GROUP BY gwd "
+                "ORDER BY at DESC LIMIT ?", (limit,))]
+        else:
+            return []
+    for r in rows:
+        r["pname"] = pmap.get(r["gwd"], "")
+    return rows
+
+
 # ── one-time v2 seed: the legacy settings 4-step chain → real data ──
 def migrate_v2():
     """Create the default 'GAASH clearance' sequence + its 4 templates from the
