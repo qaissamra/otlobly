@@ -2637,11 +2637,18 @@ def autoclear_toggle(gwd, on):
     return {"ok": True, "gwd": g, "on": bool(on)}
 
 
-def candidates():
+def candidates(include_enrolled=False):
     """Every enrollable GWD — from the Leluxe mirror AND the Purchases board —
-    that has no thread yet and isn't already delivered. Each row is tagged with
-    its `source` so the picker can show ⌚ Leluxe vs 📦 Purchases."""
-    have = {t["gwd"] for t in threads_all()}
+    that isn't already delivered. Each row is tagged with its `source` so the
+    picker can show ⌚ Leluxe vs 📦 Purchases.
+
+    By default only parcels with NO thread yet — that is what the auto-rules
+    and their ⚡ match counters must see. The 📧 enroll picker passes
+    include_enrolled=True: parcels already in a workflow stay VISIBLE there,
+    tagged with their thread state, so the owner can tell at a glance which
+    tracking numbers are covered and which still need sending."""
+    thmap = {t["gwd"]: t for t in threads_all()}
+    have = set() if include_enrolled else set(thmap)
     out, seen = [], set()
     # ── Leluxe mirror (carries the GASH STATUS field) ──
     with db.connect() as c:
@@ -2727,8 +2734,17 @@ def candidates():
         cd["pname_id"] = emap.get(cd["gwd"], "")
         cd["pname_src"] = smap.get(cd["gwd"], "")
         cd["autoclear"] = "1" if cd["gwd"] in ac else ""
-    # Leluxe first (has clearance status), then by GWD
-    out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
+        th = thmap.get(cd["gwd"])
+        cd["thread"] = (None if not th else
+                        {"state": th.get("state"), "step": th.get("step") or 0,
+                         "seq_id": th.get("seq_id")})
+
+    # what still NEEDS enrolling first, then suggestions, then already-running;
+    # inside each group Leluxe first (has clearance status), then by GWD
+    def _grp(cd):
+        t = cd.get("thread")
+        return 0 if not t else (1 if t["state"] == "proposed" else 2)
+    out.sort(key=lambda x: (_grp(x), x["source"] != "leluxe", x["gwd"]))
     return out
 
 
