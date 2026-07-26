@@ -2863,13 +2863,16 @@ def api_gaash_ids():
     b = request.get_json(force=True, silent=True) or {}
     if request.method == "DELETE":
         return jsonify({"ok": gaash_mail.ids_remove(b.get("id"))})
+    if b.get("action") == "move":       # re-file, no upload
+        return jsonify(gaash_mail.ids_move(b.get("id"), b.get("folder")))
     try:
         data = base64.b64decode(str(b.get("data_base64") or ""), validate=False)
     except Exception:  # noqa
         data = b""
     if not data or len(data) > 15 * 1024 * 1024:
         return jsonify({"ok": False, "error": "bad or oversized file"}), 400
-    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data))
+    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data,
+                                      folder=b.get("folder")))
 
 
 @app.route("/api/gaash/idfile")

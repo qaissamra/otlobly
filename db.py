@@ -473,6 +473,17 @@ def migrate():
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_open_at TEXT")
             c.execute("ALTER TABLE gaash_msgs ADD COLUMN first_click_at TEXT")
+        # 🪪 The document library splits into folders: reusable IDs vs the
+        # per-package declaration papers. Existing rows are sorted once, by name —
+        # the only signal there is — and anything ambiguous lands in 'id', which
+        # is the safe side: a declaration filed as an ID is visible and movable,
+        # a passport hidden among declarations is not.
+        if "folder" not in _columns(c, "gaash_ids"):
+            c.execute("ALTER TABLE gaash_ids ADD COLUMN folder TEXT")
+            c.execute("UPDATE gaash_ids SET folder = CASE "
+                      "WHEN lower(name) LIKE '%declaration%' "
+                      "  OR name LIKE '%تصريح%' OR name LIKE '%بيان%' "
+                      "THEN 'declaration' ELSE 'id' END")
         # 📝 Template picker columns: who wrote it, and when it was last actually
         # used. Both are NULL on rows that predate this — unknowable after the
         # fact, so the picker shows "—" rather than inventing a name or a date.
