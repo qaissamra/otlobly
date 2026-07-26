@@ -214,6 +214,37 @@ def ids_add(name, filename, data, folder=None):
     return {"ok": True, "id": iid, "filename": fn}
 
 
+def declaration_make(gwd):
+    """Generate this package's customs declaration and file it in the library's
+    📄 Declarations folder, replacing any previous one for the same GWD — a
+    parcel has ONE current declaration, and keeping supersededates invites
+    attaching the wrong one.
+
+    Everything on it is read here, not typed by hand: the name the parcel ships
+    under, the ID that name resolves to, and the package's real contents."""
+    import declaration
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a tracking number"}
+    try:
+        fn, data = declaration.build(
+            gwd=g, name=parcel_name(g), id_number=id_number_for_email(g),
+            contents=package_contents(g),
+            purpose=(_setts().get("declaration_purpose") or "").strip() or None)
+    except ValueError as e:                     # a field that cannot be printed
+        return {"ok": False, "error": str(e)}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": f"could not build it: {str(e)[:120]}"}
+    name = f"{g} - declaration"
+    with db.connect() as c:
+        old = [dict(r) for r in c.execute(
+            "SELECT id, filename FROM gaash_ids WHERE name=?", (name,))]
+    for o in old:
+        ids_remove(o["id"])
+    res = ids_add(name, fn, data, folder="declaration")
+    return {**res, "name": name, "gwd": g}
+
+
 def ids_move(id_doc_id, folder):
     """Re-file a document. The one-time backfill guessed from the name, so this
     is how a wrong guess gets corrected."""
@@ -1841,6 +1872,72 @@ TPL_CORE_TOKENS = [
 ]
 
 
+def package_contents(gwd):
+    """[{title, qty}] — what is actually inside ONE package, for the customs
+    declaration. Deliberately does NOT go through _leluxe_row_for: that returns
+    only the FIRST row matching the GWD (an item), so a three-item package would
+    silently be declared as one product."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return []
+    out = []
+    try:                                        # ── Leluxe: the item ROWS ──
+        with db.connect() as c:
+            rows = c.execute(
+                "SELECT kind, name, data_json FROM leluxe_orders "
+                "WHERE deleted=0 AND data_json LIKE ? ORDER BY id",
+                (f"%{g}%",)).fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                continue
+            f = d.get("fields") or {}
+            tn = str(d.get("tracking_number") or "").strip().upper()
+            if not tn:
+                for k, v in f.items():
+                    if k.strip().lower() == "tracking number":
+                        tn = str(v or "").strip().upper()
+                        break
+            if tn != g or r["kind"] != "item":
+                continue
+            qty = ""
+            for k, v in f.items():              # 'Quantity ordered ' — trailing space
+                if " ".join(str(k).lower().split()) == "quantity ordered":
+                    qty = _cf_stringify(v)
+                    break
+            title = str(r["name"] or "").strip()
+            if title:
+                out.append({"title": title, "qty": _int_or(qty, 1)})
+    except Exception:  # noqa
+        pass
+    if out:
+        return out
+    try:                                        # ── Purchases: the package items ──
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            if str(pk.get("tracking_number") or "").strip().upper() != g:
+                continue
+            for it in (pk.get("items") or []):
+                t = str(it.get("title") or "").strip()
+                if t:
+                    out.append({"title": t, "qty": _int_or(it.get("qty"), 1)})
+            return out
+    return out
+
+
+def _int_or(v, dflt):
+    try:
+        n = int(float(str(v).strip() or 0))
+        return n if n > 0 else dflt
+    except Exception:  # noqa
+        return dflt
+
+
 def _cf_for_gwd(gwd):
     """{label: value} of this ONE package's board columns — Leluxe ClickUp
     fields + the Purchases PO's custom values (defined-but-empty defs as "")."""
@@ -2096,7 +2193,7 @@ def task_done(gwd):
 
 
 def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
-                  schedule=None):
+                  schedule=None, docs=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
     to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
     (and therefore the ID) before email 1 goes out.
@@ -2109,6 +2206,9 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     schedule = {str(k or "").strip().upper(): v
                 for k, v in (schedule or {}).items()}
+    # {GWD: id_doc} beats the batch-wide id_doc_id — a declaration is written for
+    # ONE parcel, so it must never ride along on another parcel's email
+    docs = {str(k or "").strip().upper(): v for k, v in (docs or {}).items()}
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -2130,7 +2230,7 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                 (gwd,account_id,state,step,id_doc_id,unread,missing_docs,
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
                 VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?,?)""",
-                      (gwd, account_id, id_doc_id or None,
+                      (gwd, account_id, docs.get(gwd) or id_doc_id or None,
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),
                        now_iso(), now_iso(), seq_id))
