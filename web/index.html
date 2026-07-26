@@ -512,6 +512,29 @@
   .gm-msg.auto{opacity:.55}
   .gm-msg .gm-meta{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
   .gm-att{display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:11px;margin-top:5px;margin-inline-end:4px;text-decoration:none;color:var(--ink)}
+  /* the meta line is uppercase — addresses and Message-ID buttons opt out of that */
+  .gm-meta .gm-who{text-transform:none;letter-spacing:0;font-weight:600;max-width:190px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gm-meta .gm-mid{border:0;background:none;padding:0;cursor:pointer;font-size:11px;
+    line-height:1;color:var(--muted);text-decoration:none}
+  .gm-meta .gm-mid:hover{color:#f76808}
+  /* attachments render themselves — you should never have to click to see a document */
+  .gm-files{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;align-items:flex-start;white-space:normal}
+  .gm-fig{display:flex;flex-direction:column;gap:3px;max-width:100%;text-decoration:none;color:var(--ink)}
+  .gm-fig .gm-cap{font-size:10px;color:var(--muted);max-width:300px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  /* min-* reserves the box before the bytes arrive, so the thread doesn't jump */
+  .gm-thumb{max-width:220px;max-height:180px;min-width:90px;min-height:70px;border-radius:10px;
+    border:1px solid var(--line);display:block;cursor:zoom-in;background:var(--bg2)}
+  .gm-doc{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:10px;background:var(--card);text-decoration:none;color:var(--ink);max-width:100%}
+  .gm-doc:hover{border-color:#f7680855;background:#fff8f4}
+  .gm-doc-page{flex:none;width:38px;height:48px;border:1px solid var(--line);border-radius:3px;
+    background:#fdfcf9;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 6px}
+  .gm-doc-page i{display:block;height:2px;background:var(--line);border-radius:1px}
+  .gm-doc-page i:last-child{width:60%}
+  .gm-doc-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .gm-doc-meta b{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
   .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
   .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
   /* v2: sequence builder tree (HubSpot-style) + dashboard */
@@ -9987,8 +10010,66 @@ function gmReadPill(rd){                // 👁 did GAASH open what we sent?
     :`${T("أُرسل ولم يُفتح بعد · sent, not opened yet")} — ${rd.sent}×`;
   return `<span class="gm-read${o?" on":""}" title="${tip}"><i></i>${o||"0"}</span>`;
 }
+// ── which mailbox did this leave from? ────────────────────────────────────────
+// Outbound mail never lands in an inbox — it sits in the SENDING account's Sent
+// folder, and a thread may be pinned to any of the added Gmail accounts. So the
+// account, the recipient and the Message-ID are all shown, and 🔗 jumps straight
+// to that one email in Gmail.
+function gmAcctOf(th){ return ((GM.ov&&GM.ov.accounts)||[]).find(a=>a.id===(th||{}).account_id)||null; }
+function gmBare(addr){                  // "GAASH WW <ops@x.com>" → "ops@x.com"
+  const m=String(addr||"").match(/<([^>]+)>/);
+  return (m?m[1]:String(addr||"")).trim();
+}
+function gmMidUrl(mid,acctEmail){
+  const id=String(mid||"").replace(/^</,"").replace(/>$/,"").trim();
+  if(!id||id.startsWith("uid-")) return "";   // synthesized id — Gmail can't search it
+  return "https://mail.google.com/mail/u/?authuser="+encodeURIComponent(acctEmail||"")
+    +"#search/rfc822msgid:"+encodeURIComponent(id);
+}
+function gmCopyMid(btn){
+  const t=btn.dataset.mid||"";
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject())
+    .then(()=>toast(T("مُعرّف الرسالة نُسخ ✓ · Message-ID copied ✓"))).catch(()=>toast(t));
+}
+// what the NEXT email would go to, matching the backend's resolution order
+function gmToAddr(th,msgs){
+  const lastOut=(msgs||[]).filter(m=>m.dir==="out"&&m.to_addr).pop();
+  if(lastOut) return lastOut.to_addr;
+  const seq=gmSeqOf(th)||{};
+  return seq.to_address||((GM.ov&&GM.ov.settings)||{}).to_address||"";
+}
+// ── attachments render themselves ─────────────────────────────────────────────
+function gmSize(n){ n=+n||0;
+  return n<1024?n+" B":n<1048576?(n/1024).toFixed(0)+" KB":(n/1048576).toFixed(1)+" MB"; }
+function gmAttKind(a){                  // ctype first, filename extension as the fallback
+  const ct=String(a.ctype||"").toLowerCase(), ext=String(a.name||"").split(".").pop().toLowerCase();
+  if(ct.startsWith("image/")||["jpg","jpeg","png","gif","webp","bmp"].includes(ext)) return "img";
+  if(ct==="application/pdf"||ext==="pdf") return "pdf";
+  return "file";
+}
+function gmAttsHtml(gwd,atts){
+  if(!(atts||[]).length) return "";
+  const url=a=>`/api/gaash/attachment?gwd=${encodeURIComponent(gwd)}&file=${encodeURIComponent(a.file)}`;
+  return `<div class="gm-files">${atts.map(a=>{
+    const k=gmAttKind(a), cap=`${poEsc(a.name)}${a.size?` · ${gmSize(a.size)}`:""}`;
+    // NOT lazy: the whole point is that you see the document without doing anything
+    if(k==="img") return `<a class="gm-fig" href="${url(a)}" target="_blank" title="${poEsc(a.name)}">
+        <img class="gm-thumb" src="${url(a)}" alt="${poEsc(a.name)}">
+        <span class="gm-cap">🖼 ${cap}</span></a>`;
+    // a PDF gets a document card, not an <iframe>: the embedded PDF viewer is not
+    // dependable (it can paint a black rectangle), and a black void in the middle
+    // of a conversation is worse than no preview at all
+    if(k==="pdf") return `<a class="gm-doc" href="${url(a)}" target="_blank" title="${T("افتح المستند · open the document")}: ${poEsc(a.name)}">
+        <span class="gm-doc-page"><i></i><i></i><i></i><i></i></span>
+        <span class="gm-doc-meta"><b>📄 ${poEsc(a.name)}</b><span class="gm-cap">PDF${a.size?` · ${gmSize(a.size)}`:""} · ${T("افتح · open")}</span></span></a>`;
+    return `<a class="gm-att" target="_blank" href="${url(a)}">📎 ${cap}</a>`;
+  }).join("")}</div>`;
+}
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
+  // with a single mailbox the account is never in question — only show it when
+  // there are several and "which one sent this?" is a real question
+  const multi=(((GM.ov&&GM.ov.accounts)||[]).length>1);
   if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
   $("gmList").innerHTML=ths.map(t=>{
     const last=t.last_msg||{};
@@ -10004,6 +10085,7 @@ function gmRenderList(){
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
         ${gmReadPill(t.reads)}
+        ${multi&&gmAcctOf(t)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${T("يُرسل من · sends from")}: ${poEsc(gmAcctOf(t).email)}">📤 ${poEsc((gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0])}</span>`:''}
         ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
@@ -10028,12 +10110,20 @@ function gmRenderChat(){
     auto_ack:T("رد آلي · auto-reply"),closed:T("المكتب مغلق · office closed"),
     task:T("📋 مهمة · task"),task_done:T("✓ مهمة منجزة · task done"),
     bounce:T("⚠ لم يصل · bounced")};
+  const acct=gmAcctOf(th), inbox=(acct||{}).email||"", toAddr=gmToAddr(th,msgs);
   const bubbles=msgs.map(m=>{
     const auto=(m.kind==="auto_ack"||m.kind==="closed"||m.kind==="task_done"||m.kind==="bounce");
-    const atts=(m.attachments||[]).map(a=>`<a class="gm-att" target="_blank" href="/api/gaash/attachment?gwd=${encodeURIComponent(th.gwd)}&file=${encodeURIComponent(a.file)}">📎 ${poEsc(a.name)}</a>`).join("");
+    const atts=gmAttsHtml(th.gwd,m.attachments);
+    const who=gmBare(m.from_addr), url=gmMidUrl(m.message_id,inbox);
+    const tip=[m.subject?`✉ ${m.subject}`:"",m.from_addr?`${T("من · from")}: ${m.from_addr}`:"",
+      m.to_addr?`${T("إلى · to")}: ${m.to_addr}`:"",m.message_id||""].filter(Boolean).join("\n");
     return `<div class="gm-msg ${m.dir==="out"?"out":"in"}${auto?" auto":""}">
-      <div class="gm-meta"><span>${m.dir==="out"?"→":"←"} ${KIND[m.kind]||m.kind}${m.step?` #${m.step}`:""}</span><span>${poEsc(String(m.at||"").slice(0,16).replace("T"," "))}</span></div>
-      ${poEsc(m.body||"")}${atts?`<div>${atts}</div>`:""}</div>`;
+      <div class="gm-meta" title="${poEsc(tip)}"><span>${m.dir==="out"?"→":"←"} ${KIND[m.kind]||m.kind}${m.step?` #${m.step}`:""}</span>
+        ${who?`<span class="gm-who">${poEsc(who)}</span>`:""}
+        <span class="spacer"></span>
+        <span>${poEsc(String(m.at||"").slice(0,16).replace("T"," "))}</span>
+        ${url?`<a class="gm-mid" href="${url}" target="_blank" title="${T('افتح هذا الإيميل نفسه في جيميل · open this exact email in Gmail')}">🔗</a>`:""}
+        ${m.message_id?`<button class="gm-mid" data-mid="${poEsc(m.message_id)}" onclick="gmCopyMid(this)" title="${T('انسخ مُعرّف الرسالة · copy the Message-ID')}">⧉</button>`:""}</div>${poEsc(m.body||"")}${atts}</div>`;
   }).join("")||`<div class="muted2" style="text-align:center;padding:20px">${T("لا رسائل بعد · no messages yet")}</div>`;
   const resend=JSON.parse(th.resend_json||"null");
   $("gmChat").innerHTML=`
@@ -10056,6 +10146,11 @@ function gmRenderChat(){
       ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح ما دامت لا مراسلة حقيقية (إيميلات التجربة لصندوقك لا تُحتسب) · erase an accidental enrollment — allowed while there is no real correspondence (test emails to your own inbox don't count)")}">🗑</button>`:""}
     </div>
     <div class="gm-head" style="padding-top:0;gap:6px;font-size:12px">
+      ${acct
+        ?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:10px;text-transform:none;letter-spacing:0;display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${T("الحساب الذي يُرسل — النسخة موجودة في Sent عنده، لا في صندوق الوارد · the account that sends — the copy sits in ITS Sent folder, never in an inbox")}: ${poEsc(acct.email)}${acct.label?` · ${poEsc(acct.label)}`:""}">📤 ${poEsc(acct.email)}</span>`
+        :`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:10px;display:inline-block;vertical-align:middle" title="${T("الحساب المرتبط بهذه المحادثة لم يعد موجوداً — لن يُرسل شيء حتى تضيف حساباً من ⚙ · the account this conversation was pinned to no longer exists — nothing can be sent until you add one in ⚙")}">⚠ ${T("لا حساب مُرسِل · no sending account")}</span>`}
+      ${toAddr?`<span class="muted2" style="font-size:11px;flex:none" title="${T("المستلم · recipient")}">→ ${poEsc(toAddr)}</span>`:""}
+      ${th.subject?`<span class="muted2" style="font-size:11px;display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${T("عنوان الإيميل — ابحث عنه في جيميل · the email subject — search Gmail for this")}: ${poEsc(th.subject)}">✉ ${poEsc(th.subject)}</span>`:""}
       <span class="muted2">${T("الاسم على الطرد · name on the parcel")}</span>
       <select onchange="gmSetName(this.value)" style="font-size:11.5px;padding:2px 4px;max-width:150px" title="${T("يحدد رقم الهوية في الإيميلات القادمة · decides the ID number in the emails that follow")}">
         ${gmNameOpts(th.pname||"")}
