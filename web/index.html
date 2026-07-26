@@ -10000,6 +10000,7 @@ function gmRenderChat(){
        :`<button class="minibtn" onclick="gmMissing()">⚠ ${T("ناقص مستندات · missing docs")}</button>`}
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
+      ${(th.step||0)>0&&th.state!=="proposed"?`<button class="minibtn" onclick="gmRestart()" title="${T("يرجع للإيميل الأول ويرسله فوراً بالمستلم والقالب الحاليين · back to email #1, sent immediately with the CURRENT recipient & template")}">🔁</button>`:""}
       ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح فقط إن لم يخرج إيميل حقيقي · erase an accidental enrollment — allowed only if no real email left")}">🗑</button>`:""}
     </div>
     <div class="gm-head" style="padding-top:0;gap:6px;font-size:12px">
@@ -10036,6 +10037,15 @@ async function gmDelete(){              // erase an accidental enrollment comple
   GM.cur=null;
   $("gmChat").innerHTML=`<div class="muted2" style="padding:30px;text-align:center">${T("اختر محادثة — أو ابدأ سير عمل جديداً. · Pick a conversation — or start a new workflow.")}</div>`;
   gmLoad();
+}
+async function gmRestart(){             // 🔁 back to email #1 — sends immediately
+  if(!confirm(T("العودة للإيميل الأول وإرساله الآن؟ يُرسل فوراً بالمستلم والقالب الحاليين · restart from email #1 and send it NOW? goes immediately to the CURRENT recipient with the current template"))) return;
+  const r=await post("/api/gaash/thread",{gwd:GM.cur,action:"restart"});
+  if(!r||r.ok===false){ toast((r&&r.error)||"failed"); return; }
+  toast(r.send_error
+    ?(r.dry_run?"🧪 "+T("أُعيد الضبط — لم يُرسل شيء (وضع التجربة) · reset — nothing sent (dry-run)"):"⚠ "+r.send_error)
+    :"✉ "+T("أُرسل الإيميل الأول من جديد · email #1 sent fresh"));
+  await gmLoad(); if(GM.cur) gmOpen(GM.cur,true);
 }
 async function gmFreeze(btn){           // ⏸ the one big switch — all workflows Off / back On
   const seqs=((GM.ov&&GM.ov.sequences)||[]).filter(x=>!x.archived);

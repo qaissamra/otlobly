@@ -3029,6 +3029,9 @@ def api_gaash_thread():
             return jsonify({"ok": False, "error": "admin only"}), 403
         res = gaash_mail.thread_delete(gwd)
         return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "restart":       # 🔁 back to email #1 — sends immediately
+        res = gaash_mail.thread_restart(gwd)
+        return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
             return jsonify({"ok": False, "error": "not a proposed thread"}), 400
