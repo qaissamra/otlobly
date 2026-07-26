@@ -1454,6 +1454,7 @@
       <span class="muted2" id="gmSub" style="font-size:12px"></span>
       <span class="spacer"></span>
       <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
+      <button class="minibtn" id="gmFreezeBtn" style="display:none" onclick="gmFreeze(this)"></button>
       <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
       <button class="accent" onclick="gmNewOpen()" data-en="📧 Enroll packages" data-ar="📧 إرسال طرود">📧 Enroll packages</button>
     </div>
@@ -1462,6 +1463,7 @@
       <button class="minibtn accent" id="gmTabConv" style="border:0;border-radius:0" onclick="gmTab('conv')" data-en="💬 Conversations" data-ar="💬 المحادثات">💬 Conversations</button>
       <button class="minibtn" id="gmTabOv" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ov')" data-en="🧭 Overview" data-ar="🧭 نظرة عامة">🧭 Overview</button>
       <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="⚙️ Workflows" data-ar="⚙️ الأتمتة">⚙️ Workflows</button>
+      <button class="minibtn" id="gmTabReady" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ready')" data-en="🩺 Readiness" data-ar="🩺 الجاهزية">🩺 Readiness</button>
       <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
       <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
     </div>
@@ -1474,6 +1476,7 @@
     <div id="gmOvPane" class="hidden"></div>
     <div id="gmSeqPane" class="hidden"></div>
     <div id="gmTplPane" class="hidden"></div>
+    <div id="gmReadyPane" class="hidden"></div>
     <div id="gmDashPane" class="hidden"></div>
   </div>
 </div>
@@ -9808,13 +9811,15 @@ function gmTab(t){
   GM.tab=t;
   [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
    ["seq","gmTabSeq","gmSeqPane"],
-   ["tpl","gmTabTpl","gmTplPane"],["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
+   ["tpl","gmTabTpl","gmTplPane"],["ready","gmTabReady","gmReadyPane"],
+   ["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
     $(b).classList.toggle("accent",k===t);
     $(p).classList.toggle("hidden",k!==t);
   });
   if(t==="ov") gmOvRender();
   if(t==="seq") gmRenderSeq();
   if(t==="tpl") gmRenderTpl();
+  if(t==="ready") gmRenderReady();
   if(t==="dash") gmDashLoad();
 }
 function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
@@ -9831,11 +9836,25 @@ async function gmLoad(){
   GM.ov=d;
   GM.stats=null; GM.matches=null;      // workflow stats + ⚡ match counts refetch lazily
   const s=d.settings||{};
-  const warn=[];
-  if(!(d.accounts||[]).length) warn.push(T("لا يوجد حساب Gmail بعد — أضِف واحداً من ⚙ · no Gmail account yet — add one via ⚙"));
-  if(s.dry_run) warn.push(T("وضع التجربة مفعّل — لن يُرسل أي إيميل حتى تطفئه من ⚙ · dry-run is ON — nothing is emailed until you turn it off in ⚙"));
-  if(!d.mailer_env) warn.push(T("المُرسِل التلقائي غير مفعّل على هذا الخادم (GAASH_MAILER) · the auto-sequencer is not enabled on this server (GAASH_MAILER)"));
-  $("gmBanner").innerHTML=warn.length?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${warn.join(" · ")}</div>`:"";
+  // 🔒/🟢 the honest, calm state strip: locks are SAFETY (nothing can send by
+  // itself), not breakage — the old ⚠ wording read as "the app is broken"
+  const seqsLive=(d.sequences||[]).filter(x=>!x.archived);
+  const frozen=seqsLive.length>0&&seqsLive.every(x=>x.paused);
+  const locks=[];
+  if(frozen) locks.push("⏸ "+T("كل سير العمل موقوف · all workflows Off"));
+  if(s.dry_run) locks.push("🧪 "+T("وضع التجربة · dry-run"));
+  if(!(d.accounts||[]).length) locks.push("✉ "+T("لا حساب Gmail بعد · no Gmail account yet"));
+  if(!d.mailer_env) locks.push("🤖 "+T("المُرسِل التلقائي متوقف على هذا الخادم · auto-sequencer off on this server"));
+  const acctErr=(d.accounts||[]).find(a=>a.last_error);
+  $("gmBanner").innerHTML=
+    (acctErr?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${poEsc(acctErr.email)}: ${poEsc(String(acctErr.last_error).slice(0,120))}</div>`:"")
+    +(locks.length
+      ?`<div class="panel" style="background:var(--bg2);font-size:12.5px;margin-bottom:10px">🔒 <b>${T("وضع آمن — لا يُرسل أي إيميل من تلقاء نفسه · safe mode — no email goes out by itself")}</b> · ${locks.join(" · ")} <span class="muted2">${T("— كل ما عدا الإرسال يعمل، جرّب براحة · — everything else works, explore freely")}</span></div>`
+      :`<div class="panel" style="background:#f0fdf4;border-color:#bbf7d0;font-size:12.5px;margin-bottom:10px">🟢 <b>${T("الإرسال حي · sending is LIVE")}</b> — ${T("الإيميلات تخرج فعلاً إلى · real emails go out to")} <b dir="ltr">${poEsc(s.to_address||"?")}</b></div>`);
+  const fb=$("gmFreezeBtn");
+  if(fb){ fb.style.display=CAN_ADMIN&&seqsLive.length?"":"none";
+    fb.textContent=frozen?"▶ "+T("استئناف الكل · Resume all"):"⏸ "+T("تجميد الكل · Freeze all");
+    fb.style.color=frozen?"":"#b42318"; }
   const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
   $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
   gmRenderList();
@@ -9981,6 +10000,7 @@ function gmRenderChat(){
        :`<button class="minibtn" onclick="gmMissing()">⚠ ${T("ناقص مستندات · missing docs")}</button>`}
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
+      ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح فقط إن لم يخرج إيميل حقيقي · erase an accidental enrollment — allowed only if no real email left")}">🗑</button>`:""}
     </div>
     <div class="gm-head" style="padding-top:0;gap:6px;font-size:12px">
       <span class="muted2">${T("الاسم على الطرد · name on the parcel")}</span>
@@ -10007,6 +10027,26 @@ async function gmAct(action,extra){
   const r=await post("/api/gaash/thread",{gwd:GM.cur,action,...(extra||{})});
   if(r&&r.ok===false&&r.error) toast(r.error);
   await gmLoad(); if(GM.cur) gmOpen(GM.cur,true);
+}
+async function gmDelete(){              // erase an accidental enrollment completely
+  if(!confirm(T("حذف هذه المحادثة نهائياً كأنها لم تكن؟ (مسموح فقط إن لم يخرج إيميل حقيقي) · erase this conversation as if it never happened? (allowed only if no real email left)"))) return;
+  const r=await post("/api/gaash/thread",{gwd:GM.cur,action:"delete"});
+  if(r&&r.ok===false){ toast(r.error||"failed"); return; }
+  toast("🗑 "+T("حُذفت · erased"));
+  GM.cur=null;
+  $("gmChat").innerHTML=`<div class="muted2" style="padding:30px;text-align:center">${T("اختر محادثة — أو ابدأ سير عمل جديداً. · Pick a conversation — or start a new workflow.")}</div>`;
+  gmLoad();
+}
+async function gmFreeze(btn){           // ⏸ the one big switch — all workflows Off / back On
+  const seqs=((GM.ov&&GM.ov.sequences)||[]).filter(x=>!x.archived);
+  const frozen=seqs.length>0&&seqs.every(x=>x.paused);
+  if(!frozen&&!confirm(T("تجميد كل سير العمل؟ لا يُرسل ولا يُسجَّل شيء تلقائياً حتى تضغط استئناف · Freeze ALL workflows? Nothing sends or enrolls automatically until you press resume"))) return;
+  btn.disabled=true;
+  const r=await post("/api/gaash/freeze",{on:!frozen});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
+  toast(r.frozen?"⏸ "+T("مجمّد — لا شيء يُرسل تلقائياً · frozen — nothing auto-sends"):"▶ "+T("استؤنف · resumed"));
+  gmLoad();
 }
 function gmMissing(){
   const note=prompt(T("ما المستند الناقص؟ (مثل KMT) · which document is missing? (e.g. KMT)"),"KMT");
@@ -10086,6 +10126,18 @@ function gmCandName(sel){
   const id=(sel.value===sel.dataset.auto)?(sel.dataset.autoid||""):gmNameId(sel.value);
   const cell=document.querySelector(`.gmCandId[data-gwd="${CSS.escape(sel.dataset.gwd)}"]`);
   if(cell) cell.innerHTML=gmIdPill(id,cell.dataset.src);
+  // …and SAVE the pick right away (choosing the detected name back = clear the
+  // pick, so a later ClickUp correction flows through again). This is the save
+  // button the picker never had — no enrollment needed anymore.
+  const gwd=sel.dataset.gwd, v=(sel.value===sel.dataset.auto)?"":sel.value;
+  post("/api/gaash/pick",{gwd,pname:v}).then(r=>{
+    if(!r||!r.ok) return;
+    const c=(GM.enrollCands||[]).find(x=>x.gwd===gwd);
+    if(c){ c.pname=r.pname; c.pname_id=r.pname_id; if(v) c.pname_src="pick"; }
+    if(cell) cell.innerHTML=gmIdPill(r.pname_id||"",cell.dataset.src);
+    sel.style.boxShadow="0 0 0 2px #86efac";       // ✓ saved flash
+    setTimeout(()=>{ sel.style.boxShadow=""; },700);
+  });
 }
 function gmNewOpen(preGwds){
   const ov=GM.ov||{}; const cands=(ov.candidates||[]).slice(), ids=ov.ids||[], accts=ov.accounts||[];
@@ -10134,7 +10186,7 @@ function gmNewOpen(preGwds){
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
     <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
-    <button class="accent" onclick="gmNewStart(this)">🚀 ${T("ابدأ · Start")}</button></div>`;
+    <button class="accent" id="gmStartBtn" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال · Start emailing")}</button></div>`;
   gmNewCount();
   gmEnrollLoad();
 }
@@ -10276,7 +10328,11 @@ function gmNewGwds(){
   return [...set];
 }
 function gmNewCount(){
-  const el=$("gmNewCount"); if(el) el.textContent=`${gmNewGwds().length} ${T("طرد مختار · selected")}`;
+  const n=gmNewGwds().length;
+  const el=$("gmNewCount"); if(el) el.textContent=`${n} ${T("طرد مختار · selected")}`;
+  // the button says exactly what it does — "Start" alone once read as "Save"
+  const sb=$("gmStartBtn");
+  if(sb) sb.textContent=`📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${n}`;
 }
 // open the enroll picker from anywhere (bulk search, purchases…) pre-checked
 async function gmEnrollFrom(gwds){
@@ -10303,11 +10359,19 @@ async function gmNewStart(btn){
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   const idSel=document.querySelector('input[name="gmNewId"]:checked');
   const acct=($("gmNewAcct")||{}).value||"";
+  // say EXACTLY what is about to happen before doing it — this button once
+  // read as "save" and the owner started 4 workflows trying to save names
+  const s=((GM.ov||{}).settings)||{};
+  const live=!s.dry_run&&(((GM.ov||{}).accounts)||[]).length;
+  if(!confirm((live
+      ?T("سيبدأ الإرسال الآن: إيميل حقيقي فوري لكل طرد إلى · REAL emails start NOW — one per package, sent to")+" "+(s.to_address||"?")
+      :T("وضع التجربة: ستُجهَّز المحادثات ولن يُرسَل أي إيميل · dry-run: conversations are prepared, NO email is sent"))
+      +`\n\n${gwds.length} ${T("طرد · package(s)")}`)) return;
   // only names the owner actually CHANGED get pinned — leaving a row alone keeps
   // it following the board, so a later ClickUp correction still flows through
   const names={};
-  document.querySelectorAll(".gmCandName").forEach(s=>{
-    if(gwds.includes(s.dataset.gwd)&&s.value!==s.dataset.auto) names[s.dataset.gwd]=s.value;
+  document.querySelectorAll(".gmCandName").forEach(s2=>{
+    if(gwds.includes(s2.dataset.gwd)&&s2.value!==s2.dataset.auto) names[s2.dataset.gwd]=s2.value;
   });
   btn.disabled=true;
   const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null,
@@ -10315,9 +10379,87 @@ async function gmNewStart(btn){
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];
+  const ok=res.filter(x=>x.ok).length;
+  const sent=res.filter(x=>x.ok&&!x.dry_run&&!x.send_error&&x.state!=="goal_met").length;
   const bad=res.filter(x=>x.send_error&&!x.dry_run);
-  toast(`${res.filter(x=>x.ok).length} ${T("سير عمل بدأ · workflows started")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
+  // honest toast: "prepared, nothing sent" is a different world from "emails out"
+  toast(sent
+    ?`✉ ${sent} ${T("إيميل أول خرج فعلاً · first email(s) actually went out")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`
+    :`🧪 ${ok} ${T("جُهّزت — لم يُرسَل أي إيميل · prepared — no email was sent")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
   gmLoad();
+}
+// ── 🩺 Readiness tab: name / ID / tag / conversation per parcel, BEFORE sending ──
+let GM_READY={mode:"blocked"};          // blocked | tagged | ready | enrolled | all
+async function gmRenderReady(){
+  const p=$("gmReadyPane"); if(!p) return;
+  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/readiness")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  GM.ready=d.rows||[];
+  gmReadyDraw();
+}
+function gmReadyDraw(){
+  const p=$("gmReadyPane"); if(!p) return;
+  const rows=GM.ready||[];
+  const isBlocked=r=>!r.pname_id&&!r.state;
+  const isTagged=r=>!!(r.app_tag||r.cu_tag);
+  const isReady=r=>!!r.pname_id&&!r.state;
+  const isEnrolled=r=>!!r.state;
+  const M={all:()=>true, blocked:isBlocked, tagged:isTagged, ready:isReady, enrolled:isEnrolled};
+  const list=rows.filter(M[GM_READY.mode]||M.all);
+  const chip=(k,lab,n)=>`<button class="minibtn${GM_READY.mode===k?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="GM_READY.mode='${k}';gmReadyDraw()">${lab} <b>${n}</b></button>`;
+  const badge=s=>s==="leluxe"?"⌚":s==="purchases"?"📦":"✎";
+  const row=r=>{
+    const idc=r.pname_id
+      ?`<b class="mono" style="font-size:11px">🪪 ${poEsc(r.pname_id)}</b>`
+      :`<span class="pill" style="background:#fef3c7;color:#b45309;font-size:10px" title="${T(r.source==="purchases"?"أضف الهوية في صفحة العميل (الزبائن) · add the ID on the customer's CRM page":"امنح الاسم هوية من ⚙ أو اختر اسماً آخر · give this name an ID via ⚙ or pick another name")}">⚠ ${T("بلا هوية · no ID")}</span>`;
+    const tag=r.source==="purchases"
+      ?`<label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-size:11px" title="${T("وسم داخل التطبيق: خلّص هذا الطرد تلقائياً · in-app tag: auto-clear this parcel")}">
+          <input type="checkbox" ${r.app_tag?"checked":""} onchange="gmReadyTag('${poEsc(r.gwd)}',this.checked)">${r.app_tag?"✅":`<span class="muted2" style="font-size:10px">${T("وسم · tag")}</span>`}</label>`
+      :(r.cu_tag?`<span class="pill" style="background:#dcfce7;color:#166534;font-size:10px" title="${T("موسوم من عمود AUTO CLEAR في كليك أب · tagged via the ClickUp AUTO CLEAR column")}">✅ ${poEsc(String(r.cu_tag).slice(0,14))}</span>`
+                :`<span class="muted2" style="font-size:10.5px" title="${T("يوسَم من كليك أب: عمود AUTO CLEAR · tag it in ClickUp: the AUTO CLEAR column")}">—</span>`);
+    const st=r.state?gmChip(r.state):`<span class="muted2" style="font-size:10.5px">${T("غير مسجّل · not enrolled")}</span>`;
+    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
+      <span style="flex:none" title="${poEsc(r.source)}">${badge(r.source)}</span>
+      <b class="mono" style="font-size:11.5px;flex:none;cursor:pointer" onclick="gmTab('conv');${r.state?`gmOpen('${poEsc(r.gwd)}')`:`gmNewOpen(['${poEsc(r.gwd)}'])`}" title="${T(r.state?"افتح المحادثة · open the conversation":"سجّله في سير عمل · enroll it")}">${poEsc(r.gwd)}</b>
+      <span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.pname||"")}${gmDefMark(r.pname_src)}</span>
+      <span style="width:110px;flex:none">${idc}</span>
+      <span style="width:80px;flex:none">${tag}</span>
+      <span style="width:110px;flex:none">${st}</span>
+      <span class="muted2" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.status||r.who||"")}</span>
+    </div>`;
+  };
+  p.innerHTML=`<div class="panel">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <b style="font-size:13px">🩺 ${T("جاهزية التخليص · clearance readiness")}</b>
+      <span class="muted2" style="font-size:11px">${T("الاسم والهوية والوسم لكل طرد — قبل أن يخرج أي إيميل · name, ID and tag per parcel — before any email leaves")}</span>
+      <span class="spacer"></span>
+      ${chip("blocked","⚠ "+T("بلا هوية · no ID"),rows.filter(isBlocked).length)}
+      ${chip("tagged","✅ "+T("موسومة · tagged"),rows.filter(isTagged).length)}
+      ${chip("ready","🟢 "+T("جاهزة · ready"),rows.filter(isReady).length)}
+      ${chip("enrolled","💬 "+T("مسجّلة · enrolled"),rows.filter(isEnrolled).length)}
+      ${chip("all",T("الكل · All"),rows.length)}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+      <span style="width:14px;flex:none"></span>
+      <span style="width:92px;flex:none">${T("التتبع · tracking")}</span>
+      <span style="width:120px;flex:none">${T("الاسم · name")}</span>
+      <span style="width:110px;flex:none">${T("الهوية · ID")}</span>
+      <span style="width:80px;flex:none">${T("وسم · tag")}</span>
+      <span style="width:110px;flex:none">${T("المحادثة · conversation")}</span>
+      <span>${T("الحالة · status")}</span>
+    </div>
+    <div style="max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:10px">
+      ${list.map(row).join("")||`<div class="muted2" style="padding:12px;font-size:12px">${T("لا شيء هنا 👌 · nothing here 👌")}</div>`}
+    </div></div>`;
+}
+async function gmReadyTag(gwd,on){
+  const r=await post("/api/gaash/autoclear",{gwd,on});
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); gmRenderReady(); return; }
+  const row=(GM.ready||[]).find(x=>x.gwd===gwd); if(row) row.app_tag=!!on;
+  toast(on?"✅ "+T("سيُخلَّص تلقائياً عند تشغيل القاعدة · will auto-clear once the rule is On")
+          :T("أُزيل الوسم · tag removed"));
+  gmReadyDraw();
 }
 // ── ⚙ Accounts + templates + behavior ──
 function gmSettingsOpen(){
@@ -10349,7 +10491,8 @@ function gmSettingsOpen(){
       <label>${T("إلى · to")}: <input id="gmSetTo" value="${poEsc(s.to_address||"")}" style="width:210px"></label>
       <label>${T("الأيام بين الإيميلات · days between emails")}: <input id="gmSetCad" value="${(s.cadence_days||[2,2,2]).join(",")}" style="width:70px"></label>
     </div>
-    <div style="margin-top:12px"><b style="font-size:13px">🪪 ${T("رقم الهوية لكل اسم على الطرد · ID number per on-package name")}</b>
+    <div style="margin-top:12px"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:13px">🪪 ${T("رقم الهوية لكل اسم على الطرد · ID number per on-package name")}</b>
+      <button class="minibtn" style="margin-inline-start:auto" onclick="gmNidQuickSave(this)" title="${T("يحفظ الأسماء والهويات والاسم الافتراضي فقط — بدون النزول لآخر النافذة · saves names, IDs and the default — no scrolling to the bottom")}">💾 ${T("حفظ الهويات · Save IDs")}</button></div>
       <div class="muted2" style="font-size:11px">${T("الأسماء من عمود NAME ON PACKAGEE في كليك أب. {id_number} يعطي هوية العميل نفسه، وإن لم تكن مسجّلة يرجع لهذه القائمة — فاملأها للطرود التي لا هوية لعميلها (طرود ليلوكس غالباً) · names come from the ClickUp NAME ON PACKAGEE column. {id_number} uses the customer's own ID and falls back to this list when they have none — fill it for packages with no customer ID (typically Leluxe)")}</div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:7px;font-size:12.5px;padding:7px 9px;background:var(--bg2);border:1px solid var(--line);border-radius:10px">
         <b style="flex:none">${T("الاسم الافتراضي · Default name")}</b>
@@ -10414,6 +10557,28 @@ async function gmSettingsSave(btn){
   btn.disabled=false;
   toast(r&&r.ok?T("حُفظ · saved"):"failed");
   bulkClose(); gmLoad();
+}
+// 🪪 save ONLY names/IDs + the default — the 💾 that lives inside the section,
+// so nobody has to find the one at the very bottom of the modal again
+async function gmNidQuickSave(btn){
+  const nid={};
+  document.querySelectorAll(".gmNid").forEach(i=>{ const n=i.dataset.name, v=(i.value||"").trim(); if(n&&v) nid[n]=v; });
+  const nn=(($("gmNidNewName")||{}).value||"").trim(), nv=(($("gmNidNewNum")||{}).value||"").trim();
+  if(nn&&!nv){ toast(T("اكتب رقم الهوية للاسم الجديد أيضاً · type the new name's ID number too")); return; }
+  if(nn&&nv) nid[nn]=nv;
+  const gm={name_ids:nid, default_name:(($("gmDefName")||{}).value||"").trim()};
+  btn.disabled=true;
+  const r=await post("/api/settings",{gaash_mail:gm});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast("failed"); return; }
+  if(GM.ov&&GM.ov.settings){ GM.ov.settings.name_ids=nid; GM.ov.settings.default_name=gm.default_name; }
+  // a just-added name becomes pickable as the default IMMEDIATELY — no more
+  // save-close-reopen dance
+  const dd=$("gmDefName");
+  if(nn&&nv&&dd&&![...dd.options].some(o=>gmFold(o.value)===gmFold(nn))){
+    const o=document.createElement("option"); o.value=nn; o.textContent=nn; dd.appendChild(o);
+  }
+  toast("🪪 "+T("حُفظت الهويات · IDs saved"));
 }
 // ── 🧬 Sequences tab: list + HubSpot-style tree builder ──
 const GM_DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];   // python weekday order
@@ -10798,7 +10963,8 @@ const GM_RULE_FIELDS=[
   {k:"name",        t:"text",   lab:"الاسم · profile name", help:"اسم البروفايل / المُرسَل إليه على الطرد · the profile / ship-to name on the package"},
   {k:"customers",   t:"text",   lab:"العملاء · customers", help:"أسماء العملاء ضمن الطرد (مشتريات) · the customer names inside the package (Purchases)"},
   {k:"source",      t:"enum",   lab:"المصدر · source", help:"من أي نظام أتى الطرد: ⌚ Leluxe أو 📦 مشتريات · which system the package comes from: ⌚ Leluxe or 📦 Purchases"},
-  {k:"age_days",    t:"number", lab:"عمر السجل · record age", help:"كم يوماً مضى منذ إنشاء السجل · how many days since the record was created"}];
+  {k:"age_days",    t:"number", lab:"عمر السجل · record age", help:"كم يوماً مضى منذ إنشاء السجل · how many days since the record was created"},
+  {k:"autoclear",   t:"enum",   lab:"✅ وسم التخليص داخل التطبيق · in-app AUTO CLEAR tag", help:"يساوي 1 عندما يحمل الطرد وسم ✅ من تبويب الجاهزية (لطرود المشتريات) — طرود ليلوكس توسم من عمود AUTO CLEAR في كليك أب · equals 1 when the parcel carries the ✅ tag from the Readiness tab (Purchases parcels) — Leluxe parcels are tagged via the ClickUp AUTO CLEAR column"}];
 // A small ? chip with a hover/tap tooltip (native title) — used across the builder.
 function gmHelp(txt){ return `<span class="gm-q" tabindex="0" title="${poEsc(T(txt))}" onclick="event.stopPropagation();alert(this.getAttribute('title'))">?</span>`; }
 const GM_RULE_OPS={
