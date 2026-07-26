@@ -2919,6 +2919,48 @@ def api_gaash_start():
     return jsonify({"ok": True, "results": res})
 
 
+@app.route("/api/gaash/freeze", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_freeze():
+    """⏸ freeze/resume EVERYTHING — all workflows Off (and back)."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.freeze_all(bool(b.get("on", True)))
+    activity.log("update", "gaash", 0, "freeze",
+                 detail=("frozen" if res.get("frozen") else "resumed"),
+                 user=_user())
+    return jsonify(res)
+
+
+@app.route("/api/gaash/pick", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_pick():
+    """Pin a parcel's ship-under name WITHOUT enrolling it (picker save-on-change)."""
+    b = request.get_json(force=True, silent=True) or {}
+    gwd = (b.get("gwd") or "").strip().upper()
+    if not re.match(r"GWD\d+$", gwd):
+        return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    return jsonify(gaash_mail.set_parcel_name(gwd, b.get("pname")))
+
+
+@app.route("/api/gaash/autoclear", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_autoclear():
+    """The in-app ✅ AUTO CLEAR tag (Purchases parcels — Leluxe tags in ClickUp)."""
+    b = request.get_json(force=True, silent=True) or {}
+    return jsonify(gaash_mail.autoclear_toggle(b.get("gwd"), bool(b.get("on"))))
+
+
+@app.route("/api/gaash/readiness")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_readiness():
+    """🩺 the pre-flight table: name / ID / tag / conversation per parcel."""
+    return jsonify(gaash_mail.readiness())
+
+
 @app.route("/api/gaash/send", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
@@ -2982,6 +3024,11 @@ def api_gaash_thread():
         return jsonify({"ok": True, "results": res})
     elif action == "set_name":      # pin the name this parcel ships under ("" clears)
         return jsonify(gaash_mail.set_parcel_name(gwd, b.get("pname")))
+    elif action == "delete":        # erase an accidental enrollment (admin)
+        if not current_user.has("admin_actions"):
+            return jsonify({"ok": False, "error": "admin only"}), 403
+        res = gaash_mail.thread_delete(gwd)
+        return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
             return jsonify({"ok": False, "error": "not a proposed thread"}), 400

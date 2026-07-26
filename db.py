@@ -324,6 +324,15 @@ CREATE TABLE IF NOT EXISTS gaash_events (
   ua TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_gaashevents_msg ON gaash_events(msg_id);
+CREATE TABLE IF NOT EXISTS gaash_picks (
+  gwd TEXT PRIMARY KEY,                 -- name pinned BEFORE any thread exists —
+  pname TEXT,                           -- the enroll picker saves on change now
+  updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS gaash_autoclear (
+  gwd TEXT PRIMARY KEY,                 -- in-app ✅ AUTO CLEAR tag (📦 Purchases
+  at TEXT                               -- parcels — Leluxe tags live in ClickUp)
+);
 """
 
 

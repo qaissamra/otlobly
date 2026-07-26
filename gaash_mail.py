@@ -469,6 +469,40 @@ def sequence_toggle(seq_id, paused):
     return {"ok": True, "paused": 1 if paused else 0}
 
 
+def freeze_all(on):
+    """⏸ the one big switch for a panicking owner: ALL workflows Off — the
+    sequencer skips every thread and every trigger stops enrolling. Remembers
+    which workflows were On (settings key gaash_freeze_prev) so ▶ resume
+    restores exactly that set, not everything."""
+    with db.connect() as c:
+        if on:
+            prev = [r["id"] for r in c.execute(
+                "SELECT id FROM gaash_sequences WHERE archived=0 AND paused=0")]
+            c.execute("INSERT INTO settings(key,value) VALUES('gaash_freeze_prev',?) "
+                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                      (json.dumps(prev),))
+            c.execute("UPDATE gaash_sequences SET paused=1, updated_at=? "
+                      "WHERE archived=0", (now_iso(),))
+        else:
+            r = c.execute("SELECT value FROM settings "
+                          "WHERE key='gaash_freeze_prev'").fetchone()
+            try:
+                prev = json.loads(r["value"]) if r and r["value"] else []
+            except Exception:  # noqa
+                prev = []
+            if prev:
+                q = ",".join("?" * len(prev))
+                c.execute(f"UPDATE gaash_sequences SET paused=0, updated_at=? "
+                          f"WHERE id IN ({q})", (now_iso(), *prev))
+            else:
+                # no snapshot (workflows were paused one-by-one, not via freeze)
+                # — the owner pressed ▶ resume ALL, so that's what happens
+                c.execute("UPDATE gaash_sequences SET paused=0, updated_at=? "
+                          "WHERE archived=0", (now_iso(),))
+            c.execute("DELETE FROM settings WHERE key='gaash_freeze_prev'")
+    return {"ok": True, "frozen": bool(on)}
+
+
 def sequence_clone(seq_id):
     """Duplicate a workflow + its steps. The copy starts PAUSED (HubSpot clones
     start Off) so it can be tweaked before anything sends."""
@@ -523,6 +557,7 @@ RULE_FIELDS = {                          # field → type; the criteria universe
     "customers": "text",                 # Purchases customer names
     "source": "enum",                    # leluxe | purchases
     "age_days": "number",                # days since the record was created
+    "autoclear": "enum",                 # "1" when the in-app ✅ AUTO CLEAR tag is set
 }
 _RULE_OPS = {"text": ("is", "is_not", "contains", "not_contains",
                       "empty", "not_empty"),
@@ -734,15 +769,22 @@ def run_rules():
                 continue
             if not _cond_match(r["cond"], cd, age_fn):
                 continue
-            if r["mode"] == "auto":
+            # readiness gate: an auto rule may only ENROLL a parcel whose ID
+            # actually resolves (pick → CRM → name map → default). Anything
+            # else — auto or queue — lands as a 'proposed' chip for review, so
+            # a tag can never push an ID-less email out the door.
+            if r["mode"] == "auto" and cd.get("pname_id"):
                 start_threads([cd["gwd"]], None, None, seq_id=r["seq_id"])
             else:
+                note = (None if r["mode"] != "auto" else
+                        "مؤجل تلقائياً: بلا هوية · auto-enroll held: no ID yet")
                 with db.connect() as c:
                     c.execute("""INSERT INTO gaash_threads
                         (gwd,seq_id,state,step,unread,missing_docs,
-                         pending_files_json,created_at,last_activity)
-                        VALUES (?,?, 'proposed',0,0,0,'[]',?,?)""",
-                              (cd["gwd"], r["seq_id"], now_iso(), now_iso()))
+                         pending_files_json,created_at,last_activity,missing_note)
+                        VALUES (?,?, 'proposed',0,0,0,'[]',?,?,?)""",
+                              (cd["gwd"], r["seq_id"], now_iso(), now_iso(),
+                               note))
             made += 1
     return made
 
@@ -973,6 +1015,38 @@ def _thread_set(gwd, **fields):
     with db.connect() as c:
         c.execute(f"UPDATE gaash_threads SET {keys} WHERE gwd=?",
                   (*fields.values(), gwd))
+
+
+def thread_delete(gwd):
+    """Erase an accidental enrollment COMPLETELY — thread, messages, queued
+    files. Refused once a real email has left (that conversation is history
+    with GAASH — mark it ✓ done instead); dry-run-blocked attempts leave no
+    outbound message, so a purely-accidental thread always qualifies."""
+    g = (gwd or "").strip().upper()
+    with db.connect() as c:
+        if not c.execute("SELECT 1 FROM gaash_threads WHERE gwd=?", (g,)).fetchone():
+            return {"ok": False, "error": "thread not found"}
+        n = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=? AND "
+                      "dir='out' AND kind IN ('sent','resent')", (g,)).fetchone()["n"]
+        if n:
+            return {"ok": False, "error":
+                    "أُرسل لها إيميل حقيقي — علّمها ✓ منجزة بدلاً من الحذف · "
+                    "a real email already went out — mark it ✓ done instead"}
+        ids = [r["id"] for r in c.execute(
+            "SELECT id FROM gaash_msgs WHERE gwd=?", (g,))]
+        if ids:
+            q = ",".join("?" * len(ids))
+            c.execute(f"DELETE FROM gaash_events WHERE msg_id IN ({q})", ids)
+        c.execute("DELETE FROM gaash_msgs WHERE gwd=?", (g,))
+        c.execute("DELETE FROM gaash_threads WHERE gwd=?", (g,))
+        # the pick (gaash_picks) survives on purpose — the NAME is truth about
+        # the parcel, the thread was the mistake
+    try:                                   # queued attachment bytes, if any
+        import shutil
+        shutil.rmtree(FILES_DIR / g, ignore_errors=True)
+    except Exception:  # noqa
+        pass
+    return {"ok": True, "gwd": g}
 
 
 def _msg_add(gwd, rec):
@@ -1270,21 +1344,31 @@ def parcel_name_src(gwd):
 
 
 def _picked_name(gwd):
-    """The name the owner explicitly picked for this package, or ""."""
+    """The name the owner explicitly picked for this package, or "".
+    A thread's pname wins; gaash_picks covers parcels picked BEFORE enrolling."""
+    g = (gwd or "").strip().upper()
     try:
         with db.connect() as c:
             r = c.execute("SELECT pname FROM gaash_threads WHERE gwd=?",
-                          ((gwd or "").strip().upper(),)).fetchone()
+                          (g,)).fetchone()
+            if r and str(r["pname"] or "").strip():
+                return str(r["pname"]).strip()
+            r = c.execute("SELECT pname FROM gaash_picks WHERE gwd=?",
+                          (g,)).fetchone()
         return str((r["pname"] if r else "") or "").strip()
     except Exception:  # noqa
         return ""
 
 
 def picked_name_map():
-    """{GWD: owner-picked name} for every thread that has one — batched."""
+    """{GWD: owner-picked name} — pre-enroll picks first, thread pins on top
+    (same precedence as _picked_name), batched."""
     out = {}
     try:
         with db.connect() as c:
+            for r in c.execute("SELECT gwd, pname FROM gaash_picks "
+                               "WHERE pname IS NOT NULL AND pname<>''"):
+                out[r["gwd"]] = str(r["pname"]).strip()
             for r in c.execute("SELECT gwd, pname FROM gaash_threads "
                                "WHERE pname IS NOT NULL AND pname<>''"):
                 out[r["gwd"]] = str(r["pname"]).strip()
@@ -1294,11 +1378,19 @@ def picked_name_map():
 
 
 def set_parcel_name(gwd, name):
-    """Pin the name a package ships under (""/None clears it → back to the board)."""
+    """Pin the name a package ships under (""/None clears it → back to the board).
+    Persists in gaash_picks too, so a pick made in the enroll picker sticks even
+    if the parcel is never enrolled — that was the "no save button" hole."""
     g = (gwd or "").strip().upper()
     nm = re.sub(r"\s+", " ", str(name or "")).strip()[:60]
     with db.connect() as c:
         c.execute("UPDATE gaash_threads SET pname=? WHERE gwd=?", (nm or None, g))
+        if nm:
+            c.execute("INSERT INTO gaash_picks(gwd,pname,updated_at) VALUES(?,?,?) "
+                      "ON CONFLICT(gwd) DO UPDATE SET pname=excluded.pname, "
+                      "updated_at=excluded.updated_at", (g, nm, now_iso()))
+        else:
+            c.execute("DELETE FROM gaash_picks WHERE gwd=?", (g,))
     return {"ok": True, "gwd": g, "pname": parcel_name(g),   # cleared → back to the board
             "pname_id": id_number_for_email(g)}
 
@@ -2386,6 +2478,29 @@ def _field_meta_out():
             "tpl_tokens": tokens}
 
 
+def autoclear_set():
+    """GWDs carrying the in-app ✅ AUTO CLEAR tag (Purchases parcels — Leluxe
+    parcels get tagged in ClickUp's AUTO CLEAR column instead)."""
+    try:
+        with db.connect() as c:
+            return {r["gwd"] for r in c.execute("SELECT gwd FROM gaash_autoclear")}
+    except Exception:  # noqa
+        return set()
+
+
+def autoclear_toggle(gwd, on):
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a GWD number"}
+    with db.connect() as c:
+        if on:
+            c.execute("INSERT OR REPLACE INTO gaash_autoclear(gwd,at) "
+                      "VALUES(?,?)", (g, now_iso()))
+        else:
+            c.execute("DELETE FROM gaash_autoclear WHERE gwd=?", (g,))
+    return {"ok": True, "gwd": g, "on": bool(on)}
+
+
 def candidates():
     """Every enrollable GWD — from the Leluxe mirror AND the Purchases board —
     that has no thread yet and isn't already delivered. Each row is tagged with
@@ -2470,13 +2585,50 @@ def candidates():
     # both so the owner can see, before sending, which ID each email will carry
     pmap = parcel_name_map()
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
+    ac = autoclear_set()                 # the in-app ✅ tag, filterable in rules
     for cd in out:
         cd["pname"] = pmap.get(cd["gwd"], "")
         cd["pname_id"] = emap.get(cd["gwd"], "")
         cd["pname_src"] = smap.get(cd["gwd"], "")
+        cd["autoclear"] = "1" if cd["gwd"] in ac else ""
     # Leluxe first (has clearance status), then by GWD
     out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
     return out
+
+
+def readiness():
+    """🩺 one table that answers, per parcel, BEFORE anything sends: what name
+    it ships under (and who says so), which ID the email would carry, whether
+    it's tagged for auto-clear (ClickUp column or in-app ✅), and whether a
+    conversation already exists. Rows = enrollable candidates + every thread."""
+    ths = threads_all()
+    pmap = parcel_name_map()
+    emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
+    bmap = parcel_board_map()
+    ac = autoclear_set()
+    acf = _fold("AUTO CLEAR")
+    rows = []
+    for cd in candidates():
+        cf = cd.get("cf") or {}
+        cu = next((str(v) for k, v in cf.items() if _fold(k) == acf), "")
+        rows.append({"gwd": cd["gwd"], "source": cd.get("source") or "",
+                     "status": cd.get("gash_status") or cd.get("status") or "",
+                     "pname": cd.get("pname") or "",
+                     "pname_src": cd.get("pname_src") or "",
+                     "pname_id": cd.get("pname_id") or "",
+                     "app_tag": cd["gwd"] in ac, "cu_tag": cu,
+                     "state": "", "who": cd.get("name") or cd.get("customers") or ""})
+    for th in ths:
+        g = th["gwd"]
+        rows.append({"gwd": g, "source": bmap.get(g, ""),
+                     "status": "", "pname": pmap.get(g, ""),
+                     "pname_src": smap.get(g, ""),
+                     "pname_id": emap.get(g, ""),
+                     "app_tag": g in ac, "cu_tag": "",
+                     "state": th.get("state") or "", "who": ""})
+    # blocked-and-untouched first — that's the pile the owner came to fix
+    rows.sort(key=lambda r: (bool(r["state"]), bool(r["pname_id"]), r["gwd"]))
+    return {"ok": True, "rows": rows}
 
 
 _GASH_FK = None
@@ -2565,6 +2717,7 @@ def rule_field_meta():
         for pk in (p.get("packages") or []):
             add_val("status", pk.get("otlobly_status"))
 
+    vals.setdefault("autoclear", set()).add("1")   # the in-app ✅ tag's only value
     return {"fields": fields,
             "values": {k: sorted(s) for k, s in vals.items() if s}}
 
