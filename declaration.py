@@ -24,7 +24,7 @@ from datetime import date
 
 PAGE_W, PAGE_H = 595, 842          # A4 in points
 MARGIN = 56
-PURPOSE_DEFAULT = "Personal use — not for resale"
+PURPOSE_DEFAULT = "personal daily use"
 
 
 # --------------------------------------------------------------------------- #
@@ -70,6 +70,21 @@ class _Page:
     def line(self, x1, y1, x2, y2, w=0.6, grey=0.75):
         self.ops.append(b"q %g G %g w %g %g m %g %g l S Q"
                         % (grey, w, x1, PAGE_H - y1, x2, PAGE_H - y2))
+
+    def ellipse(self, cx, cy, rx, ry, w=1.4):
+        """The template circles the chosen import type by hand; this is that
+        circle. A ring around a printed word is a choice being marked — it says
+        nothing about who signed, which is the line we do not cross."""
+        k = 0.5523
+        y = PAGE_H - cy
+        self.ops.append(
+            b"q 0 G %g w %g %g m %g %g %g %g %g %g c %g %g %g %g %g %g c "
+            b"%g %g %g %g %g %g c %g %g %g %g %g %g c S Q"
+            % (w, cx - rx, y,
+               cx - rx, y + ry * k, cx - rx * k, y + ry, cx, y + ry,
+               cx + rx * k, y + ry, cx + rx, y + ry * k, cx + rx, y,
+               cx + rx, y - ry * k, cx + rx * k, y - ry, cx, y - ry,
+               cx - rx * k, y - ry, cx - rx, y - ry * k, cx - rx, y))
 
     def box(self, x, y, w, h, grey=0.92):
         self.ops.append(b"q %g g %g %g %g %g re f Q"
@@ -125,17 +140,46 @@ def _wrap(s, width):
 # --------------------------------------------------------------------------- #
 # The document
 # --------------------------------------------------------------------------- #
+# Helvetica / Helvetica-Bold advance widths (units per 1000), ASCII 32..126.
+# Guessing an average character width put the "circle the relevant answer" ring
+# around "pe…com" instead of around "personal" — the real metrics are 95 numbers.
+_W_REG = (278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333,
+          278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278,
+          584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278,
+          500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
+          667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556,
+          278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
+          278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584)
+_W_BOLD = (278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333,
+           278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333,
+           584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278,
+           556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
+           667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556,
+           333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556,
+           333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584)
+
+
+def _w(s, size, bold=False):
+    """Helvetica advance width of `s` at `size`, in points."""
+    tbl = _W_BOLD if bold else _W_REG
+    total = 0
+    for ch in str(s):
+        i = ord(ch) - 32
+        total += tbl[i] if 0 <= i < len(tbl) else 556
+    return total * size / 1000.0
+
+
 def build(*, gwd, name, id_number, contents, purpose=None, today=None):
-    """(filename, bytes) for one package's declaration, or raise ValueError with
-    a message naming the field that cannot be printed."""
+    """(filename, bytes) for one package's DECLARATION OF USE — the same form
+    the owner fills in by hand, with the blanks already filled. Raises
+    ValueError naming any field this document cannot print."""
     purpose = (purpose or PURPOSE_DEFAULT).strip()
-    day = (today or date.today()).strftime("%d %b %Y")
-    lines = [f"{c['title']}  x{c.get('qty') or 1}" for c in (contents or [])]
-    if not lines:
-        lines = ["(contents not itemised)"]
+    day = (today or date.today()).strftime("%d/%m/%Y")
+    goods = ", ".join(f"{c['title']} x{c.get('qty') or 1}" if (c.get("qty") or 1) > 1
+                      else c["title"] for c in (contents or []))
 
     for label, val in (("name on the parcel", name), ("ID number", id_number),
-                       ("purpose of use", purpose), ("contents", " ".join(lines))):
+                       ("purpose of use", purpose), ("contents", goods)):
         bad = _unprintable(val)
         if bad:
             raise ValueError(
@@ -145,42 +189,50 @@ def build(*, gwd, name, id_number, contents, purpose=None, today=None):
         raise ValueError("no name on the parcel — set one before declaring it")
 
     p = _Page()
-    x, y = MARGIN, 74
-    p.text(x, y, "CUSTOMS DECLARATION", 19, bold=True)
-    p.text(PAGE_W - MARGIN - 96, y, day, 10.5)
-    y += 10
-    p.line(x, y, PAGE_W - MARGIN, y, w=1.1, grey=0.2)
-    y += 30
+    L, R = MARGIN + 20, PAGE_W - MARGIN - 20
+    ttl, tsz = "DECLARATION OF USE", 15
+    tx = (PAGE_W - _w(ttl, tsz, True)) / 2
+    p.text(tx, 130, ttl, tsz, bold=True)
+    p.line(tx, 134, tx + _w(ttl, tsz, True), 134, w=1.1, grey=0)
 
-    def field(label, values, gap=25):
-        nonlocal y
-        p.text(x, y, label.upper(), 8, bold=True)
-        for i, v in enumerate(values):
-            p.text(x + 150, y + i * 15, v, 11.5, bold=(i == 0 and len(values) == 1))
-        y += max(gap, 15 * len(values) + 10)
+    def filled(label, value, y, x=None, end=None, size=11):
+        """`label ____value____` — the value centred on its rule, as if typed
+        into the blank of the printed form."""
+        x = L if x is None else x
+        end = R if end is None else end
+        p.text(x, y, label, size)
+        x0 = x + _w(label, size) + 6
+        p.line(x0, y + 4, end, y + 4, w=0.9, grey=0.15)
+        v = str(value)
+        p.text(max(x0 + 4, (x0 + end) / 2 - _w(v, size, True) / 2), y - 1,
+               v, size, bold=True)
+        return x0
 
-    field("Tracking number", [gwd])
-    field("Name", [str(name).strip()])
-    field("ID number", [str(id_number).strip() or "— not on file —"])
-    field("Description of goods", _sum_lines(lines))
-    field("Purpose of use", _wrap(purpose, 52))
+    filled("Name:", str(name).strip(), 205, end=L + 250)
+    filled("ID number:", str(id_number).strip() or "—", 205, x=L + 268)
+    filled("I declare that the parcel number:", gwd, 275, end=R - 60)
+    filled("contain", goods if goods else "(not itemised)", 345)
+    filled("In purpose of", purpose, 415)
 
-    y += 6
-    p.line(x, y, PAGE_W - MARGIN, y)
-    y += 26
-    p.box(x, y - 14, PAGE_W - 2 * MARGIN, 76, grey=0.96)
-    p.text(x + 12, y, "DECLARED BY", 8, bold=True)
-    y += 18
-    p.text(x + 12, y, f"Otlobly, on behalf of {str(name).strip()}", 11.5, bold=True)
-    y += 16
-    p.text(x + 12, y, f"Submitted electronically  ·  {day}", 10)
-    y += 15
-    # said plainly, because a reader must never take this for a signed page
-    p.text(x + 12, y, "No physical signature — submitted by the shipping agent.", 9.5)
+    # "and it is personal / commercial import (circle the relevant answer)"
+    y = 485
+    pre, word, post = "and it is ", "personal", " / commercial import (circle the relevant answer)"
+    p.text(L, y, pre + word + post, 11)
+    wx = L + _w(pre, 11)
+    p.ellipse(wx + _w(word, 11) / 2, y - 3.5, _w(word, 11) / 2 + 5, 11)
 
-    p.text(x, PAGE_H - 46,
-           "Generated by Otlobly · one declaration per package · " + gwd, 8)
-    return f"{gwd} - declaration.pdf", _pdf(p, f"Customs declaration {gwd}")
+    filled("", day, 640, x=L + 30, end=L + 230)
+    p.text(L + 108, 660, "DATE", 9.5)
+    p.line(R - 250, 644, R, 644, w=0.9, grey=0.15)
+    p.text(R - 148, 660, "SIGNATURE", 9.5)
+    # the signature blank is filled with WORDS, never a drawn mark: this page
+    # carries someone else's name and ID, and inventing their hand is not ours
+    p.text(R - 246, 626, "Submitted electronically by Otlobly", 8.5)
+    p.text(R - 246, 636, f"on behalf of {str(name).strip()} — no physical signature", 7.5)
+
+    p.text(MARGIN, PAGE_H - 46,
+           "Generated by Otlobly · one declaration per package · " + gwd, 7.5)
+    return f"{gwd} - declaration.pdf", _pdf(p, f"Declaration of use {gwd}")
 
 
 def _sum_lines(lines, cap=8):
