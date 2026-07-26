@@ -10015,7 +10015,7 @@ function gmRenderChat(){
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
       ${(th.step||0)>0&&th.state!=="proposed"?`<button class="minibtn" onclick="gmRestart()" title="${T("يرجع للإيميل الأول ويرسله فوراً بالمستلم والقالب الحاليين · back to email #1, sent immediately with the CURRENT recipient & template")}">🔁</button>`:""}
-      ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح فقط إن لم يخرج إيميل حقيقي · erase an accidental enrollment — allowed only if no real email left")}">🗑</button>`:""}
+      ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح ما دامت لا مراسلة حقيقية (إيميلات التجربة لصندوقك لا تُحتسب) · erase an accidental enrollment — allowed while there is no real correspondence (test emails to your own inbox don't count)")}">🗑</button>`:""}
     </div>
     <div class="gm-head" style="padding-top:0;gap:6px;font-size:12px">
       <span class="muted2">${T("الاسم على الطرد · name on the parcel")}</span>

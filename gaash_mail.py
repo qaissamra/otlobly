@@ -1063,19 +1063,38 @@ def _thread_set(gwd, **fields):
 
 def thread_delete(gwd):
     """Erase an accidental enrollment COMPLETELY — thread, messages, queued
-    files. Refused once a real email has left (that conversation is history
-    with GAASH — mark it ✓ done instead); dry-run-blocked attempts leave no
-    outbound message, so a purely-accidental thread always qualifies."""
+    files. Refused once the thread has real CORRESPONDENCE — mark it ✓ done
+    instead. Two independent signals say 'real', and either one is enough:
+
+      • somebody wrote back (any inbound message), or
+      • an email actually went to the configured recipient — the live GAASH
+        address on the sequence or in Settings.
+
+    An email that only ever went to the owner's own test inbox is NOT
+    correspondence: nobody at GAASH has it, so there is no history to protect
+    and erasing it is the honest way to keep the 🧭 Overview counting real work
+    only. Dry-run-blocked attempts leave no outbound message at all, so a
+    purely-accidental thread always qualifies."""
     g = (gwd or "").strip().upper()
     with db.connect() as c:
         if not c.execute("SELECT 1 FROM gaash_threads WHERE gwd=?", (g,)).fetchone():
             return {"ok": False, "error": "thread not found"}
-        n = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=? AND "
-                      "dir='out' AND kind IN ('sent','resent')", (g,)).fetchone()["n"]
-        if n:
+        inbound = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=? AND "
+                            "dir='in'", (g,)).fetchone()["n"]
+        real_to = {a for a in (
+            [r["to_address"] for r in c.execute(
+                "SELECT to_address FROM gaash_sequences WHERE to_address IS NOT NULL")]
+            + [_setts().get("to_address")]) if (a or "").strip()}
+        real_to = {a.strip().lower() for a in real_to}
+        sent_real = [r["to_addr"] for r in c.execute(
+            "SELECT DISTINCT to_addr FROM gaash_msgs WHERE gwd=? AND dir='out' "
+            "AND kind IN ('sent','resent')", (g,))
+            if (r["to_addr"] or "").strip().lower() in real_to]
+        if inbound or sent_real:
+            who = sent_real[0] if sent_real else "GAASH"
             return {"ok": False, "error":
-                    "أُرسل لها إيميل حقيقي — علّمها ✓ منجزة بدلاً من الحذف · "
-                    "a real email already went out — mark it ✓ done instead"}
+                    f"مراسلة حقيقية مع {who} — علّمها ✓ منجزة بدلاً من الحذف · "
+                    f"real correspondence with {who} — mark it ✓ done instead"}
         ids = [r["id"] for r in c.execute(
             "SELECT id FROM gaash_msgs WHERE gwd=?", (g,))]
         if ids:
