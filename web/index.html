@@ -456,6 +456,40 @@
   #bulkModal .az-box:has(.pop-menu.open){overflow:visible}
   #bulkModal .en-cols .lxc>input{max-width:100%;min-width:0}
   .en-wide .az-box{width:min(1480px,97vw);max-width:97vw}
+  /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
+     picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
+     whether it is already being chased. The compose header above says the rest. */
+  .en-pick .az-box{width:min(920px,96vw);max-width:96vw}
+  .en-list{border:1px solid var(--line);border-radius:11px;background:var(--card);
+    max-height:46vh;overflow:auto}
+  .en-row{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;
+    border-bottom:1px solid var(--line);cursor:pointer}
+  .en-row:last-child{border-bottom:none}
+  .en-row:hover{background:var(--bg2)}
+  .en-row.on{background:#fff4ee}
+  .en-row.off{cursor:default;opacity:.55}
+  .en-row.off:hover{background:none}
+  .en-row>input[type=checkbox]{flex:none;margin-top:3px}
+  .en-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .en-top{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .en-gwd{font-family:ui-monospace,monospace;font-size:12.5px;font-weight:700;flex:none}
+  .en-top .gmCandName{font-size:11.5px;padding:2px 4px;max-width:150px}
+  .en-sub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .en-none{padding:26px 14px;text-align:center;color:var(--muted);font-size:12px;line-height:1.6}
+  .en-none b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:3px}
+  /* the last guard before real email: say what is about to happen, in the page */
+  .en-cf{display:flex;flex-direction:column;gap:9px}
+  .en-cf-r{display:flex;gap:9px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+  .en-cf-r>b:first-child{flex:0 0 118px;font-size:10.5px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.05em}
+  .en-warn{border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.55}
+  .en-warn.live{background:#fff4ee;border:1px solid #f7680855}
+  .en-warn.dry{background:var(--bg2);border:1px solid var(--line)}
+  @media(max-width:640px){
+    .en-pick .az-box{width:calc(100vw - 14px)}
+    .en-top{flex-direction:column;align-items:flex-start;gap:4px}
+    .en-cf-r>b:first-child{flex:1 1 100%}
+  }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
@@ -535,6 +569,11 @@
   .gm-doc-page i:last-child{width:60%}
   .gm-doc-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
   .gm-doc-meta b{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+  /* action strip over the reply box — same plain-text rhythm as the tab strips */
+  .gm-actions{display:flex;gap:16px;align-items:center;padding:9px 13px 0}
+  .gm-actions button{border:none;background:none;font-weight:700;font-size:12.5px;
+    padding:0;cursor:pointer;color:var(--muted)}
+  .gm-actions button:hover{color:var(--accent)}
   .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
   .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
   /* v2: sequence builder tree (HubSpot-style) + dashboard */
@@ -7056,9 +7095,10 @@ async function poRefreshTracking(){
 }
 // ── Bulk progress popup: live rows for the check-all / estimate-all runs ──
 function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerHTML=""; $("bulkFoot").innerHTML=""; $("bulkModal").classList.remove("hidden"); }
-// en-wide is the enroll picker's 1180px override — drop it on close, or the
+// en-pick is the enroll picker's width override — drop it on close, or the
 // next consumer of this shared modal (shipping check, cost estimate…) inherits it
-function bulkClose(){ $("bulkModal").classList.add("hidden"); $("bulkModal").classList.remove("en-wide"); }
+function bulkClose(){ $("bulkModal").classList.add("hidden");
+  $("bulkModal").classList.remove("en-wide","en-pick"); }
 function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
   if(!r){ r=document.createElement("div"); r.id="blk_"+id;
     r.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap";
@@ -10159,6 +10199,9 @@ function gmRenderChat(){
       ${gmIdPill(th.pname_id||"",th.source)}
     </div>
     <div class="gm-msgs" id="gmMsgs">${bubbles}</div>
+    <div class="gm-actions">
+      <button onclick="gmSeqPick()" title="${T("أي سير عمل يلاحق هذا الطرد — وانقله لغيره · which workflow is chasing this package — and move it to another")}">🧬 ${T("سير العمل · Sequences")}</button>
+    </div>
     <div class="gm-compose">
       <textarea id="gmBody" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
       <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
@@ -10287,6 +10330,10 @@ function gmCandName(sel){
   // pick, so a later ClickUp correction flows through again). This is the save
   // button the picker never had — no enrollment needed anymore.
   const gwd=sel.dataset.gwd, v=(sel.value===sel.dataset.auto)?"":sel.value;
+  // remember it outside the DOM too — filtering or the review step can unmount
+  // this row, and the pick must still reach the start payload
+  GM.pickState=GM.pickState||{}; GM.pickState.names=GM.pickState.names||{};
+  if(v) GM.pickState.names[gwd]=v; else delete GM.pickState.names[gwd];
   post("/api/gaash/pick",{gwd,pname:v}).then(r=>{
     if(!r||!r.ok) return;
     const c=(GM.enrollCands||[]).find(x=>x.gwd===gwd);
@@ -10311,7 +10358,15 @@ function gmNewOpen(preGwds){
   // workflow can't be pre-checked — their box is disabled, re-enroll is a lie
   GM.enrollSel=new Set(pre.filter(g=>{
     const c=cands.find(x=>x.gwd===g); return !gmSeqBlock(c&&c.thread); }));
-  $("bulkModal").classList.add("en-wide");
+  // what step 2 has to remember: rendering the confirmation destroys step 1's
+  // controls, so Back rebuilds them from here rather than from the DOM
+  GM.pickState={paste:"", q:"", names:{}};
+  gmPickStep1();
+}
+function gmPickStep1(){
+  const ov=GM.ov||{}, ids=ov.ids||[], accts=ov.accounts||[];
+  const cands=GM.enrollCands||[], st=GM.pickState||{};
+  $("bulkModal").classList.add("en-pick");
   $("bulkBody").innerHTML=`
     <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
     <div class="gm-cmp">
@@ -10353,20 +10408,22 @@ function gmNewOpen(preGwds){
           ${poEsc(x.name)}</label>`).join("")||`<span class="muted2" style="font-size:12px">${T("المكتبة فارغة · library is empty")}</span>`}
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هوية · add ID")}</button>`:""}
       </div></div>`;
+  // put back everything the confirmation step blanked out
+  if($("gmNewPaste")) $("gmNewPaste").value=st.paste||"";
+  if($("gmCandSearch")) $("gmCandSearch").value=st.q||"";
+  if(st.seqId&&$("gmNewSeq")) $("gmNewSeq").value=st.seqId;
+  if(st.acctId&&$("gmNewAcct")) $("gmNewAcct").value=st.acctId;
+  if(st.idDocId){ const r=document.querySelector(`input[name="gmNewId"][value="${CSS.escape(st.idDocId)}"]`);
+    if(r) r.checked=true; }
+  document.querySelectorAll(".gmCandChip").forEach(b=>b.classList.toggle("accent",b.dataset.m===GM_CAND.mode));
   gmComposeSync();
+  // this button does NOT send — it opens the review step. Naming it "Start"
+  // here is how the owner once began four workflows trying to save a name.
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
     <span class="muted2" id="gmNewCount" style="font-size:11.5px;margin-inline-end:auto"></span>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
-    <button class="accent" id="gmStartBtn" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال · Start emailing")}</button></div>`;
+    <button class="accent" id="gmStartBtn" onclick="gmNewConfirm()">${T("مراجعة · Review")} →</button></div>`;
   gmNewCount();
-  gmEnrollLoad();
-}
-// The picker renders the SAME columns as Bulk search (bsModelRow) plus the 🪪
-// pair: the package's on-package name and its editable ID. Data comes from the
-// same lazily-loaded POS/LX caches the bulk-search page uses.
-async function gmEnrollLoad(){
-  await bsEnsureData();
-  if(!$("gmEnrollTbl")) return;              // modal closed while loading
   gmEnrollRender();
 }
 // ── 🧵 sequence column: is this parcel already in a workflow? ──
@@ -10439,59 +10496,141 @@ function gmEnrollToggle(gwd,on){
   on?GM.enrollSel.add(gwd):GM.enrollSel.delete(gwd);
   gmNewCount();                              // no re-render — keeps scroll + focus
 }
+// Two lines per parcel, straight from the candidate record — no bsEnsureData(),
+// so the list paints at once instead of after the Purchases + Leluxe caches
+// load. The three things the picker actually decides stay first-class: the name
+// it ships under, the ID that name carries, and whether it is already chased.
 function gmEnrollRender(){
   const mount=$("gmEnrollTbl"); if(!mount) return;
+  const q=(($("gmCandSearch")||{}).value||"").trim();
+  GM.pickState=GM.pickState||{}; GM.pickState.q=q;
   const cands=gmEnrollFiltered();
-  const byGwd={}; cands.forEach(c=>byGwd[c.gwd]=c);
-  const lxRows=bsLxRows();
-  const models=[]; const seen=new Set();
-  cands.forEach(c=>{                          // ONE row per GWD (the unit we email)
-    if(seen.has(c.gwd)) return; seen.add(c.gwd);
-    const pos=bsFindPo(c.gwd), lx=bsFindLx(c.gwd,lxRows);
-    if(pos.length) models.push({kind:"po",tn:c.gwd,...pos[0]});
-    else if(lx) models.push({kind:"lx",tn:c.gwd,lx});
-    else models.push({kind:"miss",tn:c.gwd});
-  });
-  const nids=((GM.ov&&GM.ov.settings)||{}).name_ids||{};
-  const fold=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
-  const idOf=nm=>{ const k=Object.keys(nids).find(k=>fold(k)===fold(nm)); return k?nids[k]:""; };
-  const sorted=lxtSortApply("en",models.slice(),(m,key)=>{
-    const c=byGwd[m.tn]||{};
-    if(key==="pname") return fold(c.pname)||"~";
-    if(key==="nameid") return fold(c.pname_id)||"~";
-    if(key==="seq") return String(c.thread?(c.thread.state==="proposed"?1:2):0)+m.tn;
-    return bsSortVal(m,key);
-  });
-  const pinPre=m=>{
-    const c=byGwd[m.tn]||{}, blocked=gmSeqBlock(c.thread);
-    return `<input type="checkbox" class="gmEnCb" value="${poEsc(m.tn)}" ${GM.enrollSel.has(m.tn)&&!blocked?"checked":""} ${blocked?"disabled":""}
-      onclick="event.stopPropagation()" onchange="gmEnrollToggle('${poEsc(m.tn)}',this.checked)"
-      style="flex:0 0 auto;margin-inline-end:2px${blocked?";opacity:.35":""}"${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>`;
-  };
-  const extra=m=>{
-    const c=byGwd[m.tn]||{}, nm=c.pname||"";
-    // the name is PICKED per parcel (owner's pick → board column → Settings
-    // default); the ID follows whatever name is chosen. Both come from the
-    // server so the picker agrees with what the email will actually carry.
-    return {
-      seq: gmSeqPill(c.thread,m.tn),
-      pname:`<select class="gmCandName" data-gwd="${poEsc(m.tn)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
-               onchange="gmCandName(this)" onclick="event.stopPropagation()"
-               style="width:100%;min-width:0;font-size:11.5px;padding:2px 4px"
-               title="${T("الاسم الذي يُشحن الطرد باسمه · the name this parcel ships under")}">${gmNameOpts(nm)}</select>${gmDefMark(c.pname_src)}`,
-      nameid:`<span class="gmCandId cf-cell" data-gwd="${poEsc(m.tn)}" data-src="${poEsc(c.source||"")}"
-                style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
-                ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(m.tn)}','${poEsc(nm)}')"`:""}
-                >${gmIdPill(c.pname_id,c.source)}</span>`,
-    };
-  };
-  mount.innerHTML=cands.length
-    ? lxtHead("en","التتبع · tracking")
-      +lxtWrap("en",`<div class="pkg open"><div class="pkg-body">${
-        sorted.map(m=>bsModelRow(m,null,{tbl:"en",extra,pinPre,noEnroll:true}).html).join("")}</div></div>`)
-    : `<div class="muted2" style="padding:10px">${T("لا مرشحين — الصق أرقاماً تحت · no candidates — paste numbers below")}</div>`;
-  if(cands.length){ lxColwApply(); lxtGridApply("en",mount); }
+  if(!cands.length){
+    mount.innerHTML=(GM.enrollCands||[]).length
+      // a filter that hides everything is a different problem from an empty
+      // library — never answer "nothing matches" with "go create something"
+      ? `<div class="en-none"><b>${T("لا طرد يطابق بحثك · No package matches your search")}</b>
+          ${q?`“${poEsc(q)}”`:T("مع هذا المرشِّح · with this filter")}
+          <div style="margin-top:9px"><button class="minibtn" onclick="gmEnrollClearFilter()">${T("امسح البحث · clear search")}</button></div></div>`
+      : `<div class="en-none"><b>${T("لا طرود تنتظر التسجيل · No packages waiting to be enrolled")}</b>
+          ${T("المرشّحون يأتون من لوحتَي المشتريات وللوكس — أو الصق أرقاماً تحت · candidates come from the Purchases and Leluxe boards — or paste tracking numbers below")}</div>`;
+    gmNewCount(); return;
+  }
+  const seen=new Set();
+  mount.innerHTML=`<div class="en-list">${cands.filter(c=>{   // ONE row per GWD (the unit we email)
+      if(seen.has(c.gwd)) return false; seen.add(c.gwd); return true;
+    }).map(c=>{
+      const nm=c.pname||"", blocked=gmSeqBlock(c.thread), on=GM.enrollSel.has(c.gwd)&&!blocked;
+      const src={leluxe:"Leluxe",purchases:"Purchases",manual:T("ملصوق · pasted")}[c.source]||c.source||"";
+      const sub=[src,c.gash_status||c.status,c.customers||c.po_id||c.name].filter(Boolean).join(" · ");
+      return `<div class="en-row${on?" on":""}${blocked?" off":""}" onclick="gmRowPick(this,'${poEsc(c.gwd)}')">
+        <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""} ${blocked?"disabled":""}
+          onclick="event.stopPropagation()" onchange="gmRowCb(this,'${poEsc(c.gwd)}')"
+          ${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>
+        <div class="en-main">
+          <div class="en-top">
+            <span class="en-gwd">${poEsc(c.gwd)}</span>
+            <select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
+              onchange="gmCandName(this)" onclick="event.stopPropagation()"
+              title="${T("الاسم الذي يُشحن الطرد باسمه · the name this parcel ships under")}">${gmNameOpts(nm)}</select>${gmDefMark(c.pname_src)}
+            <span class="gmCandId" data-gwd="${poEsc(c.gwd)}" data-src="${poEsc(c.source||"")}"
+              style="cursor:${CAN_ADMIN?"pointer":"default"}"
+              ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
+              >${gmIdPill(c.pname_id,c.source)}</span>
+            <span class="spacer"></span>
+            ${gmSeqPill(c.thread,c.gwd)}
+          </div>
+          <div class="en-sub">${poEsc(sub)}</div>
+        </div></div>`;
+    }).join("")}</div>`;
   gmNewCount();
+}
+function gmRowCb(cb,gwd){
+  gmEnrollToggle(gwd,cb.checked);
+  const row=cb.closest(".en-row"); if(row) row.classList.toggle("on",cb.checked);
+}
+function gmRowPick(row,gwd){          // the whole row is the click target
+  const cb=row.querySelector('input[type=checkbox]');
+  if(!cb||cb.disabled) return;
+  cb.checked=!cb.checked; gmRowCb(cb,gwd);
+}
+function gmEnrollClearFilter(){
+  const s=$("gmCandSearch"); if(s) s.value="";
+  gmCandMode("all");                   // re-renders
+}
+// ── 🧬 this conversation's workflow ───────────────────────────────────────────
+// A conversation IS an enrollment, so this never enrolls — it says which
+// workflow is chasing the parcel, where it has got to, and moves it to another.
+function gmSeqPick(){
+  const d=GM.detail; if(!d||!d.thread) return;
+  const th=d.thread, ov=GM.ov||{}, cur=gmSeqOf(th)||{};
+  const seqs=(ov.sequences||[]).filter(s=>!s.archived);
+  bulkOpen("🧬 "+T("سير العمل لهذا الطرد · This package's workflow"));
+  $("bulkModal").classList.add("en-pick");
+  $("bulkBody").innerHTML=`
+    <div class="en-cf-r" style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:9px">
+      <b class="mono" style="flex:0 0 auto;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink)">${poEsc(th.gwd)}</b>
+      <span>${T("الآن في · Now in")} <b>${poEsc(cur.name||"—")}</b></span>
+      ${gmDots(th.step||0,(cur.steps||[]).length)}
+      <span class="muted2">${T("خطوة · step")} ${th.step||0}/${(cur.steps||[]).length}</span>
+      ${th.next_send_at&&th.state==="active"
+        ?`<span class="muted2" title="${T("الإيميل القادم · next email")}">⏭ ${poEsc(String(th.next_send_at).slice(5,16).replace("T"," "))}</span>`:""}
+      <span class="spacer"></span>${gmChip(th.state)}
+    </div>
+    <div class="muted2" style="font-size:12px;margin-bottom:7px">${T("انقله إلى سير عمل آخر — يبدأ من الإيميل الأول لذلك السير · move it to another workflow — it restarts at that workflow's email #1")}</div>
+    <div class="en-list">${seqs.map(s=>{
+      const off=!!s.paused, isCur=s.id===(th.seq_id||"");
+      // an Off workflow stays VISIBLE but unselectable — hiding it just leaves
+      // the owner wondering where their workflow went
+      return `<div class="en-row${isCur?" on":""}${off||isCur?" off":""}"
+          ${off||isCur?"":`onclick="gmSeqMove('${poEsc(s.id)}')"`}
+          ${off?`title="${T("هذا السير موقوف — شغّله من 🧬 سير العمل أولاً · this workflow is off — switch it on in 🧬 Workflows first")}"`:""}>
+        <div class="en-main"><div class="en-top">
+          <b style="font-size:12.5px">${poEsc(s.name)}</b>
+          <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم · days")}</span>
+          <span class="spacer"></span>
+          ${isCur?`<span class="pill" style="background:#12a1500f;border:1px solid #12a15055;color:#12a150;font-size:9.5px">${T("مسجَّل · enrolled")}</span>`
+            :off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
+        </div></div></div>`;
+    }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b>${T("أنشئ واحداً من تبويب سير العمل · create one from the Workflows tab")}</div>`}</div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button></div>`;
+}
+function gmSeqMove(seqId){
+  const th=(GM.detail||{}).thread||{}, ov=GM.ov||{}, s=ov.settings||{};
+  const seq=(ov.sequences||[]).find(x=>x.id===seqId)||{};
+  const to=((seq.to_address||s.to_address)||"").trim();
+  const live=!s.dry_run&&(ov.accounts||[]).length;
+  const steps=(seq.steps||[]).length;
+  $("bulkBody").innerHTML=`
+    <div class="en-cf">
+      <div class="en-warn ${live?"live":"dry"}">${live
+        ? `<b>${T("إيميل حقيقي يخرج الآن · A real email goes out now")}</b> — ${T("الإيميل الأول من")} <b>${poEsc(seq.name||"")}</b> ${T("إلى · to")} <b>${poEsc(to||"?")}</b>`
+        : `<b>${T("وضع التجربة — لن يُرسَل أي إيميل · Dry-run — no email will be sent")}</b>`}</div>
+      <div class="en-cf-r"><b>${T("الطرد · Package")}</b><span class="mono">${poEsc(th.gwd||"")}</span></div>
+      <div class="en-cf-r"><b>${T("من · From")}</b><span>${poEsc((gmSeqOf(th)||{}).name||"—")}</span></div>
+      <div class="en-cf-r"><b>${T("إلى · To")}</b><span><b>${poEsc(seq.name||"")}</b>
+        <span class="muted2">${steps} ${T("إيميل على مدى · emails over")} ${gmSeqDays(seq)} ${T("يوم · days")}</span></span></div>
+      <div class="en-cf-r"><b>${T("يبدأ من · Restarts at")}</b><span>${T("الإيميل رقم ١ — تاريخ المراسلة يبقى · email #1 — the message history is kept")}</span></div>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmSeqPick()">← ${T("رجوع · Back")}</button>
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    <button class="accent" onclick="gmSeqMoveGo(this,'${poEsc(seqId)}')">🧬 ${T("انقله · Move it")}</button></div>`;
+}
+async function gmSeqMoveGo(btn,seqId){
+  const gwd=(GM.detail||{}).thread&&GM.detail.thread.gwd; if(!gwd) return;
+  btn.disabled=true;
+  const r=await post("/api/gaash/thread",{gwd,action:"switch_seq",seq_id:seqId});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر النقل · could not move it")); return; }
+  bulkClose();
+  // dry-run reports itself through send_error too, but it is the EXPECTED state,
+  // not a failure — the move landed either way. Only a real send fault gets ⚠.
+  toast(r.dry_run?`🧪 ${T("نُقل — لم يُرسَل إيميل (وضع التجربة) · moved — no email sent (dry-run)")}`
+    :r.send_error?`🧬 ${T("نُقل — لكن الإيميل لم يخرج · moved — but the email did not go out")}: ${poEsc(r.send_error)}`
+    :`🧬 ${T("نُقل إلى · moved to")} ${poEsc(r.seq_name||"")} — ${T("الإيميل الأول خرج · first email went out")}`);
+  await gmLoad(); gmOpen(gwd,true);          // header chips + step dots refresh
 }
 // 🪪 inline edit of the on-package name's ID — merges into the Settings map, so
 // EVERY package under that name (now and later) fills {name_id} in the emails.
@@ -10552,10 +10691,13 @@ function gmNewGwds(){
 }
 function gmNewCount(){
   const n=gmNewGwds().length;
+  GM.pickState=GM.pickState||{};
+  GM.pickState.paste=(($("gmNewPaste")||{}).value)||"";   // survives step 2
   const el=$("gmNewCount"); if(el) el.textContent=`${n} ${T("طرد مختار · selected")}`;
-  // the button says exactly what it does — "Start" alone once read as "Save"
+  // the button says exactly what it does — "Start" alone once read as "Save".
+  // On step 1 it only opens the review, so it must not promise a send.
   const sb=$("gmStartBtn");
-  if(sb) sb.textContent=`📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${n}`;
+  if(sb) sb.textContent=`${T("مراجعة · Review")} ${n} →`;
 }
 // open the enroll picker from anywhere (bulk search, purchases…) pre-checked
 async function gmEnrollFrom(gwds){
@@ -10577,28 +10719,72 @@ async function gmIdUpload(){
   };
   inp.click();
 }
-async function gmNewStart(btn){
+// ── step 2: say EXACTLY what is about to happen, in the page ──────────────────
+// This used to be a native confirm() — a grey OS box that cannot name the
+// workflow, the recipient, or the parcels. That matters here: the button once
+// read as "save" and the owner started four workflows trying to save a name.
+function gmNewConfirm(){
   const gwds=gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
+  const ov=GM.ov||{}, s=ov.settings||{};
   const idSel=document.querySelector('input[name="gmNewId"]:checked');
-  const acct=($("gmNewAcct")||{}).value||"";
-  // say EXACTLY what is about to happen before doing it — this button once
-  // read as "save" and the owner started 4 workflows trying to save names
-  const s=((GM.ov||{}).settings)||{};
-  const live=!s.dry_run&&(((GM.ov||{}).accounts)||[]).length;
-  if(!confirm((live
-      ?T("سيبدأ الإرسال الآن: إيميل حقيقي فوري لكل طرد إلى · REAL emails start NOW — one per package, sent to")+" "+(s.to_address||"?")
-      :T("وضع التجربة: ستُجهَّز المحادثات ولن يُرسَل أي إيميل · dry-run: conversations are prepared, NO email is sent"))
-      +`\n\n${gwds.length} ${T("طرد · package(s)")}`)) return;
-  // only names the owner actually CHANGED get pinned — leaving a row alone keeps
-  // it following the board, so a later ClickUp correction still flows through
-  const names={};
+  // capture step 1 before its controls are destroyed — Back rebuilds from this
+  GM.pickState={...(GM.pickState||{}),
+    seqId:(($("gmNewSeq")||{}).value)||"", acctId:(($("gmNewAcct")||{}).value)||"",
+    idDocId:idSel?idSel.value:null, paste:(($("gmNewPaste")||{}).value)||"",
+    q:(($("gmCandSearch")||{}).value)||"", names:gmNamesPicked(gwds), gwds};
+  const st=GM.pickState;
+  const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
+  const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||{};
+  const idDoc=(ov.ids||[]).find(x=>x.id===st.idDocId);
+  const to=((seq.to_address||s.to_address)||"").trim();
+  const live=!s.dry_run&&(ov.accounts||[]).length;
+  const steps=(seq.steps||[]).length, days=gmSeqDays(seq);
+  const byGwd={}; (GM.enrollCands||[]).forEach(c=>byGwd[c.gwd]=c);
+  $("bulkBody").innerHTML=`
+    <div class="en-cf">
+      <div class="en-warn ${live?"live":"dry"}">${live
+        ? `<b>${T("إيميل حقيقي يخرج الآن · A real email goes out now")}</b> — ${T("واحد لكل طرد، إلى · one per package, to")} <b>${poEsc(to||"?")}</b>`
+        : `<b>${T("وضع التجربة — لن يُرسَل أي إيميل · Dry-run — no email will be sent")}</b> — ${T("ستُجهَّز المحادثات فقط · the conversations are only prepared")}`}</div>
+      <div class="en-cf-r"><b>${T("سير العمل · Workflow")}</b><span>${poEsc(seq.name||"—")}</span>
+        <span class="muted2">${steps} ${T("إيميل على مدى · emails over")} ${days} ${T("يوم · days")}</span></div>
+      <div class="en-cf-r"><b>${T("المُرسِل · Sends from")}</b>
+        <span>${acct.email?poEsc(acct.email):`<span class="muted2">${T("لا حساب مُرسِل · no sending account")}</span>`}</span></div>
+      <div class="en-cf-r"><b>${T("الهوية المرفقة · ID attached")}</b>
+        <span>${idDoc?"🪪 "+poEsc(idDoc.name):`<span class="muted2">${T("بلا مرفق · none")}</span>`}</span></div>
+      <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span></div>
+      <div class="en-list" style="max-height:34vh">${gwds.map(g=>{
+        const c=byGwd[g]||{}, nm=(st.names||{})[g]||c.pname||"";
+        return `<div class="en-row off" style="opacity:1;cursor:default">
+          <div class="en-main"><div class="en-top">
+            <span class="en-gwd">${poEsc(g)}</span>
+            <span style="font-size:11.5px">${nm?poEsc(nm):`<span class="muted2">${T("بلا اسم · no name")}</span>`}</span>
+            <span class="spacer"></span>${gmIdPill(c.pname_id,c.source)}
+          </div></div></div>`;
+      }).join("")}</div>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>
+    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
+    <button class="accent" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}</button></div>`;
+}
+// only names the owner actually CHANGED get pinned — leaving a row alone keeps
+// it following the board, so a later ClickUp correction still flows through
+function gmNamesPicked(gwds){
+  const out={...((GM.pickState||{}).names||{})};   // picks made under an earlier filter
   document.querySelectorAll(".gmCandName").forEach(s2=>{
-    if(gwds.includes(s2.dataset.gwd)&&s2.value!==s2.dataset.auto) names[s2.dataset.gwd]=s2.value;
+    if(gwds.includes(s2.dataset.gwd)&&s2.value!==s2.dataset.auto) out[s2.dataset.gwd]=s2.value;
   });
+  Object.keys(out).forEach(g=>{ if(!gwds.includes(g)) delete out[g]; });
+  return out;
+}
+async function gmNewStart(btn){
+  const st=GM.pickState||{};
+  const gwds=st.gwds||gmNewGwds();
+  if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   btn.disabled=true;
-  const r=await post("/api/gaash/start",{gwds, id_doc_id:idSel?idSel.value:null, account_id:acct||null,
-    seq_id:(($("gmNewSeq")||{}).value||null), names});
+  const r=await post("/api/gaash/start",{gwds, id_doc_id:st.idDocId||null, account_id:st.acctId||null,
+    seq_id:st.seqId||null, names:st.names||{}});
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];

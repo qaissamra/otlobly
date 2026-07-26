@@ -1161,6 +1161,51 @@ def thread_restart(gwd, fresh=False, at=None):
                 "dry_run": res.get("dry_run", False)})}
 
 
+def thread_switch_seq(gwd, seq_id, at=None):
+    """Move a package to a DIFFERENT workflow.
+
+    `seq_id` was only ever written at enrollment (start_threads), so a package
+    was stuck in whatever workflow it started in — the sole way out being delete
+    + re-enroll, which is refused once real correspondence exists.
+
+    The move RESTARTS at email #1 of the new workflow: step numbers are
+    per-sequence, so carrying step 2 into a 3-step workflow would silently skip
+    its first two emails. The message history is kept — it is real
+    correspondence with the same recipient, and the next email threads onto it.
+    """
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    if th.get("state") == "proposed":
+        return {"ok": False, "error":
+                "اقتراح لم يبدأ — وافق عليه أولاً · "
+                "still a suggestion — approve it first"}
+    seq = sequence_get(seq_id)
+    if not seq:
+        return {"ok": False, "error": "workflow not found"}
+    if seq.get("paused"):
+        return {"ok": False, "error":
+                "هذا السير موقوف — شغّله أولاً · "
+                "that workflow is off — switch it on first"}
+    if (th.get("seq_id") or "") == seq["id"]:
+        return {"ok": False, "error": "already in that workflow"}
+    # subject too: _thread_send prefers the thread's stored base subject over the
+    # template's, so leaving it would send the NEW sequence under the OLD subject
+    _thread_set(g, seq_id=seq["id"], step=0, state="active", subject=None,
+                missing_docs=0, missing_note=None, resend_json=None,
+                last_error=None,
+                next_send_at=(at or datetime.now(timezone.utc)
+                              .isoformat(timespec="seconds")))
+    out = {"ok": True, "gwd": g, "seq_id": seq["id"], "seq_name": seq.get("name")}
+    if at:                                 # the daemon sends it when it's due
+        return {**out, "scheduled_at": at}
+    res = send_step(g)                     # same immediate send as start_threads
+    return {**out, **({} if res.get("ok") else
+                      {"send_error": res.get("error"),
+                       "dry_run": res.get("dry_run", False)})}
+
+
 def _msg_add(gwd, rec):
     with db.connect() as c:
         c.execute("""INSERT INTO gaash_msgs

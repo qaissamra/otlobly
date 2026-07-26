@@ -3045,6 +3045,14 @@ def api_gaash_thread():
         res = gaash_mail.thread_restart(gwd, fresh=bool(b.get("fresh")),
                                         at=b.get("at"))
         return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "switch_seq":    # move this package to a different workflow
+        res = gaash_mail.thread_switch_seq(gwd, (b.get("seq_id") or "").strip(),
+                                           at=b.get("at"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"moved to workflow {res.get('seq_name') or ''}".strip(),
+                         user=_user())
+        return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
             return jsonify({"ok": False, "error": "not a proposed thread"}), 400
