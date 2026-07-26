@@ -1065,11 +1065,18 @@ def thread_delete(gwd):
     return {"ok": True, "gwd": g}
 
 
-def thread_restart(gwd):
-    """🔁 back to email #1 and send it NOW. For threads whose 'sent' history
-    went to the wrong place (the test-inbox era) or where GAASH went silent —
-    history stays, only the sequence position resets. send_step re-renders
-    step 1 with the CURRENT recipient/template/ID resolution."""
+def thread_restart(gwd, fresh=False, at=None):
+    """🔁 back to email #1. For threads whose 'sent' history went to the wrong
+    place (the test-inbox era) or where GAASH went silent — the sequence
+    position resets and send_step re-renders step 1 with the CURRENT
+    recipient/template/ID resolution.
+
+    fresh=True also ERASES the message history, so the next email opens a clean
+    conversation: no Re: prefix, no In-Reply-To pointing at mail the recipient
+    never received. That is the honest shape when the history is with someone
+    else (a test inbox), not with the real recipient.
+    at=<iso> schedules step 1 for later (the daemon sends it) instead of now —
+    used to space a batch out so it doesn't land as one blast."""
     g = (gwd or "").strip().upper()
     th = thread_get(g)
     if not th:
@@ -1078,12 +1085,17 @@ def thread_restart(gwd):
         return {"ok": False, "error":
                 "اقتراح لم يبدأ — وافق عليه بدلاً من الإعادة · "
                 "still a suggestion — approve it instead of restarting"}
+    if fresh:
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_msgs WHERE gwd=?", (g,))
     # subject too: _thread_send prefers the thread's stored base subject over
     # the template's, so leaving it would resend email #1 under the OLD subject
     _thread_set(g, step=0, state="active", missing_docs=0, missing_note=None,
                 resend_json=None, last_error=None, subject=None,
-                next_send_at=datetime.now(timezone.utc)
-                .isoformat(timespec="seconds"))
+                unread=0, next_send_at=(at or datetime.now(timezone.utc)
+                                        .isoformat(timespec="seconds")))
+    if at:                                 # the daemon sends it when it's due
+        return {"ok": True, "gwd": g, "state": "active", "scheduled_at": at}
     res = send_step(g)                     # same immediate-send as start_threads
     return {"ok": True, "gwd": g, "state": "active",
             **({} if res.get("ok") else
@@ -1945,12 +1957,20 @@ def task_done(gwd):
     return {"ok": True, "thread": thread_get(gwd)}
 
 
-def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None):
+def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
+                  schedule=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
     to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
-    (and therefore the ID) before email 1 goes out. Returns per-GWD results."""
+    (and therefore the ID) before email 1 goes out.
+
+    `schedule` = {GWD: iso} holds step 1 back to that moment instead of sending
+    now — the daemon picks it up when due. Spacing a batch out matters when the
+    recipient is a human queue: fourteen identical emails arriving in the same
+    minute read as automation and get triaged as one. Returns per-GWD results."""
     seq_id = seq_id or default_sequence_id()
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
+    schedule = {str(k or "").strip().upper(): v
+                for k, v in (schedule or {}).items()}
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -1973,7 +1993,8 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None):
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
                 VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?,?)""",
                       (gwd, account_id, id_doc_id or None,
-                       datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                       schedule.get(gwd) or datetime.now(timezone.utc)
+                       .isoformat(timespec="seconds"),
                        now_iso(), now_iso(), seq_id))
         if names.get(gwd):                 # pin it BEFORE step 1 renders
             set_parcel_name(gwd, names[gwd])
@@ -1981,6 +2002,10 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None):
             _thread_set(gwd, state="goal_met")
             out.append({"gwd": gwd, "ok": True, "state": "goal_met",
                         "note": "already cleared/delivered — no email needed"})
+            continue
+        if schedule.get(gwd):              # queued — the daemon sends it
+            out.append({"gwd": gwd, "ok": True, "state": "active",
+                        "scheduled_at": schedule[gwd]})
             continue
         res = send_step(gwd)
         out.append({"gwd": gwd, **({"ok": True, "state": "active"} if res.get("ok")
