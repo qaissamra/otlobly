@@ -2875,6 +2875,22 @@ def api_gaash_ids():
                                       folder=b.get("folder")))
 
 
+@app.route("/api/gaash/declaration", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_declaration():
+    """Build ONE package's customs declaration from what the boards already say
+    — the name it ships under, that name's ID, and its real contents. Files it
+    in the 📄 Declarations folder and returns the library row so the caller can
+    preview it and attach it to that package's first email."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.declaration_make(b.get("gwd"))
+    if res.get("ok"):
+        activity.log("create", "gaash", 0, res.get("gwd") or "",
+                     detail="generated a customs declaration", user=_user())
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
 @app.route("/api/gaash/idfile")
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
@@ -2925,7 +2941,8 @@ def api_gaash_start():
                                    b.get("account_id"),
                                    seq_id=(b.get("seq_id") or "").strip() or None,
                                    names=b.get("names") if isinstance(b.get("names"), dict) else None,
-                                   schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None)
+                                   schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None,
+                                   docs=b.get("docs") if isinstance(b.get("docs"), dict) else None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),

@@ -3525,6 +3525,7 @@ const LXT_COLS={
   "en":[
     {key:"pname",    label:"الاسم على الطرد · name on package", w:150, sortable:true},
     {key:"nameid",   label:"🪪 رقم الهوية · ID number", w:126},
+    {key:"decl",     label:"📄 التصريح · declaration", w:132},
     {key:"status",   label:"حالة الطلب · order status", w:126, sortable:true},
     {key:"gash",     label:"حالة الجمارك · GAASH status", w:142, sortable:true},
     {key:"seq",      label:"🧵 التسلسل · sequence",   w:112, sortable:true},
@@ -10606,6 +10607,7 @@ function gmEnrollRender(){
           style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
           ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
           >${gmIdPill(c.pname_id,c.source)}</span>`,
+      decl:gmDeclCell(c),
       status:gmOrderPill(c),
       gash:gmGashPill(c),
       seq:gmSeqPill(c.thread,c.gwd),
@@ -10620,6 +10622,39 @@ function gmEnrollRender(){
   lxColwApply(); lxtGridApply("en",mount);
   gmNewCount();
   gmEnrollColour();                   // Leluxe pill colours, without blocking
+}
+// ── 📄 the per-package customs declaration ────────────────────────────────────
+// Built from what the boards already say — the name the parcel ships under,
+// that name's ID, and its real contents — and attached to THAT package's first
+// email only. It is signed by nobody: the declarant block says in typed text
+// that Otlobly submitted it on the named person's behalf.
+function gmDeclCell(c){
+  const d=(((GM.pickState||{}).docs)||{})[c.gwd];
+  if(d) return `<span style="display:flex;gap:4px;align-items:center;min-width:0">
+    <a class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;text-decoration:none;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis"
+      href="/api/gaash/idfile?file=${encodeURIComponent(d.filename)}" target="_blank"
+      onclick="event.stopPropagation()" title="${T("افتح التصريح · open the declaration")}">📄 ${T("جاهز · ready")} ↗</a>
+    <button class="minibtn" style="padding:0 6px" title="${T("أزل · remove")}"
+      onclick="event.stopPropagation();gmDeclDrop('${poEsc(c.gwd)}')">✕</button></span>`;
+  return `<button class="minibtn" style="padding:1px 8px;font-size:10.5px"
+    onclick="event.stopPropagation();gmDeclMake('${poEsc(c.gwd)}',this)">📄 ${T("أنشئ · make")}</button>`;
+}
+async function gmDeclMake(gwd,btn){
+  btn.disabled=true; const old=btn.textContent; btn.textContent="…";
+  const r=await post("/api/gaash/declaration",{gwd});
+  if(!r||!r.ok){
+    // a name that cannot be printed is named out loud, not silently mangled
+    toast((r&&r.error)||T("تعذّر إنشاء التصريح · could not build the declaration"));
+    btn.disabled=false; btn.textContent=old; return;
+  }
+  GM.pickState=GM.pickState||{}; GM.pickState.docs=GM.pickState.docs||{};
+  GM.pickState.docs[gwd]={id:r.id,name:r.name,filename:r.filename};
+  await gmLoad();                    // the library gained a 📄 Declarations row
+  gmEnrollRender(); gmIdsRender();
+}
+function gmDeclDrop(gwd){
+  const d=((GM.pickState||{}).docs||{});
+  delete d[gwd]; gmEnrollRender();    // the file stays in the library, just unattached
 }
 // The board status. Purchases colours come from the static CU_COLOR map, so they
 // are right immediately; Leluxe needs LX.schema and starts grey (see gmEnrollColour).
@@ -11098,10 +11133,13 @@ function gmNewConfirm(){
       <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span></div>
       <div class="en-list" style="max-height:34vh">${gwds.map(g=>{
         const c=byGwd[g]||{}, nm=(st.names||{})[g]||c.pname||"";
+        const dec=((st.docs||{})[g]);
         return `<div class="en-row off" style="opacity:1;cursor:default">
           <div class="en-main"><div class="en-top">
             <span class="en-gwd">${poEsc(g)}</span>
             <span style="font-size:11.5px">${nm?poEsc(nm):`<span class="muted2">${T("بلا اسم · no name")}</span>`}</span>
+            ${dec?`<a class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:9.5px;text-decoration:none"
+              href="/api/gaash/idfile?file=${encodeURIComponent(dec.filename)}" target="_blank">📄 ${T("تصريح · declaration")} ↗</a>`:""}
             <span class="spacer"></span>${gmIdPill(c.pname_id,c.source)}
           </div></div></div>`;
       }).join("")}</div>
@@ -11177,8 +11215,12 @@ async function gmNewStart(btn){
   const gwds=st.gwds||gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   btn.disabled=true;
+  // a declaration belongs to ONE parcel, so it goes per-GWD and beats the
+  // batch-wide ID doc for that parcel only
+  const docs={};
+  Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=d.id; });
   const r=await post("/api/gaash/start",{gwds, id_doc_id:st.idDocId||null, account_id:st.acctId||null,
-    seq_id:st.seqId||null, names:st.names||{}});
+    seq_id:st.seqId||null, names:st.names||{}, docs});
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];
