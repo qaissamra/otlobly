@@ -513,11 +513,22 @@
   .gm-tile span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
   .gm-tile.click{cursor:pointer;transition:border-color .12s}
   .gm-tile.click:hover{border-color:var(--accent)}
-  .gm-stat-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-top:1px solid var(--line);cursor:pointer;font-size:12.5px}
-  .gm-stat-row:first-child{border-top:none}
-  .gm-stat-row:hover{background:var(--bg2)}
-  .gm-stat-row b{flex:none}
-  .gm-stat-row .muted2{font-size:11px}
+  /* 🧭 drill-down: one real mail row per email — collapsed to a preview line,
+     click to unfold the whole body (the shape a mail client uses) */
+  .gm-mail{border-top:1px solid var(--line);padding:9px 2px}
+  .gm-mail:first-child{border-top:none}
+  .gm-mail-hd{display:flex;align-items:flex-start;gap:7px;cursor:pointer}
+  .gm-mail-hd:hover .gm-mail-subj{text-decoration:underline}
+  .gm-caret{flex:none;width:10px;margin-top:3px;color:var(--muted);font-size:10px;transition:transform .12s}
+  .gm-mail.open .gm-caret{transform:rotate(90deg)}
+  .gm-mail-subj{font-weight:700;font-size:13px}
+  .gm-mail-when{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:10px}
+  .gm-mail-meta{font-size:11.5px;color:var(--muted);margin:2px 0 0 17px}
+  .gm-dot2{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .gm-mail-body{margin:5px 0 0 17px;font-size:12.5px;color:var(--muted)}
+  .gm-mail:not(.open) .gm-mail-body{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gm-mail.open .gm-mail-body{white-space:pre-wrap;color:inherit;background:var(--bg2);
+    border-radius:8px;padding:9px 11px;max-height:260px;overflow:auto}
   .gm-fun{display:flex;align-items:flex-end;gap:6px;height:64px}
   .gm-fun>div{background:#f76808;border-radius:4px 4px 0 0;min-width:34px;position:relative}
   .gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;color:var(--muted)}
@@ -10800,9 +10811,15 @@ function gmOvRender(){
     :`<div class="muted2 panel">${T("جارِ التحميل… · loading…")}</div>`;
 }
 // ── Overview drill-down: which exact parcel/email is behind a stat tile ──
+function gmWhen(s){                      // "Jul 26, 2026 at 6:16 PM", viewer's tz
+  if(!s) return "";
+  const d=new Date(s); if(isNaN(d)) return "";
+  return d.toLocaleString(undefined,{month:"short",day:"numeric",year:"numeric",
+    hour:"numeric",minute:"2-digit"}).replace(/,([^,]*)$/," at$1");
+}
 async function gmStatDrill(kind){
   const titles={sent:T("📤 مرسل · Sent"),opened:T("👀 تم الفتح · Opened"),
-                replied:T("💬 تم الرد · Replied")};
+                clicked:T("🖱 ضغط الرابط · Clicked"),replied:T("💬 تم الرد · Replied")};
   $("gmStatTitle").textContent=titles[kind]||kind;
   $("gmStatBody").innerHTML=`<div class="empty"><span class="spin"></span> ${T("جارِ التحميل… · loading…")}</div>`;
   $("gmStatModal").classList.remove("hidden");
@@ -10811,23 +10828,42 @@ async function gmStatDrill(kind){
   if(!d.ok||!(d.rows||[]).length){
     $("gmStatBody").innerHTML=`<div class="muted2" style="padding:10px 0">${T("لا يوجد شيء بعد · nothing yet")}</div>`; return;
   }
-  $("gmStatBody").innerHTML=d.rows.map(r=>{
-    const name=r.pname?poEsc(r.pname):"";
-    let detail;
-    if(kind==="opened")
-      detail=`${r.opens} ${T("مرة فتح · open"+(r.opens===1?"":"s"))} · ${T("أول فتح · first")} ${relTime(r.first_open_at)}`;
-    else if(kind==="replied")
-      detail=`${r.n_replies} ${T("رد · repl"+(r.n_replies===1?"y":"ies"))} · ${T("آخر · last")} ${relTime(r.at)}`;
-    else
-      detail=`${r.step?T("خطوة · step")+" "+r.step+" · ":""}${poEsc(r.subject||"")}`;
-    return `<div class="gm-stat-row" onclick="gmStatClose();gmTab('conv');gmOpen('${poEsc(r.gwd)}')">
-      <div style="flex:1;min-width:0">
-        <b class="mono" style="font-size:12px">${poEsc(r.gwd)}</b>${name?` <span class="muted2">${name}</span>`:""}
-        <div class="muted2">${detail}</div>
+  $("gmStatBody").innerHTML=d.rows.map((r,i)=>{
+    const inbound=r.dir==="in";
+    // opens/clicks come from OUR tracking pixel — they only mean anything on
+    // mail we sent, so an inbound reply shows no counters at all
+    const seen=(r.opens||0)>0;
+    const track=inbound?"":`<div class="gm-mail-meta">
+        <span class="gm-dot2" style="background:${seen?"#12a150":"var(--line)"}"></span>
+        ${T("فتح · Opens")}: <b>${r.opens||0}</b> &nbsp; ${T("ضغط · Clicks")}: <b>${r.clicks||0}</b>${
+        seen?` &nbsp;<span style="opacity:.7">${T("أول فتح · first")} ${relTime(r.first_open_at)}</span>`:""}
+      </div>`;
+    return `<div class="gm-mail" id="gmMail${i}">
+      <div class="gm-mail-hd" onclick="gmStatToggle(${i})">
+        <span class="gm-caret">▶</span>
+        <span style="min-width:0">
+          <span class="gm-mail-subj">${poEsc(r.subject||T("(بلا موضوع) · (no subject)"))}</span>
+          <span class="muted2" style="font-size:11.5px"> ${T("من · from")} ${poEsc(r.from_name||r.from_addr||"")}</span>
+        </span>
+        <span class="gm-mail-when">${gmWhen(r.at)}</span>
       </div>
-      <span class="muted2" style="flex:none">${relTime(r.at)}</span>
+      <div class="gm-mail-meta">
+        <b class="mono">${poEsc(r.gwd)}</b>${r.pname?` · ${poEsc(r.pname)}`:""}${
+        r.to_addr?` · ${T("إلى · to")} ${poEsc(r.to_addr)}`:""}${
+        r.step?` · ${T("خطوة · step")} ${r.step}`:""}
+      </div>
+      ${track}
+      <div class="gm-mail-body">${poEsc(r.body||"")}</div>
+      <div class="gm-mail-more" style="display:none;margin:7px 0 2px 17px">
+        <button class="minibtn" onclick="gmStatClose();gmTab('conv');gmOpen('${poEsc(r.gwd)}')">↗ ${T("افتح المحادثة · open conversation")}</button>
+      </div>
     </div>`;
   }).join("");
+}
+function gmStatToggle(i){                // unfold one mail — full body + jump button
+  const el=$("gmMail"+i); if(!el) return;
+  const open=el.classList.toggle("open");
+  el.querySelector(".gm-mail-more").style.display=open?"":"none";
 }
 function gmStatClose(){ $("gmStatModal").classList.add("hidden"); }
 function gmSeqNew(){

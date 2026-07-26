@@ -965,29 +965,40 @@ def stats():
 
 # ── Overview drill-down: which exact email is behind a stat tile ──
 def stat_detail(kind, limit=300):
-    """Row list backing an 🧭 Overview tile ('sent'|'opened'|'clicked'|'replied')
-    so the owner can see WHICH parcel/email, not just a count."""
+    """The actual EMAILS behind an 🧭 Overview tile ('sent'|'opened'|'clicked'|
+    'replied') — one row per message, carrying enough to render a real mail row
+    (who/whom/when, opens+clicks, and the body) instead of a bare count.
+
+    'replied' lists the individual inbound replies rather than one row per
+    parcel: the interesting thing about a reply is what GAASH actually wrote."""
     pmap = parcel_name_map()
+    cols = ("id, gwd, dir, kind, step, at, from_addr, to_addr, subject, body, "
+            "opens, clicks, first_open_at, first_click_at")
     with db.connect() as c:
+        labels = {r["email"]: (r["label"] or "").strip()
+                  for r in c.execute("SELECT email, label FROM gaash_accounts")}
         if kind in ("sent", "opened", "clicked"):
-            where = {"sent": "opens>=0", "opened": "opens>0",
+            where = {"sent": "1=1", "opened": "opens>0",
                      "clicked": "clicks>0"}[kind]
             order = {"sent": "at", "opened": "first_open_at",
                      "clicked": "first_click_at"}[kind]
             rows = [dict(r) for r in c.execute(
-                f"SELECT gwd, subject, step, at, to_addr, opens, clicks, "
-                f"first_open_at, first_click_at FROM gaash_msgs "
+                f"SELECT {cols} FROM gaash_msgs "
                 f"WHERE dir='out' AND kind IN ('sent','resent') AND {where} "
                 f"ORDER BY {order} DESC LIMIT ?", (limit,))]
         elif kind == "replied":
             rows = [dict(r) for r in c.execute(
-                "SELECT gwd, MAX(at) AS at, COUNT(*) AS n_replies FROM gaash_msgs "
-                "WHERE dir='in' AND kind='reply' GROUP BY gwd "
-                "ORDER BY at DESC LIMIT ?", (limit,))]
+                f"SELECT {cols} FROM gaash_msgs WHERE dir='in' "
+                f"ORDER BY at DESC LIMIT ?", (limit,))]
         else:
             return []
     for r in rows:
         r["pname"] = pmap.get(r["gwd"], "")
+        frm = (r.get("from_addr") or "").strip()
+        # the sending mailbox has a human label ("Qais abusamra"); GAASH's own
+        # address has none, so fall back to the part before the @
+        r["from_name"] = labels.get(frm) or frm.split("@")[0]
+        r["body"] = (r.get("body") or "")[:4000]
     return rows
 
 
