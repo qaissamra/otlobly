@@ -10410,8 +10410,8 @@ function gmPickStep1(){
     <div style="font-size:12.5px;color:var(--muted);margin:6px 0">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
     <div class="gm-cmp">
       <div class="gm-cmp-tabs">
-        <button onclick="bulkClose();gmTab('tpl')" title="${T("عدّل نص الإيميلات · edit what the emails say")}">📝 ${T("القوالب · Templates")}</button>
-        <button onclick="bulkClose();gmTab('seq')" title="${T("عدّل سير العمل والمستلم · edit workflows & recipient")}">🧬 ${T("سير العمل · Sequences")}</button>
+        <button onclick="gmEnrollTpl()" title="${T("اعرض نص الإيميلات — تُفتح فوق هذه النافذة · see what the emails say — opens over this dialog")}">📝 ${T("القوالب · Templates")}</button>
+        <button onclick="gmEnrollSeq()" title="${T("اختر سير العمل — تُفتح فوق هذه النافذة · pick the workflow — opens over this dialog")}">🧬 ${T("سير العمل · Sequences")}</button>
         <button onclick="$('gmNewIds').scrollIntoView({behavior:'smooth',block:'center'})" title="${T("الهويات المرفقة · the attached IDs")}">🪪 ${T("المستندات · Documents")}</button>
       </div>
       <div class="gm-cmp-row"><span class="gm-cmp-lbl">${T("إلى · To")}</span><span id="gmCmpTo"></span></div>
@@ -10601,12 +10601,20 @@ function gmEnrollClearFilter(){
 // A popup OVER the conversation — not a jump to the Templates tab, which loses
 // your place and gives you no way back to the parcel you were writing about.
 // Nothing is ever sent from here: the text lands in the box for you to edit.
-let GM_TPL={q:"", owner:"", sort:"name", dir:1};
+// mode: "insert" = from a conversation, picking fills the reply box.
+//       "browse" = from the enroll dialog, picking shows the text (there is no
+//                  one package to fill it for, and nothing to send it on).
+let GM_TPL={q:"", owner:"", sort:"name", dir:1, mode:"insert"};
 function gmTplPick(){
   const th=(GM.detail||{}).thread; if(!th) return;
-  GM_TPL={q:"", owner:"", sort:"name", dir:1};
-  bulkOpen(T("اختر قالباً · Select template"));
-  $("bulkModal").classList.remove("en-pick");     // coming Back from the confirm
+  GM_TPL={q:"", owner:"", sort:"name", dir:1, mode:"insert"};
+  gmTplSheet(T("اختر قالباً · Select template"));
+}
+function gmTplSheet(title){
+  const browse=GM_TPL.mode==="browse";
+  const th=(GM.detail||{}).thread||{};
+  bulkOpen(title);
+  $("bulkModal").classList.remove("en-pick");     // coming Back from a sub-step
   $("bulkModal").classList.add("tpl-wide");
   const owners=[...new Set((((GM.ov||{}).templates)||[]).map(t=>t.created_by).filter(Boolean))];
   $("bulkBody").innerHTML=`
@@ -10622,13 +10630,39 @@ function gmTplPick(){
           ${owners.map(o=>`<option value="${poEsc(o)}">${poEsc(o)}</option>`).join("")}
         </select></label>`:""}
       <span class="spacer"></span>
-      <span class="muted2" style="font-size:11.5px">${T("يُملأ لـ · filled in for")} <b class="mono">${poEsc(th.gwd)}</b></span>
+      ${browse?"":`<span class="muted2" style="font-size:11.5px">${T("يُملأ لـ · filled in for")} <b class="mono">${poEsc(th.gwd||"")}</b></span>`}
     </div>
     <div id="gmTplRows"></div>`;
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px;width:100%;align-items:center">
-    <span class="muted2" style="font-size:11.5px">${T("الاختيار يضعه في صندوق الرد — لا يُرسل شيء · picking puts it in the reply box — nothing is sent")}</span>
-    <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button></div>`;
+    <span class="muted2" style="font-size:11.5px">${browse
+      ? T("للعرض فقط — التعديل من تبويب القوالب · read-only here — edit them in the Templates tab")
+      : T("الاختيار يضعه في صندوق الرد — لا يُرسل شيء · picking puts it in the reply box — nothing is sent")}</span>
+    <span style="display:flex;gap:8px">
+      ${browse?`<button class="minibtn" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>`:""}
+      <button class="minibtn" onclick="bulkClose()">${browse?T("إغلاق · Close"):T("إلغاء · Cancel")}</button>
+    </span></div>`;
   gmTplList();
+}
+// browse mode: show what the template actually says. Tokens stay raw — with no
+// single package chosen there is nothing honest to fill them with.
+function gmTplPreview(tid){
+  const t=(((GM.ov||{}).templates)||[]).find(x=>x.id===tid)||{};
+  $("bulkBody").innerHTML=`
+    <div class="en-cf" style="padding-top:4px">
+      <div class="en-cf-r"><b>${T("الاسم · Name")}</b><span><b>${poEsc(t.name||"")}</b></span></div>
+      <div class="en-cf-r"><b>${T("الموضوع · Subject")}</b><span>${poEsc(t.subject_tpl||"—")}</span></div>
+      <div class="muted2" style="font-size:11.5px">${T("ما بين الأقواس يُملأ عند الإرسال لكل طرد · what is in braces is filled in per package when it sends")}</div>
+      <div style="white-space:pre-wrap;font-size:12.5px;line-height:1.6;border:1px solid var(--line);
+        border-radius:11px;background:var(--card);padding:12px 14px">${poEsc(t.body_tpl||"")}</div>
+    </div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmEnrollTpl()">← ${T("كل القوالب · All templates")}</button>
+    <button class="minibtn" onclick="gmPickStep1()">${T("رجوع للطرود · Back to packages")}</button></div>`;
+}
+function gmTplClearFilters(){          // works in either mode — no re-entry
+  const s=$("gmTplSearch"); if(s) s.value="";
+  const o=$("bulkBody").querySelector("select"); if(o) o.value="";
+  GM_TPL.q=""; GM_TPL.owner=""; gmTplList();
 }
 function gmTplSort(k){
   GM_TPL.dir=(GM_TPL.sort===k)?-GM_TPL.dir:1;
@@ -10645,7 +10679,7 @@ function gmTplList(){
   if(!rows.length){
     mount.innerHTML=all.length
       ? `<div class="en-none"><b>${T("لا قالب يطابق · No template matches")}${q?` “${poEsc(q)}”`:""}</b>
-          <div style="margin-top:9px"><button class="minibtn" onclick="$('gmTplSearch').value='';GM_TPL.owner='';gmTplPick()">${T("امسح البحث · clear search")}</button></div></div>`
+          <div style="margin-top:9px"><button class="minibtn" onclick="gmTplClearFilters()">${T("امسح البحث · clear search")}</button></div></div>`
       : `<div class="en-none"><b>${T("لا قوالب بعد · No templates yet")}</b>
           <div style="margin-top:9px"><button class="minibtn" onclick="bulkClose();gmTab('tpl')">${T("أنشئ واحداً من تبويب القوالب · create one in the Templates tab")}</button></div></div>`;
     return;
@@ -10666,7 +10700,7 @@ function gmTplList(){
       ${th("last_used_at",T("آخر استخدام · Last used"))}
       ${th("updated_at",T("آخر تعديل · Last modified"))}
     </tr></thead><tbody>${rows.map(t=>`
-      <tr onclick="gmTplUse('${poEsc(t.id)}')">
+      <tr onclick="${GM_TPL.mode==="browse"?"gmTplPreview":"gmTplUse"}('${poEsc(t.id)}')">
         <td><span class="tpl-name">${poEsc(t.name)}</span>
           <span class="tpl-sub">${poEsc(t.subject_tpl||"")}</span></td>
         <td>${t.created_by?poEsc(t.created_by):`<span class="tpl-dim">—</span>`}</td>
@@ -10884,12 +10918,8 @@ function gmNewConfirm(){
   const gwds=gmNewGwds();
   if(!gwds.length){ toast(T("اختر طرداً واحداً على الأقل · pick at least one package")); return; }
   const ov=GM.ov||{}, s=ov.settings||{};
-  const idSel=document.querySelector('input[name="gmNewId"]:checked');
-  // capture step 1 before its controls are destroyed — Back rebuilds from this
-  GM.pickState={...(GM.pickState||{}),
-    seqId:(($("gmNewSeq")||{}).value)||"", acctId:(($("gmNewAcct")||{}).value)||"",
-    idDocId:idSel?idSel.value:null, paste:(($("gmNewPaste")||{}).value)||"",
-    q:(($("gmCandSearch")||{}).value)||"", names:gmNamesPicked(gwds), gwds};
+  gmPickCapture();                       // before the controls are destroyed
+  GM.pickState.names=gmNamesPicked(gwds); GM.pickState.gwds=gwds;
   const st=GM.pickState;
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
   const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||{};
@@ -10924,6 +10954,57 @@ function gmNewConfirm(){
     <button class="minibtn" style="margin-inline-end:auto" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
     <button class="accent" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}</button></div>`;
+}
+// Snapshot step 1's controls. Any sheet opened OVER the enroll dialog replaces
+// #bulkBody, so Back has to rebuild from this rather than from the DOM. Missing
+// elements keep their previous value instead of blanking it.
+function gmPickCapture(){
+  const st=GM.pickState||{};
+  const idSel=document.querySelector('input[name="gmNewId"]:checked');
+  const val=(id,prev)=>{ const el=$(id); return el?el.value:prev; };
+  GM.pickState={...st,
+    seqId:val("gmNewSeq",st.seqId||""), acctId:val("gmNewAcct",st.acctId||""),
+    idDocId:idSel?idSel.value:(st.idDocId||null),
+    paste:val("gmNewPaste",st.paste||""), q:val("gmCandSearch",st.q||"")};
+}
+// ── 📝 / 🧬 from INSIDE the enroll dialog ─────────────────────────────────────
+// These used to close the dialog and jump to a tab, which threw away the
+// packages you had just ticked. They now open a sheet OVER it, and Back
+// rebuilds the dialog from the snapshot — the same mechanism the review step
+// already uses.
+function gmEnrollTpl(){
+  gmPickCapture();
+  GM_TPL={q:"", owner:"", sort:"name", dir:1, mode:"browse"};
+  gmTplSheet(T("نصوص الإيميلات · What the emails say"));
+}
+function gmEnrollSeq(){
+  gmPickCapture();
+  const ov=GM.ov||{}, cur=(GM.pickState||{}).seqId||"";
+  const seqs=(ov.sequences||[]).filter(s=>!s.archived);
+  bulkOpen(T("اختر سير العمل · Select workflow"));
+  $("bulkModal").classList.remove("tpl-wide"); $("bulkModal").classList.add("en-pick");
+  $("bulkBody").innerHTML=`
+    <div class="muted2" style="font-size:12px;margin:4px 0 8px">${T("يحدد نص الإيميلات وعددها ومتى تخرج · decides what the emails say, how many, and when they go out")}</div>
+    <div class="en-list">${seqs.map(s=>{
+      const off=!!s.paused, isCur=s.id===cur;
+      return `<div class="en-row${isCur?" on":""}${off?" off":""}"
+          ${off?`title="${T("هذا السير موقوف · this workflow is off")}"`:`onclick="gmEnrollSeqPick('${poEsc(s.id)}')"`}>
+        <div class="en-main"><div class="en-top">
+          <b style="font-size:12.5px">${poEsc(s.name)}</b>
+          <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم · days")}</span>
+          <span class="spacer"></span>
+          ${isCur?`<span class="pill" style="background:#12a1500f;border:1px solid #12a15055;color:#12a150;font-size:9.5px">${T("مختار · selected")}</span>`
+            :off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
+        </div></div></div>`;
+    }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b></div>`}</div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmPickStep1()">← ${T("رجوع · Back")}</button>
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button></div>`;
+}
+function gmEnrollSeqPick(id){
+  GM.pickState=GM.pickState||{}; GM.pickState.seqId=id;
+  gmPickStep1();                         // back to the dialog, workflow applied
+  toast(`🧬 ${poEsc((((GM.ov||{}).sequences)||[]).find(s=>s.id===id)?.name||"")}`);
 }
 // only names the owner actually CHANGED get pinned — leaving a row alone keeps
 // it following the board, so a later ClickUp correction still flows through
