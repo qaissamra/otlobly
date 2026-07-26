@@ -193,7 +193,9 @@ def ids_list():
             "SELECT * FROM gaash_ids ORDER BY uploaded_at")]
 
 
-ID_FOLDERS = ("id", "declaration")      # reusable IDs · per-package papers
+# reusable IDs · per-package papers · standing certificates (a dealer import
+# certification is signed once and attached to whichever packages it covers)
+ID_FOLDERS = ("id", "declaration", "certificate")
 
 
 def _folder(v):
@@ -2100,20 +2102,46 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
     return {"ok": True, "message_id": mid, "msg_row": mrow}
 
 
+_DOC_CTYPE = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+              "pdf": "application/pdf", "webp": "image/webp"}
+
+
+def _library_doc(id_doc_id):
+    """(filename, bytes, ctype) for one library document, or None."""
+    doc = _id_doc(id_doc_id)
+    if not doc:
+        return None
+    p = id_file_path(doc["filename"])
+    if not p:
+        return None
+    ext = p.suffix.lower().lstrip(".")
+    return (f"{doc['name']}{p.suffix}", p.read_bytes(),
+            _DOC_CTYPE.get(ext, "application/octet-stream"))
+
+
 def _step_attachments(th):
-    """Attachments for the NEXT sequence email: the chosen ID doc on step 1 +
-    any files the owner queued (e.g. a KMT), which are then consumed."""
+    """Attachments for the NEXT sequence email.
+
+    docs_json is the package's own document set — a generated declaration, a
+    shared ID scan, a dealer certificate — and it rides EVERY email, because a
+    different person at GAASH may pick up each follow-up and should never have
+    to scroll back for the paperwork. Unlike pending_files_json it is not
+    consumed by _schedule_next, so it survives to the next step.
+
+    A thread created before docs_json existed keeps exactly its old behaviour:
+    one document, on email #1 only."""
     out = []
-    if int(th.get("step") or 0) == 0 and th.get("id_doc_id"):
-        doc = _id_doc(th["id_doc_id"])
-        if doc:
-            p = id_file_path(doc["filename"])
-            if p:
-                ext = p.suffix.lower().lstrip(".")
-                ctype = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
-                         "png": "image/png", "pdf": "application/pdf",
-                         "webp": "image/webp"}.get(ext, "application/octet-stream")
-                out.append((f"{doc['name']}{p.suffix}", p.read_bytes(), ctype))
+    ids = []
+    try:
+        ids = [i for i in json.loads(th.get("docs_json") or "[]") if i]
+    except Exception:  # noqa
+        ids = []
+    if not ids and int(th.get("step") or 0) == 0 and th.get("id_doc_id"):
+        ids = [th["id_doc_id"]]
+    for doc_id in ids:
+        got = _library_doc(doc_id)
+        if got:
+            out.append(got)
     for a in json.loads(th.get("pending_files_json") or "[]"):
         p = attachment_path(th["gwd"], a.get("file"))
         if p:
@@ -2206,9 +2234,13 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     schedule = {str(k or "").strip().upper(): v
                 for k, v in (schedule or {}).items()}
-    # {GWD: id_doc} beats the batch-wide id_doc_id — a declaration is written for
-    # ONE parcel, so it must never ride along on another parcel's email
-    docs = {str(k or "").strip().upper(): v for k, v in (docs or {}).items()}
+    # A package's documents = its OWN (a declaration is written for one parcel
+    # and must never ride another's email) + the batch-wide ones (a shared ID
+    # scan, a dealer certificate). id_doc_id accepts a list or a single value.
+    docs = {str(k or "").strip().upper(): (v if isinstance(v, list) else [v])
+            for k, v in (docs or {}).items()}
+    shared = ([d for d in id_doc_id if d] if isinstance(id_doc_id, list)
+              else ([id_doc_id] if id_doc_id else []))
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -2223,14 +2255,17 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
         if existing:
             out.append({"gwd": gwd, "ok": False, "error": "thread already exists"})
             continue
+        mine = [d for d in (docs.get(gwd) or []) if d]
+        pack = mine + [d for d in shared if d not in mine]     # own first, deduped
         with db.connect() as c:
             # next_send_at seeds to NOW so the sequencer retries step 1 even if
             # the immediate send below is blocked (dry-run / no account yet)
             c.execute("""INSERT INTO gaash_threads
-                (gwd,account_id,state,step,id_doc_id,unread,missing_docs,
+                (gwd,account_id,state,step,id_doc_id,docs_json,unread,missing_docs,
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
-                VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?,?)""",
-                      (gwd, account_id, docs.get(gwd) or id_doc_id or None,
+                VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?)""",
+                      (gwd, account_id, (pack[0] if pack else None),
+                       json.dumps(pack),
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),
                        now_iso(), now_iso(), seq_id))
