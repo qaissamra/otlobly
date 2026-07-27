@@ -52,6 +52,7 @@ import estimate
 import settings as settings_mod
 import google_login
 import mailer
+import memlog
 import messages
 import money
 import meta_leads as meta_leads_mod
@@ -345,13 +346,29 @@ def _revalidate_html(resp):
     return resp
 
 
+# Which ENDPOINT is growing the process? Render kills this service for exceeding
+# its 512 MB limit — memory climbs ~150 MB → ~470 MB within half an hour of every
+# boot. The daemon probes (memlog.watch) cleared the background jobs, so the growth
+# is request-driven; these two hooks attribute it. Two /proc reads per request,
+# microseconds each, and memlog swallows its own failures.
+@app.before_request
+def _mem_before():
+    request._mem_rss = memlog.rss_mb()
+
+
+@app.after_request
+def _mem_after(resp):
+    memlog.note_request(request.endpoint or request.path,
+                        getattr(request, "_mem_rss", None), memlog.rss_mb())
+    return resp
+
+
 @app.route("/healthz")
 def healthz():
     """Always-200 health check for the host (independent of login/setup state) so
     the platform never restart-loops while the app is mid-boot or has no admin yet.
     Also reports this worker's memory, so the live baseline is one curl away
     without dashboard access (Render's 512 MB instance restarts when exceeded)."""
-    import memlog
     mb = memlog.rss_mb()
     return (f"ok rss={mb:.0f}MB" if mb is not None else "ok"), 200
 
