@@ -29,6 +29,7 @@ from datetime import date, datetime, timedelta
 
 import az
 import cfg
+import memlog
 import db
 import telegram
 
@@ -501,7 +502,8 @@ def _loop():
     time.sleep(60)                    # let the app finish booting first
     while True:
         try:
-            out = maybe_send_digest()
+            with memlog.watch("leluxe_goal.digest"):
+                out = maybe_send_digest()
             if out:
                 print("leluxe_goal: daily digest sent")
         except Exception as e:  # noqa: BLE001 - never let the thread die

@@ -28,6 +28,7 @@ from urllib.parse import quote as urlquote
 
 import cfg
 import db
+import memlog
 from paths import data_path, write_json_atomic
 
 CLICKUP_API = "https://api.clickup.com/api/v2"
@@ -3336,20 +3337,23 @@ def _loop():
     time.sleep(30)                     # let the app finish booting first
     while True:
         try:
-            out = run_push_pass()
+            with memlog.watch("leluxe.push"):
+                out = run_push_pass()
             if out.get("pushed") or out.get("failed"):
                 print(f"leluxe: pushed {out.get('pushed', 0)} "
                       f"(failed {out.get('failed', 0)})")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"leluxe: push pass failed ({e})")
         try:
-            d = run_delete_pass()
+            with memlog.watch("leluxe.delete"):
+                d = run_delete_pass()
             if d.get("deleted") or d.get("gone") or d.get("deferred"):
                 print(f"leluxe: cu-delete queue {d}")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"leluxe: delete pass failed ({e})")
         try:
-            p = run_pull_pass()
+            with memlog.watch("leluxe.pull"):     # pulls the whole ClickUp board
+                p = run_pull_pass()
             if p.get("ran"):
                 print(f"leluxe: auto-pull {p}")
         except Exception as e:  # noqa: BLE001 - never let the thread die

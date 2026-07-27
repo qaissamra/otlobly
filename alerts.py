@@ -21,6 +21,7 @@ from datetime import date
 
 import cfg
 import db
+import memlog
 import purchases
 import telegram
 
@@ -130,7 +131,8 @@ def _loop():
     time.sleep(60)                    # let the app finish booting first
     while True:
         try:
-            out = run_once()          # no-op unless Telegram creds exist
+            with memlog.watch("alerts"):
+                out = run_once()      # no-op unless Telegram creds exist
             if out:
                 print(f"alerts: sent {len(out)} telegram alert(s)")
         except Exception as e:  # noqa: BLE001 - never let the thread die

@@ -20,6 +20,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -347,8 +348,12 @@ def _revalidate_html(resp):
 @app.route("/healthz")
 def healthz():
     """Always-200 health check for the host (independent of login/setup state) so
-    the platform never restart-loops while the app is mid-boot or has no admin yet."""
-    return "ok", 200
+    the platform never restart-loops while the app is mid-boot or has no admin yet.
+    Also reports this worker's memory, so the live baseline is one curl away
+    without dashboard access (Render's 512 MB instance restarts when exceeded)."""
+    import memlog
+    mb = memlog.rss_mb()
+    return (f"ok rss={mb:.0f}MB" if mb is not None else "ok"), 200
 
 
 # The Otlobly mark, served as the browser-tab icon (favicon) for every page.
@@ -3901,17 +3906,34 @@ def api_restore():
     immediately (no restart needed)."""
     if not _backup_ok():
         abort(401)
-    blob = request.get_data(cache=False)
-    if not blob:
-        abort(400, "empty body — POST the backup zip as the raw body")
-    import io
-    try:
-        raw = zipfile.ZipFile(io.BytesIO(blob)).read("otlobly.db")
-    except Exception as e:            # noqa: BLE001 — report any zip/entry issue
-        abort(400, f"could not read otlobly.db from the zip: {e}")
+    # STREAM the upload: a backup zip is ~100 MB and grows with the business, so
+    # reading the body (and the decompressed DB) into memory would spike well past
+    # what the 512 MB instance can absorb and take the whole service down with it.
+    # Body → temp file → zip entry → staging file, a chunk at a time.
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     staging = db.DB_FILE.with_name(db.DB_FILE.name + f".incoming-{stamp}")
-    staging.write_bytes(raw)
+    up = tempfile.NamedTemporaryFile(prefix="otlobly-restore-", suffix=".zip",
+                                     delete=False)
+    try:
+        shutil.copyfileobj(request.stream, up, length=1024 * 1024)
+        up.close()
+        if not os.path.getsize(up.name):
+            abort(400, "empty body — POST the backup zip as the raw body")
+        try:
+            with zipfile.ZipFile(up.name) as z, z.open("otlobly.db") as src, \
+                    open(staging, "wb") as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+        except Exception as e:        # noqa: BLE001 — report any zip/entry issue
+            try:
+                staging.unlink()
+            except OSError:
+                pass
+            abort(400, f"could not read otlobly.db from the zip: {e}")
+    finally:
+        try:
+            os.unlink(up.name)
+        except OSError:
+            pass
     try:                              # verify it's a real, intact SQLite DB
         t = sqlite3.connect(str(staging))
         ok = t.execute("PRAGMA integrity_check").fetchone()[0]
