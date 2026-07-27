@@ -435,9 +435,9 @@
      scrollLeft lxtSync keeps in step with the body. Grid vars per table:
      --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
-  .lx-cols{display:grid;grid-template-columns:var(--lxgrid,100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-cols{display:grid;grid-template-columns:var(--lxgrid,78px 100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 86px 104px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 104px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3127,6 +3127,7 @@ function lxSortVal(o,key){
   const d=(tr&&tr.data)||{};
   switch(key){
     case "name": return (o.name||"").toLowerCase();
+    case "profile": return lxAcctSortVal(lxOrderAcct(o));
     case "status": {           // rank by the list's status order, like ClickUp
       const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
       const s=its.length?(u.length===1?u[0]:null):o.status;   // null = "mixed"
@@ -3156,7 +3157,7 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // status button on every load/deploy ("the empty orange box" bug); clamping at
 // apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows", mins:{0:84}},
+  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows", mins:{1:84}},
   "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows", mins:{2:84}},
   "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows", mins:{}},
   "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
@@ -3476,7 +3477,7 @@ function renderLeluxe(){
     lxtSortApply("p",shown,([it,o],key)=>{
       if(key==="qty") return Number(lxF(it,"quantity ordered"))||0;
       if(key==="due") return Number(it.due_date)||Infinity;
-      if(key==="profile") return String(lxF(it,"name")||(o&&lxF(o,"name"))||"").toLowerCase();
+      if(key==="profile") return lxAcctSortVal(lxAcctChain(it,o));
       return ((o&&o.name)||"").toLowerCase();                  // order
     });
     // rows with same-order ties: consecutive rows sharing a parent order render
@@ -3593,6 +3594,7 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
   "":[
+    {key:"profile", label:"الحساب · profile", w:78,  sort:"profile"},
     {key:"status",  label:"الحالة · status",  w:100, sort:"status"},
     {key:"total",   label:"الإجمالي · total",   w:66,  sort:"total"},
     {key:"tracking",label:"التتبع · tracking",w:98,  sort:"tracking"},
@@ -3615,6 +3617,7 @@ const LXT_COLS={
   ],
   "k":[
     {key:"order",   label:"الطلب · order",   w:100, sortable:true},
+    {key:"profile", label:"الحساب · profile",w:78,  sortable:true},
     {key:"value",   label:"≈ القيمة · ≈ value", w:86,  sortable:true},
     {key:"status",  label:"الحالة · status",  w:104},
     {key:"gash",    label:"الجمارك · gash",    w:128},
@@ -3971,22 +3974,47 @@ function lxtCells(tbl,cells){
 }
 function lxtWrap(tbl,inner){ return `<div class="bt-wrap${LXT_PINCLS[tbl]}" onscroll="lxtSync(this)">${inner}</div>`; }
 function lxKDue(r){ return (r.pk&&r.pk.due_date)||(r.items||[]).map(i=>i.due_date).find(Boolean)||null; }
+// ── الحساب · profile: the AZ/Multilogin account an order was bought under —
+// ClickUp's NAME field (B16 / E-B10 …), the Leluxe twin of Purchases'
+// profile_box. It sits on the order + its products; package subtasks almost
+// never carry it, so a package's profile is the shared NAME of its products
+// (falling back to its own, then its order's). Rows that disagree show "mixed"
+// rather than picking one — a wrong account is worse than no account. ──
+function lxAcct(rows){
+  const u=[...new Set((Array.isArray(rows)?rows:[rows])
+    .map(r=>String((r&&lxF(r,"name"))||"").trim()).filter(Boolean))];
+  return u.length===1?u[0]:(u.length?null:"");   // null = mixed
+}
+function lxProfileCell(v){
+  if(v===null) return `<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="${T('حسابات مختلفة · products bought on different accounts')}">mixed</span>`;
+  return v?`<b class="mono" style="font-size:11.5px" title="${T('الحساب · profile / account')} (NAME): ${poEsc(v)}">${poEsc(v)}</b>`:"";
+}
 function lxKSortVal(r,key){
   if(key==="value") return r.est?r.est.sum:0;
   if(key==="due"){ const d=lxKDue(r); return d?(Number(d)||0):Infinity; }
+  if(key==="profile") return lxAcctSortVal(lxKAcct(r));
   return ((r.o&&r.o.name)||(r.pk&&r.pk.name)||"").toLowerCase();
 }
+// first source that says anything — "mixed" (null) COUNTS as an answer, so a
+// package whose products disagree never silently inherits its order's account
+function lxAcctChain(){ for(const src of arguments){ const v=lxAcct(src); if(v!=="") return v; } return ""; }
+function lxKAcct(r){ return lxAcctChain(r.items||[],r.pk,r.o); }
+function lxOrderAcct(o){ return lxAcctChain(o,lxItemsOf(o)); }   // the order's own NAME, else its products'
+// sort key: every profile sort runs through localeCompare, which ranks symbols
+// BEFORE letters — so the usual "~" placeholder would float the blanks to the
+// TOP. Prefix instead: named accounts "0…", blank/mixed "1" (always last).
+function lxAcctSortVal(v){ return v?("0"+v).toLowerCase():"1"; }
 function lxRenderPackages(){
   const q=($("lxSearch").value||"").trim().toLowerCase();
   const {orders,orphans}=lxFilteredOrders();
   const rows=[];
   orders.forEach(o=>{
-    const orows=[];
-    (o.packages||[]).forEach(pk=>orows.push({o,pk,items:pk.items||[],
-      tn:String((pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"").trim()}));
-    const vg=lxVisualPkgs(o);
-    if(vg) vg.forEach(g=>orows.push({o,pk:null,items:g.items,tn:g.tn}));
-    else if((o.items||[]).length) orows.push({o,pk:null,items:o.items,tn:""});
+    // one row per parcel (twins absorbed) — and drop the shells that name no
+    // parcel at all: an EMPTY package whose "tracking" is blank or a typed note.
+    // A real GWD with 0 products STAYS (it is a parcel whose products aren't
+    // linked yet, owner's call); the dropped shell is still rendered inside its
+    // order card, so it can always be opened, edited or hidden from there.
+    const orows=lxPkgRows(o).filter(r=>!(r.pk&&!r.items.length&&!lxLooksTracked(r.tn)));
     lxOrderPkgEst(o,orows);
     rows.push(...orows);
   });
@@ -4012,8 +4040,11 @@ function lxRenderPackages(){
 }
 function lxKRow(r){
   const o=r.o, pk=r.pk, its=r.items||[], tn=r.tn, e=r.est;
-  // pills read from the package row itself, else the first enriched product (it carries the GWD data)
-  const en=pk||its.find(x=>x.data&&(x.data.tracking_status||x.data.gerizim_status||x.data.gaash_deadline))||its[0]||null;
+  // pills read from the package row itself, else the first enriched product (it
+  // carries the GWD data). An absorbed shell is usually the EMPTY one — the live
+  // GAASH/Gerizim/deadline data sits on the products — so only prefer the package
+  // when it is the row actually carrying that enrichment.
+  const en=(pk&&lxEnriched(pk))?pk:(its.find(lxEnriched)||pk||its[0]||null);
   const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
   const statusBit=u.length===1?lxStatusPill(u[0])
     :u.length>1?`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses">mixed</span>`
@@ -4048,6 +4079,7 @@ function lxKRow(r){
   const cells={
     order: o?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(o.name)}" onclick="event.stopPropagation();lxJumpOrder(${o.id})">${lxShortName(o.name)}</button>`
       :(pk?`<span class="pill" style="background:#fef3c7;color:#92400e;font-size:10px" title="its parent order isn't in this list">w/o parent</span>`:""),
+    profile: lxProfileCell(lxKAcct(r)),
     value: estCell,
     status: statusBit,
     gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
@@ -4444,7 +4476,7 @@ async function lxGoalBackfill(btn){
 function lxCardHtml(o){
   const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];
   const nItems=pkgs.reduce((a,p)=>a+(p.items||[]).length,0)+loose.length;
-  const acct=lxF(o,"name"), amt=lxF(o,"total amount");
+  const amt=lxF(o,"total amount");
   // Purchases-style tracking strip: GWD + live GASH + 🛵 Gerizim + ⏳ deadline + gash date
   const tr=lxTrackedRow(o);
   const tn=tr?((tr.data&&tr.data.tracking_number)||lxF(tr,"tracking number")||""):"";
@@ -4482,11 +4514,11 @@ function lxCardHtml(o){
         ${lxDot(o)}
         <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
         ${lxCopyBtn(o.name)}
-        ${acct?`<span class="muted2" style="font-size:11.5px;flex:0 0 auto">${poEsc(acct)}</span>`:""}
         ${lxThumbs(lxItemsOf(o))}
         ${gzRollup(lxOrderGwds(o))}
       </div>
       ${lxtCells("",{
+        profile: lxProfileCell(lxOrderAcct(o)),
         status: headStatus,
         total: amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:"",
         tracking: headTn,
@@ -4498,7 +4530,9 @@ function lxCardHtml(o){
       })}
     </div></div>`;
   if(!open) return `<div class="po-card" id="lxo${o.id}">${head}</div>`;
-  const vgroups=lxVisualPkgs(o);
+  // same one-row-per-parcel model the 📦 Packages view uses — nothing is filtered
+  // out here: the card is where an empty/odd package is inspected and cleaned up
+  const prows=lxPkgRows(o);
   // all-untracked flat list still gets a one-shot "set tracking" bar (the visual
   // "no tracking" group only exists once at least one product is tracked)
   const looseBar=loose.length?`<div class="pkg-head"><div class="pkg-title-row" style="cursor:default">
@@ -4509,15 +4543,53 @@ function lxCardHtml(o){
       </span>
     </div></div>`:"";
   const body=`<div class="po-body">
-    ${pkgs.map(p=>lxPkgHtml(o,p)).join("")}
-    ${vgroups?vgroups.map(g=>lxVPkgHtml(o,g)).join("")
-      :(loose.length?`<div class="pkg open">${looseBar}<div class="pkg-body">${loose.map(it=>lxItemRow(it)).join("")}</div></div>`:"")}
+    ${prows.map(r=>r.flat
+      ? `<div class="pkg open">${looseBar}<div class="pkg-body">${r.items.map(it=>lxItemRow(it)).join("")}</div></div>`
+      : (r.pk?lxPkgHtml(o,r.pk,r.items):lxVPkgHtml(o,{tn:r.tn,items:r.items}))).join("")}
     <div style="display:flex;gap:8px;padding:8px 4px 2px">
       <button class="po-btn" onclick="lxOpenEditor('package',null,${o.id})">＋ Add package</button>
       <span class="spacer" style="flex:1"></span>
       <button class="po-btn danger" title="hide from this page only — the ClickUp task is NOT deleted" onclick="lxDelete(${o.id})">🗑 hide</button>
     </div></div>`;
   return `<div class="po-card open" id="lxo${o.id}">${head}${body}</div>`;
+}
+// ── One row per PHYSICAL PARCEL (one GWD = one shipment, same rule the
+// Purchases board states in poMergeDupTracking). The server hands us two
+// legitimate shapes for the same parcel and neither side is wrong:
+//   • a real 📦 subtask (o.packages[]) — kept even when empty, because
+//     _sweep_order_packages spares "a unique tracked shell … a real parcel
+//     awaiting products" (leluxe.py, owner's call 2026-07-21);
+//   • loose products hanging off the order (o.items) that regroup_order
+//     deliberately never re-homes — "loose items keep their display-only
+//     visual grouping".
+// Rendering both produced TWIN rows for one GWD (an empty "0 products" shell
+// next to the group holding the product) and, worse, inflated the divisor in
+// lxOrderPkgEst so every real package lost part of its shipping/tax share.
+// lxPkgRows absorbs a visual group into the real package that carries the same
+// tracking number. Pure read — the .slice() below matters: concatenating into a
+// live pk.items would corrupt lxItemsOf() and double-count products board-wide.
+function lxPkgTn(r){ return String(((r&&r.data)||{}).tracking_number||(r&&lxF(r,"tracking number"))||"").trim(); }
+function lxPkgKey(tn){ return String(tn||"").trim().toUpperCase(); }   // GWDs compare case-insensitively
+function lxEnriched(r){ const d=(r&&r.data)||{}; return !!(d.tracking_status||d.gerizim_status||d.gaash_deadline); }
+// "does this string name a real parcel?" — a hand-typed note like "under" is not
+// a tracking number, and an EMPTY package carrying one is pure noise on the board
+function lxLooksTracked(tn){ tn=String(tn||"").trim(); return tn.length>=6&&/\d/.test(tn); }
+function lxPkgRows(o){
+  const rows=[], host=new Map();
+  (o.packages||[]).forEach(pk=>{
+    const tn=lxPkgTn(pk), row={o,pk,items:(pk.items||[]).slice(),tn,absorbed:[],flat:false};
+    rows.push(row);
+    const k=lxPkgKey(tn); if(k&&!host.has(k)) host.set(k,row);   // duplicate shells: the oldest owns the parcel
+  });
+  const vg=lxVisualPkgs(o);
+  if(vg) vg.forEach(g=>{
+    const h=g.tn?host.get(lxPkgKey(g.tn)):null;                 // the untracked "" group never absorbs
+    if(h){ h.items=h.items.concat(g.items); h.absorbed=h.absorbed.concat(g.items); }
+    else rows.push({o,pk:null,items:g.items,tn:g.tn,absorbed:[],flat:false});
+  });
+  else if((o.items||[]).length)
+    rows.push({o,pk:null,items:(o.items||[]).slice(),tn:"",absorbed:[],flat:true});   // flat = the looseBar path
+  return rows;
 }
 // Visual 📦 grouping (display-only): the order's flat products grouped by their
 // Tracking Number — how otlobly SHOWS the mirror; ClickUp stays exactly as AZ (2).
@@ -4557,6 +4629,7 @@ function lxVPkgHtml(o,g){
         ${lxCfPill("rd status",lxF(it,"rd status"))}
       </div>
       ${lxtCells("",{
+        profile: lxProfileCell(lxAcctChain(it,o)),
         status: `${lxDot(it)}${lxStatusSelect(it)}`,
         gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
@@ -4581,6 +4654,7 @@ function lxVPkgHtml(o,g){
         ${g.tn?"":`<button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
       </div>
       ${lxtCells("",{
+        profile: lxProfileCell(lxAcctChain(g.items,o)),
         gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
         menu: popMenu([
@@ -4593,9 +4667,17 @@ function lxVPkgHtml(o,g){
   const body=collapsed?"":`<div class="pkg-body">${g.items.map(it=>lxItemRow(it,null,{inPkg:true})).join("")}</div>`;
   return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
 }
-function lxPkgHtml(o,pk){
-  const collapsed=LX_PCOL.has(pk.id), items=pk.items||[];
-  const tn=(pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"";
+// `items` = the parcel's products as lxPkgRows resolved them (the package's own
+// children PLUS any loose product absorbed by matching tracking) — defaults to
+// the package's own so every other caller is unchanged.
+function lxPkgHtml(o,pk,items){
+  const collapsed=LX_PCOL.has(pk.id);
+  items=items||pk.items||[];
+  const tn=lxPkgTn(pk);
+  // an absorbed shell is often empty — fall back to the products for the pills
+  const en=lxEnriched(pk)?pk:(items.find(lxEnriched)||pk);
+  const gashStatus=lxF(pk,"gash status")||items.map(it=>lxF(it,"gash status")).find(Boolean);
+  const gashDate=lxF(pk,"gash date")||items.map(it=>lxF(it,"gash date")).find(Boolean);
   const head=`<div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('package',${pk.id})" style="cursor:pointer">
       <div class="bt-pin">
@@ -4606,8 +4688,9 @@ function lxPkgHtml(o,pk){
         ${lxThumbs(items)}
       </div>
       ${lxtCells("",{
-        gash: `${gzBadge(tn)}${lxMergedStatusPill(pk)||lxCfPill("gash status",lxF(pk,"gash status"))}`,
-        deadline: `${lxDeadlinePill(pk)}${lxDueChip(lxF(pk,"gash date"),false)}`,
+        profile: lxProfileCell(lxAcctChain(items,pk,o)),
+        gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        deadline: `${lxDeadlinePill(en)}${lxDueChip(gashDate,false)}`,
         menu: popMenu([
           [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
@@ -4658,13 +4741,13 @@ function lxItemRow(it,parentO,opts){
         ?`<span class="muted2" style="font-size:10px;cursor:pointer;white-space:nowrap" title="نفس طلب السطر أعلاه · same order as the row above — ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">└ نفس الطلب</span>`
         :`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>${opts.tieN>1?`<span class="muted2" style="font-size:9.5px" title="${opts.tieN} products in this order">×${opts.tieN}</span>`:""}`)
       :"";
-    const profile=lxF(it,"name")||(parentO&&lxF(parentO,"name"))||"";
+    const profile=lxAcctChain(it,parentO);
     return `<div class="poc-row lx-prow${tie?" lx-tied":""}" title="انقر لعرض كل التفاصيل · click for full product details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
       <div class="bt-pin">${lxThumb(img,32)}${nameCell}</div>
       ${lxtCells("p",{
         order: orderCell,
-        profile: profile?`<b style="font-size:11px" title="profile / account (NAME)">${poEsc(profile)}</b>`:"",
+        profile: lxProfileCell(profile),
         status: `${lxDot(it)}${lxStatusSelect(it)}`,
         qty: qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:"",
         tracking: tnCell,
@@ -4688,6 +4771,7 @@ function lxItemRow(it,parentO,opts){
       ${lxCfPill("rd status",lxF(it,"rd status"))}
     </div>
     ${lxtCells("",{
+      profile: lxProfileCell(lxAcctChain(it,parentO)),
       status: `${lxDot(it)}${lxStatusSelect(it)}`,
       tracking: opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`),
       gash: opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status")),
@@ -4853,7 +4937,11 @@ function lxInfoOpen(kind,id){
     $("lxInfoModal").classList.remove("hidden");
     return;
   }
-  const its=k==="order"?lxItemsOf(order||row):(k==="package"?(row.items||[]):[row]);
+  // a package's products = what the BOARD shows for that parcel (its own children
+  // plus any loose product absorbed by matching tracking) — see lxPkgRows
+  const prow=(k==="package"&&order)?lxPkgRows(order).find(r=>r.pk&&r.pk.id===row.id):null;
+  const pkgItems=prow?prow.items:(row.items||[]);
+  const its=k==="order"?lxItemsOf(order||row):(k==="package"?pkgItems:[row]);
   // top strip — plain (non-click) thumbs, one per distinct photo (dupes merge);
   // order status is display-only like the card header
   const seenIm=new Set();
@@ -4882,7 +4970,7 @@ function lxInfoOpen(kind,id){
       +f('الماركة · Brand',poEsc(lxF(row,"brand")||""))
       +f('أُنشئ · Created',row.date_created?lxDate(row.date_created):'')
       +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'')
-      +f('المحتوى · Contents',`${(order&&order.packages||[]).length||0} 📦 · ${its.length} product${its.length===1?"":"s"}`);
+      +f('المحتوى · Contents',`${lxPkgRows(order||row).length} 📦 · ${its.length} product${its.length===1?"":"s"}`);
     shipRows=f('رقم غاش · GAASH tracking',mono(tn))
       +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
       +f('التتبع الحي · Live tracking',liveRow)
@@ -4891,7 +4979,7 @@ function lxInfoOpen(kind,id){
   } else if(k==="package"){
     infoRows=f('الطرد · Package',poEsc(row.name||""))
       +(order?f('الطلب · Order',`<button class="minibtn" style="cursor:pointer" onclick="lxInfoOpen('order',${order.id})">${lxShortName(order.name)}</button>`):'')
-      +f('المنتجات · Products',(row.items||[]).length)
+      +f('المنتجات · Products',pkgItems.length)
       +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'');
     shipRows=f('رقم غاش · GAASH tracking',mono(tn))
       +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
