@@ -414,6 +414,24 @@ def staff_app():
                               mimetype="text/html")
 
 
+_SW_JS = None
+
+
+@app.route("/sw.js")
+def sw_js():
+    """Offline-shell service worker (web/sw.js). Deliberately PUBLIC — the browser
+    refetches this script on its own schedule, session or not, and a 302→login HTML
+    answer would break worker updates; the file holds no secrets. no-cache so a
+    deploy's new worker is picked up immediately (the text/html after_request hook
+    doesn't cover application/javascript)."""
+    global _SW_JS
+    if _SW_JS is None:
+        _SW_JS = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
+    resp = app.response_class(_SW_JS, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+
+
 @app.route("/api/me")
 @login_required
 def me():
