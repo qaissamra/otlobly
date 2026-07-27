@@ -81,6 +81,13 @@ DEFAULT_STATUS_MAP = [
     # reliable code fallbacks for stages this account hasn't reached yet
     {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "customs"},
     {"match": "K2", "label": "تم التخليص الجمركي", "bucket": "cleared"},
+    # CD/SD = the customs-authority codes. Matching the CODE (not just the handful of
+    # texts above) means a customs wording we've never seen — e.g. "Parcel held by
+    # customs - customs check", live on this account — still reads as clearance
+    # instead of falling through to the generic "قيد الشحن" (which told a held
+    # customer their parcel was simply in transit).
+    {"match": "CD", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    {"match": "SD", "label": "قيد التخليص الجمركي", "bucket": "customs"},
     {"match": "D1", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     # parcelsapp machine statuses (tier-2 source; stamped as the last event's code)
     {"match": "DELIVERED", "label": "تم التسليم", "bucket": "delivered"},
@@ -97,6 +104,11 @@ DEFAULT_CUSTOMER_LABEL = "قيد الشحن"
 # (arrived = step 4, delivered completes). Editable from the admin Settings
 # table (customer_tracking.otlobly_map).
 DEFAULT_OTLOBLY_MAP = [
+    # GAASH posts "Cleared customs" as its own event when it clears a parcel, but it
+    # can be days late (or never) while the owner already knows from the clearance
+    # thread. Setting a package to "cleared" says so to the customer immediately —
+    # same green «تم التخليص الجمركي» the carrier event produces.
+    {"status": "cleared", "label": "تم التخليص الجمركي", "bucket": "cleared"},
     {"status": "recieved rd", "label": "استلمتها اطلبلي", "bucket": "arrived"},
     {"status": "recieved no rd", "label": "استلمتها اطلبلي", "bucket": "arrived"},
     {"status": "sent rd", "label": "في الطريق إلى {name}", "bucket": "arrived"},
@@ -328,14 +340,15 @@ def customer_timeline(events, status_map=None, default_label=None):
         if out and out[-1]["label"] == label:
             continue  # same state as before → keep the first occurrence's date
         out.append({"label": label, "bucket": bucket, "date": ev.get("time")})
-    # Current = the FURTHEST pipeline stage, not the last chronological event —
-    # GAASH StatusTime is often blank/out-of-order, so a "Cleared customs" event
-    # can sort before an older customs one (same guard idea as
-    # staff_status_from_events). Ties break to the latest occurrence.
+    # Current = the NEWEST event. Customs can pull a parcel BACK after it arrived or
+    # cleared (real examples on this account: arrived 11 Jul → "Parcel held by customs"
+    # 23 Jul; arrived 7 Jul → MOC asking for the ID again on 12/20/23 Jul), so
+    # "furthest stage reached" would keep claiming cleared while the box is stuck.
+    # GAASH's StatusTime is reliable here (0 blank / 0 out-of-order across every live
+    # parcel), and events_from_raw sorts by it. Only `delivered` is terminal.
     cur = None
     if out:
-        i = max(range(len(out)), key=lambda i: (BUCKET_RANK.get(out[i]["bucket"], 0), i))
-        cur = out[i]
+        cur = next((e for e in reversed(out) if e["bucket"] == "delivered"), out[-1])
     return {"events": out, "current": cur}
 
 

@@ -5837,6 +5837,59 @@ if db.claim_once("boot:k3_customs_v1"):
         app.logger.warning("K3 customs-bucket patch skipped: %s", _e)
 
 
+def _patch_cleared_stage():
+    """2026-07-27 (owner): "if a package has been cleared, let it say so, in green".
+    GAASH posts "Cleared customs" as its own event, but it can lag by weeks or never
+    arrive while the owner already knows. Adds the owner-settable `cleared` stage to
+    the SAVED otlobly_map so setting a package to "cleared" shows the customer the
+    green «تم التخليص الجمركي» straight away. Idempotent + re-editable in Settings."""
+    cfgd = cfg.load()
+    rows = cfg.get(cfgd, "customer_tracking.otlobly_map", None)
+    if not isinstance(rows, list):
+        return
+    if any((r.get("status") or "").strip().lower() == "cleared" for r in rows):
+        return
+    rows.insert(0, {"status": "cleared", "label": "تم التخليص الجمركي", "bucket": "cleared"})
+    cfg.set_path(cfgd, "customer_tracking.otlobly_map", rows)
+    cfg.save(cfgd)
+
+
+if db.claim_once("boot:cleared_stage_v1"):
+    try:
+        _patch_cleared_stage()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("cleared-stage patch skipped: %s", _e)
+
+
+def _patch_customs_codes():
+    """2026-07-27: the SAVED status map matches only a handful of customs TEXTS, so a
+    wording it has never seen fell through to the generic "قيد الشحن" — a live parcel
+    reading "Parcel held by customs - customs check" was telling its customer the box
+    was simply in transit. Adds the CD/SD customs CODE rows as a catch-all."""
+    cfgd = cfg.load()
+    rows = cfg.get(cfgd, "customer_tracking.status_map", None)
+    if not isinstance(rows, list):
+        return
+    have = {(r.get("match") or "").strip().upper() for r in rows}
+    added = [{"match": c, "label": "قيد التخليص الجمركي", "bucket": "customs", "hidden": False}
+             for c in ("CD", "SD") if c not in have]
+    if not added:
+        return
+    # after the text rows (text always wins over a code in _match_row) but before
+    # the arrival/clearance rows, so ordering stays readable in the Settings table
+    idx = next((i for i, r in enumerate(rows)
+                if (r.get("match") or "").strip() == "Cleared customs"), len(rows))
+    cfg.set_path(cfgd, "customer_tracking.status_map", rows[:idx] + added + rows[idx:])
+    cfg.save(cfgd)
+
+
+if db.claim_once("boot:customs_codes_v1"):
+    try:
+        _patch_customs_codes()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("customs-code patch skipped: %s", _e)
+
+
 def _bump_delivery_buffer():
     """2026-07-26 (owner): promise the customer arrival + 10 days instead of + 8.
     The saved config.json on the live disk wins over the code default, so bump it

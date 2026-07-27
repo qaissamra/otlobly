@@ -42,70 +42,80 @@ def _iso(hours_ago=0):
             - timedelta(hours=hours_ago)).isoformat(timespec="seconds")
 
 
-def test_rank_pick():
-    # "Cleared customs" carries an OLDER timestamp than a customs event (GAASH
-    # emits blank/out-of-order StatusTime) → chronological pick would say
-    # customs; rank pick must say cleared.
-    events = [
-        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-07-01T09:00:00"},
-        {"code": "K2", "text": "Cleared customs", "time": ""},                       # blank time sorts FIRST
-        {"code": "CD", "text": "Required customer ID", "time": "2026-07-05T09:00:00"},
-    ]
-    ct = tracking.customer_timeline(sorted(events, key=lambda e: e.get("time") or ""))
-    check("rank pick: cleared beats a later-sorted customs event",
-          (ct["current"] or {}).get("bucket") == "cleared")
-    check("rank pick: cleared label shown",
-          (ct["current"] or {}).get("label") == "تم التخليص الجمركي")
-
-    # normal in-order flow still picks the true latest stage
-    ct2 = tracking.customer_timeline([
-        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-07-01T09:00:00"},
-        {"code": "CD", "text": "Required customer ID", "time": "2026-07-03T09:00:00"},
-        {"code": "K2", "text": "Cleared customs", "time": "2026-07-05T09:00:00"},
+def test_current_pick():
+    # Newest event wins. Customs can pull a parcel BACK after it arrived or cleared
+    # (real sequences on this account), so "furthest stage reached" would keep
+    # claiming cleared while the box is actually stuck.
+    ct = tracking.customer_timeline([
+        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-06-23T11:53:32"},
+        {"code": "CD", "text": "Required customer ID", "time": "2026-06-26T11:24:52"},
+        {"code": "K3", "text": "Arrived at destination country", "time": "2026-07-11T14:15:13"},
+        {"code": "CD", "text": "Parcel held by customs - customs check", "time": "2026-07-23T16:08:37"},
     ])
-    check("rank pick: in-order flow unchanged", (ct2["current"] or {}).get("bucket") == "cleared")
+    check("held by customs AFTER arriving → customs, not cleared",
+          (ct["current"] or {}).get("bucket") == "customs")
 
-    # sacred rule: GAASH "Delivered" = box heading to Otlobly, NEVER تم التسليم
+    ct2 = tracking.customer_timeline([
+        {"code": "K3", "text": "Arrived at destination country", "time": "2026-07-09T14:21:12"},
+        {"code": "K2", "text": "Cleared customs", "time": "2026-07-09T14:29:00"},
+    ])
+    check("GAASH 'Cleared customs' → cleared (green pill)",
+          (ct2["current"] or {}).get("bucket") == "cleared"
+          and (ct2["current"] or {}).get("label") == "تم التخليص الجمركي")
+
+    # cleared, then customs re-opens it → back to customs (the honest current state)
     ct3 = tracking.customer_timeline([
+        {"code": "K2", "text": "Cleared customs", "time": "2026-07-09T14:29:00"},
+        {"code": "CD", "text": "Required customer ID", "time": "2026-07-20T09:00:00"},
+    ])
+    check("cleared then re-held → customs (never keeps claiming cleared)",
+          (ct3["current"] or {}).get("bucket") == "customs")
+
+    # arriving in country is NOT clearance — two live parcels arrived and are still held
+    ct4 = tracking.customer_timeline([
+        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-06-18T02:54:33"},
+        {"code": "K3", "text": "Arrived at destination country", "time": "2026-07-07T08:57:52"},
+    ])
+    check("arrived-in-country alone never claims cleared",
+          (ct4["current"] or {}).get("bucket") == "customs")
+
+    # sacred rule: GAASH "Delivered" = handed onward, never تم التسليم
+    ct5 = tracking.customer_timeline([
         {"code": "K2", "text": "Cleared customs", "time": "2026-07-05T09:00:00"},
         {"code": "D1", "text": "Delivered", "time": "2026-07-08T09:00:00"},
     ])
     check("sacred rule: GAASH Delivered → bucket arrived",
-          (ct3["current"] or {}).get("bucket") == "arrived")
+          (ct5["current"] or {}).get("bucket") == "arrived")
     check("sacred rule: GAASH Delivered never says تم التسليم",
-          "تم التسليم" not in ((ct3["current"] or {}).get("label") or ""))
+          "تم التسليم" not in ((ct5["current"] or {}).get("label") or ""))
 
-    # same behaviour under a saved map missing the parcelsapp rows (mirrors the
-    # live config.json's admin-saved copy)
+    # under the live saved map (missing the parcelsapp rows) behaviour is identical
     saved_map = [r for r in tracking.DEFAULT_STATUS_MAP
                  if r["match"] not in ("DELIVERED", "ARRIVED", "TRANSIT", "PICKUP")]
-    ct4 = tracking.customer_timeline([
-        {"code": "K2", "text": "Cleared customs", "time": ""},
-        {"code": "CD", "text": "Required customer ID", "time": "2026-07-05T09:00:00"},
+    ct6 = tracking.customer_timeline([
+        {"code": "K3", "text": "Arrived at destination country", "time": "2026-07-09T14:21:12"},
+        {"code": "K2", "text": "Cleared customs", "time": "2026-07-09T14:29:00"},
     ], saved_map)
-    check("rank pick works under the live saved map (no parcelsapp rows)",
-          (ct4["current"] or {}).get("bucket") == "cleared")
+    check("cleared works under the live saved map",
+          (ct6["current"] or {}).get("bucket") == "cleared")
 
     check("empty events → current None",
           tracking.customer_timeline([])["current"] is None)
 
-    # Real GAASH order: K3 "Arrived at destination country" fires BEFORE
-    # clearance, and parcels sit in MOC customs AFTER it (GWD004697561's real
-    # sequence) — K3 must bucket as customs so the bar never jumps to step 4.
-    ct5 = tracking.customer_timeline([
-        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-06-01T09:00:00"},
-        {"code": "CD", "text": "Required customer ID", "time": "2026-06-03T09:00:00"},
-        {"code": "K3", "text": "Arrived at destination country", "time": "2026-06-05T09:00:00"},
-        {"code": "AJ", "text": "MOC - Palestinian authority", "time": "2026-06-07T09:00:00"},
-    ])
-    check("K3 buckets as customs (never jumps past clearance)",
-          (ct5["current"] or {}).get("bucket") == "customs")
-    ct6 = tracking.customer_timeline([
-        {"code": "VM", "text": "Parcel is on the way to destination country", "time": "2026-06-01T09:00:00"},
-        {"code": "K3", "text": "Arrived at destination country", "time": "2026-06-05T09:00:00"},
-        {"code": "K2", "text": "Cleared customs", "time": "2026-06-08T09:00:00"},
-    ])
-    check("K2 after K3 → cleared wins", (ct6["current"] or {}).get("bucket") == "cleared")
+
+def test_owner_cleared_stage():
+    """The owner can say 'cleared' before GAASH posts it — same green result."""
+    import app
+    po = {"updated_at": "2026-07-27T10:00:00"}
+    omap = tracking.DEFAULT_OTLOBLY_MAP
+    st = app._otlobly_stage({"otlobly_status": "cleared"}, [], omap, po)
+    check("owner 'cleared' stage → cleared bucket", st and st["bucket"] == "cleared")
+    check("owner 'cleared' stage → تم التخليص الجمركي",
+          st and st["label"] == "تم التخليص الجمركي")
+    check("staff board offers the cleared status",
+          '["cleared","#16a34a"]' in (HERE / "web" / "index.html").read_text(encoding="utf-8"))
+    check("boot patch adds cleared to the live saved map",
+          "boot:cleared_stage_v1" in (HERE / "app.py").read_text(encoding="utf-8"))
 
 
 def test_otlobly_stage():
@@ -226,8 +236,10 @@ def test_frontend_strings():
 def main():
     db.init_db()
     db.set_current_business(1)
-    print("rank-based current pick:")
-    test_rank_pick()
+    print("current-state pick:")
+    test_current_pick()
+    print("owner-set cleared stage:")
+    test_owner_cleared_stage()
     print("otlobly stage override:")
     test_otlobly_stage()
     print("cache-first lookup:")
