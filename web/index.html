@@ -10569,14 +10569,17 @@ function gmWizSummary(){
   const el=$("wizSummary"); if(!el) return;
   const ov=GM.ov||{}, st=GM.pickState||{}, s=ov.settings||{};
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
-  const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||(ov.accounts||[])[0]||{};
+  const fleet=(st.acctIds||[]).map(id=>(ov.accounts||[]).find(a=>a.id===id)).filter(Boolean);
+  const acct=fleet.length===1?fleet[0]:{};
   const to=((seq.to_address||s.to_address)||"").trim();
   const nDoc=(st.docIds||[]).length+(st.makeDecl?1:0);
   el.innerHTML=`<span><b>${gmNewGwds().length}</b> ${T("طرد · packages")}</span>
     <span>🧬 ${poEsc(seq.name||"—")}</span>
     <span>🪪 ${nDoc?`${nDoc} ${T("مستند · documents")}`:T("بلا مستندات · no documents")}</span>
     <span class="spacer"></span>
-    <span class="muted2">${T("إلى · to")} ${gmToWarn(to)} ${acct.email?`· ${T("من · from")} ${poEsc(acct.email)}`:""}</span>`;
+    <span class="muted2">${T("إلى · to")} ${gmToWarn(to)} ${
+      fleet.length>1?`· ${T("من · from")} ${fleet.length} ${T("حسابات · accounts")}`
+      :acct.email?`· ${T("من · from")} ${poEsc(acct.email)}`:""}</span>`;
 }
 // "own inbox" = a sending account, or its sibling: same letters with only the
 // digits differing (qaisabusamra000 ↔ qaisabusamra001 — the test-inbox incident
@@ -10706,10 +10709,37 @@ function gmWizFlow(){
         </div><div class="en-sub">${T("الإيميل الأول · email #1")}: ${poEsc(tpl.subject_tpl||"—")}</div></div></div>`;
     }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b></div>`}</div>
     <div class="en-cf-r" style="margin-top:14px"><b>${T("المُرسِل · Sends from")}</b>
-      <select id="gmNewAcct" onchange="gmPickCapture();gmWizSummary()" style="font-size:12px">${
-        accts.map(a=>`<option value="${poEsc(a.id)}" ${a.id===st.acctId?"selected":""}>${poEsc(a.email)}</option>`).join("")
-        ||`<option value="">${T("لا حساب — أضِف من ⚙ · none — add via ⚙")}</option>`}</select></div>`;
+      <span class="muted2" style="font-size:11px">${(st.acctIds||[]).length||T("لم يُختر · none picked")}</span>
+      </div>
+    <div class="muted2" style="font-size:11.5px;margin:2px 0 7px">${T("اختر أكثر من حساب لتوزيع الدفعة عليها — أربعون إيميلاً من صندوق واحد في دقيقة هو ما يستفزّ حد الإرسال · tick more than one to spread the batch across them — forty emails from one mailbox in a minute is what trips a sending limit")}</div>
+    ${accts.length?`<div class="en-list">${accts.map(a=>{
+      const on=(st.acctIds||[]).includes(a.id);
+      return `<div class="en-row${on?" on":""}" onclick="gmAcctToggle('${poEsc(a.id)}')">
+        <input type="checkbox" ${on?"checked":""} onclick="event.stopPropagation()"
+          onchange="gmAcctToggle('${poEsc(a.id)}')">
+        <div class="en-main"><div class="en-top">
+          <b style="font-size:12.5px">${poEsc(a.email)}</b>
+          ${a.label?`<span class="muted2" style="font-size:11px">${poEsc(a.label)}</span>`:""}
+          <span class="spacer"></span>
+          ${a.last_error?`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:9.5px" title="${poEsc(a.last_error)}">⚠</span>`:""}
+        </div></div></div>`;}).join("")}</div>`
+      :`<div class="en-none"><b>${T("لا حسابات بعد · No accounts yet")}</b>${T("أضف واحداً من ⚙ · add one in ⚙")}</div>`}`;
   gmWizFoot(2,4,T("مراجعة · Review"));
+}
+function gmAcctToggle(id){
+  GM.pickState=GM.pickState||{};
+  const cur=GM.pickState.acctIds||[];
+  GM.pickState.acctIds=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
+  gmWizFlow(); gmWizSummary();
+}
+// The same round-robin the server deals, so the review shows each parcel's real
+// sender rather than a guess.
+function gmAcctFor(gwd){
+  const st=GM.pickState||{}, fleet=st.acctIds||[], gwds=st.gwds||gmNewGwds();
+  if(!fleet.length) return null;
+  const i=gwds.indexOf(gwd);
+  const id=fleet[(i<0?0:i)%fleet.length];
+  return (((GM.ov||{}).accounts)||[]).find(a=>a.id===id)||null;
 }
 function gmWizPickSeq(id){
   GM.pickState=GM.pickState||{}; GM.pickState.seqId=id;
@@ -11412,7 +11442,7 @@ function gmWizReview(){
   GM.pickState.names=gmNamesPicked(gwds); GM.pickState.gwds=gwds;
   const st=GM.pickState;
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
-  const acct=(ov.accounts||[]).find(a=>a.id===st.acctId)||{};
+  const fleet=(st.acctIds||[]).map(id=>(ov.accounts||[]).find(a=>a.id===id)).filter(Boolean);
   const to=((seq.to_address||s.to_address)||"").trim();
   const live=!s.dry_run&&(ov.accounts||[]).length;
   const steps=(seq.steps||[]).length, days=gmSeqDays(seq);
@@ -11425,7 +11455,9 @@ function gmWizReview(){
       <div class="en-cf-r"><b>${T("سير العمل · Workflow")}</b><span>${poEsc(seq.name||"—")}</span>
         <span class="muted2">${steps} ${T("إيميل على مدى · emails over")} ${days} ${T("يوم · days")}</span></div>
       <div class="en-cf-r"><b>${T("المُرسِل · Sends from")}</b>
-        <span>${acct.email?poEsc(acct.email):`<span class="muted2">${T("لا حساب مُرسِل · no sending account")}</span>`}</span></div>
+        <span>${fleet.length?fleet.map(a=>poEsc(a.email)).join(" · ")
+          :`<span class="muted2">${T("لا حساب مُرسِل · no sending account")}</span>`}</span>
+        ${fleet.length>1?`<span class="muted2" style="font-size:11px">${T("بالتناوب، طرد لكل حساب · dealt in turn, a parcel each")}</span>`:""}</div>
       <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span>
         <span class="spacer"></span>
         <span class="muted2" style="font-size:11px">${T("المرفقات تتكرر مع كل إيميل · attachments repeat on every email")}</span></div>
@@ -11464,6 +11496,8 @@ async function gmWizPreview(){
   if($("wizPrev")!==box||(((GM.wiz||{}).at)||0)!==at) return;   // moved on already
   const miss=[...(((r||{}).unresolved)||[]),...(((r||{}).blank)||[])];
   box.innerHTML=nav+`<div class="wiz-mail">
+    <div class="wiz-mail-h"><span class="muted2">${T("من · From")}</span> ${
+      poEsc((gmAcctFor(gwd)||{}).email||T("لا حساب مُرسِل · no sending account"))}</div>
     <div class="wiz-mail-h"><span class="muted2">${T("إلى · To")}</span> ${poEsc(to||"—")}</div>
     <div class="wiz-mail-h"><span class="muted2">${T("الموضوع · Subject")}</span>
       <b>${poEsc((r&&r.subject)||T("لا قالب لهذا السير · this workflow has no template"))}</b></div>
@@ -11483,7 +11517,7 @@ function gmPickCapture(){
   // docIds / makeDecl / docs live only in state — their controls belong to one
   // step and are gone the moment you move to another
   GM.pickState={...st,
-    seqId:val("gmNewSeq",st.seqId||""), acctId:val("gmNewAcct",st.acctId||""),
+    seqId:val("gmNewSeq",st.seqId||""),      // acctIds live in state, not a control
     paste:val("gmNewPaste",st.paste||""), q:val("gmCandSearch",st.q||"")};
 }
 // ── 📝 / 🧬 from INSIDE the enroll dialog ─────────────────────────────────────
@@ -11515,7 +11549,7 @@ async function gmNewStart(btn){
   // documents are shared by the whole batch. The thread gets both.
   const docs={};
   Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=[d.id]; });
-  const r=await post("/api/gaash/start",{gwds, id_doc_id:(st.docIds||[]), account_id:st.acctId||null,
+  const r=await post("/api/gaash/start",{gwds, id_doc_id:(st.docIds||[]), account_id:(st.acctIds||[]),
     seq_id:st.seqId||null, names:st.names||{}, docs});
   btn.disabled=false;
   bulkClose();

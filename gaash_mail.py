@@ -2427,6 +2427,13 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             for k, v in (docs or {}).items()}
     shared = ([d for d in id_doc_id if d] if isinstance(id_doc_id, list)
               else ([id_doc_id] if id_doc_id else []))
+    # account_id accepts a LIST: the batch is dealt round-robin across those
+    # mailboxes. Forty clearance emails from one Gmail account in a minute is
+    # what trips a sending limit; thirteen from each of three does not. Each
+    # parcel still has exactly one conversation and one sender.
+    fleet = ([a for a in account_id if a] if isinstance(account_id, list)
+             else ([account_id] if account_id else []))
+    picked = 0
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -2443,6 +2450,8 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             continue
         mine = [d for d in (docs.get(gwd) or []) if d]
         pack = mine + [d for d in shared if d not in mine]     # own first, deduped
+        acct_for = fleet[picked % len(fleet)] if fleet else None
+        picked += 1
         with db.connect() as c:
             # next_send_at seeds to NOW so the sequencer retries step 1 even if
             # the immediate send below is blocked (dry-run / no account yet)
@@ -2450,7 +2459,7 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                 (gwd,account_id,state,step,id_doc_id,docs_json,unread,missing_docs,
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
                 VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?)""",
-                      (gwd, account_id, (pack[0] if pack else None),
+                      (gwd, acct_for, (pack[0] if pack else None),
                        json.dumps(pack),
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),
