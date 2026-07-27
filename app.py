@@ -109,6 +109,7 @@ import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
+gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
                            #  local app has a stale copy and must never send)
@@ -3011,7 +3012,14 @@ def api_gaash_readiness():
 def api_gaash_send():
     b = request.get_json(force=True, silent=True) or {}
     gwd = (b.get("gwd") or "").strip().upper()
-    res = gaash_mail.send_manual(gwd, b.get("body"), _gm_files(b.get("files")))
+    # doc_ids attach straight from the library — the bytes never round-trip
+    # through the browser just to come back again
+    files = _gm_files(b.get("files"))
+    for did in (b.get("doc_ids") or [])[:6]:
+        got = gaash_mail._library_doc(did)
+        if got:
+            files.append(got)
+    res = gaash_mail.send_manual(gwd, b.get("body"), files)
     if res.get("ok"):
         activity.log("send", "gaash", 0, gwd, detail="manual GAASH email",
                      user=_user())

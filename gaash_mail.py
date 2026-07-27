@@ -1069,6 +1069,38 @@ def stat_detail(kind, limit=300):
     return rows
 
 
+def seed_followup_template():
+    """A hand-sent nudge for a parcel whose earlier email was opened but never
+    answered. Seeded by id with INSERT OR IGNORE, so it appears once and any
+    edit the owner makes to it survives every restart.
+
+    It never mentions the read receipt. Knowing a message was opened is how the
+    owner CHOOSES who to chase; saying so to a customs clerk reads as
+    surveillance and costs more goodwill than the nudge is worth."""
+    body = (
+        "Hello,\n\n"
+        "I hope you are well.\n\n"
+        "I am following up on parcel {gwd}, which has now been waiting "
+        "{days_waiting} days.\n\n"
+        "Tracking number: {gwd}\n"
+        "ID number: {id_number}\n\n"
+        "Our dealer import certification is attached for your reference. If "
+        "anything further is needed from our side, please tell me exactly which "
+        "document and I will send it the same day.\n\n"
+        "Could you let me know the current status and the expected clearance "
+        "date?\n\n"
+        "Thank you for your help,\n"
+        "Otlobly")
+    try:
+        with db.connect() as c:
+            c.execute("""INSERT OR IGNORE INTO gaash_templates
+                (id,name,subject_tpl,body_tpl,updated_at) VALUES (?,?,?,?,?)""",
+                      ("tpl_followup", "Follow-up — polite nudge",
+                       "Follow-up — parcel {gwd}", body, now_iso()))
+    except Exception:  # noqa - a missing template must never block boot
+        pass
+
+
 # ── one-time v2 seed: the legacy settings 4-step chain → real data ──
 def migrate_v2():
     """Create the default 'GAASH clearance' sequence + its 4 templates from the
