@@ -626,7 +626,9 @@
   .gm-read.on i{background:#12a150;opacity:1}
   .gm-chat{padding:0;display:flex;flex-direction:column;max-height:calc(100vh - 210px)}
   .gm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
-  .gm-msgs{flex:1;overflow:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+  /* min-height so a tall reply box borrows space from the thread but can never
+     squeeze it out of existence — .gm-msgs is the flex:1 that absorbs the change */
+  .gm-msgs{flex:1;min-height:120px;overflow:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
   .gm-msg{max-width:82%;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
   .gm-msg.out{align-self:flex-end;background:#fff4ee;border-color:#f7680833;border-bottom-right-radius:4px}
   .gm-msg.in{align-self:flex-start;background:var(--card);border-bottom-left-radius:4px}
@@ -667,7 +669,10 @@
   .gm-warn{margin:0 12px 10px;padding:7px 10px;border-radius:9px;font-size:11.5px;
     background:#fff7ed;border:1px solid #fdba74;color:#b45309}
   .gm-compose{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
-  .gm-compose textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:inherit;font-size:12.5px}
+  /* 140px showed two lines of a template you are about to send to customs.
+     It grows with the text now, capped so the conversation stays visible. */
+  .gm-compose textarea{flex:1;min-height:56px;max-height:min(340px,42vh);
+    resize:vertical;font:inherit;font-size:12.5px;line-height:1.55}
   /* v2: sequence builder tree (HubSpot-style) + dashboard */
   .gsq-tree{max-width:640px;margin:0 auto}
   .gsq-step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:11px;align-items:flex-start}
@@ -10312,10 +10317,32 @@ function gmRenderChat(){
   // whatever you were typing and any document you had attached
   const draft=((GM.draft||{})[th.gwd])||"";
   if(draft&&$("gmBody")) $("gmBody").value=draft;
+  gmGrow($("gmBody"));
   gmSendChips();
 }
 function gmDraftKeep(el){
   GM.draft=GM.draft||{}; GM.draft[GM.cur]=el.value;
+  gmGrow(el);
+}
+// Grow the reply box to its content, capped so the conversation above stays
+// readable. The cap follows the window, because 340px on a laptop is a
+// comfortable letter and on a short screen it would be the whole pane.
+function gmGrow(el){
+  if(!el) return;
+  el.style.height="auto";                       // measure the text, not the box
+  if(!el.value){ el.style.height=""; return; }
+  // Cap by the PANE's budget, not by the room under the box: this is a flex
+  // column, so growing the box moves it up and "room below" reads far too
+  // small. Budget = what the pane may occupy on screen, minus its fixed chrome
+  // (headers, tabs, chips, padding), minus the floor the thread keeps.
+  const chat=el.closest(".gm-chat"), msgs=$("gmMsgs");
+  let cap=340;
+  if(chat&&msgs){
+    const chrome=chat.getBoundingClientRect().height
+      -msgs.getBoundingClientRect().height-el.getBoundingClientRect().height;
+    cap=Math.round(innerHeight-chat.getBoundingClientRect().top-12-chrome-120);
+  }
+  el.style.height=Math.min(el.scrollHeight+2,Math.max(120,Math.min(cap,340)))+"px";
 }
 async function gmSetName(pname){        // re-pins the name → the NEXT emails carry its ID
   const r=await post("/api/gaash/thread",{gwd:GM.cur,action:"set_name",pname});
@@ -10422,7 +10449,7 @@ async function gmSend(btn){
   const r=await post("/api/gaash/send",{gwd:GM.cur, body, doc_ids:docs, files});
   btn.disabled=false;
   if(!r.ok){ toast(r.error||"failed"); return; }
-  $("gmBody").value="";
+  $("gmBody").value=""; gmGrow($("gmBody"));
   (GM.draft||{})[GM.cur]="";
   GM.sendDocs=[]; GM.sendFiles=[];     // attachments belong to the message that left
   await gmLoad(); gmOpen(GM.cur,true);
@@ -11031,7 +11058,7 @@ async function gmTplInsert(tid){
   bulkClose();
   const box=$("gmBody"); if(!box) return;
   box.value=r.body||"";
-  gmDraftKeep(box);                    // survives the next background refresh
+  gmDraftKeep(box);                    // survives the next background refresh + sizes it
   box.focus(); box.setSelectionRange(box.value.length,box.value.length);
   const warn=$("gmTplWarn"); if(!warn) return;
   const miss=[...(r.unresolved||[]),...(r.blank||[])];
