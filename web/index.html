@@ -520,6 +520,10 @@
   .wiz-mail-h{padding:7px 12px;border-bottom:1px solid var(--line);font-size:12.5px}
   .wiz-mail-h .muted2{display:inline-block;min-width:62px;font-size:10.5px;
     text-transform:uppercase;letter-spacing:.05em}
+  /* the fan-out note sits on the From line but is prose, not a field label —
+     the label styling above would shout a whole email address in capitals */
+  .wiz-mail-h .wiz-note{min-width:0;text-transform:none;letter-spacing:0;
+    font-size:11px}
   .wiz-mail-b{padding:12px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;
     max-height:30vh;overflow:auto}
   .wiz-mail-f{padding:8px 12px;border-top:1px solid var(--line);display:flex;
@@ -10795,7 +10799,7 @@ function gmWizFlow(){
     <div class="en-cf-r" style="margin-top:14px"><b>${T("المُرسِل · Sends from")}</b>
       <span class="muted2" style="font-size:11px">${(st.acctIds||[]).length||T("لم يُختر · none picked")}</span>
       </div>
-    <div class="muted2" style="font-size:11.5px;margin:2px 0 7px">${T("اختر أكثر من حساب لتوزيع الدفعة عليها — أربعون إيميلاً من صندوق واحد في دقيقة هو ما يستفزّ حد الإرسال · tick more than one to spread the batch across them — forty emails from one mailbox in a minute is what trips a sending limit")}</div>
+    <div class="muted2" style="font-size:11.5px;margin:2px 0 7px">${T("اختر أكثر من حساب فيخرج الإيميل الأول من كلٍّ منها — فترى أيّها فُتِح. المتابعات تأتي من صندوق واحد لكل طرد، فأربعون إيميلاً لا تخرج من صندوق واحد في دقيقة · tick more than one and email #1 goes out from each of them — so you can see which one gets opened. Follow-ups come from one mailbox per package, so forty emails never leave a single mailbox in a minute")}</div>
     ${accts.length?`<div class="en-list">${accts.map(a=>{
       const on=(st.acctIds||[]).includes(a.id);
       return `<div class="en-row${on?" on":""}" onclick="gmAcctToggle('${poEsc(a.id)}')">
@@ -10816,14 +10820,18 @@ function gmAcctToggle(id){
   GM.pickState.acctIds=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
   gmWizFlow(); gmWizSummary();
 }
+function gmFleet(){
+  const st=GM.pickState||{}, ov=GM.ov||{};
+  return (st.acctIds||[]).map(id=>(ov.accounts||[]).find(a=>a.id===id)).filter(Boolean);
+}
 // The same round-robin the server deals, so the review shows each parcel's real
-// sender rather than a guess.
+// PRIMARY mailbox rather than a guess. Email #1 also leaves every other ticked
+// account; only the follow-ups are this one's alone.
 function gmAcctFor(gwd){
-  const st=GM.pickState||{}, fleet=st.acctIds||[], gwds=st.gwds||gmNewGwds();
+  const st=GM.pickState||{}, fleet=gmFleet(), gwds=st.gwds||gmNewGwds();
   if(!fleet.length) return null;
   const i=gwds.indexOf(gwd);
-  const id=fleet[(i<0?0:i)%fleet.length];
-  return (((GM.ov||{}).accounts)||[]).find(a=>a.id===id)||null;
+  return fleet[(i<0?0:i)%fleet.length]||null;
 }
 function gmWizPickSeq(id){
   GM.pickState=GM.pickState||{}; GM.pickState.seqId=id;
@@ -11541,7 +11549,7 @@ function gmWizReview(){
       <div class="en-cf-r"><b>${T("المُرسِل · Sends from")}</b>
         <span>${fleet.length?fleet.map(a=>poEsc(a.email)).join(" · ")
           :`<span class="muted2">${T("لا حساب مُرسِل · no sending account")}</span>`}</span>
-        ${fleet.length>1?`<span class="muted2" style="font-size:11px">${T("بالتناوب، طرد لكل حساب · dealt in turn, a parcel each")}</span>`:""}</div>
+        ${fleet.length>1?`<span class="muted2" style="font-size:11px">${T("الإيميل الأول من كلٍّ منها · email #1 from each of them")}</span>`:""}</div>
       <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span>
         <span class="spacer"></span>
         <span class="muted2" style="font-size:11px">${T("المرفقات تتكرر مع كل إيميل · attachments repeat on every email")}</span></div>
@@ -11579,9 +11587,14 @@ async function gmWizPreview(){
     r=await post("/api/gaash/template_render",{gwd,template_id:st0.template_id,preview:true});
   if($("wizPrev")!==box||(((GM.wiz||{}).at)||0)!==at) return;   // moved on already
   const miss=[...(((r||{}).unresolved)||[]),...(((r||{}).blank)||[])];
+  const fl=gmFleet(), prim=gmAcctFor(gwd)||{};
   box.innerHTML=nav+`<div class="wiz-mail">
     <div class="wiz-mail-h"><span class="muted2">${T("من · From")}</span> ${
-      poEsc((gmAcctFor(gwd)||{}).email||T("لا حساب مُرسِل · no sending account"))}</div>
+      fl.length?fl.map(a=>poEsc(a.email)).join(" · ")
+        :T("لا حساب مُرسِل · no sending account")}
+      ${fl.length>1?`<span class="muted2 wiz-note">· ${
+        T("نسخة من كل واحد، والمتابعات من · a copy from each, follow-ups from")} ${
+        poEsc(prim.email||"")}</span>`:""}</div>
     <div class="wiz-mail-h"><span class="muted2">${T("إلى · To")}</span> ${poEsc(to||"—")}</div>
     <div class="wiz-mail-h"><span class="muted2">${T("الموضوع · Subject")}</span>
       <b>${poEsc((r&&r.subject)||T("لا قالب لهذا السير · this workflow has no template"))}</b></div>
