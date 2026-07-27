@@ -661,6 +661,7 @@
   .gm-actions button{border:none;background:none;font-weight:700;font-size:12.5px;
     padding:0;cursor:pointer;color:var(--muted)}
   .gm-actions button:hover{color:var(--accent)}
+  .gm-chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 13px 0}
   /* a token that did not resolve is named out loud under the box: a visible
      {days_waiting} is a fixable mistake, a silently empty sentence is not */
   .gm-warn{margin:0 12px 10px;padding:7px 10px;border-radius:9px;font-size:11.5px;
@@ -10228,6 +10229,7 @@ function gmRenderList(){
 }
 async function gmOpen(gwd,keep){
   GM.cur=gwd;
+  if(!keep){ GM.sendDocs=[]; GM.sendFiles=[]; }   // attachments do not follow you to another parcel
   if(!keep) gmRenderList();
   let d; try{ d=await (await fetch("/api/gaash/thread_detail?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
   if(!d||!d.ok) return;
@@ -10297,13 +10299,23 @@ function gmRenderChat(){
     <div class="gm-actions">
       <button onclick="gmTplPick()" title="${T("اختر قالباً — يُملأ باسم هذا الطرد ورقمه ثم تعدّله وترسله · pick a template — filled in for THIS package, then edit it and send")}">📝 ${T("القوالب · Templates")}</button>
       <button onclick="gmSeqPick()" title="${T("أي سير عمل يلاحق هذا الطرد — وانقله لغيره · which workflow is chasing this package — and move it to another")}">🧬 ${T("سير العمل · Sequences")}</button>
+      <button onclick="gmSendAttach()" title="${T("أرفق مستنداً بهذه الرسالة اليدوية · attach a document to THIS manual message")}">📎 ${T("إرفاق · Attach")}</button>
     </div>
+    <div id="gmSendChips" class="gm-chips hidden"></div>
     <div class="gm-compose">
-      <textarea id="gmBody" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
+      <textarea id="gmBody" oninput="gmDraftKeep(this)" placeholder="${T("اكتب رسالة يدوية لغاش… · write a manual message to GAASH…")}"></textarea>
       <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
     </div>
     <div id="gmTplWarn" class="gm-warn hidden"></div>`;
   const box=$("gmMsgs"); if(box) box.scrollTop=box.scrollHeight;
+  // the 60s poll re-renders this pane; without these two lines it silently ate
+  // whatever you were typing and any document you had attached
+  const draft=((GM.draft||{})[th.gwd])||"";
+  if(draft&&$("gmBody")) $("gmBody").value=draft;
+  gmSendChips();
+}
+function gmDraftKeep(el){
+  GM.draft=GM.draft||{}; GM.draft[GM.cur]=el.value;
 }
 async function gmSetName(pname){        // re-pins the name → the NEXT emails carry its ID
   const r=await post("/api/gaash/thread",{gwd:GM.cur,action:"set_name",pname});
@@ -10363,14 +10375,56 @@ function gmAttachPick(){
   };
   inp.click();
 }
+// ── 📎 attach to THIS manual message ──────────────────────────────────────────
+// The 📎 in the header queues a file for the next SEQUENCE email and is consumed
+// by it. This one belongs to the message you are typing — a different thing, so
+// it is a different control, and it reaches for the library first: the dealer
+// certificate you send with a nudge already lives there.
+function gmSendAttach(){
+  GM.docTarget="send"; GM.idFolder=null;
+  bulkOpen("📎 "+T("أرفق مع هذه الرسالة · Attach to this message"));
+  $("bulkModal").classList.add("en-pick");
+  $("bulkBody").innerHTML=`<div id="gmDocs" style="margin-top:4px"></div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
+    <button class="minibtn" style="margin-inline-end:auto" onclick="gmSendFilePick()">＋ ${T("ملف من جهازك · file from your computer")}</button>
+    <button class="accent" onclick="GM.docTarget=null;bulkClose();gmSendChips()">${T("تم · Done")}</button></div>`;
+  gmIdsRender();
+}
+// a one-off that does not belong in the library — it rides this message only
+async function gmSendFilePick(){
+  const inp=document.createElement("input"); inp.type="file"; inp.multiple=true;
+  inp.onchange=async()=>{
+    const got=await Promise.all([...inp.files].slice(0,4).map(gmFileB64));
+    GM.sendFiles=(GM.sendFiles||[]).concat(got.map((b,i)=>({...b,name:inp.files[i].name})));
+    GM.docTarget=null; bulkClose(); gmSendChips();
+  };
+  inp.click();
+}
+function gmSendChips(){
+  const box=$("gmSendChips"); if(!box) return;
+  const ids=((GM.ov||{}).ids)||[];
+  const docs=(GM.sendDocs||[]).map(id=>ids.find(x=>x.id===id)).filter(Boolean);
+  const files=GM.sendFiles||[];
+  box.classList.toggle("hidden",!docs.length&&!files.length);
+  box.innerHTML=[
+    ...docs.map(d=>`<span class="gm-att">📎 ${poEsc(d.name)}
+      <button class="minibtn" style="padding:0 5px" onclick="gmIdPick('${poEsc(d.id)}')">✕</button></span>`),
+    ...files.map((f,i)=>`<span class="gm-att">📎 ${poEsc(f.name)}
+      <button class="minibtn" style="padding:0 5px" onclick="GM.sendFiles.splice(${i},1);gmSendChips()">✕</button></span>`),
+  ].join("");
+}
 async function gmSend(btn){
   const body=($("gmBody")||{}).value||"";
-  if(!body.trim()){ toast(T("اكتب رسالة أولاً · write a message first")); return; }
+  const docs=GM.sendDocs||[], files=GM.sendFiles||[];
+  if(!body.trim()&&!docs.length&&!files.length){
+    toast(T("اكتب رسالة أولاً · write a message first")); return; }
   btn.disabled=true;
-  const r=await post("/api/gaash/send",{gwd:GM.cur, body});
+  const r=await post("/api/gaash/send",{gwd:GM.cur, body, doc_ids:docs, files});
   btn.disabled=false;
   if(!r.ok){ toast(r.error||"failed"); return; }
   $("gmBody").value="";
+  (GM.draft||{})[GM.cur]="";
+  GM.sendDocs=[]; GM.sendFiles=[];     // attachments belong to the message that left
   await gmLoad(); gmOpen(GM.cur,true);
 }
 async function gmCheck(btn){
@@ -10558,6 +10612,7 @@ function gmWizPackages(){
 // to scroll back for the paperwork.
 function gmWizDocs(){
   const st=GM.pickState||{}, n=gmNewGwds().length;
+  GM.docTarget="pick";                 // the folder picker ticks into the batch
   $("wizBody").innerHTML=`
     <label class="wiz-opt">
       <input type="checkbox" ${st.makeDecl?"checked":""} onchange="gmWizDeclToggle(this.checked)">
@@ -10976,6 +11031,7 @@ async function gmTplInsert(tid){
   bulkClose();
   const box=$("gmBody"); if(!box) return;
   box.value=r.body||"";
+  gmDraftKeep(box);                    // survives the next background refresh
   box.focus(); box.setSelectionRange(box.value.length,box.value.length);
   const warn=$("gmTplWarn"); if(!warn) return;
   const miss=[...(r.unresolved||[]),...(r.blank||[])];
@@ -11146,7 +11202,7 @@ const GM_FOLDERS=[{k:"id",icon:"🪪",lab:"الهويات · IDs"},
 function gmIdsRender(){
   const box=$("gmDocs"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
-  const sel=((GM.pickState||{}).docIds)||[];       // several now, not one
+  const sel=gmDocSel();                            // several now, not one
   const inF=k=>ids.filter(x=>(x.folder||"id")===k);
   const chosen=ids.filter(x=>sel.includes(x.id));
   const head=chosen.length
@@ -11195,11 +11251,19 @@ function gmIdTile(x,sel){
 }
 // the picks live in pickState, not only in the boxes — those are unmounted
 // whenever you browse to another folder or move to the next step
-function gmIdPick(id){
+// The same folder picker serves the enroll wizard and the reply box; only the
+// list it ticks into differs.
+function gmDocSel(){
+  if(GM.docTarget==="send") return (GM.sendDocs=GM.sendDocs||[]);
   GM.pickState=GM.pickState||{};
-  const cur=GM.pickState.docIds||[];
-  GM.pickState.docIds=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
-  gmIdsRender(); gmWizSummary();
+  return (GM.pickState.docIds=GM.pickState.docIds||[]);
+}
+function gmIdPick(id){
+  const cur=gmDocSel();
+  const next=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
+  if(GM.docTarget==="send") GM.sendDocs=next; else GM.pickState.docIds=next;
+  gmIdsRender();
+  if(GM.docTarget==="send") gmSendChips(); else gmWizSummary();
 }
 function gmIdFolder(k){ GM.idFolder=k||null; gmIdsRender(); }
 async function gmIdUpload(){
