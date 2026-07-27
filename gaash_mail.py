@@ -172,10 +172,22 @@ def add_account(email_addr, app_password, label=None):
     return {"ok": True, "id": aid, "email": email_addr}
 
 
+def account_thread_count(account_id):
+    """How many conversations send from this mailbox — asked BEFORE deleting it,
+    because the delete leaves them unable to send and says nothing."""
+    with db.connect() as c:
+        return c.execute("SELECT COUNT(*) n FROM gaash_threads WHERE account_id=?",
+                         (account_id,)).fetchone()["n"]
+
+
 def remove_account(account_id):
+    """Delete a mailbox. Threads pointing at it are deliberately left alone —
+    silently moving a conversation to somebody else's address is worse than an
+    orphan you can see and fix in one click."""
+    orphaned = account_thread_count(account_id)
     with db.connect() as c:
         cur = c.execute("DELETE FROM gaash_accounts WHERE id=?", (account_id,))
-        return cur.rowcount > 0
+        return {"ok": cur.rowcount > 0, "orphaned": orphaned}
 
 
 # --------------------------------------------------------------------------- #
@@ -841,17 +853,19 @@ def run_rules():
             # else — auto or queue — lands as a 'proposed' chip for review, so
             # a tag can never push an ID-less email out the door.
             if r["mode"] == "auto" and cd.get("pname_id"):
-                start_threads([cd["gwd"]], None, None, seq_id=r["seq_id"])
+                # None here is what made rule-born threads unsendable
+                start_threads([cd["gwd"]], None, default_account_id(),
+                              seq_id=r["seq_id"])
             else:
                 note = (None if r["mode"] != "auto" else
                         "مؤجل تلقائياً: بلا هوية · auto-enroll held: no ID yet")
                 with db.connect() as c:
                     c.execute("""INSERT INTO gaash_threads
-                        (gwd,seq_id,state,step,unread,missing_docs,
+                        (gwd,seq_id,account_id,state,step,unread,missing_docs,
                          pending_files_json,created_at,last_activity,missing_note)
-                        VALUES (?,?, 'proposed',0,0,0,'[]',?,?,?)""",
-                              (cd["gwd"], r["seq_id"], now_iso(), now_iso(),
-                               note))
+                        VALUES (?,?,?, 'proposed',0,0,0,'[]',?,?,?)""",
+                              (cd["gwd"], r["seq_id"], default_account_id(),
+                               now_iso(), now_iso(), note))
             made += 1
     return made
 
@@ -1258,6 +1272,81 @@ def thread_restart(gwd, fresh=False, at=None):
             **({} if res.get("ok") else
                {"send_error": res.get("error"),
                 "dry_run": res.get("dry_run", False)})}
+
+
+def thread_switch_acct(gwd, account_id):
+    """Move a conversation to a DIFFERENT sending mailbox.
+
+    account_id was written once at enrollment and never again, so a thread was
+    stuck with whichever account started it — and a thread whose account was
+    deleted, or that a rule created without one, had no cure at all.
+
+    Unlike the workflow switch this does NOT touch `step`: step numbers belong
+    to the sequence, not the mailbox, and resetting would re-send email #1 for
+    nothing.
+
+    Safe to do mid-thread. Every report reads each message's own `from_addr`
+    snapshot rather than this pointer, and reply matching is account-blind
+    (match_thread looks a Message-ID up with no account filter), so replies
+    still land on this thread whichever mailbox receives them."""
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    acct = _account((account_id or "").strip())
+    if not acct:
+        return {"ok": False, "error": "sending account not found"}
+    if (th.get("account_id") or "") == acct["id"]:
+        return {"ok": False, "error": "already sending from that account"}
+    _thread_set(g, account_id=acct["id"], last_error=None)
+    return {"ok": True, "gwd": g, "account_id": acct["id"],
+            "email": acct.get("email") or ""}
+
+
+def resend_message(msg_id, account_id=None):
+    """Send one already-sent message again — optionally from another mailbox.
+
+    The manual twin of process_resends, which is already exactly this: take the
+    outgoing row, rehydrate its attachments off disk, and put it through
+    _thread_send as kind='resent'. Passing account_id moves the conversation
+    first, so the follow-ups keep coming from the address that just wrote."""
+    try:
+        mid = int(msg_id)
+    except Exception:  # noqa
+        return {"ok": False, "error": "no message"}
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_msgs WHERE id=?", (mid,)).fetchone()
+    row = dict(r) if r else None
+    if not row or row.get("dir") != "out":
+        return {"ok": False, "error": "only a sent message can go out again"}
+    gwd = row["gwd"]
+    if not thread_get(gwd):
+        return {"ok": False, "error": "thread not found"}
+    if account_id:
+        sw = thread_switch_acct(gwd, account_id)
+        # "already on that account" is not a failure here — it just means the
+        # resend goes out from where the thread already was
+        if not sw.get("ok") and sw.get("error") != "already sending from that account":
+            return sw
+    # the bytes live under FILES_DIR/<gwd>/, not in the row
+    atts = []
+    for a in json.loads(row.get("attachments_json") or "[]"):
+        p = attachment_path(gwd, a.get("file"))
+        if p:
+            atts.append((a.get("name") or p.name, p.read_bytes(),
+                         a.get("ctype") or "application/octet-stream"))
+    res = _thread_send(gwd, row.get("body") or "", atts, kind="resent",
+                       step=row.get("step"))
+    return {**res, "gwd": gwd, "attachments": len(atts)}
+
+
+def default_account_id():
+    """The mailbox a thread gets when nobody picked one — the first added.
+
+    Without this, run_rules enrolled parcels with account_id=None and they sat
+    forever failing to send with nothing on screen to say why."""
+    got = accounts(redact=True)
+    return got[0]["id"] if got else None
 
 
 def thread_switch_seq(gwd, seq_id, at=None):
@@ -2144,7 +2233,12 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
                 "dry_run": True}
     acct = _account(th.get("account_id"))
     if not acct:
-        return {"ok": False, "error": "sending account no longer exists — add one"}
+        # every sibling failure writes last_error; this one did not, so the
+        # daemon retried and failed forever with nothing on screen to say why
+        err = ("no sending account on this conversation — pick one on its "
+               "\u2709 pill")
+        _thread_set(gwd, last_error=err)
+        return {"ok": False, "error": err}
     seq = sequence_get(th.get("seq_id"))
     to_addr = (to_override or (seq or {}).get("to_address")
                or setts.get("to_address") or "").strip()
@@ -2333,6 +2427,13 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             for k, v in (docs or {}).items()}
     shared = ([d for d in id_doc_id if d] if isinstance(id_doc_id, list)
               else ([id_doc_id] if id_doc_id else []))
+    # account_id accepts a LIST: the batch is dealt round-robin across those
+    # mailboxes. Forty clearance emails from one Gmail account in a minute is
+    # what trips a sending limit; thirteen from each of three does not. Each
+    # parcel still has exactly one conversation and one sender.
+    fleet = ([a for a in account_id if a] if isinstance(account_id, list)
+             else ([account_id] if account_id else []))
+    picked = 0
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -2349,6 +2450,8 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             continue
         mine = [d for d in (docs.get(gwd) or []) if d]
         pack = mine + [d for d in shared if d not in mine]     # own first, deduped
+        acct_for = fleet[picked % len(fleet)] if fleet else None
+        picked += 1
         with db.connect() as c:
             # next_send_at seeds to NOW so the sequencer retries step 1 even if
             # the immediate send below is blocked (dry-run / no account yet)
@@ -2356,7 +2459,7 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                 (gwd,account_id,state,step,id_doc_id,docs_json,unread,missing_docs,
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
                 VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?)""",
-                      (gwd, account_id, (pack[0] if pack else None),
+                      (gwd, acct_for, (pack[0] if pack else None),
                        json.dumps(pack),
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),

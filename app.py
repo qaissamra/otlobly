@@ -2849,8 +2849,34 @@ def api_gaash_account_add():
 @auth.require_feature("leluxe")
 def api_gaash_account_remove():
     b = request.get_json(force=True, silent=True) or {}
-    ok = gaash_mail.remove_account(b.get("id"))
-    return jsonify({"ok": ok})
+    res = gaash_mail.remove_account(b.get("id"))
+    return jsonify(res)
+
+
+@app.route("/api/gaash/account/uses")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_account_uses():
+    """How many conversations a mailbox sends for — read before offering to
+    delete it, so the confirm can name the number instead of the damage
+    appearing afterwards."""
+    n = gaash_mail.account_thread_count((request.args.get("id") or "").strip())
+    return jsonify({"ok": True, "threads": n})
+
+
+@app.route("/api/gaash/resend", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_resend():
+    """Send an already-sent message again, optionally from another mailbox —
+    which moves the conversation there, so its follow-ups keep coming from the
+    address that just wrote."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.resend_message(b.get("msg_id"), b.get("account_id"))
+    if res.get("ok"):
+        activity.log("send", "gaash", 0, res.get("gwd") or "",
+                     detail="re-sent a message", user=_user())
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/api/gaash/ids", methods=["GET", "POST", "DELETE"])
@@ -3091,6 +3117,13 @@ def api_gaash_thread():
         if res.get("ok"):
             activity.log("send", "gaash", 0, gwd,
                          detail=f"moved to workflow {res.get('seq_name') or ''}".strip(),
+                         user=_user())
+        return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "switch_acct":   # send this conversation from another mailbox
+        res = gaash_mail.thread_switch_acct(gwd, b.get("account_id"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"now sends from {res.get('email') or ''}".strip(),
                          user=_user())
         return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
