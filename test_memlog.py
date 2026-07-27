@@ -114,6 +114,84 @@ def test_watch_never_masks_errors():
         memlog.rss_mb = real
 
 
+def _reset_attribution():
+    memlog._BY_ENDPOINT.clear()
+    memlog._FIRST_RSS = None
+    memlog._NEXT_REPORT = None
+
+
+def test_request_attribution():
+    """RSS is process-wide and several threads serve at once, so one reading is
+    noisy — the culprit has to emerge from ACCUMULATED growth per endpoint."""
+    _reset_attribution()
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        # a chatty endpoint that leaks nothing, and a quieter one that does
+        for i in range(60):
+            memlog.note_request("api_notifications", 100.0 + i * 0.1, 100.0 + i * 0.1 + 0.05)
+        for i in range(20):
+            memlog.note_request("api_leluxe_orders", 110.0 + i * 3, 110.0 + i * 3 + 3.0)
+    table = memlog.endpoint_table()
+    check("the real hog tops the leaderboard, not the chatty endpoint",
+          table and table[0][0] == "api_leluxe_orders")
+    check("hit counts are kept alongside the growth",
+          dict((ep, n) for ep, n, _ in table).get("api_notifications") == 60)
+    check("a leaderboard is printed as the process grows",
+          "worst:" in buf.getvalue() and "api_leluxe_orders" in buf.getvalue())
+
+    _reset_attribution()
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        memlog.note_request("api_backup", 200.0, 240.0)      # 40 MB in one call
+    check("a single fat request is called out on its own",
+          "ONE request" in buf.getvalue() and "api_backup" in buf.getvalue())
+
+    _reset_attribution()
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        memlog.note_request("api_quiet", 100.0, 100.2)       # normal request
+    check("an ordinary request prints nothing", buf.getvalue() == "")
+
+    # memory handed BACK must not be scored as growth
+    _reset_attribution()
+    with redirect_stdout(io.StringIO()):
+        memlog.note_request("api_tidy", 200.0, 180.0)
+    check("freed memory is never counted as a leak",
+          memlog.endpoint_table()[0][2] == 0.0)
+
+    # unreadable probe / missing before-value must be survivable
+    _reset_attribution()
+    try:
+        memlog.note_request("api_x", None, 100.0)
+        memlog.note_request("api_x", 100.0, None)
+        check("a missing probe reading never breaks the request", True)
+    except Exception:  # noqa: BLE001
+        check("a missing probe reading never breaks the request", False)
+
+
+def test_attribution_is_thread_safe():
+    """gunicorn serves 4 threads per worker — concurrent note_request() must not
+    corrupt the table or raise."""
+    import threading
+    _reset_attribution()
+    errors = []
+
+    def hammer(n):
+        try:
+            for i in range(200):
+                memlog.note_request(f"ep{n % 3}", 100.0 + i * 0.01, 100.0 + i * 0.01 + 0.02)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    with redirect_stdout(io.StringIO()):
+        threads = [threading.Thread(target=hammer, args=(i,)) for i in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+    total_hits = sum(n for _, n, _ in memlog.endpoint_table())
+    check("no errors under concurrent attribution", not errors)
+    check("every concurrent request is counted (no lost updates)", total_hits == 8 * 200)
+
+
 def test_daemons_are_wrapped():
     """Every background pass that runs inside the web process must be tagged, or
     a future spike is anonymous again."""
@@ -131,6 +209,9 @@ def test_daemons_are_wrapped():
 
     appsrc = (HERE / "app.py").read_text(encoding="utf-8")
     check("/healthz reports rss", "rss={mb:.0f}MB" in appsrc)
+    check("requests are attributed to their endpoint",
+          "memlog.note_request(request.endpoint" in appsrc
+          and "request._mem_rss = memlog.rss_mb()" in appsrc)
     check("restore streams the upload instead of buffering it",
           "shutil.copyfileobj(request.stream" in appsrc
           and "io.BytesIO(blob)" not in appsrc)
@@ -178,6 +259,10 @@ def main():
     test_watch_quiet_and_loud()
     print("watch() safety:")
     test_watch_never_masks_errors()
+    print("request attribution:")
+    test_request_attribution()
+    print("attribution under concurrency:")
+    test_attribution_is_thread_safe()
     print("daemons instrumented:")
     test_daemons_are_wrapped()
     print("streamed restore:")
