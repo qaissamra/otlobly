@@ -172,10 +172,22 @@ def add_account(email_addr, app_password, label=None):
     return {"ok": True, "id": aid, "email": email_addr}
 
 
+def account_thread_count(account_id):
+    """How many conversations send from this mailbox — asked BEFORE deleting it,
+    because the delete leaves them unable to send and says nothing."""
+    with db.connect() as c:
+        return c.execute("SELECT COUNT(*) n FROM gaash_threads WHERE account_id=?",
+                         (account_id,)).fetchone()["n"]
+
+
 def remove_account(account_id):
+    """Delete a mailbox. Threads pointing at it are deliberately left alone —
+    silently moving a conversation to somebody else's address is worse than an
+    orphan you can see and fix in one click."""
+    orphaned = account_thread_count(account_id)
     with db.connect() as c:
         cur = c.execute("DELETE FROM gaash_accounts WHERE id=?", (account_id,))
-        return cur.rowcount > 0
+        return {"ok": cur.rowcount > 0, "orphaned": orphaned}
 
 
 # --------------------------------------------------------------------------- #
@@ -193,15 +205,67 @@ def ids_list():
             "SELECT * FROM gaash_ids ORDER BY uploaded_at")]
 
 
-def ids_add(name, filename, data):
+# reusable IDs · per-package papers · standing certificates (a dealer import
+# certification is signed once and attached to whichever packages it covers)
+ID_FOLDERS = ("id", "declaration", "certificate")
+
+
+def _folder(v):
+    v = str(v or "").strip().lower()
+    return v if v in ID_FOLDERS else "id"
+
+
+def ids_add(name, filename, data, folder=None):
     IDS_DIR.mkdir(parents=True, exist_ok=True)
     iid = f"id_{int(time.time() * 1000)}"
     fn = f"{iid}_{_safe_name(filename)}"
     (IDS_DIR / fn).write_bytes(data)
     with db.connect() as c:
-        c.execute("INSERT INTO gaash_ids (id,name,filename,uploaded_at) VALUES (?,?,?,?)",
-                  (iid, (name or "").strip() or _safe_name(filename), fn, now_iso()))
+        c.execute("INSERT INTO gaash_ids (id,name,filename,uploaded_at,folder) "
+                  "VALUES (?,?,?,?,?)",
+                  (iid, (name or "").strip() or _safe_name(filename), fn,
+                   now_iso(), _folder(folder)))
     return {"ok": True, "id": iid, "filename": fn}
+
+
+def declaration_make(gwd):
+    """Generate this package's customs declaration and file it in the library's
+    📄 Declarations folder, replacing any previous one for the same GWD — a
+    parcel has ONE current declaration, and keeping supersededates invites
+    attaching the wrong one.
+
+    Everything on it is read here, not typed by hand: the name the parcel ships
+    under, the ID that name resolves to, and the package's real contents."""
+    import declaration
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a tracking number"}
+    try:
+        fn, data = declaration.build(
+            gwd=g, name=parcel_name(g), id_number=id_number_for_email(g),
+            contents=package_contents(g),
+            purpose=(_setts().get("declaration_purpose") or "").strip() or None)
+    except ValueError as e:                     # a field that cannot be printed
+        return {"ok": False, "error": str(e)}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": f"could not build it: {str(e)[:120]}"}
+    name = f"{g} - declaration"
+    with db.connect() as c:
+        old = [dict(r) for r in c.execute(
+            "SELECT id, filename FROM gaash_ids WHERE name=?", (name,))]
+    for o in old:
+        ids_remove(o["id"])
+    res = ids_add(name, fn, data, folder="declaration")
+    return {**res, "name": name, "gwd": g}
+
+
+def ids_move(id_doc_id, folder):
+    """Re-file a document. The one-time backfill guessed from the name, so this
+    is how a wrong guess gets corrected."""
+    with db.connect() as c:
+        cur = c.execute("UPDATE gaash_ids SET folder=? WHERE id=?",
+                        (_folder(folder), id_doc_id))
+        return {"ok": cur.rowcount > 0, "folder": _folder(folder)}
 
 
 def ids_remove(id_doc_id):
@@ -318,20 +382,35 @@ def templates_list():
     return tpls
 
 
-def template_save(t):
+def template_save(t, user=None):
     tid = (t.get("id") or "").strip() or f"tpl_{int(time.time() * 1000)}"
     name = str(t.get("name") or "").strip()
     if not name:
         return {"ok": False, "error": "template name required"}
     with db.connect() as c:
-        c.execute("""INSERT INTO gaash_templates (id,name,subject_tpl,body_tpl,updated_at)
-            VALUES (?,?,?,?,?)
+        # created_by is written on INSERT only — editing someone else's template
+        # does not make it yours, and the picker's Created-by column would lie
+        c.execute("""INSERT INTO gaash_templates
+            (id,name,subject_tpl,body_tpl,updated_at,created_by)
+            VALUES (?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,
               subject_tpl=excluded.subject_tpl, body_tpl=excluded.body_tpl,
               updated_at=excluded.updated_at""",
                   (tid, name, str(t.get("subject_tpl") or ""),
-                   str(t.get("body_tpl") or ""), now_iso()))
+                   str(t.get("body_tpl") or ""), now_iso(),
+                   (user or "").strip() or None))
     return {"ok": True, "id": tid}
+
+
+def template_touch(tid):
+    """Stamp 'last used'. A use is the template actually going into an email —
+    the sequencer sending it, or a human picking it into the reply box. Merely
+    opening the picker is not a use."""
+    if not tid:
+        return
+    with db.connect() as c:
+        c.execute("UPDATE gaash_templates SET last_used_at=? WHERE id=?",
+                  (now_iso(), tid))
 
 
 def template_remove(tid):
@@ -774,17 +853,19 @@ def run_rules():
             # else — auto or queue — lands as a 'proposed' chip for review, so
             # a tag can never push an ID-less email out the door.
             if r["mode"] == "auto" and cd.get("pname_id"):
-                start_threads([cd["gwd"]], None, None, seq_id=r["seq_id"])
+                # None here is what made rule-born threads unsendable
+                start_threads([cd["gwd"]], None, default_account_id(),
+                              seq_id=r["seq_id"])
             else:
                 note = (None if r["mode"] != "auto" else
                         "مؤجل تلقائياً: بلا هوية · auto-enroll held: no ID yet")
                 with db.connect() as c:
                     c.execute("""INSERT INTO gaash_threads
-                        (gwd,seq_id,state,step,unread,missing_docs,
+                        (gwd,seq_id,account_id,state,step,unread,missing_docs,
                          pending_files_json,created_at,last_activity,missing_note)
-                        VALUES (?,?, 'proposed',0,0,0,'[]',?,?,?)""",
-                              (cd["gwd"], r["seq_id"], now_iso(), now_iso(),
-                               note))
+                        VALUES (?,?,?, 'proposed',0,0,0,'[]',?,?,?)""",
+                              (cd["gwd"], r["seq_id"], default_account_id(),
+                               now_iso(), now_iso(), note))
             made += 1
     return made
 
@@ -964,6 +1045,15 @@ def stats():
 
 
 # ── Overview drill-down: which exact email is behind a stat tile ──
+def account_labels():
+    """{email: human label} for the sending mailboxes. A message records the
+    address it went out from, not an account id, so every per-sender surface
+    resolves the friendly name this way."""
+    with db.connect() as c:
+        return {r["email"]: (r["label"] or "").strip()
+                for r in c.execute("SELECT email, label FROM gaash_accounts")}
+
+
 def stat_detail(kind, limit=300):
     """The actual EMAILS behind an 🧭 Overview tile ('sent'|'opened'|'clicked'|
     'replied') — one row per message, carrying enough to render a real mail row
@@ -975,8 +1065,7 @@ def stat_detail(kind, limit=300):
     cols = ("id, gwd, dir, kind, step, at, from_addr, to_addr, subject, body, "
             "opens, clicks, first_open_at, first_click_at")
     with db.connect() as c:
-        labels = {r["email"]: (r["label"] or "").strip()
-                  for r in c.execute("SELECT email, label FROM gaash_accounts")}
+        labels = account_labels()
         if kind in ("sent", "opened", "clicked"):
             where = {"sent": "1=1", "opened": "opens>0",
                      "clicked": "clicks>0"}[kind]
@@ -1000,6 +1089,38 @@ def stat_detail(kind, limit=300):
         r["from_name"] = labels.get(frm) or frm.split("@")[0]
         r["body"] = (r.get("body") or "")[:4000]
     return rows
+
+
+def seed_followup_template():
+    """A hand-sent nudge for a parcel whose earlier email was opened but never
+    answered. Seeded by id with INSERT OR IGNORE, so it appears once and any
+    edit the owner makes to it survives every restart.
+
+    It never mentions the read receipt. Knowing a message was opened is how the
+    owner CHOOSES who to chase; saying so to a customs clerk reads as
+    surveillance and costs more goodwill than the nudge is worth."""
+    body = (
+        "Hello,\n\n"
+        "I hope you are well.\n\n"
+        "I am following up on parcel {gwd}, which has now been waiting "
+        "{days_waiting} days.\n\n"
+        "Tracking number: {gwd}\n"
+        "ID number: {id_number}\n\n"
+        "Our dealer import certification is attached for your reference. If "
+        "anything further is needed from our side, please tell me exactly which "
+        "document and I will send it the same day.\n\n"
+        "Could you let me know the current status and the expected clearance "
+        "date?\n\n"
+        "Thank you for your help,\n"
+        "Otlobly")
+    try:
+        with db.connect() as c:
+            c.execute("""INSERT OR IGNORE INTO gaash_templates
+                (id,name,subject_tpl,body_tpl,updated_at) VALUES (?,?,?,?,?)""",
+                      ("tpl_followup", "Follow-up — polite nudge",
+                       "Follow-up — parcel {gwd}", body, now_iso()))
+    except Exception:  # noqa - a missing template must never block boot
+        pass
 
 
 # ── one-time v2 seed: the legacy settings 4-step chain → real data ──
@@ -1159,6 +1280,126 @@ def thread_restart(gwd, fresh=False, at=None):
             **({} if res.get("ok") else
                {"send_error": res.get("error"),
                 "dry_run": res.get("dry_run", False)})}
+
+
+def thread_switch_acct(gwd, account_id):
+    """Move a conversation to a DIFFERENT sending mailbox.
+
+    account_id was written once at enrollment and never again, so a thread was
+    stuck with whichever account started it — and a thread whose account was
+    deleted, or that a rule created without one, had no cure at all.
+
+    Unlike the workflow switch this does NOT touch `step`: step numbers belong
+    to the sequence, not the mailbox, and resetting would re-send email #1 for
+    nothing.
+
+    Safe to do mid-thread. Every report reads each message's own `from_addr`
+    snapshot rather than this pointer, and reply matching is account-blind
+    (match_thread looks a Message-ID up with no account filter), so replies
+    still land on this thread whichever mailbox receives them."""
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    acct = _account((account_id or "").strip())
+    if not acct:
+        return {"ok": False, "error": "sending account not found"}
+    if (th.get("account_id") or "") == acct["id"]:
+        return {"ok": False, "error": "already sending from that account"}
+    _thread_set(g, account_id=acct["id"], last_error=None)
+    return {"ok": True, "gwd": g, "account_id": acct["id"],
+            "email": acct.get("email") or ""}
+
+
+def resend_message(msg_id, account_id=None):
+    """Send one already-sent message again — optionally from another mailbox.
+
+    The manual twin of process_resends, which is already exactly this: take the
+    outgoing row, rehydrate its attachments off disk, and put it through
+    _thread_send as kind='resent'. Passing account_id moves the conversation
+    first, so the follow-ups keep coming from the address that just wrote."""
+    try:
+        mid = int(msg_id)
+    except Exception:  # noqa
+        return {"ok": False, "error": "no message"}
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_msgs WHERE id=?", (mid,)).fetchone()
+    row = dict(r) if r else None
+    if not row or row.get("dir") != "out":
+        return {"ok": False, "error": "only a sent message can go out again"}
+    gwd = row["gwd"]
+    if not thread_get(gwd):
+        return {"ok": False, "error": "thread not found"}
+    if account_id:
+        sw = thread_switch_acct(gwd, account_id)
+        # "already on that account" is not a failure here — it just means the
+        # resend goes out from where the thread already was
+        if not sw.get("ok") and sw.get("error") != "already sending from that account":
+            return sw
+    # the bytes live under FILES_DIR/<gwd>/, not in the row
+    atts = []
+    for a in json.loads(row.get("attachments_json") or "[]"):
+        p = attachment_path(gwd, a.get("file"))
+        if p:
+            atts.append((a.get("name") or p.name, p.read_bytes(),
+                         a.get("ctype") or "application/octet-stream"))
+    res = _thread_send(gwd, row.get("body") or "", atts, kind="resent",
+                       step=row.get("step"))
+    return {**res, "gwd": gwd, "attachments": len(atts)}
+
+
+def default_account_id():
+    """The mailbox a thread gets when nobody picked one — the first added.
+
+    Without this, run_rules enrolled parcels with account_id=None and they sat
+    forever failing to send with nothing on screen to say why."""
+    got = accounts(redact=True)
+    return got[0]["id"] if got else None
+
+
+def thread_switch_seq(gwd, seq_id, at=None):
+    """Move a package to a DIFFERENT workflow.
+
+    `seq_id` was only ever written at enrollment (start_threads), so a package
+    was stuck in whatever workflow it started in — the sole way out being delete
+    + re-enroll, which is refused once real correspondence exists.
+
+    The move RESTARTS at email #1 of the new workflow: step numbers are
+    per-sequence, so carrying step 2 into a 3-step workflow would silently skip
+    its first two emails. The message history is kept — it is real
+    correspondence with the same recipient, and the next email threads onto it.
+    """
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    if th.get("state") == "proposed":
+        return {"ok": False, "error":
+                "اقتراح لم يبدأ — وافق عليه أولاً · "
+                "still a suggestion — approve it first"}
+    seq = sequence_get(seq_id)
+    if not seq:
+        return {"ok": False, "error": "workflow not found"}
+    if seq.get("paused"):
+        return {"ok": False, "error":
+                "هذا السير موقوف — شغّله أولاً · "
+                "that workflow is off — switch it on first"}
+    if (th.get("seq_id") or "") == seq["id"]:
+        return {"ok": False, "error": "already in that workflow"}
+    # subject too: _thread_send prefers the thread's stored base subject over the
+    # template's, so leaving it would send the NEW sequence under the OLD subject
+    _thread_set(g, seq_id=seq["id"], step=0, state="active", subject=None,
+                missing_docs=0, missing_note=None, resend_json=None,
+                last_error=None,
+                next_send_at=(at or datetime.now(timezone.utc)
+                              .isoformat(timespec="seconds")))
+    out = {"ok": True, "gwd": g, "seq_id": seq["id"], "seq_name": seq.get("name")}
+    if at:                                 # the daemon sends it when it's due
+        return {**out, "scheduled_at": at}
+    res = send_step(g)                     # same immediate send as start_threads
+    return {**out, **({} if res.get("ok") else
+                      {"send_error": res.get("error"),
+                       "dry_run": res.get("dry_run", False)})}
 
 
 def _msg_add(gwd, rec):
@@ -1633,6 +1874,190 @@ def parcel_board_map():
     return out
 
 
+def tracking_map():
+    """{GWD: {gash_status, bucket, gz, label}} — where customs has got to, for
+    every parcel, in ONE leluxe scan + ONE purchases load. `gz` is the Gerizim
+    last-mile bucket: GAASH "delivered" only means handed to the last-mile
+    shelf, so the two together are what "this parcel is finished" means.
+
+    Batched on purpose: the per-GWD twin (_leluxe_row_for) is a full-table LIKE
+    scan each time, and the conversation list draws every thread at once."""
+    out = {}
+    try:
+        with db.connect() as c:
+            rows = c.execute("SELECT data_json FROM leluxe_orders "
+                             "WHERE deleted=0").fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                continue
+            f = d.get("fields") or {}
+            tn = str(d.get("tracking_number") or "").strip().upper()
+            if not tn:
+                for k, v in f.items():
+                    if k.strip().lower() == "tracking number":
+                        tn = str(v or "").strip().upper()
+                        break
+            if not tn:
+                continue
+            gash = ""
+            for k, v in f.items():
+                if k.strip().lower() == "gash status":
+                    # ClickUp stores several of these with a leading space
+                    # (" customer ID"); untrimmed it misses the colour lookup
+                    gash = _cf_stringify(v).strip()
+                    break
+            ts = d.get("tracking_status")
+            cur = out.get(tn) or {}
+            # a package row carries the truth; an item row may be blank, so keep
+            # whichever value actually says something
+            out[tn] = {"gash_status": gash or cur.get("gash_status") or "",
+                       "bucket": _bucket(ts) or cur.get("bucket") or "",
+                       "gz": _bucket(d.get("gerizim_status")) or cur.get("gz") or "",
+                       "label": ((ts.get("label") if isinstance(ts, dict)
+                                  else (str(ts)[:40] if ts else ""))
+                                 or cur.get("label") or "")}
+    except Exception:  # noqa
+        pass
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if not tn or tn in out:
+                    continue
+                ts = pk.get("tracking_status")
+                out[tn] = {"gash_status": "",       # Purchases has no such field
+                           "bucket": _bucket(ts) or "",
+                           "gz": _bucket(pk.get("gerizim_status")) or "",
+                           "label": (ts.get("label") if isinstance(ts, dict)
+                                     else (str(ts)[:40] if ts else "")) or ""}
+    except Exception:  # noqa
+        pass
+    return out
+
+
+def _store_index():
+    """{"leluxe": {GWD…}, "purchases": {GWD…}} in one scan each.
+
+    A tracking number can sit on a Leluxe row AND a purchase package. Checking
+    only the board a conversation came from left the other one stale, showing
+    two different answers for the same parcel."""
+    idx = {"leluxe": set(), "purchases": set()}
+    try:
+        with db.connect() as c:
+            for r in c.execute("SELECT data_json FROM leluxe_orders WHERE deleted=0"):
+                try:
+                    d = json.loads(r["data_json"] or "{}")
+                except Exception:  # noqa
+                    continue
+                tn = str(d.get("tracking_number") or "").strip().upper()
+                if not tn:
+                    for k, v in (d.get("fields") or {}).items():
+                        if k.strip().lower() == "tracking number":
+                            tn = str(v or "").strip().upper()
+                            break
+                if tn:
+                    idx["leluxe"].add(tn)
+    except Exception:  # noqa
+        pass
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if tn:
+                    idx["purchases"].add(tn)
+    except Exception:  # noqa
+        pass
+    return idx
+
+
+def sweep_terminal(tm=None):
+    """Cleared/delivered parcels stop sequencing NOW.
+
+    The per-thread guard in run_once only fires when a step comes due, which is
+    days later — so a cleared parcel kept its place in the list and its pending
+    email. This sweeps every active thread off one batched tracking_map (no
+    per-thread LIKE scan, no network), so it is cheap enough to run on every
+    check and every daemon pass. Returns the GWDs it stopped."""
+    tm = tracking_map() if tm is None else tm
+    out = []
+    for th in threads_all():
+        if th.get("state") != "active":
+            continue
+        v = tm.get(str(th.get("gwd") or "").strip().upper()) or {}
+        if v.get("bucket") in _TERMINAL or v.get("gz") == "delivered":
+            _thread_set(th["gwd"], state="goal_met", next_send_at=None)
+            out.append(th["gwd"])
+    return out
+
+
+def check_tracking(gwds=None, force=False, actor=""):
+    """Ask the carriers where these parcels are, and land the answer everywhere.
+
+    One press, one request. For each GWD every store that holds that tracking
+    number is refreshed — not just the board the conversation came from — and
+    each store already fans the result out across all of its own rows carrying
+    that number. What moved is written to gash_status_log so it can be reviewed
+    afterwards, and anything that turned out to be cleared stops sequencing.
+
+    ClickUp: the GASH STATUS field push is queued by leluxe.apply_gash_status
+    as always (working list). The REAL AZ (2) is written by the Mac sync tool,
+    which the browser triggers separately — nothing here writes to it."""
+    import leluxe
+    import purchases
+    gwds = [str(g or "").strip().upper() for g in (gwds or [])]
+    gwds = [g for g in gwds if re.match(r"GWD\d+$", g)]
+    if not gwds:
+        gwds = [t["gwd"] for t in threads_all()
+                if t.get("state") not in ("done", "goal_met")]
+    idx = _store_index()
+    run_id = db.gash_run_start(actor=actor)
+    changes, remaining = [], 0
+    for gwd in gwds:
+        if gwd in idx["leluxe"]:
+            try:
+                r = leluxe.refresh_tracking(only=gwd, force=force)
+            except Exception as e:  # noqa - one dead parcel must not kill the run
+                r = {"error": str(e)[:120]}
+            remaining += int(r.get("remaining") or 0)
+            for ch in r.get("changes") or []:
+                changes.append({"gwd": gwd, "name": ch.get("name") or "",
+                                "code": ch.get("code") or "",
+                                "order_status": ch.get("status") or "",
+                                "old": ch.get("old") or "", "new": ch.get("new") or "",
+                                "store": "leluxe"})
+        if gwd in idx["purchases"]:
+            try:
+                r = purchases.refresh_tracking(only=gwd, force=force)
+            except Exception as e:  # noqa
+                r = {"error": str(e)[:120]}
+            for ch in r.get("changes") or []:
+                # the carriers' own words here — Purchases has no GASH STATUS
+                # dropdown, so there is no option name to report
+                for old, new in ((ch.get("old"), ch.get("new")),
+                                 (ch.get("gz_old"), ch.get("gz_new"))):
+                    changes.append({"gwd": gwd, "name": ch.get("name") or "",
+                                    "code": f"#{ch.get('package_no')}"
+                                            if ch.get("package_no") else "",
+                                    "order_status": "",
+                                    "old": (old or {}).get("text") or "",
+                                    "new": (new or {}).get("text") or "",
+                                    "store": "purchases"})
+    logged = [ch for ch in changes
+              if db.log_gash_change(run_id, ch["gwd"], ch["old"], ch["new"],
+                                    name=ch["name"], code=ch["code"],
+                                    order_status=ch["order_status"],
+                                    store=ch["store"])]
+    db.gash_run_close(run_id, len(gwds), len(logged))
+    cleared = sweep_terminal()
+    return {"ok": True, "run_id": run_id, "checked": len(gwds),
+            "changed": len(logged), "changes": logged,
+            "cleared": cleared, "remaining": remaining}
+
+
 def parcel_src_map(pmap=None):
     """{GWD: pick|board|default} for the rows the UI is about to draw — batched
     twin of parcel_name_src (which costs a query per GWD)."""
@@ -1762,6 +2187,72 @@ TPL_CORE_TOKENS = [
 ]
 
 
+def package_contents(gwd):
+    """[{title, qty}] — what is actually inside ONE package, for the customs
+    declaration. Deliberately does NOT go through _leluxe_row_for: that returns
+    only the FIRST row matching the GWD (an item), so a three-item package would
+    silently be declared as one product."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return []
+    out = []
+    try:                                        # ── Leluxe: the item ROWS ──
+        with db.connect() as c:
+            rows = c.execute(
+                "SELECT kind, name, data_json FROM leluxe_orders "
+                "WHERE deleted=0 AND data_json LIKE ? ORDER BY id",
+                (f"%{g}%",)).fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                continue
+            f = d.get("fields") or {}
+            tn = str(d.get("tracking_number") or "").strip().upper()
+            if not tn:
+                for k, v in f.items():
+                    if k.strip().lower() == "tracking number":
+                        tn = str(v or "").strip().upper()
+                        break
+            if tn != g or r["kind"] != "item":
+                continue
+            qty = ""
+            for k, v in f.items():              # 'Quantity ordered ' — trailing space
+                if " ".join(str(k).lower().split()) == "quantity ordered":
+                    qty = _cf_stringify(v)
+                    break
+            title = str(r["name"] or "").strip()
+            if title:
+                out.append({"title": title, "qty": _int_or(qty, 1)})
+    except Exception:  # noqa
+        pass
+    if out:
+        return out
+    try:                                        # ── Purchases: the package items ──
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            if str(pk.get("tracking_number") or "").strip().upper() != g:
+                continue
+            for it in (pk.get("items") or []):
+                t = str(it.get("title") or "").strip()
+                if t:
+                    out.append({"title": t, "qty": _int_or(it.get("qty"), 1)})
+            return out
+    return out
+
+
+def _int_or(v, dflt):
+    try:
+        n = int(float(str(v).strip() or 0))
+        return n if n > 0 else dflt
+    except Exception:  # noqa
+        return dflt
+
+
 def _cf_for_gwd(gwd):
     """{label: value} of this ONE package's board columns — Leluxe ClickUp
     fields + the Purchases PO's custom values (defined-but-empty defs as "")."""
@@ -1860,10 +2351,19 @@ def _build_msg(acct, to_addr, subject, body, attachments, chain, html=None):
 
 
 def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
-                 subject=None, to_override=None, step_id=None):
+                 subject=None, to_override=None, step_id=None,
+                 acct_override=None, fresh=False):
     """Send one message on a thread (threaded Re: after the first). The message
     row is pre-allocated so the tracking pixel/links can carry its id, then
-    DELETED if Gmail rejects the send. Honors dry_run."""
+    DELETED if Gmail rejects the send. Honors dry_run.
+
+    `acct_override` sends from a named mailbox WITHOUT moving the conversation
+    to it, and `fresh` starts a new RFC-822 root instead of replying onto the
+    thread's earlier messages. Both exist for the step-1 fan-out: a copy that
+    threads would reach GAASH as a stranger replying to someone else's email
+    about their parcel. The copy's Message-ID is still stored, so a reply to
+    EITHER copy still matches the thread — match_thread looks ids up with no
+    account filter."""
     th = thread_get(gwd)
     if not th:
         return {"ok": False, "error": "thread not found"}
@@ -1872,16 +2372,21 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
         _thread_set(gwd, last_error="dry-run is ON in Settings — nothing is sent")
         return {"ok": False, "error": "dry_run enabled — sends are disabled in Settings",
                 "dry_run": True}
-    acct = _account(th.get("account_id"))
+    acct = _account(acct_override or th.get("account_id"))
     if not acct:
-        return {"ok": False, "error": "sending account no longer exists — add one"}
+        # every sibling failure writes last_error; this one did not, so the
+        # daemon retried and failed forever with nothing on screen to say why
+        err = ("no sending account on this conversation — pick one on its "
+               "\u2709 pill")
+        _thread_set(gwd, last_error=err)
+        return {"ok": False, "error": err}
     seq = sequence_get(th.get("seq_id"))
     to_addr = (to_override or (seq or {}).get("to_address")
                or setts.get("to_address") or "").strip()
     if not to_addr:
         return {"ok": False, "error": "no recipient address — set one on the sequence or in Settings"}
     base = th.get("subject") or subject or f"Customs clearance — {gwd}"
-    prior = [m for m in msgs_for(gwd) if m.get("message_id")]
+    prior = [] if fresh else [m for m in msgs_for(gwd) if m.get("message_id")]
     subj = base
     if prior and not re.match(r"(?i)re:", base):
         subj = f"Re: {base}"
@@ -1924,20 +2429,46 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
     return {"ok": True, "message_id": mid, "msg_row": mrow}
 
 
+_DOC_CTYPE = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+              "pdf": "application/pdf", "webp": "image/webp"}
+
+
+def _library_doc(id_doc_id):
+    """(filename, bytes, ctype) for one library document, or None."""
+    doc = _id_doc(id_doc_id)
+    if not doc:
+        return None
+    p = id_file_path(doc["filename"])
+    if not p:
+        return None
+    ext = p.suffix.lower().lstrip(".")
+    return (f"{doc['name']}{p.suffix}", p.read_bytes(),
+            _DOC_CTYPE.get(ext, "application/octet-stream"))
+
+
 def _step_attachments(th):
-    """Attachments for the NEXT sequence email: the chosen ID doc on step 1 +
-    any files the owner queued (e.g. a KMT), which are then consumed."""
+    """Attachments for the NEXT sequence email.
+
+    docs_json is the package's own document set — a generated declaration, a
+    shared ID scan, a dealer certificate — and it rides EVERY email, because a
+    different person at GAASH may pick up each follow-up and should never have
+    to scroll back for the paperwork. Unlike pending_files_json it is not
+    consumed by _schedule_next, so it survives to the next step.
+
+    A thread created before docs_json existed keeps exactly its old behaviour:
+    one document, on email #1 only."""
     out = []
-    if int(th.get("step") or 0) == 0 and th.get("id_doc_id"):
-        doc = _id_doc(th["id_doc_id"])
-        if doc:
-            p = id_file_path(doc["filename"])
-            if p:
-                ext = p.suffix.lower().lstrip(".")
-                ctype = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
-                         "png": "image/png", "pdf": "application/pdf",
-                         "webp": "image/webp"}.get(ext, "application/octet-stream")
-                out.append((f"{doc['name']}{p.suffix}", p.read_bytes(), ctype))
+    ids = []
+    try:
+        ids = [i for i in json.loads(th.get("docs_json") or "[]") if i]
+    except Exception:  # noqa
+        ids = []
+    if not ids and int(th.get("step") or 0) == 0 and th.get("id_doc_id"):
+        ids = [th["id_doc_id"]]
+    for doc_id in ids:
+        got = _library_doc(doc_id)
+        if got:
+            out.append(got)
     for a in json.loads(th.get("pending_files_json") or "[]"):
         p = attachment_path(th["gwd"], a.get("file"))
         if p:
@@ -1998,6 +2529,7 @@ def send_step(gwd):
                        step=step + 1, subject=subject, step_id=st.get("id"))
     if not res.get("ok"):
         return res
+    template_touch(st.get("template_id"))          # it really went out → "last used"
     _schedule_next(gwd, seq, step + 1)
     return {"ok": True, "step": step + 1, **res}
 
@@ -2015,8 +2547,46 @@ def task_done(gwd):
     return {"ok": True, "thread": thread_get(gwd)}
 
 
+def _fanout_step1(gwd, msg_row, account_id):
+    """Send email #1 AGAIN from another ticked mailbox, as its own first email.
+
+    Ticking several accounts means "write to GAASH from each of these", so the
+    per-sender open counts on the card can answer which address they actually
+    read. Only step 1 fans out — the thread keeps one account_id and every
+    follow-up comes from it, or a 4-step workflow would put eight emails in a
+    human queue.
+
+    Called AFTER send_step, never inside it: send_step ends in _schedule_next,
+    which advances step and sets next_send_at, so a copy sent from in there
+    would be filed under step 2 and double-advance the sequence."""
+    if not msg_row:
+        return None
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_msgs WHERE id=?",
+                      (msg_row,)).fetchone()
+    row = dict(r) if r else None
+    if not row:
+        return None
+    atts = []                              # the bytes live on disk, not in the row
+    for a in json.loads(row.get("attachments_json") or "[]"):
+        p = attachment_path(gwd, a.get("file"))
+        if p:
+            atts.append((a.get("name") or p.name, p.read_bytes(),
+                         a.get("ctype") or "application/octet-stream"))
+    res = _thread_send(gwd, row.get("body") or "", atts, kind="sent",
+                       step=row.get("step"), step_id=row.get("step_id"),
+                       acct_override=account_id, fresh=True)
+    if not res.get("ok"):
+        # _thread_send already wrote last_error, but as if the whole step had
+        # failed — which it did not. Name the mailbox that did.
+        who = (_account(account_id) or {}).get("email") or account_id
+        _thread_set(gwd, last_error="copy from %s failed: %s"
+                    % (who, res.get("error") or "?"))
+    return res
+
+
 def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
-                  schedule=None):
+                  schedule=None, docs=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
     to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
     (and therefore the ID) before email 1 goes out.
@@ -2029,6 +2599,23 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     schedule = {str(k or "").strip().upper(): v
                 for k, v in (schedule or {}).items()}
+    # A package's documents = its OWN (a declaration is written for one parcel
+    # and must never ride another's email) + the batch-wide ones (a shared ID
+    # scan, a dealer certificate). id_doc_id accepts a list or a single value.
+    docs = {str(k or "").strip().upper(): (v if isinstance(v, list) else [v])
+            for k, v in (docs or {}).items()}
+    shared = ([d for d in id_doc_id if d] if isinstance(id_doc_id, list)
+              else ([id_doc_id] if id_doc_id else []))
+    # account_id accepts a LIST. The round-robin picks each parcel's PRIMARY
+    # mailbox — it owns the conversation and sends every follow-up, which is
+    # what keeps forty clearance emails from leaving one Gmail account in a
+    # minute and tripping its sending limit. On top of that, email #1 also goes
+    # out from every OTHER ticked mailbox (_fanout_step1), because ticking two
+    # addresses means "write to GAASH from both" and the point is to see which
+    # one they open.
+    fleet = ([a for a in account_id if a] if isinstance(account_id, list)
+             else ([account_id] if account_id else []))
+    picked = 0
     out = []
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
@@ -2043,14 +2630,19 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
         if existing:
             out.append({"gwd": gwd, "ok": False, "error": "thread already exists"})
             continue
+        mine = [d for d in (docs.get(gwd) or []) if d]
+        pack = mine + [d for d in shared if d not in mine]     # own first, deduped
+        acct_for = fleet[picked % len(fleet)] if fleet else None
+        picked += 1
         with db.connect() as c:
             # next_send_at seeds to NOW so the sequencer retries step 1 even if
             # the immediate send below is blocked (dry-run / no account yet)
             c.execute("""INSERT INTO gaash_threads
-                (gwd,account_id,state,step,id_doc_id,unread,missing_docs,
+                (gwd,account_id,state,step,id_doc_id,docs_json,unread,missing_docs,
                  pending_files_json,next_send_at,created_at,last_activity,seq_id)
-                VALUES (?,?, 'active',0,?,0,0,'[]',?,?,?,?)""",
-                      (gwd, account_id, id_doc_id or None,
+                VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?)""",
+                      (gwd, acct_for, (pack[0] if pack else None),
+                       json.dumps(pack),
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),
                        now_iso(), now_iso(), seq_id))
@@ -2066,10 +2658,20 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                         "scheduled_at": schedule[gwd]})
             continue
         res = send_step(gwd)
+        copies, cerr = 0, []
+        if res.get("ok"):
+            for extra in [a for a in fleet if a != acct_for]:
+                r2 = _fanout_step1(gwd, res.get("msg_row"), extra) or {}
+                if r2.get("ok"):
+                    copies += 1
+                elif r2.get("error"):
+                    cerr.append(r2["error"])
         out.append({"gwd": gwd, **({"ok": True, "state": "active"} if res.get("ok")
                                    else {"ok": True, "state": "active",
                                          "send_error": res.get("error"),
-                                         "dry_run": res.get("dry_run", False)})})
+                                         "dry_run": res.get("dry_run", False)}),
+                    **({"copies": copies} if copies else {}),
+                    **({"copy_errors": cerr} if cerr else {})})
     return out
 
 
@@ -2495,6 +3097,13 @@ def run_once():
         proposed = run_rules()
     except Exception:  # noqa - a bad rule must never stop the sends
         proposed = 0
+    # cleared/delivered parcels stop HERE, before the not-due filter below —
+    # the per-thread guard further down only ever sees threads whose next email
+    # is already due, so without this a cleared parcel sequences for days
+    try:
+        sweep_terminal()
+    except Exception:  # noqa - a sweep failure must never stop the sends
+        pass
     for th in threads_all():
         if th.get("state") != "active":
             continue
@@ -2576,24 +3185,53 @@ def overview():
                                   "at": r["at"], "body": (r["body"] or "")[:140]}
         # did anyone READ what we sent? the same tracking the 🧭 tiles count,
         # rolled up per parcel so the list can show it without opening a thread
-        reads = {r["gwd"]: {"sent": r["n"], "opens": r["opens"] or 0,
-                            "clicks": r["clicks"] or 0, "first_open_at": r["fo"]}
-                 for r in c.execute(
-                     "SELECT gwd, COUNT(*) n, SUM(opens) opens, SUM(clicks) clicks, "
-                     "MIN(first_open_at) fo FROM gaash_msgs "
-                     "WHERE dir='out' AND kind IN ('sent','resent') GROUP BY gwd")}
+        # ...and by WHOM. A parcel chased from two mailboxes needs one line each:
+        # the aggregate sitting beside a single address implied that address
+        # earned every open. Still one query — grouping by sender as well, then
+        # summing in Python, so overview() gains no round-trip.
+        by = {}
+        for r in c.execute(
+                "SELECT gwd, from_addr, COUNT(*) n, SUM(opens) opens, "
+                "SUM(clicks) clicks, MIN(first_open_at) fo, MAX(at) last_at "
+                "FROM gaash_msgs WHERE dir='out' AND kind IN ('sent','resent') "
+                "GROUP BY gwd, from_addr"):
+            by.setdefault(r["gwd"], []).append(
+                {"email": (r["from_addr"] or "").strip(), "sent": r["n"],
+                 "opens": r["opens"] or 0, "clicks": r["clicks"] or 0,
+                 "first_open_at": r["fo"], "last_at": r["last_at"]})
+        reads = {}
+        for gwd, rows in by.items():
+            rows.sort(key=lambda x: x["last_at"] or "", reverse=True)
+            firsts = [x["first_open_at"] for x in rows if x["first_open_at"]]
+            reads[gwd] = {"sent": sum(x["sent"] for x in rows),
+                          "opens": sum(x["opens"] for x in rows),
+                          "clicks": sum(x["clicks"] for x in rows),
+                          "first_open_at": min(firsts) if firsts else None}
+        accts = {r["id"]: r["email"] for r in
+                 c.execute("SELECT id, email FROM gaash_accounts")}
+    labels = account_labels()
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     bmap = parcel_board_map()
+    tmap = tracking_map()
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
         th["reads"] = reads.get(th["gwd"]) or {"sent": 0, "opens": 0,
                                                "clicks": 0, "first_open_at": None}
+        # who SENT (from_addr, historical) reconciled against who sends NEXT
+        # (account_id) — without the flag a switched thread lists a mailbox
+        # that no longer sends with nothing to say so
+        nxt = (accts.get(th.get("account_id")) or "").strip()
+        th["reads_by"] = [{**x, "label": labels.get(x["email"], ""),
+                           "current": x["email"] == nxt}
+                          for x in by.get(th["gwd"], [])]
         th.pop("pending_files_json", None)
         th["pname"] = pmap.get(th["gwd"], "")
         th["pname_id"] = emap.get(th["gwd"], "")
         th["pname_src"] = smap.get(th["gwd"], "")
         th["source"] = bmap.get(th["gwd"], "")
+        # where customs has got to — the one thing the list could not tell you
+        th["gash"] = tmap.get(th["gwd"]) or {}
     proposed = [t for t in threads if t.get("state") == "proposed"]
     return {"threads": [t for t in threads if t.get("state") != "proposed"],
             "proposed": proposed,
@@ -2637,11 +3275,18 @@ def autoclear_toggle(gwd, on):
     return {"ok": True, "gwd": g, "on": bool(on)}
 
 
-def candidates():
+def candidates(include_enrolled=False):
     """Every enrollable GWD — from the Leluxe mirror AND the Purchases board —
-    that has no thread yet and isn't already delivered. Each row is tagged with
-    its `source` so the picker can show ⌚ Leluxe vs 📦 Purchases."""
-    have = {t["gwd"] for t in threads_all()}
+    that isn't already delivered. Each row is tagged with its `source` so the
+    picker can show ⌚ Leluxe vs 📦 Purchases.
+
+    By default only parcels with NO thread yet — that is what the auto-rules
+    and their ⚡ match counters must see. The 📧 enroll picker passes
+    include_enrolled=True: parcels already in a workflow stay VISIBLE there,
+    tagged with their thread state, so the owner can tell at a glance which
+    tracking numbers are covered and which still need sending."""
+    thmap = {t["gwd"]: t for t in threads_all()}
+    have = set() if include_enrolled else set(thmap)
     out, seen = [], set()
     # ── Leluxe mirror (carries the GASH STATUS field) ──
     with db.connect() as c:
@@ -2712,11 +3357,19 @@ def candidates():
             custs = sorted({(it.get("customer_name") or "").strip()
                             for it in (pk.get("items") or [])
                             if (it.get("customer_name") or "").strip()})
+            # Purchases has no ClickUp GASH STATUS field, so its customs position
+            # comes from the STORED tracking status — the same value the filter
+            # above already read. Keeping it costs nothing and asks no carrier:
+            # it is whatever the last normal refresh wrote.
+            pts = pk.get("tracking_status")
             out.append({"gwd": tn, "source": "purchases",
                         "name": (p.get("ship_to") or "").strip()[:70],
                         "status": pk.get("otlobly_status"), "gash_status": None,
-                        "customers": "، ".join(custs)[:70], "bucket": None,
-                        "label": None, "po_id": p.get("po_id"), "cf": dict(pcf)})
+                        "customers": "، ".join(custs)[:70],
+                        "bucket": _bucket(pts) or None,
+                        "label": (pts.get("label") if isinstance(pts, dict)
+                                  else str(pts)[:40] if pts else None),
+                        "po_id": p.get("po_id"), "cf": dict(pcf)})
     # the name each parcel ships under + the ID mapped to it — the picker shows
     # both so the owner can see, before sending, which ID each email will carry
     pmap = parcel_name_map()
@@ -2727,8 +3380,17 @@ def candidates():
         cd["pname_id"] = emap.get(cd["gwd"], "")
         cd["pname_src"] = smap.get(cd["gwd"], "")
         cd["autoclear"] = "1" if cd["gwd"] in ac else ""
-    # Leluxe first (has clearance status), then by GWD
-    out.sort(key=lambda x: (x["source"] != "leluxe", x["gwd"]))
+        th = thmap.get(cd["gwd"])
+        cd["thread"] = (None if not th else
+                        {"state": th.get("state"), "step": th.get("step") or 0,
+                         "seq_id": th.get("seq_id")})
+
+    # what still NEEDS enrolling first, then suggestions, then already-running;
+    # inside each group Leluxe first (has clearance status), then by GWD
+    def _grp(cd):
+        t = cd.get("thread")
+        return 0 if not t else (1 if t["state"] == "proposed" else 2)
+    out.sort(key=lambda x: (_grp(x), x["source"] != "leluxe", x["gwd"]))
     return out
 
 
@@ -2875,6 +3537,7 @@ def thread_detail(gwd):
     th["pname_id"] = id_number_for_email(gwd)
     th["pname_src"] = parcel_name_src(gwd)
     th["source"] = parcel_board_map().get(gwd, "")
+    th["gash"] = tracking_map().get(gwd) or {}
     return {"thread": th, "messages": msgs}
 
 

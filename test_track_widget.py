@@ -215,7 +215,10 @@ def test_frontend_strings():
     check("account.html: labels carry done/cur state", '${labels}' in account)
 
     check("app.py: customer path is cache-first", "timelines_cache_first" in apppy)
-    check("app.py: staff refresh feeds the shared cache", "cache_put_events" in apppy)
+    # Every staff-side GAASH fetch MUST write through to the shared cache, or the
+    # cache-first customer path would serve frozen statuses forever.
+    check("purchases.py: staff refresh feeds the shared cache",
+          "cache_put_events" in (HERE / "purchases.py").read_text(encoding="utf-8"))
     check("leluxe.py: daemon feeds the shared cache",
           "cache_put_events" in (HERE / "leluxe.py").read_text(encoding="utf-8"))
 

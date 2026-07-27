@@ -109,6 +109,7 @@ import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
+gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
                            #  local app has a stale copy and must never send)
@@ -411,6 +412,24 @@ def staff_app():
     brand = branding.resolve(db.current_business())
     return app.response_class(branding.render_shell(html_text, brand),
                               mimetype="text/html")
+
+
+_SW_JS = None
+
+
+@app.route("/sw.js")
+def sw_js():
+    """Offline-shell service worker (web/sw.js). Deliberately PUBLIC — the browser
+    refetches this script on its own schedule, session or not, and a 302→login HTML
+    answer would break worker updates; the file holds no secrets. no-cache so a
+    deploy's new worker is picked up immediately (the text/html after_request hook
+    doesn't cover application/javascript)."""
+    global _SW_JS
+    if _SW_JS is None:
+        _SW_JS = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
+    resp = app.response_class(_SW_JS, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
 
 
 @app.route("/api/me")
@@ -1738,149 +1757,17 @@ def api_purchases_refresh_tracking():
     Each GWD is checked against BOTH carriers: GAASH (skipped once its own
     bucket is delivered) and Gerizim last-mile (until GERIZIM says delivered —
     GAASH "Delivered" only means handed to the last-mile shelf)."""
-    import activity
-    import gerizim
     import purchases
     import tracking
-    ttl_min = 30
     b = request.get_json(force=True, silent=True) or {}
-    only = tracking.clean_tracking(b.get("tracking") or "") or None
-    force = bool(b.get("force"))
-    pdb = purchases.load()
-    now = datetime.now().astimezone()
-    cutoff = now - timedelta(minutes=ttl_min)
-    dl_cutoff = now - timedelta(days=14)          # the GAASH deadline is near-fixed: fetch
-    old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
-    dl_cap = 10                                   # bound the first-load deadline backfill
-    # work[gwd] = list of (po, pk, need_track, need_dl)
-    work = {}
-    for po in pdb["purchase_orders"]:
-        for pk in po.get("packages") or []:
-            tn = tracking.clean_tracking(pk.get("tracking_number") or "")
-            if not tn or (only and tn != only):
-                continue
-            gz = pk.get("gerizim_status") or {}
-            if isinstance(gz, dict) and gz.get("bucket") == "delivered":
-                continue                  # customer has the box — truly terminal
-            ts = pk.get("tracking_status") or {}
-            gaash_done = isinstance(ts, dict) and ts.get("bucket") == "delivered"
-            if gaash_done and not gz and (ts.get("time") or "") < old_gaash_cut:
-                continue                  # ancient GAASH-delivered parcel Gerizim never saw
-            need_track = force
-            if not need_track:
-                try:
-                    need_track = datetime.fromisoformat(pk.get("tracking_checked") or "") <= cutoff
-                except (ValueError, TypeError):
-                    need_track = True     # never checked / unparsable → refresh
-            # The deadline scrape rides its OWN cadence, not the 30-min tracking TTL
-            # (the Mac sync keeps tracking_checked fresh, which used to starve it).
-            # `gz` is `... or {}`, so test truthiness — an empty {} means "no Gerizim".
-            eligible = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
-                and not gz
-            need_dl = False
-            if eligible:
-                try:
-                    need_dl = force or not pk.get("gaash_deadline") \
-                        or datetime.fromisoformat(pk.get("gaash_deadline_checked") or "") <= dl_cutoff
-                except (ValueError, TypeError):
-                    need_dl = True        # never scraped → fetch once
-            if need_track or need_dl:
-                work.setdefault(tn, []).append((po, pk, need_track, need_dl))
-    # Each GWD costs ~10s of live scraping; doing all ~13 in one request blows past
-    # gunicorn's 120s timeout, which kills the request before the final save so
-    # NOTHING persists. Process a bounded batch, save after each, and report how
-    # many remain so the client re-calls until done.
-    BATCH = 5
-    all_gwds = list(work.items())
-    batch = all_gwds[:BATCH]
-    remaining = len(all_gwds) - len(batch)
-    updated, changes, dl_done = 0, [], 0
-    if batch:
-        session = None                    # scraped lazily: gerizim-only rounds skip it
-        for i, (tn, rows) in enumerate(batch):
-            if i:
-                time.sleep(tracking.REQUEST_GAP)
-            want_track = any(nt for _, _, nt, _ in rows)      # a tracking refresh is due
-            want_dl = any(nd for _, _, _, nd in rows) and dl_done < dl_cap
-            st, cd_at = None, None
-            if want_track:
-                if session is None:
-                    try:
-                        session = tracking.get_session()
-                    except Exception as e:  # noqa - GAASH down: keep Gerizim going
-                        session = e
-                if not isinstance(session, Exception):
-                    data = tracking.fetch_one(tn, *session)
-                    st = tracking.latest_status(data)
-                    # feed the shared last-known cache — the public tracking
-                    # widget serves customers straight from it (cache-first)
-                    tracking.cache_put_events(tn, tracking.events_from_raw(data))
-                    # latest "docs required" event — GAASH re-emits CD while docs are
-                    # missing, so a CD newer than the owner's upload stamp means the
-                    # upload never registered (the row shows a red warning chip).
-                    cd_at = max((s.get("StatusTime") or ""
-                                 for s in (data or {}).get("Statuses") or []
-                                 if (s.get("MappedStatusCode") or "").strip().upper() == "CD"
-                                 or (s.get("StatusDescription") or "").strip().lower() == "required customer id"),
-                                default=None) or None
-            gz = gerizim.track(tn) if want_track else None
-            gz_new = gz if isinstance(gz, dict) else None
-            # GAASH's lost-forever deadline (doc-link expiry) — own cadence, fetched
-            # once then re-checked every ~2 weeks; never re-hammered per page load.
-            deadline, dl_stamp = None, None
-            if want_dl:
-                dl_done += 1
-                dl_stamp = db.now_iso()   # stamp the attempt even if it returns None
-                deadline = tracking.ops_deadline(tn)
-            if not st and not gz_new and not deadline and not dl_stamp:
-                continue                  # every lookup failed / nothing new → no writes
-            stamp = db.now_iso()
-            for po, pk, nt, nd in rows:
-                old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
-                gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
-                if st:
-                    pk["tracking_status"] = st
-                if cd_at:
-                    pk["gaash_cd_at"] = cd_at
-                if gz_new:
-                    pk["gerizim_status"] = gz_new
-                if nd and dl_stamp:
-                    pk["gaash_deadline_checked"] = dl_stamp
-                    if deadline:
-                        pk["gaash_deadline"] = deadline
-                if nt:
-                    pk["tracking_checked"] = stamp
-                updated += 1
-                cur = st or old
-                changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
-                                "tracking": tn,
-                                "old": {"bucket": (old or {}).get("bucket"),
-                                        "text": activity.gaash_text(old)},
-                                "new": {"bucket": (cur or {}).get("bucket"),
-                                        "text": activity.gaash_text(cur)},
-                                "gz_old": {"bucket": (gz_old or {}).get("bucket"),
-                                           "text": activity.gaash_text(gz_old)},
-                                "gz_new": {"bucket": (gz_new or gz_old or {}).get("bucket"),
-                                           "text": activity.gaash_text(gz_new or gz_old)}})
-                # feed the per-PO Activity trail (readable text, the carrier as actor)
-                header = ("Order # " + po["amazon_order_number"]) if po.get("amazon_order_number") else po.get("po_id", "")
-                ot, nt = activity.gaash_text(old), activity.gaash_text(st)
-                if st and nt and ot != nt:
-                    activity.log("set", "purchase", po.get("po_id"), header,
-                                 field="tracking_status", old=ot or None, new=nt,
-                                 detail=f"Package {pk.get('package_no')}", user="GAASH")
-                got, gnt = activity.gaash_text(gz_old), activity.gaash_text(gz_new)
-                if gz_new and gnt and got != gnt:
-                    activity.log("set", "purchase", po.get("po_id"), header,
-                                 field="gerizim_status", old=got or None, new=gnt,
-                                 detail=f"Package {pk.get('package_no')}", user="Gerizim")
-            # Persist after EACH GWD so a timeout mid-batch never loses finished work.
-            purchases.save(pdb)
-    if updated:
+    res = purchases.refresh_tracking(only=tracking.clean_tracking(b.get("tracking") or "") or None,
+                                     force=bool(b.get("force")))
+    if res["updated"]:
         db.audit(auth.actor(), "tracking_refresh", "purchase", "-",
-                 f"refreshed GAASH status on {updated} package(s)")
-    return jsonify({"ok": True, "updated": updated, "remaining": remaining, "changes": changes,
-                    "purchase_orders": [purchases.summary(p) for p in pdb["purchase_orders"]]})
+                 f"refreshed GAASH status on {res['updated']} package(s)")
+    return jsonify({"ok": True, "updated": res["updated"], "remaining": res["remaining"],
+                    "changes": res["changes"],
+                    "purchase_orders": [purchases.summary(p) for p in res["db"]["purchase_orders"]]})
 
 
 @app.route("/api/purchase", methods=["GET", "POST"])
@@ -2811,7 +2698,38 @@ def _gm_files(raw):
 @auth.require_feature("leluxe")
 def api_gaash_overview():
     return jsonify({"ok": True, **gaash_mail.overview(),
-                    "candidates": gaash_mail.candidates()})
+                    "candidates": gaash_mail.candidates(include_enrolled=True)})
+
+
+@app.route("/api/gaash/check_tracking", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_check_tracking():
+    """📦 one press → every store that holds the number, plus the receipt.
+
+    Replaces the browser's old loop of one request per conversation, which
+    could only ever refresh the board each conversation came from.
+    Body: {"gwds": [...]}(default: every open conversation), {"force": true}."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.check_tracking(gwds=b.get("gwds") or None,
+                                   force=bool(b.get("force")),
+                                   actor=auth.actor())
+    if res.get("changed"):
+        db.audit(auth.actor(), "gaash_check", "leluxe", "-",
+                 f"{res['changed']} parcel(s) moved of {res['checked']} checked")
+    return jsonify(res)
+
+
+@app.route("/api/gaash/changes")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_changes():
+    """What the checks have moved lately — the popup's whole data source."""
+    try:
+        days = max(1, min(90, int(request.args.get("days") or 14)))
+    except ValueError:
+        days = 14
+    return jsonify({"ok": True, **db.gash_changes(days)})
 
 
 @app.route("/api/gaash/stat_detail")
@@ -2852,8 +2770,34 @@ def api_gaash_account_add():
 @auth.require_feature("leluxe")
 def api_gaash_account_remove():
     b = request.get_json(force=True, silent=True) or {}
-    ok = gaash_mail.remove_account(b.get("id"))
-    return jsonify({"ok": ok})
+    res = gaash_mail.remove_account(b.get("id"))
+    return jsonify(res)
+
+
+@app.route("/api/gaash/account/uses")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_account_uses():
+    """How many conversations a mailbox sends for — read before offering to
+    delete it, so the confirm can name the number instead of the damage
+    appearing afterwards."""
+    n = gaash_mail.account_thread_count((request.args.get("id") or "").strip())
+    return jsonify({"ok": True, "threads": n})
+
+
+@app.route("/api/gaash/resend", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_resend():
+    """Send an already-sent message again, optionally from another mailbox —
+    which moves the conversation there, so its follow-ups keep coming from the
+    address that just wrote."""
+    b = request.get_json(force=True, silent=True) or {}
+    res = gaash_mail.resend_message(b.get("msg_id"), b.get("account_id"))
+    if res.get("ok"):
+        activity.log("send", "gaash", 0, res.get("gwd") or "",
+                     detail="re-sent a message", user=_user())
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/api/gaash/ids", methods=["GET", "POST", "DELETE"])
@@ -2867,13 +2811,44 @@ def api_gaash_ids():
     b = request.get_json(force=True, silent=True) or {}
     if request.method == "DELETE":
         return jsonify({"ok": gaash_mail.ids_remove(b.get("id"))})
+    if b.get("action") == "move":       # re-file, no upload
+        return jsonify(gaash_mail.ids_move(b.get("id"), b.get("folder")))
     try:
         data = base64.b64decode(str(b.get("data_base64") or ""), validate=False)
     except Exception:  # noqa
         data = b""
     if not data or len(data) > 15 * 1024 * 1024:
         return jsonify({"ok": False, "error": "bad or oversized file"}), 400
-    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data))
+    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data,
+                                      folder=b.get("folder")))
+
+
+@app.route("/api/gaash/declaration", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_declaration():
+    """Build ONE package's customs declaration from what the boards already say
+    — the name it ships under, that name's ID, and its real contents. Files it
+    in the 📄 Declarations folder and returns the library row so the caller can
+    preview it and attach it to that package's first email."""
+    b = request.get_json(force=True, silent=True) or {}
+    many = b.get("gwds")
+    if isinstance(many, list):
+        # one refusal must not sink the batch: a parcel with no name is reported
+        # by name with its reason, the rest are still generated
+        results = [{**gaash_mail.declaration_make(g), "gwd": str(g or "").strip().upper()}
+                   for g in many[:200]]
+        done = [r["gwd"] for r in results if r.get("ok")]
+        if done:
+            activity.log("create", "gaash", 0, ",".join(done[:10]),
+                         detail=f"generated {len(done)} customs declaration(s)",
+                         user=_user())
+        return jsonify({"ok": True, "results": results})
+    res = gaash_mail.declaration_make(b.get("gwd"))
+    if res.get("ok"):
+        activity.log("create", "gaash", 0, res.get("gwd") or "",
+                     detail="generated a customs declaration", user=_user())
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/api/gaash/idfile")
@@ -2926,7 +2901,8 @@ def api_gaash_start():
                                    b.get("account_id"),
                                    seq_id=(b.get("seq_id") or "").strip() or None,
                                    names=b.get("names") if isinstance(b.get("names"), dict) else None,
-                                   schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None)
+                                   schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None,
+                                   docs=b.get("docs") if isinstance(b.get("docs"), dict) else None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
@@ -2983,7 +2959,14 @@ def api_gaash_readiness():
 def api_gaash_send():
     b = request.get_json(force=True, silent=True) or {}
     gwd = (b.get("gwd") or "").strip().upper()
-    res = gaash_mail.send_manual(gwd, b.get("body"), _gm_files(b.get("files")))
+    # doc_ids attach straight from the library — the bytes never round-trip
+    # through the browser just to come back again
+    files = _gm_files(b.get("files"))
+    for did in (b.get("doc_ids") or [])[:6]:
+        got = gaash_mail._library_doc(did)
+        if got:
+            files.append(got)
+    res = gaash_mail.send_manual(gwd, b.get("body"), files)
     if res.get("ok"):
         activity.log("send", "gaash", 0, gwd, detail="manual GAASH email",
                      user=_user())
@@ -3048,6 +3031,21 @@ def api_gaash_thread():
     elif action == "restart":       # 🔁 back to email #1 (now, or scheduled)
         res = gaash_mail.thread_restart(gwd, fresh=bool(b.get("fresh")),
                                         at=b.get("at"))
+        return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "switch_seq":    # move this package to a different workflow
+        res = gaash_mail.thread_switch_seq(gwd, (b.get("seq_id") or "").strip(),
+                                           at=b.get("at"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"moved to workflow {res.get('seq_name') or ''}".strip(),
+                         user=_user())
+        return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "switch_acct":   # send this conversation from another mailbox
+        res = gaash_mail.thread_switch_acct(gwd, b.get("account_id"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"now sends from {res.get('email') or ''}".strip(),
+                         user=_user())
         return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "dismiss":
         if th.get("state") != "proposed":
@@ -3142,8 +3140,58 @@ def api_gaash_templates():
     if request.method == "DELETE":
         res = gaash_mail.template_remove((b.get("id") or "").strip())
     else:
-        res = gaash_mail.template_save(b)
+        res = gaash_mail.template_save(b, user=_user())
     return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/template_render", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_template_render():
+    """One template, rendered for ONE package — the same _fill() the sequencer
+    sends with, so a template picked by hand carries exactly what an automated
+    email would. Renders only; nothing is sent.
+
+    Also reports which tokens did not survive: `unresolved` came back literal
+    (no such board column), `blank` resolved to nothing at all. A visible
+    {days_waiting} is a fixable mistake — a silently empty sentence is not.
+    """
+    b = request.get_json(force=True, silent=True) or {}
+    gwd = (b.get("gwd") or "").strip().upper()
+    tid = (b.get("template_id") or "").strip()
+    tpl = next((t for t in gaash_mail.templates_list() if t["id"] == tid), None)
+    if not tpl:
+        return jsonify({"ok": False, "error": "template not found"}), 404
+    th = gaash_mail.thread_get(gwd)
+    body_tpl = tpl.get("body_tpl") or ""
+    subj_tpl = tpl.get("subject_tpl") or ""
+    unresolved, blank = [], []
+    for tok in sorted(set(re.findall(r"\{([^{}]+)\}", body_tpl + " " + subj_tpl))):
+        one = gaash_mail._fill("{" + tok + "}", gwd, th)
+        if one == "{" + tok + "}":
+            unresolved.append(tok)
+        elif not one.strip():
+            blank.append(tok)
+
+    def render(text):
+        # a token that resolves to NOTHING is left standing as itself. _fill()
+        # substitutes "" — right for the sequencer, wrong here: it turns into
+        # "The ID document () is attached", a blank the writer cannot see. The
+        # token survives the fill behind a sentinel, so the writer meets
+        # "{id_name}" and can fix it. _fill itself is untouched.
+        for i, t in enumerate(blank):
+            text = text.replace("{" + t + "}", f"\x00{i}\x00")
+        text = gaash_mail._fill(text, gwd, th)
+        for i, t in enumerate(blank):
+            text = text.replace(f"\x00{i}\x00", "{" + t + "}")
+        return text
+
+    # previewing twenty packages before enrolling must not rewrite "last used"
+    # twenty times — only an actual pick counts as a use
+    if not b.get("preview"):
+        gaash_mail.template_touch(tid)
+    return jsonify({"ok": True, "subject": render(subj_tpl), "body": render(body_tpl),
+                    "unresolved": unresolved, "blank": blank})
 
 
 @app.route("/api/gaash/rules", methods=["GET", "POST", "DELETE"])

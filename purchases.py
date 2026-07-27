@@ -440,6 +440,179 @@ def summary(po, include_money=True):
 
 
 # --------------------------------------------------------------------------- #
+# Live GAASH / Gerizim refresh — the body of /api/purchases/refresh_tracking.
+# It lives here rather than in the route so the GAASH-mail check can reach it:
+# one tracking number can sit on a Leluxe row AND a purchase package, and a
+# check that only refreshed the board it was pressed on left the other stale.
+# --------------------------------------------------------------------------- #
+def refresh_tracking(only=None, force=False, batch=5):
+    """Top up every package's GAASH + Gerizim status from the carriers.
+
+    The hourly Mac sync can die silently (and did — month-old buckets shown as
+    truth), so opening the page tops itself up: every package with a GWD number
+    that isn't delivered and wasn't checked within the TTL gets one live lookup.
+    Unique numbers are fetched once (a GWD can sit on several packages); a
+    package is only rewritten on a successful fetch with real statuses.
+    `only` refreshes just that number; `force` bypasses the TTL (never the
+    terminal skips). Each GWD is checked against BOTH carriers: GAASH (skipped
+    once its own bucket is delivered) and Gerizim last-mile (until GERIZIM says
+    delivered — GAASH "Delivered" only means handed to the last-mile shelf).
+
+    Returns {updated, remaining, changes} — `changes` carries old→new per
+    package, which is what the change log and the popup are built from."""
+    import time
+    from datetime import timedelta
+
+    import activity
+    import db
+    import gerizim
+    import tracking
+    ttl_min = 30
+    only = tracking.clean_tracking(only or "") or None
+    pdb = load()
+    now = datetime.now().astimezone()
+    cutoff = now - timedelta(minutes=ttl_min)
+    dl_cutoff = now - timedelta(days=14)          # the GAASH deadline is near-fixed: fetch
+    old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
+    dl_cap = 10                                   # bound the first-load deadline backfill
+    # work[gwd] = list of (po, pk, need_track, need_dl)
+    work = {}
+    for po in pdb["purchase_orders"]:
+        for pk in po.get("packages") or []:
+            tn = tracking.clean_tracking(pk.get("tracking_number") or "")
+            if not tn or (only and tn != only):
+                continue
+            gz = pk.get("gerizim_status") or {}
+            if isinstance(gz, dict) and gz.get("bucket") == "delivered":
+                continue                  # customer has the box — truly terminal
+            ts = pk.get("tracking_status") or {}
+            gaash_done = isinstance(ts, dict) and ts.get("bucket") == "delivered"
+            if gaash_done and not gz and (ts.get("time") or "") < old_gaash_cut:
+                continue                  # ancient GAASH-delivered parcel Gerizim never saw
+            need_track = force
+            if not need_track:
+                try:
+                    need_track = datetime.fromisoformat(pk.get("tracking_checked") or "") <= cutoff
+                except (ValueError, TypeError):
+                    need_track = True     # never checked / unparsable → refresh
+            # The deadline scrape rides its OWN cadence, not the 30-min tracking TTL
+            # (the Mac sync keeps tracking_checked fresh, which used to starve it).
+            # `gz` is `... or {}`, so test truthiness — an empty {} means "no Gerizim".
+            eligible = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
+                and not gz
+            need_dl = False
+            if eligible:
+                try:
+                    need_dl = force or not pk.get("gaash_deadline") \
+                        or datetime.fromisoformat(pk.get("gaash_deadline_checked") or "") <= dl_cutoff
+                except (ValueError, TypeError):
+                    need_dl = True        # never scraped → fetch once
+            if need_track or need_dl:
+                work.setdefault(tn, []).append((po, pk, need_track, need_dl))
+    # Each GWD costs ~10s of live scraping; doing all ~13 in one request blows past
+    # gunicorn's 120s timeout, which kills the request before the final save so
+    # NOTHING persists. Process a bounded batch, save after each, and report how
+    # many remain so the client re-calls until done.
+    all_gwds = list(work.items())
+    picked = all_gwds[:max(1, int(batch or 5))]
+    remaining = len(all_gwds) - len(picked)
+    updated, changes, dl_done = 0, [], 0
+    if picked:
+        session = None                    # scraped lazily: gerizim-only rounds skip it
+        for i, (tn, rows) in enumerate(picked):
+            if i:
+                time.sleep(tracking.REQUEST_GAP)
+            want_track = any(nt for _, _, nt, _ in rows)      # a tracking refresh is due
+            want_dl = any(nd for _, _, _, nd in rows) and dl_done < dl_cap
+            st, cd_at = None, None
+            if want_track:
+                if session is None:
+                    try:
+                        session = tracking.get_session()
+                    except Exception as e:  # noqa - GAASH down: keep Gerizim going
+                        session = e
+                if not isinstance(session, Exception):
+                    data = tracking.fetch_one(tn, *session)
+                    st = tracking.latest_status(data)
+                    # feed the shared last-known cache — the public tracking widget
+                    # serves customers straight from it (cache-first)
+                    tracking.cache_put_events(tn, tracking.events_from_raw(data))
+                    # latest "docs required" event — GAASH re-emits CD while docs are
+                    # missing, so a CD newer than the owner's upload stamp means the
+                    # upload never registered (the row shows a red warning chip).
+                    cd_at = max((s.get("StatusTime") or ""
+                                 for s in (data or {}).get("Statuses") or []
+                                 if (s.get("MappedStatusCode") or "").strip().upper() == "CD"
+                                 or (s.get("StatusDescription") or "").strip().lower() == "required customer id"),
+                                default=None) or None
+            gz = gerizim.track(tn) if want_track else None
+            gz_new = gz if isinstance(gz, dict) else None
+            # GAASH's lost-forever deadline (doc-link expiry) — own cadence, fetched
+            # once then re-checked every ~2 weeks; never re-hammered per page load.
+            deadline, dl_stamp = None, None
+            if want_dl:
+                dl_done += 1
+                dl_stamp = db.now_iso()   # stamp the attempt even if it returns None
+                deadline = tracking.ops_deadline(tn)
+            if not st and not gz_new and not deadline and not dl_stamp:
+                continue                  # every lookup failed / nothing new → no writes
+            stamp = db.now_iso()
+            for po, pk, nt, nd in rows:
+                old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
+                gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
+                if st:
+                    pk["tracking_status"] = st
+                if cd_at:
+                    pk["gaash_cd_at"] = cd_at
+                if gz_new:
+                    pk["gerizim_status"] = gz_new
+                if nd and dl_stamp:
+                    pk["gaash_deadline_checked"] = dl_stamp
+                    if deadline:
+                        pk["gaash_deadline"] = deadline
+                if nt:
+                    pk["tracking_checked"] = stamp
+                updated += 1
+                cur = st or old
+                changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
+                                "tracking": tn,
+                                "name": _pkg_label(po, pk),
+                                "old": {"bucket": (old or {}).get("bucket"),
+                                        "text": activity.gaash_text(old)},
+                                "new": {"bucket": (cur or {}).get("bucket"),
+                                        "text": activity.gaash_text(cur)},
+                                "gz_old": {"bucket": (gz_old or {}).get("bucket"),
+                                           "text": activity.gaash_text(gz_old)},
+                                "gz_new": {"bucket": (gz_new or gz_old or {}).get("bucket"),
+                                           "text": activity.gaash_text(gz_new or gz_old)}})
+                # feed the per-PO Activity trail (readable text, the carrier as actor)
+                header = ("Order # " + po["amazon_order_number"]) if po.get("amazon_order_number") else po.get("po_id", "")
+                ot, ntx = activity.gaash_text(old), activity.gaash_text(st)
+                if st and ntx and ot != ntx:
+                    activity.log("set", "purchase", po.get("po_id"), header,
+                                 field="tracking_status", old=ot or None, new=ntx,
+                                 detail=f"Package {pk.get('package_no')}", user="GAASH")
+                got, gnt = activity.gaash_text(gz_old), activity.gaash_text(gz_new)
+                if gz_new and gnt and got != gnt:
+                    activity.log("set", "purchase", po.get("po_id"), header,
+                                 field="gerizim_status", old=got or None, new=gnt,
+                                 detail=f"Package {pk.get('package_no')}", user="Gerizim")
+            # Persist after EACH GWD so a timeout mid-batch never loses finished work.
+            save(pdb)
+    return {"updated": updated, "remaining": remaining, "changes": changes, "db": pdb}
+
+
+def _pkg_label(po, pk):
+    """A human name for one package — the first item's product, else its number.
+    The change log shows a product, not 'Package 2'."""
+    for it in pk.get("items") or []:
+        t = (it.get("title") or it.get("name") or "").strip()
+        if t:
+            return t
+    return f"Package {pk.get('package_no') or '?'}"
+
+
+# --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rematch", action="store_true",

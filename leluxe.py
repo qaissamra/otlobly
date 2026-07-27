@@ -2564,21 +2564,27 @@ def _gash_target(row, fdef):
 
 
 def _queue_gash_status(row, fkey, target):
-    """Set fields[GASH STATUS]=target and queue a FIELD-ONLY push. Returns True
-    when a change was queued (False = already up to date / row gone)."""
+    """Set fields[GASH STATUS]=target and queue a FIELD-ONLY push.
+
+    Returns the transition `{row_id, tracking, name, old, new}` when one was
+    queued, else None (already up to date / row gone). It returns the pair
+    rather than a bare True because this is the only place that still knows
+    what the value WAS — the change log and the "what moved" popup are built
+    from it, and a caller that only counts throws that away."""
     with db.connect() as c:
         r = c.execute("SELECT sync_state, data_json FROM leluxe_orders "
                       "WHERE id=? AND deleted=0", (row["id"],)).fetchone()
         if not r:
-            return False
+            return None
         try:
             d = json.loads(r["data_json"] or "{}")
         except ValueError:
             d = {}
         fields = d.setdefault("fields", {})
         key = next((k for k in fields if k.strip().lower() == GASH_FIELD), fkey)
-        if str(fields.get(key) or "").strip() == target:
-            return False
+        old = str(fields.get(key) or "").strip()
+        if old == target:
+            return None
         fields[key] = target
         # Only a clean row gets the field-only marker; a real edit in flight
         # (dirty/pushing/error) keeps its FULL push, which now carries the field.
@@ -2598,7 +2604,11 @@ def _queue_gash_status(row, fkey, target):
                             f"→ syncing to ClickUp")
     except Exception:  # noqa: BLE001 — logging must never block the sync
         pass
-    return True
+    code = next((str(v) for k, v in (row["data"].get("fields") or {}).items()
+                 if k.strip().upper() == "NAME" and v), "")
+    return {"row_id": row["id"], "tracking": _row_tracking(row),
+            "name": row.get("name") or "", "code": code, "old": old,
+            "new": target, "status": row.get("status") or "", "store": "leluxe"}
 
 
 def apply_gash_status(only=None, config=None):
@@ -2606,17 +2616,20 @@ def apply_gash_status(only=None, config=None):
     GASH STATUS dropdown. Idempotent (writes only differences), FORWARD-ONLY
     (never downgrades a manual entry that's ahead of a lagging feed); `only`
     scopes to one GWD. Runs over ALL stored enrichment, so already-delivered
-    parcels (which the network loop skips) still catch up. Returns #queued."""
+    parcels (which the network loop skips) still catch up.
+
+    Returns the LIST of transitions queued (each `{row_id, tracking, name,
+    code, old, new, status, store}`) — `len()` is the old count."""
     config = config or cfg.load()
     fkey, fdef = _gash_field_def(config)
     if not fdef:
-        return 0
+        return []
     import tracking
     only = tracking.clean_tracking(only or "") or None
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
-    queued = 0
+    queued = []
     for row in rows:
         if only and tracking.clean_tracking(_row_tracking(row)) != only:
             continue
@@ -2630,8 +2643,9 @@ def apply_gash_status(only=None, config=None):
         # still applies; equal VALUES are dropped inside _queue_gash_status.
         if cur_rank is not None and (tgt_rank is None or tgt_rank < cur_rank):
             continue
-        if _queue_gash_status(row, fkey, target):
-            queued += 1
+        moved = _queue_gash_status(row, fkey, target)
+        if moved:
+            queued.append(moved)
     if queued:
         kick()
     return queued
@@ -2731,7 +2745,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     # after storing fresh Gerizim stages, mirror them into the GASH STATUS field
     applied = apply_gash_status(only=only, config=config)
     return {"checked": len(todo), "remaining": max(0, len(work) - len(todo)),
-            "gash_applied": applied}
+            "gash_applied": len(applied), "changes": applied}
 
 
 # --------------------------------------------------------------------------- #

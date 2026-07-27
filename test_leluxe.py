@@ -516,7 +516,7 @@ def gash_status_sync():
                 c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                           (json.dumps(d, ensure_ascii=False), row["id"]))
         plant({"bucket": "delivered", "label": "GERZIM DELIVERED", "status": "delivered"})
-        n = leluxe.apply_gash_status()
+        n = len(leluxe.apply_gash_status())
         r2 = leluxe.get_row(row["id"])
         check("delivered bucket queues the existing option", n == 1
               and r2["data"]["fields"].get("GASH STATUS") == "GERZIM DELIVERED"
@@ -532,13 +532,13 @@ def gash_status_sync():
         r3 = leluxe.get_row(row["id"])
         check("marker cleared + synced after field-only push",
               r3["sync_state"] == "synced" and "pending_fields" not in r3["data"])
-        check("idempotent: same stage queues nothing", leluxe.apply_gash_status() == 0)
+        check("idempotent: same stage queues nothing", leluxe.apply_gash_status() == [])
         # once تم التسليم exists (added in ClickUp UI → Discover), it's preferred
         config = cfg.load()
         config["leluxe"]["schema"]["fields"]["GASH STATUS"]["options"].append(
             {"id": "opt-tam", "name": "تم التسليم", "orderindex": 10, "color": "#2ecd6f"})
         cfg.save(config)
-        n = leluxe.apply_gash_status()
+        n = len(leluxe.apply_gash_status())
         r4 = leluxe.get_row(row["id"])
         check("تم التسليم preferred once its option exists",
               n == 1 and r4["data"]["fields"].get("GASH STATUS") == "تم التسليم")
@@ -580,7 +580,7 @@ def gash_status_sync():
         # a stage whose option is missing on the list is skipped, never guessed
         plant({"bucket": "sms", "label": "SMS sent — awaiting pickup", "status": "sms"})
         check("bucket without an existing option is skipped",
-              leluxe.apply_gash_status() == 0)
+              leluxe.apply_gash_status() == [])
 
         # ── GAASH leg (no Gerizim data yet) + the forward-only guard ──
         row2, _ = leluxe.save_row({"kind": "order", "name": "Order # gz-2",
@@ -597,14 +597,14 @@ def gash_status_sync():
         # live GAASH "Required customer ID" → the " customer ID" option
         # (leading space — written in ClickUp's exact spelling)
         plant2({"tracking_status": {"bucket": "customs", "text": "Required customer ID"}})
-        n = leluxe.apply_gash_status()
+        n = len(leluxe.apply_gash_status())
         r6 = leluxe.get_row(row2["id"])
         check("GAASH customs/customer-ID maps to the exact option",
               n == 1 and r6["data"]["fields"].get("GASH STATUS") == " customer ID")
         leluxe.run_push_pass()
         # live cleared (rank above customer ID) → moves FORWARD
         plant2({"tracking_status": {"bucket": "cleared", "text": "Cleared customs"}})
-        n = leluxe.apply_gash_status()
+        n = len(leluxe.apply_gash_status())
         r7 = leluxe.get_row(row2["id"])
         check("stale field catches up when the parcel clears (his MOC bug)",
               n == 1 and r7["data"]["fields"].get("GASH STATUS") == "CLEARED GASH")
@@ -613,11 +613,11 @@ def gash_status_sync():
         plant2({"tracking_status": {"bucket": "arrived",
                                     "text": "Arrived at destination country"}})
         check("forward-only: lagging GAASH stage never downgrades the field",
-              leluxe.apply_gash_status() == 0)
+              leluxe.apply_gash_status() == [])
         # Gerizim data outranks the GAASH leg once the parcel reaches last-mile
         plant2({"gerizim_status": {"bucket": "office", "label": "At Gerizim office",
                                    "status": "office"}})
-        n = leluxe.apply_gash_status()
+        n = len(leluxe.apply_gash_status())
         r8 = leluxe.get_row(row2["id"])
         check("Gerizim stage wins over the GAASH leg (Arabic office option)",
               n == 1 and r8["data"]["fields"].get("GASH STATUS") == "في مكتب جرزيم")
