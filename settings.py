@@ -17,6 +17,12 @@ import cfg
 import tracking
 
 
+# Days added to a PO package's Arrives date to get the date the CUSTOMER is
+# promised (GAASH last-mile + clearance slack). Owner-editable in ⚙ Settings;
+# this is only the fallback when config.json has no pipeline.delivery_buffer_days.
+DELIVERY_BUFFER_DAYS = 10
+
+
 def _f(v, default=0.0):
     try:
         return float(str(v).replace(",", "").strip())
@@ -157,6 +163,9 @@ def read(config=None):
         "shipping_rule": cfg.get(config, "estimate.shipping_rule", {"type": "flat", "value": 15}),
         "import_rule": cfg.get(config, "estimate.import_rule", {"type": "pct", "value": 0}),
         "customer_mode": bool(cfg.get(config, "estimate.customer_mode", False)),
+        # Customer ETA = the PO package's Arrives date + this many days (GAASH last-mile).
+        "delivery_buffer_days": int(cfg.get(config, "pipeline.delivery_buffer_days",
+                                            DELIVERY_BUFFER_DAYS)),
         "business_whatsapp": cfg.get(config, "business.whatsapp", ""),
         # Facebook page link + $ coupon promised in the Package-prep review request.
         "business_facebook_reviews": cfg.get(config, "business.facebook_reviews_url", ""),
@@ -313,6 +322,9 @@ def apply(body, config=None, persist=True):
             cfg.set_path(config, f"estimate.{r}", _rule(body[r]))
     if "customer_mode" in body:
         cfg.set_path(config, "estimate.customer_mode", bool(body["customer_mode"]))
+    if "delivery_buffer_days" in body:
+        days = int(_f(body["delivery_buffer_days"], DELIVERY_BUFFER_DAYS))
+        cfg.set_path(config, "pipeline.delivery_buffer_days", min(60, max(0, days)))
     if "business_whatsapp" in body:
         cfg.set_path(config, "business.whatsapp",
                      re.sub(r"[^\d+]", "", str(body["business_whatsapp"])))

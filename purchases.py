@@ -90,7 +90,7 @@ def _arrival_plus(arrival, buffer_days):
     return None
 
 
-def apply_to_orders(po, orders, buffer_days=8):
+def apply_to_orders(po, orders, buffer_days=10):
     """The supply→demand connection: when a PO is saved, every PO item already matched to
     a customer order (by ASIN) flips that order to **ORDERED** and inherits the Amazon
     order #, box, the package arrival date, and the customer ETA (arrival + buffer).

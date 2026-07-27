@@ -1071,6 +1071,7 @@
         <div><label class="fld">Business WhatsApp #</label><input id="s_wa" style="width:100%" placeholder="970599…"></div>
         <div><label class="fld">Facebook page (review link in Package-prep message)</label><input id="s_fb" style="width:100%" placeholder="https://facebook.com/otlobly"></div>
         <div><label class="fld">Review coupon $ (promised for a good review)</label><input id="s_coupon" type="number" step="1" style="width:100%" placeholder="5"></div>
+        <div><label class="fld" title="تاريخ التسليم للعميل = تاريخ وصول الطرد + هذا العدد · customer ETA = package Arrives date + this many days">Customer ETA buffer (days after the package Arrives date)</label><input id="s_buffer" type="number" step="1" min="0" max="60" style="width:100%" placeholder="10"></div>
         <div><label class="fld">Ship-to country (SerpApi)</label><input id="s_dest" style="width:100%" placeholder="Israel"></div>
         <div><label class="fld">Destination label (shown to customer)</label><input id="s_destlabel" style="width:100%" placeholder="Palestine"></div>
         <div><label class="fld">Shipping estimate</label>
@@ -6630,6 +6631,7 @@ async function loadSettings(){
   $("s_wa").value=s.business_whatsapp||"";
   if($("s_fb")) $("s_fb").value=s.business_facebook_reviews||"";
   if($("s_coupon")) $("s_coupon").value=(s.reviews_coupon_usd!=null?s.reviews_coupon_usd:5);
+  if($("s_buffer")) $("s_buffer").value=(s.delivery_buffer_days!=null?s.delivery_buffer_days:10);
   $("s_dest").value=s.destination.shipping_location||"";
   $("s_destlabel").value=s.destination.label||"";
   $("s_shiptype").value=s.shipping_rule.type; $("s_shipval").value=s.shipping_rule.value;
@@ -6827,6 +6829,9 @@ async function saveSettings(b){
     pkg_ils_per_usd:parseFloat($("s_pkg_ils").value)||3.1, business_whatsapp:$("s_wa").value,
     business_facebook_reviews:($("s_fb")?$("s_fb").value:""),
     reviews_coupon_usd:($("s_coupon")?(parseInt($("s_coupon").value,10)||5):5),
+    // 0 is a legal buffer (same-day) — only a blank/NaN box falls back to 10.
+    delivery_buffer_days:($("s_buffer")&&Number.isFinite(parseInt($("s_buffer").value,10))
+      ?parseInt($("s_buffer").value,10):10),
     destination:{shipping_location:$("s_dest").value,label:$("s_destlabel").value},
     shipping_rule:{type:$("s_shiptype").value,value:$("s_shipval").value},
     import_rule:{type:$("s_imptype").value,value:$("s_impval").value},

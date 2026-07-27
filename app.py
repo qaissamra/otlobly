@@ -1902,7 +1902,8 @@ def api_purchase():
     purchases.save(pdb)
     db.audit(auth.actor(), "save_po", "purchase", po["po_id"], "")
     # Connect supply→demand: matched orders auto-flip to ORDERED + inherit batch/box/ETA.
-    buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", 8)
+    buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days",
+                  settings_mod.DELIVERY_BUFFER_DAYS)
     src = po.get("amazon_order_number") or po["po_id"]
     for oid, ch in purchases.apply_to_orders(po, orders, buf):
         db.update_order(oid, ch, auth.actor())
@@ -5538,7 +5539,8 @@ def api_customer_notify_track():
     # so Notify works the moment the date is typed, before reconcile stamps the order.
     eta_iso = order.get("est_delivery_customer")
     if not eta_iso and (pk.get("arrival") or "").strip():
-        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", 8)
+        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days",
+                      settings_mod.DELIVERY_BUFFER_DAYS)
         eta_iso = purchases._arrival_plus(pk["arrival"].strip(), buf)
     eta = _fmt_delivery(eta_iso)
     if not eta:
@@ -5681,7 +5683,8 @@ def _reconcile_pos_to_orders():
     import cfg as _cfg
     pdb = purchases.load()
     orders = db.list_orders()
-    buf = _cfg.get(_cfg.load(), "pipeline.delivery_buffer_days", 8)
+    buf = _cfg.get(_cfg.load(), "pipeline.delivery_buffer_days",
+                   settings_mod.DELIVERY_BUFFER_DAYS)
     touched = False
     for po in pdb.get("purchase_orders", []):
         purchases.attach_matches(po, orders)
@@ -5736,6 +5739,25 @@ if db.claim_once("boot:customer_map_v1"):
         _patch_customer_status_map()
     except Exception as _e:                      # noqa: BLE001 — never block boot
         app.logger.warning("customer status-map patch skipped: %s", _e)
+
+
+def _bump_delivery_buffer():
+    """2026-07-26 (owner): promise the customer arrival + 10 days instead of + 8.
+    The saved config.json on the live disk wins over the code default, so bump it
+    once — and ONLY if it still holds the old default 8, never an owner-set value.
+    Re-editable any time in ⚙ Settings → Customer ETA buffer."""
+    cfgd = cfg.load()
+    if cfg.get(cfgd, "pipeline.delivery_buffer_days", None) != 8:
+        return
+    cfg.set_path(cfgd, "pipeline.delivery_buffer_days", settings_mod.DELIVERY_BUFFER_DAYS)
+    cfg.save(cfgd)
+
+
+if db.claim_once("boot:delivery_buffer_10_v1"):
+    try:
+        _bump_delivery_buffer()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("delivery-buffer bump skipped: %s", _e)
 
 
 if __name__ == "__main__":
