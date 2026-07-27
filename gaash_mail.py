@@ -36,6 +36,7 @@ import hashlib
 import hmac
 import html as html_mod
 import imaplib
+import memlog
 import json
 import os
 import re
@@ -3558,7 +3559,8 @@ def _loop():
     time.sleep(60)                        # let the app finish booting first
     while True:
         try:
-            out = run_once()
+            with memlog.watch("gaash_mail.run_once"):
+                out = run_once()
             if out.get("sent") or out.get("new"):
                 print(f"gaash_mail: sent {out.get('sent', 0)}, "
                       f"replies {out.get('new', 0)}")

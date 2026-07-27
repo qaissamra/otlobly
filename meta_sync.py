@@ -14,6 +14,7 @@ import os
 import threading
 import time
 
+import memlog
 import meta
 
 
@@ -28,7 +29,8 @@ def _loop():
     time.sleep(30)  # let the app finish booting before the first pull
     while True:
         try:
-            out = meta.sync_once()
+            with memlog.watch("meta_sync"):
+                out = meta.sync_once()
             if out.get("last_error"):
                 print(f"[meta_sync] error: {out['last_error']}", flush=True)
             else:
