@@ -126,8 +126,8 @@
     "_note": "$ discount on the NEXT order, promised in the Package-prep review-request message to customers who leave a good review. Wording only — applied manually by staff."
   },
   "pipeline": {
-    "delivery_buffer_days": 8,
-    "_note": "Customer delivery ETA = PO package arrival + this many days (GAASH last-mile to Palestine)."
+    "delivery_buffer_days": 10,
+    "_note": "Customer delivery ETA = PO package arrival + this many days (GAASH last-mile to Palestine). Editable in ⚙ Settings."
   },
   "public": {
     "sections": {

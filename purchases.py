@@ -90,7 +90,7 @@ def _arrival_plus(arrival, buffer_days):
     return None
 
 
-def apply_to_orders(po, orders, buffer_days=8):
+def apply_to_orders(po, orders, buffer_days=10):
     """The supply→demand connection: when a PO is saved, every PO item already matched to
     a customer order (by ASIN) flips that order to **ORDERED** and inherits the Amazon
     order #, box, the package arrival date, and the customer ETA (arrival + buffer).
@@ -534,6 +534,9 @@ def refresh_tracking(only=None, force=False, batch=5):
                 if not isinstance(session, Exception):
                     data = tracking.fetch_one(tn, *session)
                     st = tracking.latest_status(data)
+                    # feed the shared last-known cache — the public tracking widget
+                    # serves customers straight from it (cache-first)
+                    tracking.cache_put_events(tn, tracking.events_from_raw(data))
                     # latest "docs required" event — GAASH re-emits CD while docs are
                     # missing, so a CD newer than the owner's upload stamp means the
                     # upload never registered (the row shows a red warning chip).

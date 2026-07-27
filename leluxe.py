@@ -2699,9 +2699,17 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
         if want_track:
             try:
                 session = session or tracking.get_session()
-                st = tracking.latest_status(tracking.fetch_one(tn, *session))
+                data = tracking.fetch_one(tn, *session)
+                st = tracking.latest_status(data)
             except Exception:  # noqa: BLE001 — one bad number must not stall the batch
-                st = None
+                st, data = None, None
+            if st:
+                try:
+                    # feed the shared last-known cache — the public tracking widget
+                    # serves customers straight from it (cache-first, best-effort)
+                    tracking.cache_put_events(tn, tracking.events_from_raw(data))
+                except Exception:  # noqa: BLE001 — a cache hiccup must not lose the status
+                    pass
             try:
                 gz_new = gerizim.track(tn)
             except Exception:  # noqa: BLE001

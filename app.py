@@ -1792,7 +1792,8 @@ def api_purchase():
     purchases.save(pdb)
     db.audit(auth.actor(), "save_po", "purchase", po["po_id"], "")
     # Connect supply→demand: matched orders auto-flip to ORDERED + inherit batch/box/ETA.
-    buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", 8)
+    buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days",
+                  settings_mod.DELIVERY_BUFFER_DAYS)
     src = po.get("amazon_order_number") or po["po_id"]
     for oid, ch in purchases.apply_to_orders(po, orders, buf):
         db.update_order(oid, ch, auth.actor())
@@ -4429,7 +4430,12 @@ def _otlobly_stage(pk, pk_items, omap, po):
                          for it in (pk_items or pk.get("items") or [])
                          if (it.get("customer_name") or "").strip()), "")
             label = label.replace("{name}", name or "إليك")
-        return {"label": label, "bucket": (row.get("bucket") or "arrived").strip() or "arrived",
+        # A weak map row (no/unknown bucket) must NOT force the progress bar to
+        # "arrived" — return bucket=None and let the caller keep the carrier's.
+        bucket = (row.get("bucket") or "").strip().lower()
+        if bucket not in tracking.BUCKET_RANK:
+            bucket = None
+        return {"label": label, "bucket": bucket,
                 "date": (po.get("updated_at") or "")[:10] or None}
     return None
 
@@ -4453,7 +4459,7 @@ def _shipments_for(pairs, names, oids):
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
     omap = cfg.get(cfgd, "customer_tracking.otlobly_map", tracking.DEFAULT_OTLOBLY_MAP)
     gwds = [pk.get("tracking_number") for _, pk in uniq if (pk.get("tracking_number") or "").strip()]
-    tls = tracking.timelines_with_fallback(gwds) if gwds else {}
+    tls = tracking.timelines_cache_first(gwds) if gwds else {}
     shipments = []
     for po, pk in uniq:
         otl = pk.get("customer_tracking")
@@ -4493,8 +4499,11 @@ def _shipments_for(pairs, names, oids):
         # come from the owner, never from GAASH/Gerizim.
         stage = _otlobly_stage(pk, pk_items, omap, po)
         if stage:
-            ship["current"] = {"label": stage["label"], "bucket": stage["bucket"]}
-            ship["events"] = (ship.get("events") or []) + [stage]
+            # The owner's LABEL always wins; a stage with no explicit bucket keeps
+            # the carrier's bucket so the progress bar never jumps ahead of GAASH.
+            b = stage["bucket"] or (ship.get("current") or {}).get("bucket") or "arrived"
+            ship["current"] = {"label": stage["label"], "bucket": b}
+            ship["events"] = (ship.get("events") or []) + [dict(stage, bucket=b)]
         shipments.append(ship)
     return shipments
 
@@ -5589,7 +5598,8 @@ def api_customer_notify_track():
     # so Notify works the moment the date is typed, before reconcile stamps the order.
     eta_iso = order.get("est_delivery_customer")
     if not eta_iso and (pk.get("arrival") or "").strip():
-        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", 8)
+        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days",
+                      settings_mod.DELIVERY_BUFFER_DAYS)
         eta_iso = purchases._arrival_plus(pk["arrival"].strip(), buf)
     eta = _fmt_delivery(eta_iso)
     if not eta:
@@ -5732,7 +5742,8 @@ def _reconcile_pos_to_orders():
     import cfg as _cfg
     pdb = purchases.load()
     orders = db.list_orders()
-    buf = _cfg.get(_cfg.load(), "pipeline.delivery_buffer_days", 8)
+    buf = _cfg.get(_cfg.load(), "pipeline.delivery_buffer_days",
+                   settings_mod.DELIVERY_BUFFER_DAYS)
     touched = False
     for po in pdb.get("purchase_orders", []):
         purchases.attach_matches(po, orders)
@@ -5787,6 +5798,62 @@ if db.claim_once("boot:customer_map_v1"):
         _patch_customer_status_map()
     except Exception as _e:                      # noqa: BLE001 — never block boot
         app.logger.warning("customer status-map patch skipped: %s", _e)
+
+
+def _patch_k3_customs():
+    """2026-07-27: K3 "Arrived at destination country" fires BEFORE customs
+    clearance in every real GAASH sequence, but the SAVED Settings map buckets it
+    "arrived" — jumping the customer progress bar past clearance (the wrong-status
+    complaint). Patch the saved rows to bucket "customs" and add the text-match
+    row; only rows still holding the old default label are touched, so an
+    owner-customized row survives. Idempotent + re-editable in Settings."""
+    cfgd = cfg.load()
+    rows = cfg.get(cfgd, "customer_tracking.status_map", None)
+    if not isinstance(rows, list):
+        return
+    changed = False
+    for r in rows:
+        if (r.get("match") or "").strip() in ("K3", "Arrived at destination country") \
+                and (r.get("label") or "").strip() == "وصلت إلى بلدك" \
+                and (r.get("bucket") or "").strip() == "arrived":
+            r["bucket"] = "customs"
+            changed = True
+    if not any((r.get("match") or "").strip().lower() == "arrived at destination country"
+               for r in rows):
+        idx = next((i for i, r in enumerate(rows)
+                    if (r.get("match") or "").strip() == "Cleared customs"), len(rows))
+        rows.insert(idx, {"match": "Arrived at destination country",
+                          "label": "وصلت إلى بلدك", "bucket": "customs", "hidden": False})
+        changed = True
+    if changed:
+        cfg.set_path(cfgd, "customer_tracking.status_map", rows)
+        cfg.save(cfgd)
+
+
+if db.claim_once("boot:k3_customs_v1"):
+    try:
+        _patch_k3_customs()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("K3 customs-bucket patch skipped: %s", _e)
+
+
+def _bump_delivery_buffer():
+    """2026-07-26 (owner): promise the customer arrival + 10 days instead of + 8.
+    The saved config.json on the live disk wins over the code default, so bump it
+    once — and ONLY if it still holds the old default 8, never an owner-set value.
+    Re-editable any time in ⚙ Settings → Customer ETA buffer."""
+    cfgd = cfg.load()
+    if cfg.get(cfgd, "pipeline.delivery_buffer_days", None) != 8:
+        return
+    cfg.set_path(cfgd, "pipeline.delivery_buffer_days", settings_mod.DELIVERY_BUFFER_DAYS)
+    cfg.save(cfgd)
+
+
+if db.claim_once("boot:delivery_buffer_10_v1"):
+    try:
+        _bump_delivery_buffer()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("delivery-buffer bump skipped: %s", _e)
 
 
 if __name__ == "__main__":
