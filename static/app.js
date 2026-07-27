@@ -21,8 +21,9 @@ const I18N = {
     "track.prod":     "سماعة Sony XM5",
     "track.s1":       "تم الطلب",
     "track.s2":       "تم الشحن",
-    "track.s3":       "وصلت فلسطين",
-    "track.s4":       "قيد التوصيل",
+    "track.s3":       "التخليص الجمركي",
+    "track.s4":       "وصلت اطلبلي",
+    "track.s5":       "تم التسليم",
     "track.loc":      "الموقع",
     "track.locv":     "رام الله — المستودع",
     "track.eta":      "الوصول المتوقّع",
@@ -31,6 +32,7 @@ const I18N = {
     "track.inputph":  "أدخل رقم جوالك…",
     "track.submit":   "تتبّع",
     "track.searching":"…",
+    "track.loading":  "جارٍ البحث عن شحنتك…",
     "track.notfound": "لم نجد شحنة بهذا الرقم. تأكد من إدخال رقم جوالك كاملاً.",
     "track.empty":    "أدخل رقم جوالك لعرض حالة شحنتك",
     "track.status":   "الحالة الحالية",
@@ -87,8 +89,9 @@ const I18N = {
     "track.prod":     "Sony XM5 Headphones",
     "track.s1":       "Ordered",
     "track.s2":       "Shipped",
-    "track.s3":       "Arrived in Palestine",
-    "track.s4":       "Out for delivery",
+    "track.s3":       "Customs",
+    "track.s4":       "At Otlobly",
+    "track.s5":       "Delivered",
     "track.loc":      "Location",
     "track.locv":     "Ramallah — Hub",
     "track.eta":      "Est. arrival",
@@ -97,6 +100,7 @@ const I18N = {
     "track.inputph":  "Enter your mobile number…",
     "track.submit":   "Track",
     "track.searching":"…",
+    "track.loading":  "Looking up your shipment…",
     "track.notfound": "No shipment found for that number. Make sure you entered your full mobile number.",
     "track.empty":    "Enter your mobile number to see your shipment status",
     "track.status":   "Current status",
@@ -230,13 +234,16 @@ function trFmt(d){ if(!d) return ""; var x=new Date(d); if(isNaN(x)) return trEs
 function trFmtRange(a,b){ var loc=currentLang==="ar"?"ar":"en-GB";
   var f=function(d){ return new Date(d).toLocaleDateString(loc,{day:"2-digit",month:"short"}); };
   return f(a)+" – "+f(b)+" "+new Date(b).getFullYear(); }
-/* bucket → progress step (1..4); 5 = fully delivered. Same mapping as the account portal. */
+/* bucket → progress step (1..5); 6 = fully delivered (all five done).
+   customs = node 3 in progress, cleared = node 3 DONE — visibly different.
+   Same mapping as the account portal. */
 function trStep(s){
   var b=(s.current&&s.current.bucket)||"";
   var hasTrack=!!(s.tracking&&(s.events||[]).length);
-  if(b==="delivered") return 5;
+  if(b==="delivered") return 6;
   if(b==="arrived") return 4;
-  if(b==="customs"||b==="cleared") return 3;
+  if(b==="cleared") return 4;
+  if(b==="customs") return 3;
   if(b==="transit") return (hasTrack||s.est_delivery)?2:1;
   return 1;
 }
@@ -252,6 +259,16 @@ function doTrackLookup(code) {
   var oldTxt = btn.textContent;
   btn.disabled = true; btn.textContent = tL("track.searching");
   status.innerHTML = "";
+  // skeleton card: results are usually instant (cache-first), but a first-ever
+  // GWD goes live to GAASH — never let the page look stuck while it does
+  if (empty) empty.style.display = "none";
+  results.classList.remove("multi");
+  results.innerHTML =
+    '<div class="track-card track-skel"><div class="track-top">' +
+    '<div class="sk sk-thumb"></div><div style="flex:1">' +
+    '<div class="sk sk-line w60"></div><div class="sk sk-line w35"></div></div></div>' +
+    '<div class="sk sk-bar"></div>' +
+    '<div class="track-skel-msg">' + tL("track.loading") + '</div></div>';
   fetch("/api/track", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: code }) })
     .then(function(r){ return r.json(); })
@@ -259,13 +276,13 @@ function doTrackLookup(code) {
     .then(function(d){
       btn.disabled = false; btn.textContent = oldTxt;
       if (!d || !d.found || !(d.shipments && d.shipments.length)) {
-        results.innerHTML = ""; if (empty) empty.style.display = "none";
+        results.innerHTML = "";
         status.innerHTML = '<div class="track-msg">' + tL("track.notfound") + '</div>';
         return;
       }
-      if (empty) empty.style.display = "none";
       var head = (d.count > 1) ? '<div class="track-count">' + tL("track.count").replace("{n}", d.count) + '</div>' : "";
       var reset = '<button class="track-newsearch" onclick="trackReset()">' + tL("track.newsearch") + '</button>';
+      results.classList.toggle("multi", d.count > 1);
       results.innerHTML = head + d.shipments.map(renderLandingShip).join("") + reset;
     });
 }
@@ -275,7 +292,7 @@ function trackReset(){
   var status = document.getElementById("track-status");
   var empty = document.getElementById("track-empty");
   var input = document.getElementById("track-input");
-  if (results) results.innerHTML = "";
+  if (results) { results.innerHTML = ""; results.classList.remove("multi"); }
   if (status) status.innerHTML = "";
   if (empty) empty.style.display = "";
   if (input) { input.value = ""; input.focus(); }
@@ -294,11 +311,13 @@ function renderLandingShip(s){
   var first = (s.items || [])[0] || {};
   var more = ((s.items || []).length > 1) ? ' <span class="tk-more">+' + (s.items.length - 1) + '</span>' : "";
   var step = trStep(s);
-  var nodes = "";
-  for (var n = 1; n <= 4; n++) {
-    var done = (step === 5 || n < step), isCur = (n === step);
-    nodes += '<span class="node' + (done ? ' done' : (isCur ? ' cur' : '')) + '"></span>';
-    if (n < 4) nodes += '<span class="seg' + ((step === 5 || n < step) ? ' fill' : '') + '"></span>';
+  var nodes = "", labels = "";
+  for (var n = 1; n <= 5; n++) {
+    var done = (step === 6 || n < step), isCur = (n === step);
+    var st = done ? ' done' : (isCur ? ' cur' : '');
+    nodes += '<span class="node' + st + '"></span>';
+    if (n < 5) nodes += '<span class="seg' + (done ? ' fill' : '') + '"></span>';
+    labels += '<span class="' + (done ? 'done' : (isCur ? 'cur' : '')) + '">' + tL("track.s" + n) + '</span>';
   }
   var eta = (s.est_from && s.est_to) ? trFmtRange(s.est_from, s.est_to)
           : (s.est_delivery ? trFmt(s.est_delivery) : "—");
@@ -318,10 +337,10 @@ function renderLandingShip(s){
     +   '<div class="track-thumb">' + thumb + '</div>'
     +   '<div class="track-meta"><div class="nm" dir="auto">' + (trEsc(first.title) || tL("track.yourship")) + more + '</div>'
     +     (s.tracking ? '<div class="id">' + trEsc(s.tracking) + '</div>' : '')
-    +     (cur.label ? '<span class="tk-pill" dir="auto">' + trEsc(cur.label) + '</span>' : '') + '</div>'
+    +     (cur.label ? '<span class="tk-pill b-' + trEsc(cur.bucket || 'transit') + '" dir="auto">' + trEsc(cur.label) + '</span>' : '') + '</div>'
     + '</div>'
-    + '<div class="prog" aria-hidden="true">' + nodes + '</div>'
-    + '<div class="prog-labels"><span>' + tL("track.s1") + '</span><span>' + tL("track.s2") + '</span><span>' + tL("track.s3") + '</span><span>' + tL("track.s4") + '</span></div>'
+    + '<div class="prog' + (step === 6 ? ' all' : '') + '" aria-hidden="true">' + nodes + '</div>'
+    + '<div class="prog-labels">' + labels + '</div>'
     + '<div class="track-fields">'
     +   '<div class="f"><div class="k">' + TR_CLK + '<span>' + tL("track.eta") + '</span></div><div class="v">' + eta + '</div></div>'
     + '</div>'

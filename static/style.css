@@ -232,34 +232,44 @@ html[dir="ltr"] .track-search{padding:4px 14px 4px 4px}
 }
 .track-search button:hover{filter:brightness(1.06)}
 
-/* ── Tracking teaser card ── */
+/* ── Tracking teaser card (compact: several parcels must fit on screen) ── */
 .track-card{background:#fff;border:1px solid var(--line);border-top:3px solid var(--orange);
-  border-radius:0 0 var(--card-r) var(--card-r);padding:20px;box-shadow:var(--shadow-card);margin:0 auto}
-.track-top{display:flex;align-items:center;gap:14px}
-.track-thumb{width:60px;height:60px;flex:none;border-radius:18px;background:#fff;box-shadow:0 4px 12px rgba(35,24,10,.10);overflow:hidden}
-.track-thumb .illo,.track-thumb .illo .ph{border-radius:18px}
+  border-radius:0 0 20px 20px;padding:14px 16px;box-shadow:var(--shadow-card);margin:0 auto}
+.track-top{display:flex;align-items:center;gap:10px}
+.track-thumb{width:44px;height:44px;flex:none;border-radius:12px;background:#fff;box-shadow:0 4px 12px rgba(35,24,10,.10);overflow:hidden}
+.track-thumb .illo,.track-thumb .illo .ph{border-radius:12px}
 .track-thumb .illo{aspect-ratio:1}
-.track-meta .nm{font-family:var(--head);font-weight:800;font-size:18px}
-.track-meta .id{font-family:var(--body);color:#8a7f72;font-size:13px;font-weight:600}
-.tk-pill{display:inline-flex;align-items:center;margin-top:8px;background:#ffe1cf;color:var(--orange-deep);
-  font-family:var(--head);font-weight:800;font-size:12px;padding:4px 12px;border-radius:999px;line-height:1.4}
-/* progress line */
-.prog{display:flex;align-items:center;margin:20px 4px 6px}
-.prog .node{width:16px;height:16px;border-radius:50%;flex:none;background:#fff;border:3px solid #e5e0d8;z-index:1;position:relative;transition:.2s}
+.track-meta .nm{font-family:var(--head);font-weight:800;font-size:15px}
+.track-meta .id{font-family:var(--body);color:#8a7f72;font-size:12px;font-weight:600}
+.tk-pill{display:inline-flex;align-items:center;margin-top:4px;background:#ffe1cf;color:var(--orange-deep);
+  font-family:var(--head);font-weight:800;font-size:11px;padding:3px 10px;border-radius:999px;line-height:1.4}
+/* status pill: one distinct colour per bucket (same scheme as /track + the staff board) */
+.tk-pill.b-transit{background:var(--sky-2);color:#1d4ed8}
+.tk-pill.b-customs{background:#fef3c7;color:#b45309}
+.tk-pill.b-cleared{background:#dcfce7;color:#15803d}
+.tk-pill.b-arrived{background:#e0f2fe;color:#0369a1}
+.tk-pill.b-delivered{background:#16a34a;color:#fff}
+/* progress line: done = solid orange · current = ringed (pulse) · future = visible gray */
+.prog{display:flex;align-items:center;margin:12px 2px 4px}
+.prog .node{width:12px;height:12px;border-radius:50%;flex:none;background:#f1ece3;border:2.5px solid #d6cfc3;z-index:1;position:relative;transition:.2s}
 .prog .node.done{background:var(--orange);border-color:var(--orange)}
-.prog .node.cur{background:#fff;border-color:var(--orange);box-shadow:0 0 0 5px rgba(255,90,31,.22)}
-.prog .seg{flex:1;height:4px;background:var(--line);border-radius:4px;margin:0 -2px}
+.prog .node.cur{background:#fff;border-color:var(--orange);box-shadow:0 0 0 4px rgba(255,90,31,.20)}
+.prog .seg{flex:1;height:3px;background:var(--line);border-radius:4px;margin:0 -2px}
 .prog .seg.fill{background:var(--orange)}
-.prog-labels{display:flex;justify-content:space-between;font-family:var(--body);font-size:10.5px;font-weight:600;color:#8a7f72;margin:2px 0 4px}
+.prog.all .node.done{background:#16a34a;border-color:#16a34a}
+.prog.all .seg.fill{background:#16a34a}
+.prog-labels{display:flex;justify-content:space-between;font-family:var(--body);font-size:9.5px;font-weight:600;color:#b3aca3;margin:2px 0 4px}
 .prog-labels span{flex:1;text-align:center}
 .prog-labels span:first-child{text-align:start}
 .prog-labels span:last-child{text-align:end}
-.track-fields{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(35,24,10,.12)}
+.prog-labels span.done{color:#8a7f72}
+.prog-labels span.cur{color:var(--orange-deep);font-weight:800}
+.track-fields{display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(35,24,10,.12)}
 .track-fields .f{flex:1}
 .track-fields .f .k{display:flex;align-items:center;gap:6px;font-family:var(--body);font-size:12px;color:#8a7f72;font-weight:600}
 .track-fields .f .k .ic{width:14px;height:14px}
-.track-fields .f .v{font-family:var(--head);font-weight:800;font-size:16px;margin-top:2px}
-.track-card .btn{margin-top:16px;background:#fff7f2;border:1px solid var(--line);color:var(--orange-deep);font-size:14px;padding:11px 18px}
+.track-fields .f .v{font-family:var(--head);font-weight:800;font-size:14px;margin-top:2px}
+.track-card .btn{width:fit-content;margin:10px auto 0;background:#fff7f2;border:1px solid var(--line);color:var(--orange-deep);font-size:13px;padding:8px 16px}
 .track-card .btn:hover{background:#fff1ea;border-color:#f2dcc8}
 /* Track empty-state (shown until a real phone lookup runs) */
 .track-empty{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:26px 16px 20px;color:var(--muted)}
@@ -268,12 +278,23 @@ html[dir="ltr"] .track-search{padding:4px 14px 4px 4px}
 .track-empty p{font-family:var(--body);font-size:14px;font-weight:600;margin:0}
 
 /* ── Inline live tracking results (rendered into #track-results) ── */
-#track-results .track-card + .track-card,
-#track-results .track-count + .track-card{margin-top:14px}
-.track-count{font-family:var(--head);font-weight:800;font-size:14px;color:var(--ink);margin:0 0 12px}
+#track-results{display:grid;grid-template-columns:1fr;gap:12px}
+.track-count,.track-newsearch{grid-column:1/-1}
+.track-count{font-family:var(--head);font-weight:800;font-size:14px;color:var(--ink);margin:0}
+/* loading skeleton — shown while /api/track answers (usually instant; a
+   first-ever parcel goes live to GAASH and must never look stuck) */
+.track-skel .sk{border-radius:8px;background:linear-gradient(90deg,#f3eee6 25%,#faf7f1 50%,#f3eee6 75%);
+  background-size:200% 100%;animation:skshine 1.2s linear infinite}
+.track-skel .sk-thumb{width:44px;height:44px;border-radius:12px;flex:none}
+.track-skel .sk-line{height:12px;margin:5px 0}
+.track-skel .w60{width:60%}
+.track-skel .w35{width:35%}
+.track-skel .sk-bar{height:10px;margin-top:14px}
+.track-skel-msg{font-family:var(--body);font-size:12.5px;font-weight:600;color:#8a7f72;margin-top:10px;text-align:center}
+@keyframes skshine{to{background-position:-200% 0}}
 .track-msg{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;
   font-size:14px;color:#8a5a2b;box-shadow:var(--shadow-card)}
-.track-newsearch{display:flex;align-items:center;gap:6px;width:fit-content;margin:14px auto 0;
+.track-newsearch{display:flex;align-items:center;gap:6px;width:fit-content;margin:2px auto 0;
   background:none;border:none;cursor:pointer;font-family:var(--head),var(--body),sans-serif;
   font-weight:700;font-size:13px;color:var(--orange-deep)}
 .track-thumb .tk-noimg{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#c99163}
@@ -405,10 +426,14 @@ footer .stafflink:hover{border-color:#4d473c;color:#c7c0b4}
   .whys{grid-template-columns:repeat(3,1fr)}
   .why{flex-direction:column}
   .track-card{max-width:680px}
+  #track-results.multi{grid-template-columns:repeat(2,minmax(0,1fr));max-width:960px;margin:0 auto}
+  #track-results.multi .track-card{max-width:none;margin:0}
 }
 @media (min-width:860px) and (max-width:1040px){ .steps{grid-template-columns:repeat(2,1fr)} }
 
 @media (prefers-reduced-motion: no-preference){
   .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease, transform .6s ease}
   .reveal.in{opacity:1;transform:none}
+  .prog .node.cur{animation:curpulse 1.6s ease-in-out infinite}
 }
+@keyframes curpulse{50%{box-shadow:0 0 0 7px rgba(255,90,31,.10)}}

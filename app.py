@@ -1812,6 +1812,9 @@ def api_purchases_refresh_tracking():
                 if not isinstance(session, Exception):
                     data = tracking.fetch_one(tn, *session)
                     st = tracking.latest_status(data)
+                    # feed the shared last-known cache — the public tracking
+                    # widget serves customers straight from it (cache-first)
+                    tracking.cache_put_events(tn, tracking.events_from_raw(data))
                     # latest "docs required" event — GAASH re-emits CD while docs are
                     # missing, so a CD newer than the owner's upload stamp means the
                     # upload never registered (the row shows a red warning chip).
@@ -4379,7 +4382,12 @@ def _otlobly_stage(pk, pk_items, omap, po):
                          for it in (pk_items or pk.get("items") or [])
                          if (it.get("customer_name") or "").strip()), "")
             label = label.replace("{name}", name or "إليك")
-        return {"label": label, "bucket": (row.get("bucket") or "arrived").strip() or "arrived",
+        # A weak map row (no/unknown bucket) must NOT force the progress bar to
+        # "arrived" — return bucket=None and let the caller keep the carrier's.
+        bucket = (row.get("bucket") or "").strip().lower()
+        if bucket not in tracking.BUCKET_RANK:
+            bucket = None
+        return {"label": label, "bucket": bucket,
                 "date": (po.get("updated_at") or "")[:10] or None}
     return None
 
@@ -4403,7 +4411,7 @@ def _shipments_for(pairs, names, oids):
     dlabel = cfg.get(cfgd, "customer_tracking.default_label", tracking.DEFAULT_CUSTOMER_LABEL)
     omap = cfg.get(cfgd, "customer_tracking.otlobly_map", tracking.DEFAULT_OTLOBLY_MAP)
     gwds = [pk.get("tracking_number") for _, pk in uniq if (pk.get("tracking_number") or "").strip()]
-    tls = tracking.timelines_with_fallback(gwds) if gwds else {}
+    tls = tracking.timelines_cache_first(gwds) if gwds else {}
     shipments = []
     for po, pk in uniq:
         otl = pk.get("customer_tracking")
@@ -4443,8 +4451,11 @@ def _shipments_for(pairs, names, oids):
         # come from the owner, never from GAASH/Gerizim.
         stage = _otlobly_stage(pk, pk_items, omap, po)
         if stage:
-            ship["current"] = {"label": stage["label"], "bucket": stage["bucket"]}
-            ship["events"] = (ship.get("events") or []) + [stage]
+            # The owner's LABEL always wins; a stage with no explicit bucket keeps
+            # the carrier's bucket so the progress bar never jumps ahead of GAASH.
+            b = stage["bucket"] or (ship.get("current") or {}).get("bucket") or "arrived"
+            ship["current"] = {"label": stage["label"], "bucket": b}
+            ship["events"] = (ship.get("events") or []) + [dict(stage, bucket=b)]
         shipments.append(ship)
     return shipments
 
@@ -5739,6 +5750,43 @@ if db.claim_once("boot:customer_map_v1"):
         _patch_customer_status_map()
     except Exception as _e:                      # noqa: BLE001 — never block boot
         app.logger.warning("customer status-map patch skipped: %s", _e)
+
+
+def _patch_k3_customs():
+    """2026-07-27: K3 "Arrived at destination country" fires BEFORE customs
+    clearance in every real GAASH sequence, but the SAVED Settings map buckets it
+    "arrived" — jumping the customer progress bar past clearance (the wrong-status
+    complaint). Patch the saved rows to bucket "customs" and add the text-match
+    row; only rows still holding the old default label are touched, so an
+    owner-customized row survives. Idempotent + re-editable in Settings."""
+    cfgd = cfg.load()
+    rows = cfg.get(cfgd, "customer_tracking.status_map", None)
+    if not isinstance(rows, list):
+        return
+    changed = False
+    for r in rows:
+        if (r.get("match") or "").strip() in ("K3", "Arrived at destination country") \
+                and (r.get("label") or "").strip() == "وصلت إلى بلدك" \
+                and (r.get("bucket") or "").strip() == "arrived":
+            r["bucket"] = "customs"
+            changed = True
+    if not any((r.get("match") or "").strip().lower() == "arrived at destination country"
+               for r in rows):
+        idx = next((i for i, r in enumerate(rows)
+                    if (r.get("match") or "").strip() == "Cleared customs"), len(rows))
+        rows.insert(idx, {"match": "Arrived at destination country",
+                          "label": "وصلت إلى بلدك", "bucket": "customs", "hidden": False})
+        changed = True
+    if changed:
+        cfg.set_path(cfgd, "customer_tracking.status_map", rows)
+        cfg.save(cfgd)
+
+
+if db.claim_once("boot:k3_customs_v1"):
+    try:
+        _patch_k3_customs()
+    except Exception as _e:                      # noqa: BLE001 — never block boot
+        app.logger.warning("K3 customs-bucket patch skipped: %s", _e)
 
 
 def _bump_delivery_buffer():

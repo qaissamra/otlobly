@@ -112,16 +112,22 @@
   .tc-art{width:84px;flex:none;margin-inline-start:auto}
   .tc-art svg{width:100%;height:auto;display:block}
   .tcard .prog{display:flex;align-items:center;margin:18px 2px 6px}
-  .tcard .prog .node{width:15px;height:15px;border-radius:50%;flex:none;background:#fff;
-    border:3px solid rgba(35,24,10,.15);z-index:1;position:relative}
+  .tcard .prog .node{width:13px;height:13px;border-radius:50%;flex:none;background:#f6ece1;
+    border:2.5px solid rgba(35,24,10,.22);z-index:1;position:relative}
   .tcard .prog .node.done{background:var(--pa);border-color:var(--pa)}
-  .tcard .prog .node.cur{background:#fff;border-color:var(--pa);box-shadow:0 0 0 5px rgba(255,90,31,.18)}
+  .tcard .prog .node.cur{background:#fff;border-color:var(--pa);box-shadow:0 0 0 4px rgba(255,90,31,.18)}
   .tcard .prog .seg{flex:1;height:4px;background:#f0ddcb;border-radius:4px;margin:0 -2px}
   .tcard .prog .seg.fill{background:var(--pa)}
-  .tcard .prog-labels{display:flex;font-size:10px;font-weight:600;color:rgba(35,24,10,.6);margin:2px 0 4px}
+  .tcard .prog-labels{display:flex;font-size:9.5px;font-weight:600;color:rgba(35,24,10,.38);margin:2px 0 4px}
   .tcard .prog-labels span{flex:1;text-align:center}
   .tcard .prog-labels span:first-child{text-align:start}
   .tcard .prog-labels span:last-child{text-align:end}
+  .tcard .prog-labels span.done{color:rgba(35,24,10,.6)}
+  .tcard .prog-labels span.cur{color:var(--orange-deep);font-weight:800}
+  @media (prefers-reduced-motion: no-preference){
+    .tcard .prog .node.cur{animation:tcpulse 1.6s ease-in-out infinite}
+  }
+  @keyframes tcpulse{50%{box-shadow:0 0 0 7px rgba(255,90,31,.09)}}
   .tc-fields{display:flex;gap:10px;margin-top:12px}
   .tc-fields .f{flex:1;min-width:0}
   .tc-fields .k{display:flex;align-items:center;gap:5px;font-size:10.5px;color:rgba(35,24,10,.55);font-weight:600}
@@ -474,7 +480,7 @@ const T={
       creditsum:"رصيدك لدينا", payments:"💵 سجل دفعاتك", credittag:"رصيد لحسابك",
       kdeposit:"عربون", kcollect:"دفعة", krefund:"استرجاع",
       qorder:"اطلب الآن", qordersub:"من أمازون إلى بابك", qtrack:"تتبّع شحنة", qtracksub:"برقم OTL أو جوالك",
-      s1:"تم الطلب", s2:"تم الشحن", s3:"وصلت فلسطين", s4:"التسليم",
+      s1:"تم الطلب", s2:"تم الشحن", s3:"التخليص الجمركي", s4:"وصلت اطلبلي", s5:"تم التسليم",
       details:"التفاصيل ▾", detailsh:"إخفاء ▴", searchph:"ابحث باسم المنتج أو رقم الطلب أو جوالك…",
       sethead:"⚙️ الإعدادات", bellhead:"تحديثات شحناتك", bellnone:"لا تحديثات جديدة 👌",
       navhome:"الرئيسية", navorders:"طلباتي", navpay:"دفعاتي", navset:"الإعدادات",
@@ -522,7 +528,7 @@ const T={
       creditsum:"Your credit", payments:"💵 Your payments", credittag:"Account credit",
       kdeposit:"Deposit", kcollect:"Payment", krefund:"Refund",
       qorder:"New order", qordersub:"Amazon to your door", qtrack:"Track package", qtracksub:"by OTL # or phone",
-      s1:"Ordered", s2:"Shipped", s3:"In Palestine", s4:"Delivery",
+      s1:"Ordered", s2:"Shipped", s3:"Customs", s4:"At Otlobly", s5:"Delivered",
       details:"Details ▾", detailsh:"Hide ▴", searchph:"Search by product, order # or your phone…",
       sethead:"⚙️ Settings", bellhead:"Shipment updates", bellnone:"No new updates 👌",
       navhome:"Home", navorders:"Orders", navpay:"Payments", navset:"Settings",
@@ -768,12 +774,14 @@ async function linkVerify(){
 }
 /* ---- dashboard rendering ---------------------------------------------------- */
 const PALS=["p-lav","p-sky","p-mint","p-peach"];
-// bucket → progress step (1..4). Exact status text still shown in the fields row.
+// bucket → progress step (1..5); 6 = all five done. customs = node 3 in
+// progress, cleared = node 3 DONE (visibly different). Same as the landing bar.
 function stepOf(s){
   const b=((s.current||{}).bucket)||""; const hasTrack=!!(s.tracking&&(s.events||[]).length);
-  if(b==="delivered") return 5;                 // all four done
+  if(b==="delivered") return 6;                 // all five done
   if(b==="arrived")   return 4;
-  if(b==="customs"||b==="cleared") return 3;
+  if(b==="cleared")   return 4;
+  if(b==="customs")   return 3;
   if(b==="transit")   return hasTrack?2:( (s.est_delivery)?2:1 );
   return 1;
 }
@@ -784,11 +792,13 @@ function shipCard(s,i){
   const first=(s.items||[])[0]||{};
   const more=(s.items||[]).length>1?` <span style="font-weight:600;font-size:11px">+${s.items.length-1}</span>`:"";
   const step=stepOf(s);
-  const nodes=[1,2,3,4].map(n=>{
-    const cls=(step===5||n<step)?"done":(n===step?"cur":"");
-    const seg=n<4?`<span class="seg ${ (step===5||n<step)?"fill":"" }"></span>`:"";
+  const nodes=[1,2,3,4,5].map(n=>{
+    const cls=(step===6||n<step)?"done":(n===step?"cur":"");
+    const seg=n<5?`<span class="seg ${ (step===6||n<step)?"fill":"" }"></span>`:"";
     return `<span class="node ${cls}"></span>${seg}`;
   }).join("");
+  const labels=[1,2,3,4,5].map(n=>
+    `<span class="${(step===6||n<step)?"done":(n===step?"cur":"")}">${t("s"+n)}</span>`).join("");
   const eta=(s.est_from&&s.est_to)?fmtRange(s.est_from,s.est_to):(s.est_delivery?fmt(s.est_delivery):"—");
   const items=(s.items||[]).map(it=>`<div class="prod">${it.image?`<img src="${esc(it.image)}" loading="lazy" alt="">`:'<div class="ph"></div>'}<span dir="auto">${esc(it.title)}</span></div>`).join("");
   const evs=(s.events||[]).slice().reverse();
@@ -806,7 +816,7 @@ function shipCard(s,i){
       <div class="tc-art">${RIDE_SVG}</div>
     </div>
     <div class="prog" aria-hidden="true">${nodes}</div>
-    <div class="prog-labels"><span>${t("s1")}</span><span>${t("s2")}</span><span>${t("s3")}</span><span>${t("s4")}</span></div>
+    <div class="prog-labels">${labels}</div>
     <div class="tc-fields">
       <div class="f"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>${t("curr")}</span></div>
         <div class="v" dir="auto">${esc(cur.label)||t("prep")}</div></div>

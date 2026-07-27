@@ -50,6 +50,12 @@ CODE_LABEL = {
     "D1": ("Delivered", "delivered"),
 }
 
+# Pipeline order of the five customer buckets. The parcel pipeline is monotonic
+# (a box never un-clears customs), so "furthest stage reached" beats "last
+# chronological event" — GAASH StatusTime values are often blank or out of order
+# (the same reason staff_status_from_events guards its delivered pick).
+BUCKET_RANK = {"transit": 1, "customs": 2, "cleared": 3, "arrived": 4, "delivered": 5}
+
 # CUSTOMER-FACING default map (Arabic): match by GAASH status TEXT first (reliable),
 # then code. The customs/authority steps all read "in clearance" so the customer is
 # never shown the internal detail (e.g. "Required customer ID"). GAASH's codes are
@@ -62,6 +68,10 @@ DEFAULT_STATUS_MAP = [
     {"match": "MOC - Palestinian authority", "label": "قيد التخليص الجمركي", "bucket": "customs"},
     {"match": "Ministry of Transportation", "label": "قيد التخليص الجمركي", "bucket": "customs"},
     {"match": "Ministry of Communications", "label": "قيد التخليص الجمركي", "bucket": "customs"},
+    # K3 "Arrived at destination country" fires BEFORE clearance in every real
+    # GAASH sequence (VM → docs → K3 → K2 Cleared → delivery), so its bucket is
+    # customs — bucket arrived would jump the progress bar past clearance.
+    {"match": "Arrived at destination country", "label": "وصلت إلى بلدك", "bucket": "customs"},
     {"match": "Cleared customs", "label": "تم التخليص الجمركي", "bucket": "cleared"},
     # GAASH "Delivered" / handed to Gerizim ≠ the customer has it — the box is on
     # its way to OTLOBLY, which re-ships it; only the owner-set Otlobly stage
@@ -69,7 +79,7 @@ DEFAULT_STATUS_MAP = [
     {"match": "Delivered", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     {"match": "Picked up by Gerizim courier", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     # reliable code fallbacks for stages this account hasn't reached yet
-    {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "arrived"},
+    {"match": "K3", "label": "وصلت إلى بلدك", "bucket": "customs"},
     {"match": "K2", "label": "تم التخليص الجمركي", "bucket": "cleared"},
     {"match": "D1", "label": "في الطريق إلى اطلبلي", "bucket": "arrived"},
     # parcelsapp machine statuses (tier-2 source; stamped as the last event's code)
@@ -239,6 +249,15 @@ def track(tn, lang="en"):
     return s or {"error": "no status yet for this parcel"}
 
 
+def events_from_raw(data):
+    """GAASH raw response → sorted normalized events [{code, text, time}]."""
+    return sorted(
+        ({"code": (s.get("MappedStatusCode") or "").strip(),
+          "text": (s.get("StatusDescription") or "").strip(),
+          "time": s.get("StatusTime")} for s in (data or {}).get("Statuses") or []),
+        key=lambda e: e.get("time") or "")
+
+
 def timeline(tn, lang="en"):
     """One GWD number → the FULL event list (oldest→newest), raw. Returns
     {ok, events:[{code, text, time}]} or {ok:False, error}."""
@@ -251,13 +270,7 @@ def timeline(tn, lang="en"):
     data = fetch_one(tn, api_url, nonce, lang)
     if "_error" in data:
         return {"ok": False, "error": data["_error"]}
-    statuses = (data or {}).get("Statuses") or []
-    events = sorted(
-        ({"code": (s.get("MappedStatusCode") or "").strip(),
-          "text": (s.get("StatusDescription") or "").strip(),
-          "time": s.get("StatusTime")} for s in statuses),
-        key=lambda e: e.get("time") or "")
-    return {"ok": True, "events": events}
+    return {"ok": True, "events": events_from_raw(data)}
 
 
 def timelines(gwds, lang="en"):
@@ -275,12 +288,7 @@ def timelines(gwds, lang="en"):
         if "_error" in data:
             out[g] = {"ok": False, "error": data["_error"]}
             continue
-        statuses = (data or {}).get("Statuses") or []
-        out[g] = {"ok": True, "events": sorted(
-            ({"code": (s.get("MappedStatusCode") or "").strip(),
-              "text": (s.get("StatusDescription") or "").strip(),
-              "time": s.get("StatusTime")} for s in statuses),
-            key=lambda e: e.get("time") or "")}
+        out[g] = {"ok": True, "events": events_from_raw(data)}
     return out
 
 
@@ -320,7 +328,15 @@ def customer_timeline(events, status_map=None, default_label=None):
         if out and out[-1]["label"] == label:
             continue  # same state as before → keep the first occurrence's date
         out.append({"label": label, "bucket": bucket, "date": ev.get("time")})
-    return {"events": out, "current": (out[-1] if out else None)}
+    # Current = the FURTHEST pipeline stage, not the last chronological event —
+    # GAASH StatusTime is often blank/out-of-order, so a "Cleared customs" event
+    # can sort before an older customs one (same guard idea as
+    # staff_status_from_events). Ties break to the latest occurrence.
+    cur = None
+    if out:
+        i = max(range(len(out)), key=lambda i: (BUCKET_RANK.get(out[i]["bucket"], 0), i))
+        cur = out[i]
+    return {"events": out, "current": cur}
 
 
 def track_many(tns, lang="en"):
@@ -358,6 +374,22 @@ def _save_cache(cache):
     with open(tmp, "w") as f:
         json.dump(cache, f, ensure_ascii=False)
     os.replace(tmp, CACHE_FILE)
+
+
+def cache_put_events(tn, events, source="gaash"):
+    """Persist a fresh raw-event timeline into the shared last-known cache — the
+    customer cache-first path (timelines_cache_first) reads it, so every staff
+    refresh doubles as a customer-page refresh. Preserves the parcelsapp
+    cooldown stamp. No-op on empty events (never overwrite good data with
+    nothing)."""
+    tn = clean_tracking(tn)
+    if not tn or not events:
+        return
+    cache = _load_cache()
+    prev = cache.get(tn) or {}
+    cache[tn] = {"events": events, "source": source, "fetched_at": _now_iso(),
+                 "pa_attempt_at": prev.get("pa_attempt_at")}
+    _save_cache(cache)
 
 
 def _parcelsapp_events(shipment):
@@ -471,11 +503,7 @@ def timelines_with_fallback(gwds, lang="en"):
             if not data or "_error" in data:
                 still.append(g)
                 continue
-            events = sorted(
-                ({"code": (s.get("MappedStatusCode") or "").strip(),
-                  "text": (s.get("StatusDescription") or "").strip(),
-                  "time": s.get("StatusTime")} for s in (data.get("Statuses") or [])),
-                key=lambda e: e.get("time") or "")
+            events = events_from_raw(data)
             # empty events = GAASH answered "no record yet" → success, like tier 1
             res[g] = {"ok": True, "events": events,
                       "source": "gaash_browser", "fetched_at": fetched}
@@ -538,6 +566,39 @@ def timelines_with_fallback(gwds, lang="en"):
 
     if dirty:
         _save_cache(cache)
+    return res
+
+
+# A cached answer older than this gets stale:True + as_of on the customer card.
+# The staff board (30-min TTL) and the Leluxe daemon both write through
+# cache_put_events, so in practice entries stay well under an hour old.
+CUSTOMER_CACHE_FRESH_SEC = 6 * 3600
+
+
+def timelines_cache_first(gwds, lang="en"):
+    """Customer-path timelines: serve the last-known cached events INSTANTLY for
+    every GWD that has any (owner decision — the staff side refreshes them every
+    ~30 min, so 99% of lookups never wait on GAASH). Live-fetch (full tiered
+    fallback) ONLY the GWDs with nothing cached; those persist to the cache so
+    the next lookup is instant too. Same contract as timelines_with_fallback."""
+    cache = _load_cache()
+    res, missing = {}, []
+    for g in gwds:
+        entry = cache.get(clean_tracking(g)) or {}
+        if entry.get("events"):
+            r = {"ok": True, "events": entry["events"], "source": "cache",
+                 "fetched_at": entry.get("fetched_at")}
+            try:
+                age = time.time() - datetime.fromisoformat(entry["fetched_at"]).timestamp()
+                if age > CUSTOMER_CACHE_FRESH_SEC:
+                    r["stale"] = True
+            except (KeyError, ValueError, TypeError):
+                r["stale"] = True
+            res[g] = r
+        else:
+            missing.append(g)
+    if missing:
+        res.update(timelines_with_fallback(missing, lang))  # persists to cache itself
     return res
 
 
