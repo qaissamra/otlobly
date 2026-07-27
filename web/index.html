@@ -10097,7 +10097,14 @@ function gmAgo(iso){ if(!iso) return ""; const ms=Date.parse(iso); if(!ms) retur
   const d=Math.floor((Date.now()-ms)/864e5); return d<=0?T("اليوم · today"):`${d}d`; }
 async function gmLoad(){
   let d; try{ d=await (await fetch("/api/gaash/overview")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){
+    // One blipped request must not strand the pane (the view now loads at BOOT via
+    // the restored-page feature, right when a fresh deploy/reconnect is coldest):
+    // offer a retry link AND arm the same 60s timer the success path uses.
+    $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")} — <a href="#" onclick="gmLoad();return false" style="color:var(--accent);font-weight:700">${T("إعادة المحاولة · retry")}</a></div>`;
+    clearInterval(GM.timer);
+    GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
+    return; }
   GM.ov=d;
   GM.stats=null; GM.matches=null;      // workflow stats + ⚡ match counts refetch lazily
   const s=d.settings||{};
