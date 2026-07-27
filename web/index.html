@@ -308,6 +308,10 @@
     padding:11px 15px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;
     opacity:0;transform:translateY(8px);transition:.25s;max-width:440px;white-space:pre-line;z-index:50}
   #toast.show{opacity:1;transform:none}
+  /* offline strip: shown while the app runs on cached data (service worker fallback) */
+  #offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;
+    text-align:center;font-size:12.5px;font-weight:700;padding:6px 12px;box-shadow:0 2px 8px rgba(16,24,40,.25)}
+  #offBanner.show{display:block}
   @media(max-width:860px){.cards{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:1fr}}
   @media print{
     body{background:#fff}.cards,.grid3,.toolbar,#sidebar,.topbar,#ordersView,.no-print{display:none!important}
@@ -1910,6 +1914,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="offBanner" dir="auto">⚠ لا يوجد إنترنت — تُعرض آخر بيانات محفوظة، وأي تعديل لن يُحفَظ · No internet — showing last saved data; edits will NOT be saved</div>
 </div></div></div><!-- /.wrap /.main /.app -->
 
 <script>
@@ -1939,6 +1944,36 @@ function quoteOrder(id){
 
 function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),3500);}
+
+// ═══ Offline shell: banner + fetch instrumentation (the worker lives in /sw.js) ═══
+// The service worker answers from its cache ONLY when the network itself fails, and
+// marks such responses with X-Otl-Cache — that marker (or a rejected fetch) raises
+// the red strip; the first live response of any kind clears it (the 60s notification
+// poll doubles as the reconnect heartbeat). Writes are never intercepted or queued:
+// offline they fail exactly as before, plus a "not saved" toast here.
+let OFFLINE=false;
+function setOffline(on){ on=!!on; if(on===OFFLINE) return; OFFLINE=on;
+  const b=$("offBanner"); if(b) b.classList.toggle("show",on); }
+const _fetch=window.fetch.bind(window);
+window.fetch=function(input,init){
+  const method=((init&&init.method)||(input&&input.method)||"GET").toUpperCase();
+  return _fetch(input,init).then(r=>{
+    try{ setOffline(!!r.headers.get("X-Otl-Cache")); }catch(e){}
+    return r;
+  }).catch(err=>{
+    setOffline(true);
+    if(method!=="GET") toast("⚠ لم يُحفَظ — لا يوجد إنترنت · Not saved — no internet");
+    throw err;                                     // callers' own error paths behave exactly as today
+  });
+};
+window.addEventListener("offline",()=>setOffline(true));
+window.addEventListener("online",()=>{ fetch("/api/me").catch(()=>{}); });   // probe; the response decides
+function logoutClean(ev){                            // logout also drops the offline cache —
+  ev.preventDefault();                               // last-seen orders/customers JSON shouldn't
+  const go=()=>location.href="/logout";              // outlive the session on a shared machine
+  try{ caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k)))).then(go,go); setTimeout(go,500); }
+  catch(e){ go(); }
+}
 
 // ═══ UI language (staff console only) ══════════════════════════════════════
 // English is the default; a 🌐 toggle in the top bar switches to Arabic. Labels
@@ -1987,8 +2022,10 @@ async function applyRole(){
   ME={local:true};                       // default: local no-auth dashboard → show all
   try{ const r=await fetch("/api/me"); if(r.ok){const j=await r.json(); if(j&&j.perms) ME=j;} }catch(e){}
   if(ME.local){                           // local dashboard (8788): no logins, show everything —
-    // including the otlobly-only buttons that default to display:none
-    ["leluxeBtn","metaLeadsBtn"].forEach(id=>{const el=$(id); if(el) el.style.display="";});
+    // including the otlobly-only buttons that default to display:none. Hostname-guarded:
+    // offline-in-prod with no cached /api/me must NOT unhide the admin nav.
+    if(["localhost","127.0.0.1"].includes(location.hostname))
+      ["leluxeBtn","metaLeadsBtn"].forEach(id=>{const el=$(id); if(el) el.style.display="";});
     return;
   }
   const p=ME.perms;
@@ -2023,7 +2060,7 @@ async function applyRole(){
     const keep=new Set(RESTRICTED.nav);
     document.querySelectorAll("#sideNav button, #addOrderBtn, #refreshBtn").forEach(b=>{ b.style.display = keep.has(b.id) ? "" : "none"; });
   }
-  $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b><div>${ME.role} · <a href="/logout">logout</a></div>`;
+  $("userChip").innerHTML=`<b style="color:var(--ink)">${ME.name}</b><div>${ME.role} · <a href="/logout" onclick="logoutClean(event)">logout</a></div>`;
   if(ME.platform && ME.platform.sidebar_html) $("platBrand").innerHTML=ME.platform.sidebar_html;
   // Tatabu support view: the platform admin is inside a broker's dashboard — pin an
   // exit banner. (The rest of the UI already behaves as that tenant via /api/me.)
@@ -2133,10 +2170,10 @@ function notifRender(){
 }
 async function load(){
   await applyRole();
-  if(RESTRICTED){ setView(RESTRICTED.home); }       // limited roles land on their page, never the orders dashboard
+  if(RESTRICTED){ setView(BOOTED?RESTRICTED.home:restoreView(RESTRICTED.home)); }  // limited roles land on their pages (setView clamps a disallowed saved view)
   else restorePlatform();                            // owner: re-enter the Tatabu console if they were in it
   if(!BOOTED){ BOOTED=true;
-    if(!RESTRICTED && !PLATFORM) setView("brain");   // the Brain is the landing page
+    if(!RESTRICTED && !PLATFORM) setView(restoreView("brain"));   // back to the page they were on; Brain for a fresh start
   } else if(VIEW==="brain"){ loadBrain(); }          // ↻ Refresh re-fetches the Brain, never yanks the view
   try{                                              // a server blip shouldn't leave the page frozen at "loading…"
     const r = await fetch("/api/report"); if(!r.ok) throw new Error("HTTP "+r.status);
@@ -2397,6 +2434,22 @@ let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true, BOOTED=false;
 // Which views keep the topbar quick-actions (see the toggles in setView).
 const ADD_ORDER_VIEWS=new Set(["orders","brain","needorder"]);  // create a customer order
 const REFRESH_VIEWS  =new Set(["orders","brain","picking"]);    // views load() actually re-renders
+// Sidebar nav map (view id → nav button id) — module scope so restoreView() can validate saved ids.
+const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
+  activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
+  brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
+  usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
+// A refresh used to always land back on the Brain — restore the page the user was on
+// instead. Platform views restore separately (tatabu_view); a view whose nav button is
+// role/feature-hidden falls back so nobody lands on a page they can't reach.
+function restoreView(fallback){
+  fallback=fallback||"brain";
+  let v=null; try{ v=localStorage.getItem("otl_view"); }catch(e){}
+  if(!v || !VIEW_BTN[v] || PLAT_VIEWS.has(v)) return fallback;
+  const b=$(VIEW_BTN[v]);
+  if(!b || b.style.display==="none") return fallback;
+  return v;
+}
 function setView(v){
   if(v==="quote"){ v="needorder"; QUOTE_JUMP=true; }   // Quote now lives at the top of the To-order page
   if(RESTRICTED && !RESTRICTED.views.includes(v)) v=RESTRICTED.home;   // can't leave the allowed pages
@@ -2409,6 +2462,7 @@ function setView(v){
   if(PLAT_VIEWS.has(v)){ try{ localStorage.setItem("tatabu_view",
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
+  if(!PLAT_VIEWS.has(v)){ try{ localStorage.setItem("otl_view",v); }catch(e){} }   // survive a refresh
   const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
@@ -2441,10 +2495,6 @@ function setView(v){
   $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
   $("gmView").classList.toggle("hidden",v!=="gaashmail");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
-  const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
-    activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
-    brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-    usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
@@ -2481,7 +2531,7 @@ function setView(v){
   if(v==="leluxe"){ loadLeluxe(); }
   if(v==="pkgprep"){ loadPkgprep(); }
   if(v==="bulksearch"){ bsInit(); }
-  if(v==="gaashmail"){ gmLoad(); }
+  if(v==="gaashmail"){ gmLoad().then(()=>{ if(GM.ov && GM.tab!=="conv") gmTab(GM.tab); }); }   // re-show the restored tab once data is in
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
@@ -3281,7 +3331,7 @@ function lxFilteredOrders(){
 function lxExpandAll(open){
   LX_OPEN.clear();
   if(open)(LX.orders||[]).forEach(o=>LX_OPEN.add(o.id));
-  if(LX_VIEW!=="orders") lxViewToggle(); else renderLeluxe();
+  renderLeluxe();   // (expansion only affects the orders sub-view; a plain re-render is always right)
 }
 function lxJumpOrder(id){
   LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
@@ -6800,7 +6850,8 @@ async function qCreateOrder(){
   newOrderOpen(items);                             // open the New-order form pre-filled with the quoted products
 }
 async function loadSettings(){
-  const s=await (await fetch("/api/settings")).json(); QSETTINGS=s;
+  let s; try{ s=await (await fetch("/api/settings")).json(); }catch(e){ toast(T("تعذّر تحميل الإعدادات · Couldn't load Settings")); return; }
+  QSETTINGS=s;
   const m=s.markup_pct*100; $("s_markup").value=(m%1?m.toFixed(1):m.toFixed(0));
   if($("s_ils")) $("s_ils").value=s.ils_per_usd||3.7;
   if($("s_pkg_ils")) $("s_pkg_ils").value=s.pkg_ils_per_usd||3.1;
@@ -7129,7 +7180,8 @@ function phoneCoreJs(s){ let d=String(s==null?"":s).replace(/\D/g,"");
   return d.replace(/^0+/,""); }
 async function loadPurchases(){
   if(!QSETTINGS){ try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){} }  // white-label flags/labels for the card
-  const d=await (await fetch("/api/purchases")).json();
+  let d; try{ d=await (await fetch("/api/purchases")).json(); }catch(e){ d=null; }  // offline/blip → say so, don't hang on the placeholder
+  if(!d){ toast(T("تعذّر تحميل المشتريات · Couldn't load Purchases")); return; }
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   PO_MONEY=d.money!==false;                     // false = COGS redacted for this role
   // The CRM list — names for the customer cell's datalist, and the FULL records
@@ -10012,6 +10064,8 @@ function bsRender(){
 
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
 let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null, wfOpen:new Set()};
+try{ const t=localStorage.getItem("gm_tab");                     // reopen on the tab the user was on
+  if(["conv","ov","seq","tpl","ready","dash"].includes(t)) GM.tab=t; }catch(e){}
 const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
   missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
   cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
@@ -10019,6 +10073,7 @@ const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594",
   exhausted:["#f76808","انتهى بلا رد · no reply"], done:["#8d8d8d","منجز · done"]};
 function gmTab(t){
   GM.tab=t;
+  try{ localStorage.setItem("gm_tab",t); }catch(e){}
   [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
    ["seq","gmTabSeq","gmSeqPane"],
    ["tpl","gmTabTpl","gmTplPane"],["ready","gmTabReady","gmReadyPane"],
@@ -12515,6 +12570,8 @@ async function gmDashLoad(){
     </table></div></div>`;
 }
 
+// Offline shell worker: scope /app only — /, /login and the public pages stay untouched.
+if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("/sw.js",{scope:"/app"}).catch(()=>{}); }catch(e){} }
 localizeStatic();   // apply the saved UI language (default English) to the static chrome
 load();
 </script>
