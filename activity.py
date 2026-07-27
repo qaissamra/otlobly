@@ -21,6 +21,7 @@ Event shape:
 """
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -105,29 +106,57 @@ def _short(v):
     return s if len(s) <= 120 else s[:117] + "…"
 
 
+def _lines_newest_first(path, chunk=256 * 1024):
+    """Yield the file's lines from the END backwards, reading a chunk at a time.
+
+    The log is append-only, so the newest events are the last lines — walking
+    backwards means a caller that wants the latest 200 events touches ~64 KB
+    instead of the whole file."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        pos = f.tell()
+        tail = b""                     # bytes before the earliest complete line read
+        while pos > 0:
+            step = min(chunk, pos)
+            pos -= step
+            f.seek(pos)
+            parts = (f.read(step) + tail).split(b"\n")
+            tail = parts.pop(0)        # may be a partial line — completed next loop
+            for raw in reversed(parts):
+                yield raw
+        if tail:
+            yield tail
+
+
 def recent(limit=60, entity=None, business_id=None, entity_id=None):
     """Newest-first list of events, optionally filtered to one entity type and/or
     one specific entity id (the per-PO Activity feed in the detail drawer).
-    `business_id` reads another tenant's feed (Tatabu platform admin only)."""
+    `business_id` reads another tenant's feed (Tatabu platform admin only).
+
+    Reads BACKWARDS and stops at `limit`. It used to slurp the whole file, split
+    it into every line and json-parse all of them just to keep the newest few:
+    at 12 MB that cost ~36 MB per call, and /api/notifications (polled every 5s
+    by the staff board) was walking the process into Render's 512 MB limit."""
     af = _activity_file(business_id)
     if not af.exists():
         return []
     out = []
-    for line in af.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw in _lines_newest_first(af):
+        line = raw.strip()
         if not line:
             continue
         try:
-            ev = json.loads(line)
-        except ValueError:
+            ev = json.loads(line.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
             continue
         if entity and ev.get("entity") != entity:
             continue
         if entity_id and ev.get("entity_id") != str(entity_id):
             continue
         out.append(ev)
-    out.reverse()
-    return out[:limit]
+        if limit and len(out) >= limit:
+            break
+    return out
 
 
 def platform_recent(businesses, limit=100):
