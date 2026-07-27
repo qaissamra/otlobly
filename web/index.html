@@ -9011,7 +9011,9 @@ function poCardHtml(p){
 //    and colors copied verbatim from the owner's ClickUp list ("Otloble AMAZON /
 //    Orders", 901523915172) on 2026-07-13 — re-copy if the ClickUp workflow changes. ──
 const CU_STATUSES=[["oredered","#9faec7"],["shipped","#4466ff"],["doc sent to gash","#ab4aba"],
-  ["in clearance","#0f9d9f"],["waiting verification","#f76808"],["refund request","#aa8d80"],
+  // "cleared" is Otlobly's own: GAASH's "Cleared customs" event can lag by weeks (or
+  // never land), so setting it here shows the customer the green «تم التخليص الجمركي» now.
+  ["in clearance","#0f9d9f"],["cleared","#16a34a"],["waiting verification","#f76808"],["refund request","#aa8d80"],
   ["order number","#f5cf78"],["cancelled","#e5484d"],["not correct address","#e93d82"],
   ["id request","#d33d44"],["rd request","#0091ff"],["mixed","#6647f0"],["delivered","#a18072"],
   ["request cancel","#f76808"],["parcel check","#f76808"],["tracking api","#6647f0"],
