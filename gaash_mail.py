@@ -1745,6 +1745,66 @@ def parcel_board_map():
     return out
 
 
+def tracking_map():
+    """{GWD: {gash_status, bucket, label}} — where customs has got to, for every
+    parcel, in ONE leluxe scan + ONE purchases load.
+
+    Batched on purpose: the per-GWD twin (_leluxe_row_for) is a full-table LIKE
+    scan each time, and the conversation list draws every thread at once."""
+    out = {}
+    try:
+        with db.connect() as c:
+            rows = c.execute("SELECT data_json FROM leluxe_orders "
+                             "WHERE deleted=0").fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                continue
+            f = d.get("fields") or {}
+            tn = str(d.get("tracking_number") or "").strip().upper()
+            if not tn:
+                for k, v in f.items():
+                    if k.strip().lower() == "tracking number":
+                        tn = str(v or "").strip().upper()
+                        break
+            if not tn:
+                continue
+            gash = ""
+            for k, v in f.items():
+                if k.strip().lower() == "gash status":
+                    # ClickUp stores several of these with a leading space
+                    # (" customer ID"); untrimmed it misses the colour lookup
+                    gash = _cf_stringify(v).strip()
+                    break
+            ts = d.get("tracking_status")
+            cur = out.get(tn) or {}
+            # a package row carries the truth; an item row may be blank, so keep
+            # whichever value actually says something
+            out[tn] = {"gash_status": gash or cur.get("gash_status") or "",
+                       "bucket": _bucket(ts) or cur.get("bucket") or "",
+                       "label": ((ts.get("label") if isinstance(ts, dict)
+                                  else (str(ts)[:40] if ts else ""))
+                                 or cur.get("label") or "")}
+    except Exception:  # noqa
+        pass
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if not tn or tn in out:
+                    continue
+                ts = pk.get("tracking_status")
+                out[tn] = {"gash_status": "",       # Purchases has no such field
+                           "bucket": _bucket(ts) or "",
+                           "label": (ts.get("label") if isinstance(ts, dict)
+                                     else (str(ts)[:40] if ts else "")) or ""}
+    except Exception:  # noqa
+        pass
+    return out
+
+
 def parcel_src_map(pmap=None):
     """{GWD: pick|board|default} for the rows the UI is about to draw — batched
     twin of parcel_name_src (which costs a query per GWD)."""
@@ -2800,6 +2860,7 @@ def overview():
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     bmap = parcel_board_map()
+    tmap = tracking_map()
     for th in threads:
         th["last_msg"] = last.get(th["gwd"])
         th["reads"] = reads.get(th["gwd"]) or {"sent": 0, "opens": 0,
@@ -2809,6 +2870,8 @@ def overview():
         th["pname_id"] = emap.get(th["gwd"], "")
         th["pname_src"] = smap.get(th["gwd"], "")
         th["source"] = bmap.get(th["gwd"], "")
+        # where customs has got to — the one thing the list could not tell you
+        th["gash"] = tmap.get(th["gwd"]) or {}
     proposed = [t for t in threads if t.get("state") == "proposed"]
     return {"threads": [t for t in threads if t.get("state") != "proposed"],
             "proposed": proposed,
@@ -3114,6 +3177,7 @@ def thread_detail(gwd):
     th["pname_id"] = id_number_for_email(gwd)
     th["pname_src"] = parcel_name_src(gwd)
     th["source"] = parcel_board_map().get(gwd, "")
+    th["gash"] = tracking_map().get(gwd) or {}
     return {"thread": th, "messages": msgs}
 
 

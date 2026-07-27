@@ -1642,6 +1642,7 @@
       <span class="muted2" id="gmSub" style="font-size:12px"></span>
       <span class="spacer"></span>
       <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
+      <button class="minibtn" id="gmTrkAllBtn" onclick="gmTrackAll(this)" title="اسأل غاش عن كل الطرود — يتخطى ما فُحص في آخر ٣٠ دقيقة · ask GAASH about every parcel — skips anything checked in the last 30 min" data-en="📦 Check tracking" data-ar="📦 فحص التتبّع">📦 Check tracking</button>
       <button class="minibtn" id="gmFreezeBtn" style="display:none" onclick="gmFreeze(this)"></button>
       <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
       <button class="accent" onclick="gmNewOpen()" data-en="📧 Enroll packages" data-ar="📧 إرسال طرود">📧 Enroll packages</button>
@@ -10217,6 +10218,7 @@ function gmRenderList(){
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
         ${gmReadPill(t.reads)}
+        ${gmGashPill({...(t.gash||{}),source:t.source},true)}
         ${multi&&gmAcctOf(t)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${T("يُرسل من · sends from")}: ${poEsc(gmAcctOf(t).email)}">📤 ${poEsc((gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0])}</span>`:''}
         ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
@@ -10272,6 +10274,7 @@ function gmRenderChat(){
        :`<button class="minibtn" onclick="gmAct('resume')">▶ ${T("استئناف · resume")}</button>`}
       ${th.missing_docs?`<button class="minibtn" onclick="gmAct('clear_missing')">✓ ${T("اكتملت المستندات · docs complete")}</button>`
        :`<button class="minibtn" onclick="gmMissing()">⚠ ${T("ناقص مستندات · missing docs")}</button>`}
+      <button class="minibtn" id="gmTrkBtn" onclick="gmTrackOne(this)" title="${T("اسأل غاش عن هذا الطرد الآن · ask GAASH about this parcel now")}">📦 ${T("تتبّع · track")}</button>
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
       ${(th.step||0)>0&&th.state!=="proposed"?`<button class="minibtn" onclick="gmRestart()" title="${T("يرجع للإيميل الأول ويرسله فوراً بالمستلم والقالب الحاليين · back to email #1, sent immediately with the CURRENT recipient & template")}">🔁</button>`:""}
@@ -10755,11 +10758,13 @@ function gmPlainPill(txt){
 }
 // Where customs has got to. Leluxe stores it as a ClickUp field; Purchases has no
 // such field, so it comes from the STORED tracking status — no carrier is asked.
-function gmGashPill(c){
+// blank=true drops the "—" placeholder: a table column needs one, a conversation
+// row does not — a dash on every row is noise, not information
+function gmGashPill(c,blank){
   if(c.gash_status) return gmLxReady()
     ? lxCfPill("gash status",c.gash_status) : gmPlainPill(c.gash_status);
   if(c.bucket||c.label) return gaashMiniPill(c.bucket,c.label);
-  return '<span class="muted2">—</span>';
+  return blank?"":'<span class="muted2">—</span>';
 }
 // lxStatusPill/lxCfPill read their colours from LX.schema, which only exists once
 // the Leluxe cache is loaded. Load it AFTER the first paint and re-render once —
@@ -10783,6 +10788,51 @@ function gmRowPick(row,gwd){          // the whole row is the click target
 function gmEnrollClearFilter(){
   const s=$("gmCandSearch"); if(s) s.value="";
   gmCandMode("all");                   // re-renders
+}
+// ── 📦 ask GAASH where a parcel is ────────────────────────────────────────────
+// The single check lives HERE, in the opened conversation, not on the list row —
+// a button per row would crowd the list and invite a scrape per parcel per
+// glance. It reuses the boards' own endpoint: a free GAASH scrape, never the
+// paid parcelsapp tier, which only the customer-facing lookup walks.
+function gmTrackUrl(source){
+  return source==="purchases" ? "/api/purchases/refresh_tracking"
+                              : "/api/leluxe/refresh_tracking";
+}
+async function gmTrackOne(btn){
+  const th=(GM.detail||{}).thread; if(!th) return;
+  const was=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spin"></span>';
+  // force skips the boards' 30-minute cooldown — right for ONE parcel you are
+  // looking at and asked about, wrong for a sweep (see gmTrackAll)
+  const r=await post(gmTrackUrl(th.source),{tracking:th.gwd,force:true});
+  btn.disabled=false; btn.innerHTML=was;
+  if(!r||r.ok===false){
+    toast((r&&r.error)||T("تعذّر التتبّع — قد تحتاج صلاحية أعلى · could not track — you may need a higher permission"));
+    return;
+  }
+  await gmLoad(); await gmOpen(th.gwd,true);
+  const g=((GM.detail||{}).thread||{}).gash||{};
+  toast(g.gash_status||g.label
+    ? `📦 ${poEsc(g.gash_status||g.label)}`
+    : T("لا جديد من غاش · nothing new from GAASH"));
+}
+// The sweep does NOT force: the 30-minute cooldown and the terminal skips are
+// what keep a 40-parcel pass from being 40 scrapes every time it is pressed.
+async function gmTrackAll(btn){
+  const ths=((GM.ov&&GM.ov.threads)||[]).filter(t=>t.state!=="done"&&t.state!=="goal_met");
+  if(!ths.length){ toast(T("لا محادثات · no conversations")); return; }
+  const was=btn.innerHTML; btn.disabled=true;
+  let done=0, moved=0;
+  for(const t of ths){
+    btn.innerHTML=`… ${++done}/${ths.length}`;
+    const before=(t.gash||{}).gash_status||(t.gash||{}).label||"";
+    let r=null;
+    try{ r=await post(gmTrackUrl(t.source),{tracking:t.gwd}); }catch(e){}
+    if(r&&r.ok!==false&&(r.updated||r.checked)) moved++;
+    void before;
+  }
+  btn.disabled=false; btn.innerHTML=was;
+  await gmLoad();
+  toast(`📦 ${done} ${T("طرد فُحص · checked")}${moved?` · ${moved} ${T("تحدّث · updated")}`:""}`);
 }
 // ── 📝 pick a template into the reply box ─────────────────────────────────────
 // A popup OVER the conversation — not a jump to the Templates tab, which loses
