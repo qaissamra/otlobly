@@ -2227,10 +2227,19 @@ def _build_msg(acct, to_addr, subject, body, attachments, chain, html=None):
 
 
 def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
-                 subject=None, to_override=None, step_id=None):
+                 subject=None, to_override=None, step_id=None,
+                 acct_override=None, fresh=False):
     """Send one message on a thread (threaded Re: after the first). The message
     row is pre-allocated so the tracking pixel/links can carry its id, then
-    DELETED if Gmail rejects the send. Honors dry_run."""
+    DELETED if Gmail rejects the send. Honors dry_run.
+
+    `acct_override` sends from a named mailbox WITHOUT moving the conversation
+    to it, and `fresh` starts a new RFC-822 root instead of replying onto the
+    thread's earlier messages. Both exist for the step-1 fan-out: a copy that
+    threads would reach GAASH as a stranger replying to someone else's email
+    about their parcel. The copy's Message-ID is still stored, so a reply to
+    EITHER copy still matches the thread — match_thread looks ids up with no
+    account filter."""
     th = thread_get(gwd)
     if not th:
         return {"ok": False, "error": "thread not found"}
@@ -2239,7 +2248,7 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
         _thread_set(gwd, last_error="dry-run is ON in Settings — nothing is sent")
         return {"ok": False, "error": "dry_run enabled — sends are disabled in Settings",
                 "dry_run": True}
-    acct = _account(th.get("account_id"))
+    acct = _account(acct_override or th.get("account_id"))
     if not acct:
         # every sibling failure writes last_error; this one did not, so the
         # daemon retried and failed forever with nothing on screen to say why
@@ -2253,7 +2262,7 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
     if not to_addr:
         return {"ok": False, "error": "no recipient address — set one on the sequence or in Settings"}
     base = th.get("subject") or subject or f"Customs clearance — {gwd}"
-    prior = [m for m in msgs_for(gwd) if m.get("message_id")]
+    prior = [] if fresh else [m for m in msgs_for(gwd) if m.get("message_id")]
     subj = base
     if prior and not re.match(r"(?i)re:", base):
         subj = f"Re: {base}"
@@ -2414,6 +2423,44 @@ def task_done(gwd):
     return {"ok": True, "thread": thread_get(gwd)}
 
 
+def _fanout_step1(gwd, msg_row, account_id):
+    """Send email #1 AGAIN from another ticked mailbox, as its own first email.
+
+    Ticking several accounts means "write to GAASH from each of these", so the
+    per-sender open counts on the card can answer which address they actually
+    read. Only step 1 fans out — the thread keeps one account_id and every
+    follow-up comes from it, or a 4-step workflow would put eight emails in a
+    human queue.
+
+    Called AFTER send_step, never inside it: send_step ends in _schedule_next,
+    which advances step and sets next_send_at, so a copy sent from in there
+    would be filed under step 2 and double-advance the sequence."""
+    if not msg_row:
+        return None
+    with db.connect() as c:
+        r = c.execute("SELECT * FROM gaash_msgs WHERE id=?",
+                      (msg_row,)).fetchone()
+    row = dict(r) if r else None
+    if not row:
+        return None
+    atts = []                              # the bytes live on disk, not in the row
+    for a in json.loads(row.get("attachments_json") or "[]"):
+        p = attachment_path(gwd, a.get("file"))
+        if p:
+            atts.append((a.get("name") or p.name, p.read_bytes(),
+                         a.get("ctype") or "application/octet-stream"))
+    res = _thread_send(gwd, row.get("body") or "", atts, kind="sent",
+                       step=row.get("step"), step_id=row.get("step_id"),
+                       acct_override=account_id, fresh=True)
+    if not res.get("ok"):
+        # _thread_send already wrote last_error, but as if the whole step had
+        # failed — which it did not. Name the mailbox that did.
+        who = (_account(account_id) or {}).get("email") or account_id
+        _thread_set(gwd, last_error="copy from %s failed: %s"
+                    % (who, res.get("error") or "?"))
+    return res
+
+
 def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                   schedule=None, docs=None):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
@@ -2435,10 +2482,13 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             for k, v in (docs or {}).items()}
     shared = ([d for d in id_doc_id if d] if isinstance(id_doc_id, list)
               else ([id_doc_id] if id_doc_id else []))
-    # account_id accepts a LIST: the batch is dealt round-robin across those
-    # mailboxes. Forty clearance emails from one Gmail account in a minute is
-    # what trips a sending limit; thirteen from each of three does not. Each
-    # parcel still has exactly one conversation and one sender.
+    # account_id accepts a LIST. The round-robin picks each parcel's PRIMARY
+    # mailbox — it owns the conversation and sends every follow-up, which is
+    # what keeps forty clearance emails from leaving one Gmail account in a
+    # minute and tripping its sending limit. On top of that, email #1 also goes
+    # out from every OTHER ticked mailbox (_fanout_step1), because ticking two
+    # addresses means "write to GAASH from both" and the point is to see which
+    # one they open.
     fleet = ([a for a in account_id if a] if isinstance(account_id, list)
              else ([account_id] if account_id else []))
     picked = 0
@@ -2484,10 +2534,20 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                         "scheduled_at": schedule[gwd]})
             continue
         res = send_step(gwd)
+        copies, cerr = 0, []
+        if res.get("ok"):
+            for extra in [a for a in fleet if a != acct_for]:
+                r2 = _fanout_step1(gwd, res.get("msg_row"), extra) or {}
+                if r2.get("ok"):
+                    copies += 1
+                elif r2.get("error"):
+                    cerr.append(r2["error"])
         out.append({"gwd": gwd, **({"ok": True, "state": "active"} if res.get("ok")
                                    else {"ok": True, "state": "active",
                                          "send_error": res.get("error"),
-                                         "dry_run": res.get("dry_run", False)})})
+                                         "dry_run": res.get("dry_run", False)}),
+                    **({"copies": copies} if copies else {}),
+                    **({"copy_errors": cerr} if cerr else {})})
     return out
 
 
