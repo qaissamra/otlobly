@@ -16,7 +16,7 @@ import os
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import money
@@ -211,6 +211,33 @@ CREATE TABLE IF NOT EXISTS leluxe_status_log (
 );
 CREATE INDEX IF NOT EXISTS ix_lxlog_row ON leluxe_status_log(row_id, ts);
 CREATE INDEX IF NOT EXISTS ix_lxlog_new ON leluxe_status_log(new_status);
+-- 📦 GAASH status changes — what a "Check tracking" run actually moved. The
+-- carriers' own answer is a moving target, so a run that changes 13 parcels
+-- and reports only "13 checked" is unreviewable: this is the receipt. One
+-- gash_runs row per press, one gash_status_log row per parcel that moved.
+CREATE TABLE IF NOT EXISTS gash_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  actor TEXT,
+  checked INTEGER NOT NULL DEFAULT 0,   -- parcels looked at
+  changed INTEGER NOT NULL DEFAULT 0,   -- parcels that moved
+  source TEXT NOT NULL DEFAULT 'check'  -- check | sequencer
+);
+CREATE TABLE IF NOT EXISTS gash_status_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER,                       -- gash_runs.id
+  at TEXT NOT NULL,
+  gwd TEXT NOT NULL,
+  name TEXT,                            -- the product, as shown on the board
+  code TEXT,                            -- the NAME box (B28 / E-B31)
+  order_status TEXT,                    -- rd | ordered … the board's own pill
+  old_status TEXT,
+  new_status TEXT,
+  store TEXT NOT NULL DEFAULT 'leluxe'  -- leluxe | purchases
+);
+CREATE INDEX IF NOT EXISTS ix_gashlog_at ON gash_status_log(at);
+CREATE INDEX IF NOT EXISTS ix_gashlog_run ON gash_status_log(run_id);
+CREATE INDEX IF NOT EXISTS ix_gashlog_gwd ON gash_status_log(gwd);
 CREATE TABLE IF NOT EXISTS leluxe_pkg_mail (
   gwd TEXT PRIMARY KEY,                 -- one clearance-email thread per GWD package
   to_email TEXT,
@@ -999,6 +1026,49 @@ def log_leluxe_status(row_id, old, new, source="app", c=None):
         return
     with connect() as conn:
         conn.execute(sql, row)
+
+
+def gash_run_start(actor="", source="check"):
+    """Open a run and return its id — the header the popup groups changes under."""
+    with connect() as c:
+        cur = c.execute("INSERT INTO gash_runs (at, actor, source) VALUES (?,?,?)",
+                        (now_iso(), actor or "", source))
+        return cur.lastrowid
+
+
+def gash_run_close(run_id, checked, changed):
+    with connect() as c:
+        c.execute("UPDATE gash_runs SET checked=?, changed=? WHERE id=?",
+                  (int(checked or 0), int(changed or 0), run_id))
+
+
+def log_gash_change(run_id, gwd, old, new, *, name="", code="",
+                    order_status="", store="leluxe"):
+    """Record ONE parcel moving from `old` to `new`. Transitions only — a first
+    sighting (no old value) still counts, but old == new never does, or a
+    re-check with nothing new would fill the log with noise."""
+    if (old or "") == (new or "") or not (new or "").strip():
+        return False
+    with connect() as c:
+        c.execute("""INSERT INTO gash_status_log
+                     (run_id, at, gwd, name, code, order_status,
+                      old_status, new_status, store)
+                     VALUES (?,?,?,?,?,?,?,?,?)""",
+                  (run_id, now_iso(), gwd, name or "", code or "",
+                   order_status or "", old or "", new or "", store))
+    return True
+
+
+def gash_changes(days=14):
+    """Recent runs + the changes they made, newest first."""
+    cut = (datetime.now(timezone.utc) - timedelta(days=int(days or 14))) \
+        .astimezone().isoformat(timespec="seconds")
+    with connect() as c:
+        runs = [dict(r) for r in c.execute(
+            "SELECT * FROM gash_runs WHERE at>=? ORDER BY at DESC", (cut,))]
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM gash_status_log WHERE at>=? ORDER BY at DESC", (cut,))]
+    return {"runs": runs, "changes": rows}
 
 
 def audit(actor, action, entity, entity_id, detail=""):

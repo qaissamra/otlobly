@@ -491,6 +491,47 @@
     .tpl-tbl th:nth-child(2),.tpl-tbl td:nth-child(2),
     .tpl-tbl th:nth-child(4),.tpl-tbl td:nth-child(4){display:none}
   }
+  /* 🕐 status-change log — a day column beside the run, so "what did the check
+     do?" is answerable a week later, not just in the toast that flashed by */
+  #bulkModal.chg-wide .az-box{width:min(1120px,96vw);height:min(700px,86vh);max-height:86vh}
+  #bulkModal.chg-wide #bulkBody{flex:1;min-height:0;display:flex}
+  .chg-wrap{display:flex;gap:14px;width:100%;min-height:0}
+  .chg-days{flex:0 0 168px;overflow:auto;border-inline-end:1px solid var(--line);padding-inline-end:8px}
+  .chg-day{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:9px;
+    cursor:pointer;font-size:12px}
+  .chg-day:hover{background:var(--bg2)}
+  .chg-day.on{background:var(--bg2);font-weight:700}
+  .chg-cnt{margin-inline-start:auto;background:var(--line);border-radius:999px;
+    padding:1px 7px;font-size:10.5px;font-weight:700}
+  .chg-cnt.zero{opacity:.45;font-weight:400}
+  .chg-detail{flex:1;min-width:0;overflow:auto;padding-inline-end:4px}
+  .chg-h{margin:0;font-size:19px;font-weight:800}
+  .chg-when{color:var(--muted);font-size:12px;margin:2px 0 10px}
+  .chg-run{border-radius:10px;padding:8px 11px;font-size:12px;margin-bottom:10px}
+  .chg-run.ok{background:#ecfdf3;border:1px solid #abefc6;color:#067647}
+  .chg-run.warn{background:#fef3f2;border:1px solid #fecdca;color:#b42318}
+  .chg-sum{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .chg-pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700}
+  .chg-row{display:flex;align-items:center;gap:8px;padding:9px 2px;
+    border-top:1px solid var(--line);font-size:12.5px;flex-wrap:wrap}
+  .chg-time{color:var(--muted);font-size:11px;flex:0 0 46px}
+  .chg-code{flex:0 0 auto;font-weight:700;font-size:11.5px}
+  .chg-name{flex:1 1 180px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chg-move{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .chg-arrow{color:var(--muted)}
+  .gm-az2{font-size:11.5px;margin-bottom:8px;min-height:0}
+  .gm-az2:empty{display:none}
+  .gm-az2.wait{color:var(--muted)}
+  .gm-az2.ok{color:#067647}
+  .gm-az2.warn{color:#b45309}
+  @media(max-width:640px){
+    #bulkModal.chg-wide .az-box{width:calc(100vw - 14px);height:92vh}
+    .chg-wrap{flex-direction:column}
+    .chg-days{flex:0 0 auto;display:flex;gap:6px;overflow-x:auto;border-inline-end:0;
+      border-bottom:1px solid var(--line);padding:0 0 8px}
+    .chg-day{flex:0 0 auto}
+  }
   /* 📦 the package list is two calm lines per parcel, not a spreadsheet — the
      picker only ever needed WHICH parcel, under WHICH name, with WHICH ID, and
      whether it is already being chased. The compose header above says the rest. */
@@ -618,6 +659,13 @@
   .gm-row{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
   .gm-row:hover{background:var(--bg2)}
   .gm-row.on{background:#fff4ee;border-color:#f7680855}
+  /* ✅ the cleared folder — closed by default, one click from its contents */
+  .gm-fold{display:flex;align-items:center;gap:7px;padding:8px 10px;margin-top:8px;
+    border-top:1px solid var(--line);cursor:pointer;font-size:12.5px;user-select:none}
+  .gm-fold:hover{background:var(--bg2)}
+  .gm-fold-c{color:var(--muted);font-size:11px;width:10px}
+  .gm-fold-n{background:var(--line);border-radius:999px;padding:1px 8px;
+    font-size:10.5px;font-weight:700}
   .gm-row .gm-top{display:flex;align-items:center;gap:7px}
   .gm-row .gm-gwd{font-family:ui-monospace,monospace;font-size:12px;font-weight:700}
   .gm-dots{display:inline-flex;gap:2px;flex:0 0 auto}
@@ -1662,6 +1710,7 @@
       <span class="spacer"></span>
       <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
       <button class="minibtn" id="gmTrkAllBtn" onclick="gmTrackAll(this)" title="اسأل غاش عن كل الطرود — يتخطى ما فُحص في آخر ٣٠ دقيقة · ask GAASH about every parcel — skips anything checked in the last 30 min" data-en="📦 Check tracking" data-ar="📦 فحص التتبّع">📦 Check tracking</button>
+      <button class="minibtn" id="gmChgBtn" onclick="gmChangesOpen()" title="ما تغيّر في آخر الفحوصات · what the last checks moved" data-en="🕐 Changes" data-ar="🕐 التغييرات">🕐 Changes</button>
       <button class="minibtn" id="gmFreezeBtn" style="display:none" onclick="gmFreeze(this)"></button>
       <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
       <button class="accent" onclick="gmNewOpen()" data-en="📧 Enroll packages" data-ar="📧 إرسال طرود">📧 Enroll packages</button>
@@ -7258,7 +7307,7 @@ function bulkOpen(title){ $("bulkTitle").textContent=title; $("bulkBody").innerH
 // en-pick is the enroll picker's width override — drop it on close, or the
 // next consumer of this shared modal (shipping check, cost estimate…) inherits it
 function bulkClose(){ $("bulkModal").classList.add("hidden");
-  $("bulkModal").classList.remove("en-wide","en-pick","tpl-wide"); }
+  $("bulkModal").classList.remove("en-wide","en-pick","tpl-wide","chg-wide"); }
 function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
   if(!r){ r=document.createElement("div"); r.id="blk_"+id;
     r.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap";
@@ -10291,13 +10340,24 @@ function gmSenderRows(t){
       ${gmReadPill(r)}
     </div>`).join("")}</div>`;
 }
+// A parcel that cleared is finished business: it keeps its history but it is no
+// longer something to act on, so it drops into a folder instead of sitting at
+// the top of the list between the parcels that still need chasing.
+const GM_DONE_STATES=["goal_met","done","cleared"];
+function gmIsDone(t){ return GM_DONE_STATES.includes(t.state); }
+function gmClearedOpen(){ return localStorage.getItem("gm_cleared_open")==="1"; }
+function gmClearedToggle(){
+  localStorage.setItem("gm_cleared_open",gmClearedOpen()?"0":"1");
+  gmRenderList();
+}
 function gmRenderList(){
-  const ths=(GM.ov&&GM.ov.threads)||[];
+  const all=(GM.ov&&GM.ov.threads)||[];
+  const ths=all.filter(t=>!gmIsDone(t)), done=all.filter(gmIsDone);
   // with a single mailbox the account is never in question — only show it when
   // there are several and "which one sent this?" is a real question
   const multi=(((GM.ov&&GM.ov.accounts)||[]).length>1);
-  if(!ths.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
-  $("gmList").innerHTML=ths.map(t=>{
+  if(!all.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
+  const card=t=>{
     const last=t.last_msg||{};
     const prev=last.body?poEsc(last.body):(t.last_error?`⚠ ${poEsc(t.last_error)}`:"");
     return `<div class="gm-row${GM.cur===t.gwd?' on':''}" onclick="gmOpen('${t.gwd}')">
@@ -10319,7 +10379,17 @@ function gmRenderList(){
       ${gmSenderRows(t)}
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
     </div>`;
-  }).join("");
+  };
+  const open=gmClearedOpen();
+  $("gmList").innerHTML=
+    (ths.length?ths.map(card).join("")
+      :`<div class="muted2" style="padding:14px;text-align:center">${T("لا شيء ينتظر — كل الطرود خلصت · nothing waiting — every parcel is done")}</div>`)
+    +(done.length?`<div class="gm-fold${open?" on":""}" onclick="gmClearedToggle()">
+        <span class="gm-fold-c">${open?"▾":"▸"}</span>
+        <b>✅ ${T("خلصت · Cleared")}</b>
+        <span class="muted2" style="font-size:11px">${T("لا تسلسل بعد الآن · no longer sequencing")}</span>
+        <span class="spacer"></span><span class="gm-fold-n">${done.length}</span>
+      </div>${open?done.map(card).join(""):""}`:"");
 }
 async function gmOpen(gwd,keep){
   GM.cur=gwd;
@@ -11068,16 +11138,12 @@ async function gmResendGo(acctId){
 // a button per row would crowd the list and invite a scrape per parcel per
 // glance. It reuses the boards' own endpoint: a free GAASH scrape, never the
 // paid parcelsapp tier, which only the customer-facing lookup walks.
-function gmTrackUrl(source){
-  return source==="purchases" ? "/api/purchases/refresh_tracking"
-                              : "/api/leluxe/refresh_tracking";
-}
 async function gmTrackOne(btn){
   const th=(GM.detail||{}).thread; if(!th) return;
   const was=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spin"></span>';
   // force skips the boards' 30-minute cooldown — right for ONE parcel you are
   // looking at and asked about, wrong for a sweep (see gmTrackAll)
-  const r=await post(gmTrackUrl(th.source),{tracking:th.gwd,force:true});
+  const r=await post("/api/gaash/check_tracking",{gwds:[th.gwd],force:true});
   btn.disabled=false; btn.innerHTML=was;
   if(!r||r.ok===false){
     toast((r&&r.error)||T("تعذّر التتبّع — قد تحتاج صلاحية أعلى · could not track — you may need a higher permission"));
@@ -11089,24 +11155,136 @@ async function gmTrackOne(btn){
     ? `📦 ${poEsc(g.gash_status||g.label)}`
     : T("لا جديد من غاش · nothing new from GAASH"));
 }
-// The sweep does NOT force: the 30-minute cooldown and the terminal skips are
-// what keep a 40-parcel pass from being 40 scrapes every time it is pressed.
+// ONE request for the whole sweep — it used to be one per conversation, which
+// could only ever refresh the board that conversation came from, so the same
+// GWD sitting on the other board stayed stale. The server walks every store
+// that holds the number and hands back what actually moved.
+// It does NOT force: the 30-minute cooldown and the terminal skips are what
+// keep a 40-parcel pass from being 40 scrapes every time it is pressed.
 async function gmTrackAll(btn){
   const ths=((GM.ov&&GM.ov.threads)||[]).filter(t=>t.state!=="done"&&t.state!=="goal_met");
   if(!ths.length){ toast(T("لا محادثات · no conversations")); return; }
   const was=btn.innerHTML; btn.disabled=true;
-  let done=0, moved=0;
-  for(const t of ths){
-    btn.innerHTML=`… ${++done}/${ths.length}`;
-    const before=(t.gash||{}).gash_status||(t.gash||{}).label||"";
-    let r=null;
-    try{ r=await post(gmTrackUrl(t.source),{tracking:t.gwd}); }catch(e){}
-    if(r&&r.ok!==false&&(r.updated||r.checked)) moved++;
-    void before;
-  }
+  btn.innerHTML=`<span class="spin"></span> ${ths.length}`;
+  let r=null;
+  try{ r=await post("/api/gaash/check_tracking",{gwds:ths.map(t=>t.gwd)}); }catch(e){}
   btn.disabled=false; btn.innerHTML=was;
+  if(!r||r.ok===false){
+    toast((r&&r.error)||T("تعذّر التتبّع — قد تحتاج صلاحية أعلى · could not track — you may need a higher permission"));
+    return;
+  }
   await gmLoad();
-  toast(`📦 ${done} ${T("طرد فُحص · checked")}${moved?` · ${moved} ${T("تحدّث · updated")}`:""}`);
+  await gmChangesOpen(r.run_id);      // the receipt, not just a number
+  gmAz2Sync();                        // …and push the real AZ (2) into step
+}
+// ── 🕐 what the checks moved ──────────────────────────────────────────────────
+// The app's GASH STATUS write lands on the AZ (2) COPY list; the real AZ (2) is
+// written only by the Mac sync tool. So after a check we ask that tool to run —
+// from the BROWSER, over the same 127.0.0.1 bridge the Gerizim mini-tool uses,
+// because the app itself (on Render) cannot reach this Mac. When the Mac is
+// asleep the popup says so rather than implying AZ (2) is up to date.
+// kept on GM, not in the DOM: the detail pane re-renders whenever you pick
+// another day, and a status that vanished on a click would read as "it never
+// happened" for the one line here nobody can afford to guess about
+function gmAz2Set(cls,html){
+  GM.az2={cls:cls,html:html};
+  const line=$("gmAz2Line");
+  if(line){ line.className="gm-az2 "+cls; line.innerHTML=html; }
+}
+async function gmAz2Sync(){
+  gmAz2Set("wait",`<span class="spin"></span> ${T("يُحدَّث AZ (2)… · syncing AZ (2)…")}`);
+  try{
+    if(!GZMINI.data) await gzProbe();
+    const r=await gzFetch("/run",{},600000);   // a body makes gzFetch POST
+    const ok=r&&r.ok!==false;
+    gmAz2Set(ok?"ok":"warn", ok?T("✓ AZ (2) محدَّث · AZ (2) synced")
+      :T("⚠ لم تكتمل مزامنة AZ (2) · AZ (2) sync did not finish"));
+  }catch(e){
+    gmAz2Set("warn",T("⚠ أداة الماك مغلقة — AZ (2) لم يُحدَّث، سيلحق عند ٩:٠٠ · Mac tool offline — AZ (2) not updated, it catches up at 09:00"));
+  }
+}
+function gmChgDay(iso){ return String(iso||"").slice(0,10); }
+async function gmChangesOpen(runId){
+  bulkOpen(T("🕐 تغييرات حالة غاش · GAASH status changes"));
+  $("bulkModal").classList.add("chg-wide");
+  if(!runId) GM.az2=null;             // opened by hand → no sync is in flight
+  $("bulkBody").innerHTML=`<div class="muted2" style="padding:18px;text-align:center">${T("جارِ التحميل… · loading…")}</div>`;
+  $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;width:100%">
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button></div>`;
+  let d=null;
+  try{ d=await(await fetch("/api/gaash/changes?days=14")).json(); }catch(e){}
+  if(!d||d.ok===false){
+    $("bulkBody").innerHTML=`<div class="muted2" style="padding:18px;text-align:center">${T("تعذّر تحميل السجل · could not load the log")}</div>`;
+    return;
+  }
+  GM.chg=d;
+  const days=[...new Set([...(d.changes||[]).map(c=>gmChgDay(c.at)),
+                          ...(d.runs||[]).map(r=>gmChgDay(r.at))])].sort().reverse();
+  GM.chgDay=runId?gmChgDay(((d.runs||[]).find(r=>r.id===runId)||{}).at)||days[0]:days[0];
+  $("bulkBody").innerHTML=`<div class="chg-wrap">
+    <div class="chg-days" id="chgDays"></div><div class="chg-detail" id="chgDetail"></div></div>`;
+  gmChgRender(days);
+  // the status colours live in LX.schema, which is loaded lazily — paint first,
+  // then repaint once it arrives, exactly as the enroll picker does
+  if(!gmLxReady()&&!GM.chgColouring){
+    GM.chgColouring=true;
+    bsEnsureData().then(()=>{ if($("chgDetail")) gmChgRender(days); })
+      .catch(()=>{}).then(()=>{ GM.chgColouring=false; });
+  }
+}
+function gmChgRender(days){
+  const d=GM.chg||{}, all=d.changes||[], runs=d.runs||[];
+  if(!days.length){
+    $("chgDays").innerHTML="";
+    $("chgDetail").innerHTML=`<div class="muted2" style="padding:18px;text-align:center">${T("لا تغييرات بعد — اضغط 📦 فحص التتبّع · nothing yet — press 📦 Check tracking")}</div>`;
+    return;
+  }
+  if(!days.includes(GM.chgDay)) GM.chgDay=days[0];
+  $("chgDays").innerHTML=days.map(k=>{
+    const n=all.filter(c=>gmChgDay(c.at)===k).length;
+    return `<div class="chg-day${k===GM.chgDay?" on":""}" onclick="GM.chgDay='${k}';gmChgRender(${JSON.stringify(days).replace(/"/g,"&quot;")})">
+      <span>${poEsc(gmChgLabel(k))}</span>
+      <span class="chg-cnt${n?"":" zero"}">${n}</span></div>`;}).join("");
+  const items=all.filter(c=>gmChgDay(c.at)===GM.chgDay);
+  const dayRuns=runs.filter(r=>gmChgDay(r.at)===GM.chgDay)
+                    .sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+  const last=dayRuns[dayRuns.length-1];
+  const tally={};
+  items.forEach(c=>{ tally[c.new_status]=(tally[c.new_status]||0)+1; });
+  $("chgDetail").innerHTML=`
+    <h3 class="chg-h">${items.length} ${T("تغيير حالة · status changes")}</h3>
+    <div class="chg-when">${poEsc(gmChgLabel(GM.chgDay,true))}</div>
+    <div id="gmAz2Line" class="gm-az2 ${(GM.az2||{}).cls||""}">${(GM.az2||{}).html||""}</div>
+    <div class="chg-run ${last?"ok":"warn"}">${last
+      ? `✓ ${T("فُحص الساعة · Checked at")} ${poEsc(gmChgTime(last.at))} · ${last.checked} ${T("طرد · parcels")}${
+          dayRuns.length>1?` · ${dayRuns.length} ${T("فحوصات · checks")}`:""}`
+      : T("لا فحص مسجَّل في هذا اليوم · no check recorded this day")}</div>
+    ${Object.keys(tally).length?`<div class="chg-sum">${Object.entries(tally)
+      .sort((a,b)=>b[1]-a[1]).map(([s,n])=>`<span class="chg-pill">${n} → ${
+        gmGashPill({gash_status:s},true)||poEsc(s)}</span>`).join("")}</div>`:""}
+    ${items.length?items.map(c=>`<div class="chg-row">
+      <span class="chg-time">${poEsc(gmChgTime(c.at))}</span>
+      <span class="chg-code mono">${poEsc(c.code||"—")}</span>
+      ${c.order_status&&gmLxReady()?lxStatusPill(c.order_status):""}
+      <span class="chg-name" title="${poEsc(c.name||"")}">${poEsc(c.name||c.gwd)}</span>
+      <span class="mono muted2" style="font-size:10px">${poEsc(c.gwd)}</span>
+      <span class="spacer"></span>
+      <span class="chg-move">${c.old_status?gmGashPill({gash_status:c.old_status},true):`<span class="muted2">(${T("فارغ · empty")})</span>`}
+        <span class="chg-arrow">→</span>
+        ${gmGashPill({gash_status:c.new_status},true)||poEsc(c.new_status)}</span>
+    </div>`).join("")
+    :`<div class="muted2" style="padding:16px 2px">${T("لم يتحرّك شيء في هذا اليوم · nothing moved this day")}</div>`}`;
+}
+function gmChgLabel(k,long){
+  try{
+    const d=new Date(k+"T12:00:00");
+    return d.toLocaleDateString(undefined,long?{weekday:"long",year:"numeric",month:"long",day:"numeric"}
+                                             :{weekday:"short",month:"short",day:"numeric"});
+  }catch(e){ return k; }
+}
+function gmChgTime(at){
+  try{ return new Date(at).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }
+  catch(e){ return String(at||"").slice(11,16); }
 }
 // ── 📝 pick a template into the reply box ─────────────────────────────────────
 // A popup OVER the conversation — not a jump to the Templates tab, which loses

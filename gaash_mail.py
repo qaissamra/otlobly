@@ -1875,8 +1875,10 @@ def parcel_board_map():
 
 
 def tracking_map():
-    """{GWD: {gash_status, bucket, label}} — where customs has got to, for every
-    parcel, in ONE leluxe scan + ONE purchases load.
+    """{GWD: {gash_status, bucket, gz, label}} — where customs has got to, for
+    every parcel, in ONE leluxe scan + ONE purchases load. `gz` is the Gerizim
+    last-mile bucket: GAASH "delivered" only means handed to the last-mile
+    shelf, so the two together are what "this parcel is finished" means.
 
     Batched on purpose: the per-GWD twin (_leluxe_row_for) is a full-table LIKE
     scan each time, and the conversation list draws every thread at once."""
@@ -1912,6 +1914,7 @@ def tracking_map():
             # whichever value actually says something
             out[tn] = {"gash_status": gash or cur.get("gash_status") or "",
                        "bucket": _bucket(ts) or cur.get("bucket") or "",
+                       "gz": _bucket(d.get("gerizim_status")) or cur.get("gz") or "",
                        "label": ((ts.get("label") if isinstance(ts, dict)
                                   else (str(ts)[:40] if ts else ""))
                                  or cur.get("label") or "")}
@@ -1927,11 +1930,132 @@ def tracking_map():
                 ts = pk.get("tracking_status")
                 out[tn] = {"gash_status": "",       # Purchases has no such field
                            "bucket": _bucket(ts) or "",
+                           "gz": _bucket(pk.get("gerizim_status")) or "",
                            "label": (ts.get("label") if isinstance(ts, dict)
                                      else (str(ts)[:40] if ts else "")) or ""}
     except Exception:  # noqa
         pass
     return out
+
+
+def _store_index():
+    """{"leluxe": {GWD…}, "purchases": {GWD…}} in one scan each.
+
+    A tracking number can sit on a Leluxe row AND a purchase package. Checking
+    only the board a conversation came from left the other one stale, showing
+    two different answers for the same parcel."""
+    idx = {"leluxe": set(), "purchases": set()}
+    try:
+        with db.connect() as c:
+            for r in c.execute("SELECT data_json FROM leluxe_orders WHERE deleted=0"):
+                try:
+                    d = json.loads(r["data_json"] or "{}")
+                except Exception:  # noqa
+                    continue
+                tn = str(d.get("tracking_number") or "").strip().upper()
+                if not tn:
+                    for k, v in (d.get("fields") or {}).items():
+                        if k.strip().lower() == "tracking number":
+                            tn = str(v or "").strip().upper()
+                            break
+                if tn:
+                    idx["leluxe"].add(tn)
+    except Exception:  # noqa
+        pass
+    try:
+        import purchases
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                tn = str(pk.get("tracking_number") or "").strip().upper()
+                if tn:
+                    idx["purchases"].add(tn)
+    except Exception:  # noqa
+        pass
+    return idx
+
+
+def sweep_terminal(tm=None):
+    """Cleared/delivered parcels stop sequencing NOW.
+
+    The per-thread guard in run_once only fires when a step comes due, which is
+    days later — so a cleared parcel kept its place in the list and its pending
+    email. This sweeps every active thread off one batched tracking_map (no
+    per-thread LIKE scan, no network), so it is cheap enough to run on every
+    check and every daemon pass. Returns the GWDs it stopped."""
+    tm = tracking_map() if tm is None else tm
+    out = []
+    for th in threads_all():
+        if th.get("state") != "active":
+            continue
+        v = tm.get(str(th.get("gwd") or "").strip().upper()) or {}
+        if v.get("bucket") in _TERMINAL or v.get("gz") == "delivered":
+            _thread_set(th["gwd"], state="goal_met", next_send_at=None)
+            out.append(th["gwd"])
+    return out
+
+
+def check_tracking(gwds=None, force=False, actor=""):
+    """Ask the carriers where these parcels are, and land the answer everywhere.
+
+    One press, one request. For each GWD every store that holds that tracking
+    number is refreshed — not just the board the conversation came from — and
+    each store already fans the result out across all of its own rows carrying
+    that number. What moved is written to gash_status_log so it can be reviewed
+    afterwards, and anything that turned out to be cleared stops sequencing.
+
+    ClickUp: the GASH STATUS field push is queued by leluxe.apply_gash_status
+    as always (working list). The REAL AZ (2) is written by the Mac sync tool,
+    which the browser triggers separately — nothing here writes to it."""
+    import leluxe
+    import purchases
+    gwds = [str(g or "").strip().upper() for g in (gwds or [])]
+    gwds = [g for g in gwds if re.match(r"GWD\d+$", g)]
+    if not gwds:
+        gwds = [t["gwd"] for t in threads_all()
+                if t.get("state") not in ("done", "goal_met")]
+    idx = _store_index()
+    run_id = db.gash_run_start(actor=actor)
+    changes, remaining = [], 0
+    for gwd in gwds:
+        if gwd in idx["leluxe"]:
+            try:
+                r = leluxe.refresh_tracking(only=gwd, force=force)
+            except Exception as e:  # noqa - one dead parcel must not kill the run
+                r = {"error": str(e)[:120]}
+            remaining += int(r.get("remaining") or 0)
+            for ch in r.get("changes") or []:
+                changes.append({"gwd": gwd, "name": ch.get("name") or "",
+                                "code": ch.get("code") or "",
+                                "order_status": ch.get("status") or "",
+                                "old": ch.get("old") or "", "new": ch.get("new") or "",
+                                "store": "leluxe"})
+        if gwd in idx["purchases"]:
+            try:
+                r = purchases.refresh_tracking(only=gwd, force=force)
+            except Exception as e:  # noqa
+                r = {"error": str(e)[:120]}
+            for ch in r.get("changes") or []:
+                # the carriers' own words here — Purchases has no GASH STATUS
+                # dropdown, so there is no option name to report
+                for old, new in ((ch.get("old"), ch.get("new")),
+                                 (ch.get("gz_old"), ch.get("gz_new"))):
+                    changes.append({"gwd": gwd, "name": ch.get("name") or "",
+                                    "code": f"#{ch.get('package_no')}"
+                                            if ch.get("package_no") else "",
+                                    "order_status": "",
+                                    "old": (old or {}).get("text") or "",
+                                    "new": (new or {}).get("text") or "",
+                                    "store": "purchases"})
+    logged = [ch for ch in changes
+              if db.log_gash_change(run_id, ch["gwd"], ch["old"], ch["new"],
+                                    name=ch["name"], code=ch["code"],
+                                    order_status=ch["order_status"],
+                                    store=ch["store"])]
+    db.gash_run_close(run_id, len(gwds), len(logged))
+    cleared = sweep_terminal()
+    return {"ok": True, "run_id": run_id, "checked": len(gwds),
+            "changed": len(logged), "changes": logged,
+            "cleared": cleared, "remaining": remaining}
 
 
 def parcel_src_map(pmap=None):
@@ -2973,6 +3097,13 @@ def run_once():
         proposed = run_rules()
     except Exception:  # noqa - a bad rule must never stop the sends
         proposed = 0
+    # cleared/delivered parcels stop HERE, before the not-due filter below —
+    # the per-thread guard further down only ever sees threads whose next email
+    # is already due, so without this a cleared parcel sequences for days
+    try:
+        sweep_terminal()
+    except Exception:  # noqa - a sweep failure must never stop the sends
+        pass
     for th in threads_all():
         if th.get("state") != "active":
             continue
