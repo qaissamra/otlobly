@@ -617,6 +617,11 @@
   .gm-dot.on{background:#f76808}
   .gm-unread{background:#e5484d;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 6px}
   .gm-prev{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* one row per mailbox that sent on this parcel — only drawn when there are 2+ */
+  .gm-senders{display:flex;flex-direction:column;gap:2px}
+  .gm-sender{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)}
+  .gm-sender-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+  .gm-sender-c{color:#f76808;font-weight:800}
   /* read receipt on a conversation row: grey = sent, nobody opened it yet;
      green = somebody did. Absence of the pill means nothing was sent at all. */
   .gm-read{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
@@ -10204,6 +10209,22 @@ function gmAttsHtml(gwd,atts){
     return `<a class="gm-att" target="_blank" href="${url(a)}">📎 ${cap}</a>`;
   }).join("")}</div>`;
 }
+// One line per mailbox that has actually sent on this parcel, each with its own
+// open count. Only when there are TWO or more: a stack of one is noise, and the
+// compact pill above is right for the common case. The counts come from each
+// message's own from_addr, so they say who really earned the open — the 📤 pill
+// above reads account_id, which is only who sends NEXT.
+function gmSenderRows(t){
+  const rows=t.reads_by||[];
+  if(rows.length<2) return "";
+  return `<div class="gm-senders">${rows.map(r=>`
+    <div class="gm-sender" title="${poEsc(r.email)}${r.label?` · ${poEsc(r.label)}`:""}">
+      <span class="gm-sender-n">📤 ${poEsc(r.label||String(r.email||"").split("@")[0])}</span>
+      ${r.current?`<span class="gm-sender-c" title="${T("منه يخرج الإيميل القادم · the next email goes from here")}">→</span>`:""}
+      <span class="spacer"></span>
+      ${gmReadPill(r)}
+    </div>`).join("")}</div>`;
+}
 function gmRenderList(){
   const ths=(GM.ov&&GM.ov.threads)||[];
   // with a single mailbox the account is never in question — only show it when
@@ -10223,12 +10244,13 @@ function gmRenderList(){
         <span class="muted2" style="font-size:10.5px">${gmAgo(t.last_activity)}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
-        ${gmReadPill(t.reads)}
+        ${((t.reads_by||[]).length>1)?"":gmReadPill(t.reads)}
         ${gmGashPill({...(t.gash||{}),source:t.source},true)}
         ${!gmAcctOf(t)?`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:9.5px" title="${T("لا حساب مُرسِل — افتحها واختر واحداً · no sending account — open it and pick one")}">⚠ ${T("بلا مرسِل · no sender")}</span>`:""}
-        ${multi&&gmAcctOf(t)?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${T("يُرسل من · sends from")}: ${poEsc(gmAcctOf(t).email)}">📤 ${poEsc((gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0])}</span>`:''}
+        ${multi&&gmAcctOf(t)&&(t.reads_by||[]).length<2?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${T("يُرسل من · sends from")}: ${poEsc(gmAcctOf(t).email)}">📤 ${poEsc((gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0])}</span>`:''}
         ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
+      ${gmSenderRows(t)}
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
     </div>`;
   }).join("");

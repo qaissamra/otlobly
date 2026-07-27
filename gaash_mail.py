@@ -1045,6 +1045,15 @@ def stats():
 
 
 # ── Overview drill-down: which exact email is behind a stat tile ──
+def account_labels():
+    """{email: human label} for the sending mailboxes. A message records the
+    address it went out from, not an account id, so every per-sender surface
+    resolves the friendly name this way."""
+    with db.connect() as c:
+        return {r["email"]: (r["label"] or "").strip()
+                for r in c.execute("SELECT email, label FROM gaash_accounts")}
+
+
 def stat_detail(kind, limit=300):
     """The actual EMAILS behind an 🧭 Overview tile ('sent'|'opened'|'clicked'|
     'replied') — one row per message, carrying enough to render a real mail row
@@ -1056,8 +1065,7 @@ def stat_detail(kind, limit=300):
     cols = ("id, gwd, dir, kind, step, at, from_addr, to_addr, subject, body, "
             "opens, clicks, first_open_at, first_click_at")
     with db.connect() as c:
-        labels = {r["email"]: (r["label"] or "").strip()
-                  for r in c.execute("SELECT email, label FROM gaash_accounts")}
+        labels = account_labels()
         if kind in ("sent", "opened", "clicked"):
             where = {"sent": "1=1", "opened": "opens>0",
                      "clicked": "clicks>0"}[kind]
@@ -2986,12 +2994,31 @@ def overview():
                                   "at": r["at"], "body": (r["body"] or "")[:140]}
         # did anyone READ what we sent? the same tracking the 🧭 tiles count,
         # rolled up per parcel so the list can show it without opening a thread
-        reads = {r["gwd"]: {"sent": r["n"], "opens": r["opens"] or 0,
-                            "clicks": r["clicks"] or 0, "first_open_at": r["fo"]}
-                 for r in c.execute(
-                     "SELECT gwd, COUNT(*) n, SUM(opens) opens, SUM(clicks) clicks, "
-                     "MIN(first_open_at) fo FROM gaash_msgs "
-                     "WHERE dir='out' AND kind IN ('sent','resent') GROUP BY gwd")}
+        # ...and by WHOM. A parcel chased from two mailboxes needs one line each:
+        # the aggregate sitting beside a single address implied that address
+        # earned every open. Still one query — grouping by sender as well, then
+        # summing in Python, so overview() gains no round-trip.
+        by = {}
+        for r in c.execute(
+                "SELECT gwd, from_addr, COUNT(*) n, SUM(opens) opens, "
+                "SUM(clicks) clicks, MIN(first_open_at) fo, MAX(at) last_at "
+                "FROM gaash_msgs WHERE dir='out' AND kind IN ('sent','resent') "
+                "GROUP BY gwd, from_addr"):
+            by.setdefault(r["gwd"], []).append(
+                {"email": (r["from_addr"] or "").strip(), "sent": r["n"],
+                 "opens": r["opens"] or 0, "clicks": r["clicks"] or 0,
+                 "first_open_at": r["fo"], "last_at": r["last_at"]})
+        reads = {}
+        for gwd, rows in by.items():
+            rows.sort(key=lambda x: x["last_at"] or "", reverse=True)
+            firsts = [x["first_open_at"] for x in rows if x["first_open_at"]]
+            reads[gwd] = {"sent": sum(x["sent"] for x in rows),
+                          "opens": sum(x["opens"] for x in rows),
+                          "clicks": sum(x["clicks"] for x in rows),
+                          "first_open_at": min(firsts) if firsts else None}
+        accts = {r["id"]: r["email"] for r in
+                 c.execute("SELECT id, email FROM gaash_accounts")}
+    labels = account_labels()
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     bmap = parcel_board_map()
@@ -3000,6 +3027,13 @@ def overview():
         th["last_msg"] = last.get(th["gwd"])
         th["reads"] = reads.get(th["gwd"]) or {"sent": 0, "opens": 0,
                                                "clicks": 0, "first_open_at": None}
+        # who SENT (from_addr, historical) reconciled against who sends NEXT
+        # (account_id) — without the flag a switched thread lists a mailbox
+        # that no longer sends with nothing to say so
+        nxt = (accts.get(th.get("account_id")) or "").strip()
+        th["reads_by"] = [{**x, "label": labels.get(x["email"], ""),
+                           "current": x["email"] == nxt}
+                          for x in by.get(th["gwd"], [])]
         th.pop("pending_files_json", None)
         th["pname"] = pmap.get(th["gwd"], "")
         th["pname_id"] = emap.get(th["gwd"], "")
