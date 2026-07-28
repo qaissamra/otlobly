@@ -11154,7 +11154,7 @@ function gmAttachPick(){
 // it is a different control, and it reaches for the library first: the dealer
 // certificate you send with a nudge already lives there.
 function gmSendAttach(){
-  GM.docTarget="send"; GM.idFolder=null;
+  GM.docTarget="send"; GM.idFolder=null; GM.declMsg=null;
   bulkOpen("📎 "+T("أرفق مع هذه الرسالة · Attach to this message"));
   $("bulkModal").classList.add("en-pick");
   $("bulkBody").innerHTML=`<div id="gmDocs" style="margin-top:4px"></div>`;
@@ -11172,6 +11172,35 @@ async function gmSendFilePick(){
     GM.docTarget=null; bulkClose(); gmSendChips();
   };
   inp.click();
+}
+// ── 📄 make THIS parcel's declaration without leaving the thread ──────────────
+// The wizard makes one per package at enrollment. A parcel already enrolled had
+// no door at all: you had to go back out and start a sequence to paper it.
+// Everything on it is read from the boards, so there is nothing to fill in —
+// one press, and it is filed in the library AND ticked onto this message.
+async function gmSendDeclMake(btn){
+  if(!GM.cur) return;
+  if(btn) btn.disabled=true;
+  GM.declMsg={ok:true,text:T("جارِ الإنشاء… · generating…")};
+  gmIdsRender();
+  // note the ids going out BEFORE the call: the server replaces this parcel's
+  // declaration rather than adding a second one, so an id left behind here
+  // resolves to nothing on send and the email leaves un-papered, silently
+  const stale=(((GM.ov||{}).ids)||[])
+    .filter(x=>x.name===GM.cur+" - declaration").map(x=>x.id);
+  const r=await post("/api/gaash/declaration",{gwd:GM.cur});
+  if(btn) btn.disabled=false;
+  if(!r||!r.ok){
+    // name the refusal — it is nearly always a fixable one (an Arabic name that
+    // the document cannot print, or no name on the parcel at all)
+    GM.declMsg={ok:false,text:(r&&r.error)||T("تعذّر الإنشاء · could not generate")};
+    gmIdsRender(); return;
+  }
+  GM.sendDocs=(GM.sendDocs||[]).filter(id=>!stale.includes(id)).concat([r.id]);
+  GM.declMsg={ok:true,text:"✓ "+(r.name||"")+" — "+T("مرفق · attached")};
+  await gmLoad();                       // so the new tile is in GM.ov.ids
+  GM.idFolder="declaration";
+  gmIdsRender(); gmSendChips();
 }
 function gmSendChips(){
   const box=$("gmSendChips"); if(!box) return;
@@ -12195,13 +12224,27 @@ function gmIdsRender(){
   }
   const f=GM_FOLDERS.find(x=>x.k===GM.idFolder)||GM_FOLDERS[0];
   const docs=inF(f.k);
+  // generating belongs to ONE parcel, so it is offered only where a parcel is in
+  // hand — the reply box. The wizard papers its whole batch from the step-2 tick.
+  const canGen=f.k==="declaration"&&GM.docTarget==="send"&&GM.cur;
+  const had=canGen&&ids.some(x=>x.name===GM.cur+" - declaration");
+  // the message outlives a re-render — this box is rewritten whole on every pick
+  const msg=(canGen&&GM.declMsg)
+    ?(GM.declMsg.ok
+      ?`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${poEsc(GM.declMsg.text)}</div>`
+      :`<div class="en-warn live" style="margin-bottom:7px">${poEsc(GM.declMsg.text)}</div>`)
+    :"";
   box.innerHTML=head+`
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
       <button class="minibtn" onclick="gmIdFolder('')">← ${T("كل المجلدات · all folders")}</button>
       <b style="font-size:12.5px">${f.icon} ${T(f.lab)}</b>
       <span class="spacer"></span>
+      ${canGen?`<button class="minibtn" onclick="gmSendDeclMake(this)"
+        title="${T("يُملأ من اللوحات — الاسم، رقم الهوية، المحتويات · filled from the boards — name, ID number, contents")}">${
+        had?"↻ "+T("أعد الإنشاء · regenerate"):"＋ "+T("أنشئ تصريحاً · generate")} ${poEsc(GM.cur)}</button>`:""}
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
     </div>
+    ${msg}
     <div style="display:flex;gap:9px;flex-wrap:wrap">${docs.map(x=>gmIdTile(x,sel)).join("")
       ||`<span class="muted2" style="font-size:12px">${T("هذا المجلد فارغ · this folder is empty")}</span>`}</div>`;
 }
@@ -12231,12 +12274,16 @@ function gmDocSel(){
 }
 function gmIdPick(id){
   const cur=gmDocSel();
+  // the send route takes six and drops the rest without a word — say so here
+  // instead, or a picked document just never arrives
+  if(!cur.includes(id)&&cur.length>=6){
+    toast(T("ستة مستندات كحد أقصى · six documents at most")); return; }
   const next=cur.includes(id)?cur.filter(x=>x!==id):cur.concat([id]);
   if(GM.docTarget==="send") GM.sendDocs=next; else GM.pickState.docIds=next;
   gmIdsRender();
   if(GM.docTarget==="send") gmSendChips(); else gmWizSummary();
 }
-function gmIdFolder(k){ GM.idFolder=k||null; gmIdsRender(); }
+function gmIdFolder(k){ GM.idFolder=k||null; GM.declMsg=null; gmIdsRender(); }
 async function gmIdUpload(){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
   inp.onchange=()=>{ const f=inp.files[0]; if(f) gmIdUploadForm(f); };
