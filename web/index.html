@@ -3163,13 +3163,13 @@ function lxCopyBtn(name){
   return lxCopyRawBtn(n);
 }
 function lxCopyRawBtn(t){ return t?`<button class="lx-copy" title="copy ${poEsc(t)}" onclick="event.stopPropagation();copyCtk('${poEsc(t)}')">📋</button>`:""; }
-function lxCfPill(nameLower,val){
+function lxCfPill(nameLower,val,tip){
   if(val==null||val==="") return "";
   let c="#6b7280";
   const fields=(LX.schema&&LX.schema.fields)||{};
   for(const k in fields){ if(k.trim().toLowerCase()===nameLower){
     const o=(fields[k].options||[]).find(o=>o.name===val); if(o&&o.color) c=o.color; break; } }
-  return `<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55;font-size:10px" title="${poEsc(nameLower)}">${poEsc(val)}</span>`;
+  return `<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55;font-size:10px" title="${poEsc([nameLower,tip].filter(Boolean).join(" · "))}">${poEsc(val)}</span>`;
 }
 function lxDot(r){
   const m={synced:["#16a34a","synced to ClickUp"],dirty:["#d97706","waiting to sync"],
@@ -3184,12 +3184,12 @@ function lxIsDone(r){ return /deliver|complete|reci?eved/i.test(r.status||""); }
 // order due-date / package gash-date chips — reuse the Purchases dueChip/dueDays
 function lxDueChip(ms,done){ const iso=lxMs(ms); return iso?dueChip(iso,!!done):""; }
 // live GAASH status pill (from a package's fetched tracking_status)
-function lxGashPill(pk){
+function lxGashPill(pk,tip){
   const ts=(pk.data&&pk.data.tracking_status)||null; if(!ts) return "";
   const b=ts.bucket||"", txt=ts.text||ts.label||b||"";
   const COL={delivered:"#16a34a",cleared:"#0891b2",transit:"#2563eb",customs:"#b45309",problem:"#dc2626"};
   const c=COL[b]||"#6b7280";
-  return `<span class="pill" style="background:${c}1a;color:${c};border:1px solid ${c}55;font-size:10px" title="live GAASH status">${poEsc(String(txt).slice(0,26))||"GAASH"}</span>`;
+  return `<span class="pill" style="background:${c}1a;color:${c};border:1px solid ${c}55;font-size:10px" title="${poEsc(["live GAASH status",tip].filter(Boolean).join(" · "))}">${poEsc(String(txt).slice(0,26))||"GAASH"}</span>`;
 }
 // Gerizim last-mile status (postgerizim.com) — the exact Purchases pill
 // Gerizim leg → the parcel app's own Arabic wording + small icon (Leluxe only;
@@ -3197,19 +3197,32 @@ function lxGashPill(pk){
 // rows read Arabic immediately without a re-fetch.
 const GZ_AR={office:["📦","في مكتب جرزيم"],sms:["📩","تم إرسال SMS"],
   pickup:["🏬","جاهز للاستلام"],out:["🛵","خارج للتوصيل"],delivered:["✅","تم التسليم"]};
-function lxGerizimPill(row){
+function lxGerizimPill(row,tip){
   const gz=(row.data&&row.data.gerizim_status&&typeof row.data.gerizim_status==="object")?row.data.gerizim_status:null;
   if(!gz||!(gz.label||gz.status)) return "";
   const ar=GZ_AR[gz.bucket], txt=ar?`${ar[0]} ${ar[1]}`:`🛵 ${gz.label||gz.status}`;
-  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, gzTip(gz));
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, [gzTip(gz),tip].filter(Boolean).join(" · "));
 }
 // merged GAASH+Gerizim status: a parcel is only at Gerizim AFTER GAASH hands it
 // off (sequential, never both), so show the furthest leg — Gerizim if present,
 // else the live GAASH pill. One column.
-function lxMergedStatusPill(row){
+function lxMergedStatusPill(row,tip){
   if(!row) return "";
   const gz=row.data&&row.data.gerizim_status;
-  return (gz&&typeof gz==="object"&&(gz.label||gz.status))?lxGerizimPill(row):lxGashPill(row);
+  return (gz&&typeof gz==="object"&&(gz.label||gz.status))?lxGerizimPill(row,tip):lxGashPill(row,tip);
+}
+// ONE pill for the GASH column: the furthest leg. Being REGISTERED at Gerizim is
+// a receipt, not a status — a different axis, so it cannot be "the later of the
+// two" and it rode along as a second chip, clipping both to half-words in a
+// 128px column. It goes in the tooltip instead, and only becomes a pill of its
+// own when there is no status yet — otherwise a registered parcel reads blank.
+function lxGashCell(en,gashStatus,tn){
+  const tip=gzRegTip(tn);
+  // ❔ no-tracking outranks the registration receipt: "we asked and GAASH has no
+  // record" is the one that wants doing something about. The badge is the last
+  // word only — shown where this cell would otherwise be blank.
+  return lxMergedStatusPill(en,tip)||lxCfPill("gash status",gashStatus,tip)
+      || lxNoDataPill(en)||gzBadge(tn);
 }
 // checked-but-unknown: a live check ran and the carriers had nothing — a
 // visible mark so the parcel never renders as an untouched blank (Purchases
@@ -4343,7 +4356,7 @@ function lxKRow(r){
     profile: lxProfileCell(lxKAcct(r)),
     value: estCell,
     status: statusBit,
-    gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
+    gash: lxGashCell(en,gashStatus,tn),
     mail: lxMailPill(tn),
     deadline: `${en?lxDeadlinePill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
     due: done?"":lxDueChip(due,doneSt),
@@ -4896,7 +4909,7 @@ function lxVPkgHtml(o,g){
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(it,o)),
         status: `${lxDot(it)}${lxStatusSelect(it)}`,
-        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
+        gash: lxGashCell(en,gashStatus,g.tn),
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
         due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
         menu: popMenu([
@@ -4920,7 +4933,7 @@ function lxVPkgHtml(o,g){
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(g.items,o)),
-        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
+        gash: lxGashCell(en,gashStatus,g.tn),
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
         menu: popMenu([
           [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
@@ -4954,7 +4967,7 @@ function lxPkgHtml(o,pk,items){
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(items,pk,o)),
-        gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
+        gash: lxGashCell(en,gashStatus,tn),
         deadline: `${lxDeadlinePill(en)}${lxDueChip(gashDate,false)}`,
         menu: popMenu([
           [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
@@ -8957,14 +8970,22 @@ async function loadGzRegistered(){
     GZ_REG_META=Object.fromEntries(reg.map(r=>[r.tracking,r]));
   }catch(e){ /* non-critical: the signs just stay hidden */ }
 }
+// The registration sentence on its own — so a column that shows only the status
+// can still say it in a tooltip, and the two wordings never drift apart.
+function gzRegTip(gwd){
+  if(!gwd||!GZ_REG.has(gwd)) return "";
+  const m=GZ_REG_META[gwd]||{}, ago=m.registered_at?agoTxt(m.registered_at):"";
+  return (m.ok===0?"أُرسل لكن جيرزيم أبلغ عن مشكلة · sent, Gerizim flagged"
+                 :"مُسجّل في جيرزيم · registered at Gerizim")+(ago?" · "+ago:"");
+}
 // Per-package sign. Reads only GZ_REG (NOT the last-mile gerizim_status/lxGzDone,
 // which means "delivered" — a different thing).
 function gzBadge(gwd){
   if(!gwd||!GZ_REG.has(gwd)) return "";
-  const m=GZ_REG_META[gwd]||{}, ago=m.registered_at?agoTxt(m.registered_at):"";
-  return m.ok===0
-    ? hexPill("#c2410c","جيرزيم ؟",`أُرسل لكن جيرزيم أبلغ عن مشكلة · sent, Gerizim flagged${ago?" · "+ago:""}`)
-    : solidPill("#0a7d33","جيرزيم ✓",`مُسجّل في جيرزيم · registered at Gerizim${ago?" · "+ago:""}`);
+  const tip=gzRegTip(gwd);
+  return (GZ_REG_META[gwd]||{}).ok===0
+    ? hexPill("#c2410c","جيرزيم ؟",tip)
+    : solidPill("#0a7d33","جيرزيم ✓",tip);
 }
 // Order-row roll-up: n of m of the order's GWDs are registered.
 function gzRollup(gwds){
