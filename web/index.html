@@ -8464,7 +8464,7 @@ function poPkFlatRow(p,pk,pi){
     gashstatus: pkgGaashPill(pk),
     deadline: pkgDeadlinePill(p,pk,pi),
     docs: pkgDocsPill(p,pk,pi),
-    gerizim: `${gzBadge(gaash)}${pkgGerizimPill(pk)}`,
+    gerizim: pkgGerizimCell(pk,gaash),
     idnum: idNumCell(pkgIdNumber(pk)),
     status: pkgCuSelect(p,pk,pi),
     menu,
@@ -9376,13 +9376,21 @@ function gzTip(gz){
   else if(gz.eta) bits.push(`ETA ${gz.eta}`);
   return bits.join(' · ');
 }
-function pkgGerizimPill(pk){
+function pkgGerizimPill(pk,tip){
   const gz=(pk&&pk.gerizim_status&&typeof pk.gerizim_status==='object')?pk.gerizim_status:null;
   if(!gz||!(gz.label||gz.status)) return '';
   // same Arabic stage vocabulary as Leluxe (GZ_AR); the carrier's raw English
   // label stays in the hover tip (gzTip leads with it)
   const ar=GZ_AR[gz.bucket], txt=ar?`${ar[0]} ${ar[1]}`:`🛵 ${gz.label||gz.status}`;
-  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, gzTip(gz));
+  return solidPill(GZ_HEX[gz.bucket]||"#8d8d8d", txt, [gzTip(gz),tip].filter(Boolean).join(" · "));
+}
+// ONE pill for the GERIZIM column, same rule as Leluxe's lxGashCell: registration
+// is a receipt, not a stage, so it rides the tooltip of the stage pill — and only
+// stands alone while there is no stage yet to report. No gash-status fallback
+// here: on this board GASH STATUS is its own column.
+function pkgGerizimCell(pk,gaash){
+  const tip=gzRegTip(gaash);
+  return pkgGerizimPill(pk,tip)||gzBadge(gaash);
 }
 const STAGE_SHORT={ORDERED:"Ordered",SHIPPED:"In transit",ARRIVED:"At destination",DELIVERED:"Delivered"};
 // The collapsed PO row's one summary pill = the worst / soonest package.
@@ -9672,7 +9680,7 @@ function poPkgHtml(p,pk,pi){
         gashstatus: pkgGaashPill(pk),
         deadline: pkgDeadlinePill(p,pk,pi),
         docs: pkgDocsPill(p,pk,pi),
-        gerizim: `${gzBadge(gaash)}${pkgGerizimPill(pk)}`,
+        gerizim: pkgGerizimCell(pk,gaash),
         status: pkgCuSelect(p,pk,pi),
         menu,
       })}
