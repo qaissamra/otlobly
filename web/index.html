@@ -6016,23 +6016,34 @@ function renderMetaLeads(){
   const leads=(ML.leads||[]).filter(l=>ML_FILTER==="all"||l.status===ML_FILTER||l.source===ML_FILTER);
   if(!leads.length){ $("mlList").innerHTML=`<div class="empty">No leads here yet — press "Sync from Meta".</div>`; return; }
   const staffOpts=id=>`<option value="">— assign —</option>`+ML_STAFF.map(u=>`<option value="${u.id}" ${u.id==id?'selected':''}>${poEsc(u.name)}</option>`).join("");
+  // Two-tier card (UI_AUDIT Batch 5): white title row (name + actions) over the
+  // tinted .po-meta strip (message / time / response / order + the note input) —
+  // same anatomy as every order card; the list-of-cards layout is unchanged.
   $("mlList").innerHTML=leads.map(l=>{
     const wa=l.phone?`<a class="po-btn accent" target="_blank" href="https://wa.me/${(l.phone||'').replace(/[^\d]/g,'')}?text=${encodeURIComponent('مرحباً '+(l.name||''))}">📱</a>`:'';
-    return `<div style="border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px;background:var(--card)">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
-        <div style="min-width:180px;flex:1">
-          <b>${poEsc(l.name||'—')}</b> <span class="muted2" style="font-size:11px">${ML_SRC[l.source]||l.source}</span>${l.phone?`<span class="muted2 mono" style="font-size:11px"> · ${poEsc(l.phone)}</span>`:''}
-          <div class="muted2" style="font-size:12px;margin-top:2px">${poEsc(l.last_message||l.form_name||'')}</div>
-          <div class="muted2" style="font-size:10.5px;margin-top:2px">${l.created_time?new Date(l.created_time).toLocaleString():''}${l.response_min!=null?` · ⏱ ${l.response_min}m`:''}${l.order_id?` · ➜ ${poEsc(l.order_id)}`:''}</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    const flds=[
+      (l.last_message||l.form_name)?fld("💬 رسالة · message",`<span style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom">${poEsc(l.last_message||l.form_name)}</span>`):"",
+      l.created_time?fld("🕒 وقت · time",poEsc(new Date(l.created_time).toLocaleString())):"",
+      l.response_min!=null?fld("⏱ رد · response",l.response_min+"m"):"",
+      l.order_id?fld("➜ طلب · order",`<span class="mono">${poEsc(l.order_id)}</span>`):"",
+    ].filter(Boolean).join("");
+    return `<div class="po-card" style="margin-bottom:9px">
+      <div class="po-head">
+        <div class="po-title">
+          <b class="po-name">${poEsc(l.name||'—')}</b>
+          <span class="muted2" style="font-size:11px">${ML_SRC[l.source]||l.source}</span>
+          ${l.phone?`<span class="muted2 mono" style="font-size:11px">${poEsc(l.phone)}</span>`:''}
+          <span class="spacer"></span>
           <select onchange="setLeadStatus('${poEsc(l.lead_id)}',this.value)" style="width:auto">${['new','contacted','converted','lost'].map(st=>`<option value="${st}" ${l.status===st?'selected':''}>${ML_STATUS[st][QLANG==='ar'?'ar':'en']}</option>`).join('')}</select>
           <select onchange="assignLead('${poEsc(l.lead_id)}',this.value)" style="width:auto">${staffOpts(l.assigned_to)}</select>
           ${wa}
           ${l.status!=='converted'?`<button class="po-btn" onclick="convertLead('${poEsc(l.lead_id)}',this)">➕ order</button>`:''}
         </div>
+        <div class="po-meta">
+          ${flds}
+          <input placeholder="ملاحظة · note" value="${poEsc(l.note||'')}" style="flex:1;min-width:160px;font-size:12px;background:#fff;border:1px solid var(--line)" onchange="saveLeadNote('${poEsc(l.lead_id)}',this.value)">
+        </div>
       </div>
-      <input placeholder="ملاحظة · note" value="${poEsc(l.note||'')}" style="width:100%;margin-top:7px;font-size:12px" onchange="saveLeadNote('${poEsc(l.lead_id)}',this.value)">
     </div>`;
   }).join("");
 }
@@ -10059,7 +10070,7 @@ function renderPnl(){
   const card=(l,v,cls="",metric="",extra="")=>`<div class="card${extra?' '+extra:''}"${metric?` style="cursor:pointer" title="اضغط للتفاصيل · click to see where this number comes from" onclick="openPnlDrill('${metric}')"`:''}><div class="n ${cls}">${v}</div><div class="l">${l}${metric?' <span style="color:var(--muted);font-weight:400">›</span>':''}</div></div>`;
   // hero: NET PROFIT = Revenue − Amazon cost − Meta ads
   const pos=t.net_profit_usd>=0;
-  const marginChip=t.net_margin_pct==null?'':` <span class="pill" style="background:${pos?'#ecfdf5':'#fef2f2'};color:${pos?'#16a34a':'#dc2626'}">${t.net_margin_pct}% margin</span>`;
+  const marginChip=t.net_margin_pct==null?'':" "+tonePill(pos?"green":"red",t.net_margin_pct+"% margin");
   $("pnlHero").innerHTML=
     `<div class="card hero" style="cursor:pointer" title="كيف يُحسب · how it's computed" onclick="openPnlDrill('fx_net')">
        <div class="n ${pos?'good':'neg'}">${money(t.net_profit_usd)}</div>
