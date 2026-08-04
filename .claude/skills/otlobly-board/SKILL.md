@@ -66,8 +66,12 @@ Pitfalls (all hit us once):
   `.bt-pin` background rules;
 - header vs rows width can differ 1-2px per nested border level — the header's
   `border-inline:1px solid transparent` + `lxtSync`'s end-snap absorb it;
-- `.lxc:has(.pop-menu.open)` + `.bt-wrap:has(.pop-menu.open){overflow:visible}`
-  keep dropdowns unclipped;
+- dropdowns never need ancestor-overflow escapes: every open path places the
+  menu `position:fixed` z-99 (`popToggle`→`popPlace`/`fldPlace`; `lxtColMenu` +
+  `poCfPickOpen` inline). The old `:has(.pop-menu.open){overflow:visible}`
+  escapes were REMOVED 2026-08-04 — they collapsed the `.bt-wrap` scrollport on
+  open (sticky pin/header desync) and z-lifted rows above the topbar. Don't
+  re-add them;
 - hiding a column resets that table's saved widths (visible-set keyed).
 
 Plain wide `<table>`s elsewhere (staff Orders `#tbl`, Customers, Deposits,
@@ -484,7 +488,12 @@ build for all tenants. Never fork.
 - Editing the MAIN repo instead of the worktree (identical relative paths) —
   always check the absolute path before Edit; recover via `git -C main diff > patch`.
 - `.po-thumbs` wrap → thumbs stacking vertically in nowrap grid rows.
-- Dropdown menus clipped by `.lxc` overflow — the `:has(.pop-menu.open)` escapes.
+- Dropdown clipping is solved by fixed positioning (`popPlace`/`fldPlace`), NOT
+  ancestor-overflow escapes — the `:has(.pop-menu.open)` rules glitched the whole
+  board on open and were removed 2026-08-04.
+- Synthetic Leluxe package rows have `status:""` (leluxe.py never stamps them) —
+  any package-row status display must fall back to the products' shared status
+  (`lxKEffStatus`), or the board reads all "—".
 - Stale saved column widths after a column-count change — length guard handles it.
 - `launch.json` left modified in a commit; `alerts` firing real Telegram messages
   from a worktree run with live tokens.
