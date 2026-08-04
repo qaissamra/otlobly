@@ -37,15 +37,16 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | To-order (`neRowHtml` :6399) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | 🟡 detail only | ✅ | 🟡 own resize only | ✅ |
 | Orders (`render`, LXT table `"od"`) | ✅ pill-colored `statusSelect` | ✅ board (pin + columns) | n/a | ❌ (asin links only) | ✅ order `tracking_number` col | ✅ 📍 city+addr editable | ✅ | ✅ `od` *(Batch 2)* | ✅ onchange + `editCell` |
 | Brain (`renderBrain` :5837) | 🟡 raw pills | ❌ bespoke tiles | ❌ | ❌ | n/a | n/a | 🟡 | n/a | n/a |
-| Customers (`renderCustomers` :9671) | 🟡 | ❌ plain table | 🟡 `.kv` panel | ❌ | n/a | ✅ profile panel | 🟡 `.minibtn` | ❌ | 🟡 panel only |
-| Deposits (`renderDeposits` :5727) | ✅ | ❌ plain table | ❌ | ❌ | n/a | ❌ | 🟡 | ❌ | ❌ |
-| In cart (`renderIncart` :6504) | 🟡 | ❌ | ❌ | ❌ | n/a | n/a | ✅ | ❌ | 🟡 one input |
-| Catalog (`renderCatalog` :2767) | 🟡 | ❌ plain table | ❌ | ✅ 38px | n/a | n/a | 🟡 `.minibtn` | ❌ | ✅ onchange |
+| Customers (LXT `"cu"`) | ✅ | ✅ board *(Batch 3)* | 🟡 `.kv` panel | ❌ | n/a | ✅ city col + profile | ✅ | ✅ `cu` | 🟡 panel (board inline-edit deferred — /api/customer upsert semantics need review first) |
+| Deposits (LXT `"dp"`) | ✅ | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | ❌ | ✅ | ✅ `dp` | n/a ledger (delete only) |
+| In cart (LXT `"ic"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 30px thumbs | n/a | n/a | ✅ | ✅ `ic` | ✅ cost input |
+| Catalog (LXT `"ct"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 34px in pin | n/a | n/a | 🟡 `.minibtn` | ✅ `ct` | ✅ onchange in cells |
 | Meta leads (`renderMetaLeads` :5780) | 🟡 raw inline divs | ❌ fully bespoke | ❌ | ❌ | n/a | ❌ | ✅ | ❌ | ✅ onchange |
 | P&L (`renderPnl` :9794) | ✅ in drills | ❌ bespoke tiles | ❌ | ❌ | n/a | n/a | 🟡 | ❌ | n/a |
 | GAASH mail (gm* :10448-12770) | 🟡 ~50 raw pills | 🟡 mixed | ❌ | ✅ via bs rows | ✅ | n/a | ✅ | ✅ `wf`/`en` only | 🟡 |
 | Bulk search (`bsRender` :10195) | ✅ mixed correctly | ✅ | ✅ | ✅ | ✅ both | ❌ | ✅ | ✅ `bs` | n/a read-only |
-| Team/Trash/Activity/Picking | 🟡 | ❌ plain tables | ❌ | ❌ | n/a | n/a | 🟡 `.minibtn` | ❌ | 🟡 |
+| Trash (LXT `"tr"`) | n/a | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | n/a | ✅ | ✅ `tr` | n/a |
+| Team/Activity/Picking | 🟡 | ❌ plain tables (Team deferred: interleaved pw-reset rows need the wf-exp translate pattern) | ❌ | ❌ | n/a | n/a | ✅ Team / 🟡 rest | ❌ | 🟡 |
 
 ## Cross-cutting defects (not per-view)
 
@@ -79,8 +80,14 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   `bt-total` row; bulk-select kept (select-all moved to the toolbar). Per-order
   GWD (GAASH parcel number) deferred — needs a purchases-scan attach server-side;
   fold into a later batch.
-- [ ] **Batch 3 — Customers / Deposits / Catalog / In cart / Trash / Team**:
-  plain tables → LXT; editable cells via shared helper.
+- [x] **Batch 3 — Customers / Deposits / Catalog / In cart / Trash** *(shipped
+  2026-08-04)*: five plain tables → LXT boards `cu`/`dp`/`ct`/`ic`/`tr` (full
+  resize/reorder/hide/sort per user; Σ totals rows on cu+dp; Catalog keeps its
+  onchange inputs inside cells; Customers keeps row-click → profile).
+  **Deferred from this batch:** Team (interleaved password-reset rows need the
+  wf-exp full-width-block pattern — tiny admin table, low value); Customers
+  board inline-edit (POST /api/customer upsert may blank omitted fields — review
+  its semantics before wiring editCell).
 - [ ] **Batch 4 — GAASH mail pill cleanup**: replace raw pills with
   tonePill/hexPill/statusPill; adopt `fld()` in chat/builder headers.
 - [ ] **Batch 5 — Meta leads / Brain / P&L**: adopt card language (two-tier
