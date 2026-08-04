@@ -8703,9 +8703,14 @@ const TONE={red:"color:#b42318;background:#fef2f2;border-color:#fecaca",
   green:"color:#15803d;background:#ecfdf5;border-color:#bbf7d0",
   amber:"color:#b45309;background:#fff7ed;border-color:#fed7aa",
   gray:"color:var(--muted);background:var(--bg2);border-color:var(--line)"};
-function tonePill(tone,txt,tip){ return `<span class="pill" style="${TONE[tone]||TONE.gray};font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+// opts (optional, UI_AUDIT Batch 4): {style:"font-size:9.5px", attrs:'onclick="…"',
+// cls:"mono"} — the ONE sanctioned way to tweak a pill's size/class/handlers;
+// never hand-roll a `<span class="pill" style="…">` instead.
+function tonePill(tone,txt,tip,opts){ const o=opts||{};
+  return `<span class="pill${o.cls?" "+o.cls:""}" style="${TONE[tone]||TONE.gray};font-weight:600${o.style?";"+o.style:""}"${tip?` title="${poEsc(tip)}"`:''}${o.attrs?" "+o.attrs:""}>${poEsc(txt)}</span>`; }
 // Pill in an arbitrary hex colour (same recipe as the ClickUp-status dropdown).
-function hexPill(hex,txt,tip){ return `<span class="pill" style="color:${hex};background:${hex}1a;border-color:${hex}55;font-weight:600"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+function hexPill(hex,txt,tip,opts){ const o=opts||{};
+  return `<span class="pill${o.cls?" "+o.cls:""}" style="color:${hex};background:${hex}1a;border-color:${hex}55;font-weight:600${o.style?";"+o.style:""}"${tip?` title="${poEsc(tip)}"`:''}${o.attrs?" "+o.attrs:""}>${poEsc(txt)}</span>`; }
 // Solid ClickUp-style chip: full-colour background, white or dark text by luminance
 // (the pastel GASH hexes are unreadable as tinted text-on-light pills).
 function inkFor(hex){ const m=hex.replace('#','');
@@ -10723,9 +10728,9 @@ function gmRenderList(){
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
         ${((t.reads_by||[]).length>1)?"":gmReadPill(t.reads)}
         ${gmGashPill({...(t.gash||{}),source:t.source},true)}
-        ${!gmAcctOf(t)?`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:9.5px" title="${T("لا حساب مُرسِل — افتحها واختر واحداً · no sending account — open it and pick one")}">⚠ ${T("بلا مرسِل · no sender")}</span>`:""}
-        ${multi&&gmAcctOf(t)&&(t.reads_by||[]).length<2?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${T("يُرسل من · sends from")}: ${poEsc(gmAcctOf(t).email)}">📤 ${poEsc((gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0])}</span>`:''}
-        ${t.pname?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${T('الاسم على الطرد · name on the parcel')}: ${poEsc(t.pname)}${t.pname_id?` · 🪪 ${poEsc(t.pname_id)}`:` · ${T('بلا هوية · no ID')}`}">${t.pname_id?"👤":"⚠"} ${poEsc(t.pname)}${t.pname_src==="default"?" ·"+T("افتراضي · default"):""}</span>`:''}
+        ${!gmAcctOf(t)?tonePill("red","⚠ "+T("بلا مرسِل · no sender"),T("لا حساب مُرسِل — افتحها واختر واحداً · no sending account — open it and pick one"),{style:"font-size:9.5px"}):""}
+        ${multi&&gmAcctOf(t)&&(t.reads_by||[]).length<2?tonePill("gray","📤 "+(gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0],T("يُرسل من · sends from")+": "+gmAcctOf(t).email,{style:"color:var(--ink);font-size:9.5px;text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis"}):''}
+        ${t.pname?tonePill("gray",(t.pname_id?"👤 ":"⚠ ")+t.pname+(t.pname_src==="default"?" ·"+T("افتراضي · default"):""),T('الاسم على الطرد · name on the parcel')+": "+t.pname+(t.pname_id?` · 🪪 ${t.pname_id}`:` · ${T('بلا هوية · no ID')}`),{style:"font-size:9.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis"}):''}
         ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:10.5px" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
       ${gmSenderRows(t)}
       ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
@@ -10785,8 +10790,8 @@ function gmRenderChat(){
       <b class="mono">${poEsc(th.gwd)}</b> ${gmChip(th.state)} ${gmDots(th.step||0,((gmSeqOf(th)||{}).steps||[]).length)}
       ${(gmSeqOf(th)||{}).name?`<span class="muted2" style="font-size:11px">🧬 ${poEsc(gmSeqOf(th).name)}</span>`:""}
       ${idDoc?`<span class="gm-att">🪪 ${poEsc(idDoc.name)}</span>`:""}
-      ${th.missing_docs?`<span class="pill" style="background:#fee2e2;color:#b42318">⚠ ${poEsc(th.missing_note||T("ناقص مستندات · missing docs"))}</span>`:""}
-      ${resend?`<span class="pill" style="background:#fffbeb;color:#b45309" title="${T('المكتب كان مغلقاً — سيُعاد الإرسال · office was closed — will resend')}">⏰ ${poEsc(String(resend.due_at||"").slice(5,16).replace("T"," "))}</span>`:""}
+      ${th.missing_docs?tonePill("red","⚠ "+(th.missing_note||T("ناقص مستندات · missing docs"))):""}
+      ${resend?tonePill("amber","⏰ "+String(resend.due_at||"").slice(5,16).replace("T"," "),T('المكتب كان مغلقاً — سيُعاد الإرسال · office was closed — will resend')):""}
       <span class="spacer"></span>
       ${th.state==="waiting_task"?`<button class="accent" style="padding:3px 10px;font-size:12px" onclick="gmAct('task_done')">✓ ${T("المهمة أُنجزت · task done")}</button>`
        :th.state==="active"?`<button class="minibtn" onclick="gmAct('pause')">⏸ ${T("إيقاف · pause")}</button>
@@ -11000,8 +11005,9 @@ function gmIdPill(id,src){
     ?T("طرد أطلبلي — أضف رقم هوية العميل من صفحته في العملاء · an Otlobly purchase — add the customer's ID number on their Customers page")
     :T("لا هوية لهذا الاسم — أضفها من ⚙ الحسابات والقوالب · no ID for this name — add it in ⚙ Accounts & templates");
   return id
-    ?`<span class="pill mono" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle" title="${T("رقم الهوية الذي سيحمله إيميل هذا الطرد · the ID this package's email will carry")}">🪪 ${poEsc(id)}</span>`
-    :`<span class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#b45309;font-size:9.5px;display:inline-block;vertical-align:middle" title="${where}">⚠ ${T("بلا هوية · no ID")}</span>`;
+    ?tonePill("green","🪪 "+id,T("رقم الهوية الذي سيحمله إيميل هذا الطرد · the ID this package's email will carry"),
+      {cls:"mono",style:"font-size:10px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle"})
+    :tonePill("amber","⚠ "+T("بلا هوية · no ID"),where,{style:"font-size:9.5px;display:inline-block;vertical-align:middle"});
 }
 // a name nobody put on the parcel — it came from the Settings default. Marked
 // everywhere it shows, because assuming an identity on a customs document
@@ -11214,7 +11220,7 @@ function gmWizFlow(){
           <b style="font-size:12.5px">${poEsc(s.name)}</b>
           <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("إيميل على مدى · emails over")} ${gmSeqDays(s)} ${T("يوم · days")}</span>
           <span class="spacer"></span>
-          ${off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
+          ${off?hexPill("#8d8d8d",T("موقوف · off"),null,{style:"font-size:9.5px"}):""}
         </div><div class="en-sub">${T("الإيميل الأول · email #1")}: ${poEsc(tpl.subject_tpl||"—")}</div></div></div>`;
     }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b></div>`}</div>
     <div class="en-cf-r" style="margin-top:14px"><b>${T("المُرسِل · Sends from")}</b>
@@ -11230,7 +11236,7 @@ function gmWizFlow(){
           <b style="font-size:12.5px">${poEsc(a.email)}</b>
           ${a.label?`<span class="muted2" style="font-size:11px">${poEsc(a.label)}</span>`:""}
           <span class="spacer"></span>
-          ${a.last_error?`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:9.5px" title="${poEsc(a.last_error)}">⚠</span>`:""}
+          ${a.last_error?tonePill("red","⚠",a.last_error,{style:"font-size:9.5px"}):""}
         </div></div></div>`;}).join("")}</div>`
       :`<div class="en-none"><b>${T("لا حسابات بعد · No accounts yet")}</b>${T("أضف واحداً من ⚙ · add one in ⚙")}</div>`}`;
   gmWizFoot(2,4,T("مراجعة · Review"));
@@ -11267,12 +11273,12 @@ function gmSeqPill(t,gwd){
   const jump=`onclick="event.stopPropagation();bulkClose();gmTab('conv');gmOpen('${poEsc(gwd)}')"`;
   const stp=t.step||0;
   if(t.state==="proposed")
-    return `<span class="pill" style="color:#b45309;background:#fff7ed;border:1px solid #f59e0b55;font-size:10.5px" title="${T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real")}">💡 ${T("مقترح · suggested")}</span>`;
+    return tonePill("amber","💡 "+T("مقترح · suggested"),T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real"),{style:"font-size:10.5px"});
   if(t.state==="goal_met"||t.state==="done")
-    return `<span class="pill" style="color:#12a150;background:#12a1500f;border:1px solid #12a15055;font-size:10.5px;cursor:pointer" ${jump} title="${T("وصل هدفه — افتح محادثته · goal met — open its conversation")}">🏁 ${T("منجز · done")}</span>`;
+    return hexPill("#12a150","🏁 "+T("منجز · done"),T("وصل هدفه — افتح محادثته · goal met — open its conversation"),{style:"font-size:10.5px;cursor:pointer",attrs:jump});
   if(t.state==="paused")
-    return `<span class="pill" style="color:#8d8d8d;background:#8d8d8d1a;border:1px solid #8d8d8d55;font-size:10.5px;cursor:pointer" ${jump} title="${T("له محادثة قائمة (موقوفة) — اضغط لفتحها · already has a conversation (paused) — click to open it")}">⏸ ${T("موقوف · paused")} · ${stp}</span>`;
-  return `<span class="pill" style="color:#12a150;background:#12a1500f;border:1px solid #12a15055;font-size:10.5px;cursor:pointer" ${jump} title="${T("يعمل الآن عند الإيميل رقم · running — at email #")} ${stp} — ${T("اضغط لفتح المحادثة · click to open the conversation")}">▶ ${T("جارٍ · running")} · ${stp}</span>`;
+    return hexPill("#8d8d8d","⏸ "+T("موقوف · paused")+" · "+stp,T("له محادثة قائمة (موقوفة) — اضغط لفتحها · already has a conversation (paused) — click to open it"),{style:"font-size:10.5px;cursor:pointer",attrs:jump});
+  return hexPill("#12a150","▶ "+T("جارٍ · running")+" · "+stp,T("يعمل الآن عند الإيميل رقم · running — at email #")+" "+stp+" — "+T("اضغط لفتح المحادثة · click to open the conversation"),{style:"font-size:10.5px;cursor:pointer",attrs:jump});
 }
 // keep the compose header honest: To follows the SELECTED workflow (its
 // to_address, else Settings), Subject = that workflow's email-#1 template
@@ -11356,8 +11362,7 @@ function gmEnrollRender(){
       status:gmOrderPill(c),
       gash:gmGashPill(c),
       seq:gmSeqPill(c.thread,c.gwd),
-      found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line);font-size:10.5px">${
-        {leluxe:"⌚ Leluxe",purchases:"📦 Purchases",manual:T("ملصوق · pasted")}[c.source]||poEsc(c.source||"—")}</span>`,
+      found:tonePill("gray",({leluxe:"⌚ Leluxe",purchases:"📦 Purchases",manual:T("ملصوق · pasted")})[c.source]||c.source||"—",null,{style:"font-size:10.5px"}),
       cust:`<span style="font-size:11.5px" title="${poEsc(c.customers||c.po_id||c.name||"")}">${
         poEsc(c.customers||c.po_id||c.name||"—")}</span>`,
     })}</div>`;
@@ -11382,8 +11387,7 @@ function gmOrderPill(c){
 // always undefined and would keep every pill grey forever
 function gmLxReady(){ return typeof LX!=="undefined" && !!(LX&&LX.schema); }
 function gmPlainPill(txt){
-  return `<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10.5px"
-    title="${poEsc(txt)}">${poEsc(txt)}</span>`;
+  return tonePill("gray",txt,txt,{style:"font-size:10.5px"});
 }
 // Where customs has got to. Leluxe stores it as a ClickUp field; Purchases has no
 // such field, so it comes from the STORED tracking status — no carrier is asked.
@@ -11434,8 +11438,8 @@ function gmAcctRows(curId,onclick){
         <b style="font-size:12.5px">${poEsc(a.email)}</b>
         ${a.label?`<span class="muted2" style="font-size:11px">${poEsc(a.label)}</span>`:""}
         <span class="spacer"></span>
-        ${on?`<span class="pill" style="background:#12a1500f;border:1px solid #12a15055;color:#12a150;font-size:9.5px">${T("الحالي · current")}</span>`:""}
-        ${a.last_error?`<span class="pill" style="background:#fee2e2;border:1px solid #fca5a5;color:#b42318;font-size:9.5px" title="${poEsc(a.last_error)}">⚠</span>`:""}
+        ${on?hexPill("#12a150",T("الحالي · current"),null,{style:"font-size:9.5px"}):""}
+        ${a.last_error?tonePill("red","⚠",a.last_error,{style:"font-size:9.5px"}):""}
       </div></div></div>`;}).join("")}</div>`;
 }
 function gmAcctPick(){
@@ -11821,8 +11825,8 @@ function gmSeqPick(){
           <b style="font-size:12.5px">${poEsc(s.name)}</b>
           <span class="muted2" style="font-size:11px">${(s.steps||[]).length} ${T("خطوة · steps")} · ${gmSeqDays(s)} ${T("يوم · days")}</span>
           <span class="spacer"></span>
-          ${isCur?`<span class="pill" style="background:#12a1500f;border:1px solid #12a15055;color:#12a150;font-size:9.5px">${T("مسجَّل · enrolled")}</span>`
-            :off?`<span class="pill" style="background:#8d8d8d1a;border:1px solid #8d8d8d55;color:#8d8d8d;font-size:9.5px">${T("موقوف · off")}</span>`:""}
+          ${isCur?hexPill("#12a150",T("مسجَّل · enrolled"),null,{style:"font-size:9.5px"})
+            :off?hexPill("#8d8d8d",T("موقوف · off"),null,{style:"font-size:9.5px"}):""}
         </div></div></div>`;
     }).join("")||`<div class="en-none"><b>${T("لا سير عمل بعد · No workflows yet")}</b>${T("أنشئ واحداً من تبويب سير العمل · create one from the Workflows tab")}</div>`}</div>`;
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
@@ -11946,8 +11950,8 @@ function gmIdsRender(){
   const chosen=ids.filter(x=>sel.includes(x.id));
   const head=chosen.length
     ?`<div class="muted2" style="font-size:11.5px;margin-bottom:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        ${T("مرفق · attached")}: ${chosen.map(c=>`<span class="pill" style="background:#eefaf3;border:1px solid #bfe6d2;color:#1b6b45;font-size:10px">${poEsc(c.name)}
-          <button class="minibtn" style="padding:0 5px" onclick="gmIdPick('${poEsc(c.id)}')" title="${T("أزل · remove")}">✕</button></span>`).join("")}</div>`
+        ${T("مرفق · attached")}: ${chosen.map(c=>tonePill("green",c.name,null,{style:"font-size:10px"})
+          +`<button class="minibtn" style="padding:0 5px" onclick="gmIdPick('${poEsc(c.id)}')" title="${T("أزل · remove")}">✕</button>`).join("")}</div>`
     :`<div class="muted2" style="font-size:11.5px;margin-bottom:7px">${T("لا مستند مشترك — التصريح وحده إن فعّلته · no shared document — just the declaration if you switched it on")}</div>`;
   if(!GM.idFolder){
     box.innerHTML=head+`<div class="gm-folders">${GM_FOLDERS.map(f=>{
@@ -12204,11 +12208,11 @@ function gmReadyDraw(){
   const row=r=>{
     const idc=r.pname_id
       ?`<b class="mono" style="font-size:11px">🪪 ${poEsc(r.pname_id)}</b>`
-      :`<span class="pill" style="background:#fef3c7;color:#b45309;font-size:10px" title="${T(r.source==="purchases"?"أضف الهوية في صفحة العميل (الزبائن) · add the ID on the customer's CRM page":"امنح الاسم هوية من ⚙ أو اختر اسماً آخر · give this name an ID via ⚙ or pick another name")}">⚠ ${T("بلا هوية · no ID")}</span>`;
+      :tonePill("amber","⚠ "+T("بلا هوية · no ID"),T(r.source==="purchases"?"أضف الهوية في صفحة العميل (الزبائن) · add the ID on the customer's CRM page":"امنح الاسم هوية من ⚙ أو اختر اسماً آخر · give this name an ID via ⚙ or pick another name"),{style:"font-size:10px"});
     const tag=r.source==="purchases"
       ?`<label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-size:11px" title="${T("وسم داخل التطبيق: خلّص هذا الطرد تلقائياً · in-app tag: auto-clear this parcel")}">
           <input type="checkbox" ${r.app_tag?"checked":""} onchange="gmReadyTag('${poEsc(r.gwd)}',this.checked)">${r.app_tag?"✅":`<span class="muted2" style="font-size:10px">${T("وسم · tag")}</span>`}</label>`
-      :(r.cu_tag?`<span class="pill" style="background:#dcfce7;color:#166534;font-size:10px" title="${T("موسوم من عمود AUTO CLEAR في كليك أب · tagged via the ClickUp AUTO CLEAR column")}">✅ ${poEsc(String(r.cu_tag).slice(0,14))}</span>`
+      :(r.cu_tag?tonePill("green","✅ "+String(r.cu_tag).slice(0,14),T("موسوم من عمود AUTO CLEAR في كليك أب · tagged via the ClickUp AUTO CLEAR column"),{style:"font-size:10px"})
                 :`<span class="muted2" style="font-size:10.5px" title="${T("يوسَم من كليك أب: عمود AUTO CLEAR · tag it in ClickUp: the AUTO CLEAR column")}">—</span>`);
     const st=r.state?gmChip(r.state):`<span class="muted2" style="font-size:10.5px">${T("غير مسجّل · not enrolled")}</span>`;
     return `<div style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
@@ -12442,9 +12446,9 @@ function gmWfRow(row){
     onoff, trigger:trig,
     steps:`<span class="muted2">${(s.steps||[]).length}</span>`,
     days:`<span class="muted2">${gmSeqDays(s)}</span>`,
-    goal:`<span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">🎯 ${poEsc(s.goal)}</span>`,
+    goal:tonePill("gray","🎯 "+s.goal,null,{style:"font-size:10px"}),
     active:`<b>${s.active_threads||0}</b>`,
-    enrolled:`<span style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0" title="${T("عرض المسجّل والمقترح بكل الأعمدة · view enrolled + suggested packages with full columns")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')"><span class="muted2">${st.enrolled??"—"}</span>${prop.length?`<span class="pill" style="background:#fffbeb;border:1px solid #fde68a;color:#b45309;font-size:10px;font-weight:800;flex:none">⚡ ${prop.length}</span>`:""}</span>`,
+    enrolled:`<span style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0" title="${T("عرض المسجّل والمقترح بكل الأعمدة · view enrolled + suggested packages with full columns")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')"><span class="muted2">${st.enrolled??"—"}</span>${prop.length?tonePill("amber","⚡ "+prop.length,null,{style:"font-size:10px;font-weight:800;flex:none"}):""}</span>`,
     enr7d:`<span class="muted2">${st.enrolled_7d??"—"}</span>`,
     goalmet:`<span class="muted2">${st.goal_met??"—"}</span>`,
     sent:`<span class="muted2">${st.sent??"—"}</span>`,
@@ -12520,7 +12524,7 @@ function gmRenderSeq(){
         <b>${poEsc(r.name)}</b>
         <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)} → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
         ${gmMatchChip(r.id)}
-        <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
+        ${tonePill("gray",r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval"),null,{style:"font-size:10px"})}
         <span class="spacer"></span>
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button>
         <button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
@@ -12682,7 +12686,7 @@ function gmRenderBuilder(){
       <b>${poEsc(r.name)}</b>
       <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)}</span>
       ${gmMatchChip(r.id)}
-      <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval")}</span>
+      ${tonePill("gray",r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval"),null,{style:"font-size:10px"})}
       <span class="spacer"></span>
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button><button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
     </div>`;
@@ -12729,7 +12733,7 @@ function gmRenderBuilder(){
           <option value="reply" ${e.goal==="reply"?"selected":""}>${T("وصل رد بشري · got a human reply")}</option>
           <option value="manual" ${e.goal==="manual"?"selected":""}>${T("يدوي فقط · manual only")}</option>
         </select></label>
-      <div><b>🕘 ${T("نافذة الإرسال · send window")}</b> <span class="pill" style="background:#fff4ee;border:1px solid #f7680833">${T("بتوقيت فلسطين افتراضياً · Palestine time by default")}</span>
+      <div><b>🕘 ${T("نافذة الإرسال · send window")}</b> ${hexPill("#f76808",T("بتوقيت فلسطين افتراضياً · Palestine time by default"))}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
           ${GM_DAY_LABELS.map((d,i)=>`<label style="display:flex;gap:3px;align-items:center;cursor:pointer;font-size:11.5px"><input type="checkbox" class="gmWinDay" value="${i}" ${w.days.includes(i)?"checked":""} ${CAN_ADMIN?"":"disabled"}>${d}</label>`).join("")}
           <input id="gmWinStart" type="time" value="${poEsc(w.start)}" ${CAN_ADMIN?"":"disabled"}> →
@@ -12944,7 +12948,7 @@ function gmRuleCritRender(){
   // the shared field-search list (all built-ins + every board column)
   dls+=`<datalist id="gmFieldsDL">${gmRuleFieldList().map(f=>`<option value="${poEsc(gmFieldDisplay(f))}">`).join("")}</datalist>`;
   $("gmRuleCrit").innerHTML=gs.map((g,gi)=>`
-    ${gi?`<div style="display:flex;align-items:center;gap:8px;margin:7px 0"><span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${T("أو · or")}</span><div style="flex:1;border-top:1px dashed var(--line)"></div></div>`:""}
+    ${gi?`<div style="display:flex;align-items:center;gap:8px;margin:7px 0">${tonePill("gray",T("أو · or"),null,{style:"font-size:10px"})}<div style="flex:1;border-top:1px dashed var(--line)"></div></div>`:""}
     <div class="panel" style="padding:8px 10px">
       <div style="display:flex;align-items:center;gap:8px"><b style="font-size:11.5px;color:var(--muted);text-transform:uppercase">${T("مجموعة · Group")} ${gi+1}</b><span class="spacer"></span>
         ${gs.length>1?`<button class="minibtn" onclick="gmRuleGroupDel(${gi})">🗑</button>`:""}</div>
@@ -13016,7 +13020,7 @@ function gmRenderTpl(editId){
       <b>${poEsc(t.name)}</b>
       <span class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${poEsc(t.subject_tpl||"")}</span>
       <span class="spacer"></span>
-      <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px">${t.used_by||0} ${T("استخدام · used")}</span>
+      ${tonePill("gray",(t.used_by||0)+" "+T("استخدام · used"),null,{style:"font-size:10px"})}
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmRenderTpl('${t.id}')">✎</button>
       <button class="minibtn" onclick="gmTplDelete('${t.id}')">🗑</button>`:""}
     </div>`).join("")||`<div class="muted2 panel">${T("لا قوالب بعد · no templates yet")}</div>`}
