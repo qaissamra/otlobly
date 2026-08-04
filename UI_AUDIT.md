@@ -36,13 +36,13 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | Leluxe packages (`lxRenderPackages` :4007) | 🟡 | ✅ | 🟡 | ✅ | ✅ GWD | n/a | ✅ | ✅ `k` | ✅ |
 | To-order (`neRowHtml` :6399) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | 🟡 detail only | ✅ | 🟡 own resize only | ✅ |
 | Orders (`render`, LXT table `"od"`) | ✅ pill-colored `statusSelect` | ✅ board (pin + columns) | n/a | ❌ (asin links only) | ✅ order `tracking_number` col | ✅ 📍 city+addr editable | ✅ | ✅ `od` *(Batch 2)* | ✅ onchange + `editCell` |
-| Brain (`renderBrain` :5837) | 🟡 raw pills | ❌ bespoke tiles | ❌ | ❌ | n/a | n/a | 🟡 | n/a | n/a |
+| Brain (`renderBrain`) | ✅ (audited Batch 5: uses shared `qchip`, no raw pills) | n/a dashboard tiles (`.panel` idiom) | ❌ | ❌ | n/a | n/a | ✅ `minibtn` | n/a | n/a |
 | Customers (LXT `"cu"`) | ✅ | ✅ board *(Batch 3)* | 🟡 `.kv` panel | ❌ | n/a | ✅ city col + profile | ✅ | ✅ `cu` | 🟡 panel (board inline-edit deferred — /api/customer upsert semantics need review first) |
 | Deposits (LXT `"dp"`) | ✅ | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | ❌ | ✅ | ✅ `dp` | n/a ledger (delete only) |
 | In cart (LXT `"ic"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 30px thumbs | n/a | n/a | ✅ | ✅ `ic` | ✅ cost input |
 | Catalog (LXT `"ct"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 34px in pin | n/a | n/a | 🟡 `.minibtn` | ✅ `ct` | ✅ onchange in cells |
-| Meta leads (`renderMetaLeads` :5780) | 🟡 raw inline divs | ❌ fully bespoke | ❌ | ❌ | n/a | ❌ | ✅ | ❌ | ✅ onchange |
-| P&L (`renderPnl` :9794) | ✅ in drills | ❌ bespoke tiles | ❌ | ❌ | n/a | n/a | 🟡 | ❌ | n/a |
+| Meta leads (`renderMetaLeads`) | ✅ (none needed) | ✅ two-tier lead cards *(Batch 5)* | ✅ `fld()` meta strip | ❌ | n/a | ❌ | ✅ | n/a (card list) | ✅ onchange + note in strip |
+| P&L (`renderPnl`) | ✅ (margin via tonePill, *Batch 5*) | n/a dashboard tiles (`.card` idiom) | ❌ | ❌ | n/a | n/a | 🟡 | n/a | n/a |
 | GAASH mail (gm* :10448-12770) | 🟡 ~50 raw pills | 🟡 mixed | ❌ | ✅ via bs rows | ✅ | n/a | ✅ | ✅ `wf`/`en` only | 🟡 |
 | Bulk search (`bsRender` :10195) | ✅ mixed correctly | ✅ | ✅ | ✅ | ✅ both | ❌ | ✅ | ✅ `bs` | n/a read-only |
 | Trash (LXT `"tr"`) | n/a | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | n/a | ✅ | ✅ `tr` | n/a |
@@ -100,8 +100,18 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   to TONE/hexPill recipes (tiny shade shifts accepted — that IS the
   consistency). The audit's "adopt fld() in chat/builder headers" line had no
   real target — the gm headers use chips, not label strips; dropped.
-- [ ] **Batch 5 — Meta leads / Brain / P&L**: adopt card language (two-tier
-  headers, shared pills, `.po-btn`), keep their layouts.
+- [x] **Batch 5 — Meta leads / Brain / P&L** *(shipped 2026-08-04)*: Meta leads
+  lead cards → the two-tier `.po-card` anatomy (title row + tinted `.po-meta`
+  with `fld()` fields + the note input); P&L margin chip → `tonePill`. Audit
+  correction: Brain was already conformant (`panel`/`qchip`/`minibtn` are shared
+  idiom, no raw pills) and both Brain + P&L are dashboards where two-tier order
+  headers don't apply — matrix cells fixed rather than force-converting.
+- [ ] **Batch 5b — scattered one-off raw pills** (small): ~18 single raw pills
+  across views (orders 🌐 badge, ppCard/ppReviewCard "بلا رقم", ppSection count,
+  ne/po/lx one-offs) → tonePill/hexPill with opts. NOTE: the other ~27 remaining
+  `<span class="pill"` sites are DOMAIN pill builders (statusPill, lxStatusPill,
+  lxCfPill, lxChip, lxMailPill, deadline/docs/gash pills…) — they ARE the
+  helpers; leave them.
 - [ ] **Batch 6 — editability sweep**: audit every ❌/🟡 in the "Editable
   fields" column; wire the shared inline-edit helper + endpoints.
 - [ ] **Batch 7 — expand-state + open-CSS unification** (low priority, pure
