@@ -33,7 +33,7 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | Package prep (`ppCard` :2672) | ✅ + 🟡 | ✅ | 🟡 inline variant | ✅ 34px in rows | ❌→✅ **Batch 0 adds OTL** | ❌→✅ **Batch 0** | ✅ | ❌ (card view) | 🟡 status only →✅ **Batch 0 adds location** |
 | Package prep done/review (`ppReviewCard` :2726) | ❌ | 🟡 title only | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ✅ | ❌ | ❌→✅ **Batch 0** (backend stripped everything — pkgprep.py:300-304 `_make_review_card`) |
 | Leluxe orders/products (`renderLeluxe` :3447) | 🟡 `lxStatusPill` (correct for ClickUp) | ✅ `.pkg-head` | 🟡 | ✅ `lxThumbs` | ✅ GWD / ❌ OTL | ❌ (AZ world — n/a mostly) | ✅ | ✅ `""`/`p` | ✅ modal + selects |
-| Leluxe packages (`lxRenderPackages` :4007) | 🟡 | ✅ | 🟡 | ✅ | ✅ GWD | n/a | ✅ | ✅ `k` | ✅ |
+| Leluxe packages (`lxRenderPackages`) | ✅ editable `lxStatusSelect` on subtask/single-product rows *(2026-08-04 Purchases-parity pass; multi-product grouped rows stay read-only — never-bulk)* | ✅ | 🟡 | ✅ 32px max-4 `lxThumbs` *(parity)* | ✅ GWD | n/a | ✅ | ✅ `k` (+status sort, 84px floor) | ✅ row-level status |
 | To-order (`neRowHtml`) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | ✅ 📍 editable in detail *(Batch 6)* | ✅ | 🟡 own resize only | ✅ + location `editCell` |
 | Orders (`render`, LXT table `"od"`) | ✅ pill-colored `statusSelect` | ✅ board (pin + columns) | n/a | ❌ (asin links only) | ✅ order `tracking_number` col | ✅ 📍 city+addr editable | ✅ | ✅ `od` *(Batch 2)* | ✅ onchange + `editCell` |
 | Brain (`renderBrain`) | ✅ (audited Batch 5: uses shared `qchip`, no raw pills) | n/a dashboard tiles (`.panel` idiom) | ❌ | ❌ | n/a | n/a | ✅ `minibtn` | n/a | n/a |
