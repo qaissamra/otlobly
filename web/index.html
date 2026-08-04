@@ -210,8 +210,8 @@
      got the same grid cells (806c25f): clicking a package row's status button
      opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
      white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open),.en-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open),.en-cols .lxc:has(.pop-menu.open),.od-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop,.od-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -442,6 +442,7 @@
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
+  .od-cols{display:grid;grid-template-columns:var(--odgrid,170px 110px 90px 96px 64px 64px 88px 132px 120px 92px 130px 96px 168px);gap:6px;align-items:center;flex:0 0 auto}
   /* 📧 enroll picker: the ONLY .bt-* table that lives inside a modal. Its
      sticky header is tuned to the page topbar (top:70px) — reset it to the
      modal body, cap the scroll box, and let a cell dropdown escape the box. */
@@ -628,17 +629,17 @@
   }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc,.od-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b,.od-cols .lxc>.pill,.od-cols .lxc>span,.od-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead,.en-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl,.en-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort,.en-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover,.en-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead,.en-colhead,.od-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl,.en-colhead .lbl,.od-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort,.en-colhead .lx-sort,.od-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover,.en-colhead .lx-sort:hover,.od-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl,.en-colhead .en-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl,.en-colhead .en-cols .lbl,.od-colhead .od-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -829,7 +830,7 @@
   .bt-wrap .poc-meta{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
-  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin,.bs-colhead .bt-pin,.en-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin,.bs-colhead .bt-pin,.en-colhead .bt-pin,.od-colhead .bt-pin{background:var(--bg);align-self:auto}
   /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
   .wf-row:hover{background:var(--bg2)}
   .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
@@ -1060,6 +1061,8 @@
   <!-- Orders -->
   <div id="ordersView">
     <div class="toolbar">
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);cursor:pointer" title="select all shown">
+        <input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)"><span data-en="all" data-ar="الكل">all</span></label>
       <input class="search" id="search" placeholder="Search name, phone, ASIN, address…" oninput="render()">
       <select id="statusFilter" onchange="render()"><option value="">All statuses</option></select>
       <select id="batchFilter" onchange="render()"><option value="">All batches</option></select>
@@ -1071,15 +1074,7 @@
       <button class="po-btn" onclick="clearOrderSel()">Clear</button>
       <span class="muted2" style="font-size:11.5px">deleted orders move to 🗑 Trash — you can restore them</span>
     </div>
-    <div class="tbl-scroll"><table id="tbl">
-      <thead><tr>
-        <th style="width:26px"><input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)" title="select all shown"></th>
-        <th>Order</th><th>Customer</th><th>Items</th><th>Amount</th><th>Deposit</th><th>Remaining</th>
-        <th>Box</th><th>Batch</th><th>Due</th><th>Status</th><th>Amazon #</th><th>WhatsApp</th>
-      </tr></thead>
-      <tbody id="rows"></tbody>
-      <tfoot><tr><td colspan="4">Total outstanding</td><td class="amt" id="footAmt"></td><td class="amt" id="footDep"></td><td class="amt" id="footRem"></td><td colspan="6"></td></tr></tfoot>
-    </table></div>
+    <div id="odMount"></div>
   </div>
 
   <!-- Profit / P&L -->
@@ -2365,7 +2360,10 @@ function editCell(el,opts,save,cancel){
 }
 
 function statusSelect(o){
-  return `<select class="statussel" onchange="setStatus('${o.order_id}',this.value)">`+
+  // editable select, painted like the status pill (STATUS_COLOR) — UI_AUDIT Batch 2
+  const [c,bg]=STATUS_COLOR[o.status]||["#555","#eee"];
+  return `<select class="statussel" style="color:${c};background:${bg};border:1px solid ${c}55;border-radius:7px;font-weight:700"
+    onchange="setStatus('${o.order_id}',this.value)">`+
     DATA.statuses.map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join("")+`</select>`;
 }
 
@@ -2404,20 +2402,57 @@ async function notifyTrack(id,btn,force){
   else { toast("⚠ "+(d.error||"failed")); }
 }
 
+// typed sort values for the Orders board (numbers sort numerically, text lexically)
+function odSortVal(o,k){
+  switch(k){
+    case "collect": return o.amount_to_collect_usd==null?-1:+o.amount_to_collect_usd;
+    case "dep":     return +(o.deposit_usd||0);
+    case "rem":     return o.remaining_usd==null?-1:+o.remaining_usd;
+    case "batch":   return String(o.batch||"");
+    case "due":     return String(o.est_delivery_customer||"9999-99-99");
+    case "ostatus": return String(o.status||"");
+    case "city":    return String(o.city||"");
+    default:        return String(o.order_id||"");
+  }
+}
+// 📍 customer city/address, editable in place on the board (same field the
+// Package prep cards edit) — saves via /api/order/edit, updates the row model
+function odLocEdit(el,oid,fldKey){
+  if(!CAN_EDIT) return;
+  const o=((DATA||{}).orders||[]).find(x=>x.order_id===oid); if(!o) return;
+  const cur=o[fldKey]||"";
+  editCell(el,{value:cur,width:"",minWidth:"84px",
+    placeholder:fldKey==="city"?"المدينة · city":"العنوان · address"},async v=>{
+    v=v.trim();
+    if(v===cur){ render(); return; }
+    const body={order_id:oid}; body[fldKey]=v;
+    const r=await post("/api/order/edit",body);
+    if(r&&r.ok){ o[fldKey]=v; toast("📍 حُفظ ✓"); } else toast("⚠ "+((r&&r.error)||"failed"));
+    render();
+  },render);
+}
+function odLocCell(o,fldKey){
+  const v=o[fldKey]||"";
+  if(!CAN_EDIT) return v?`<span>${poEsc(v)}</span>`:"";
+  return `<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit"
+    onclick="event.stopPropagation();odLocEdit(this,'${o.order_id}','${fldKey}')">${v?poEsc(v):"—"}</span>`;
+}
 function render(){
   if(!DATA) return;
+  const mount=$("odMount"); if(!mount) return;
   const term=$("search").value.trim().toLowerCase();
   const fs=$("statusFilter").value, fb=$("batchFilter").value;
   let rows=DATA.orders.filter(o=>{
     if(fs && o.status!==fs) return false;
     if(fb && o.batch!==fb) return false;
     if(!term) return true;
-    const hay=[o.customer,o.phone,o.address,o.order_id,
+    const hay=[o.customer,o.phone,o.address,o.city,o.order_id,
       ...o.items.map(i=>i.asin)].join(" ").toLowerCase();
     return hay.includes(term);
   });
+  rows=lxtSortApply("od",rows.slice(),odSortVal);
   let out=0, totDep=0, totRem=0;
-  $("rows").innerHTML=rows.map(o=>{
+  const rowsHtml=rows.map(o=>{
     const open=["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"].includes(o.status);
     if(open){ out+=o.amount_to_collect_usd||0; totDep+=o.deposit_usd||0;
               totRem+=(o.remaining_usd!=null?o.remaining_usd:(o.amount_to_collect_usd||0)); }
@@ -2426,31 +2461,39 @@ function render(){
       : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
     const depTxt=(o.deposit_usd!=null&&o.deposit_usd>0)?money(o.deposit_usd):'';
     const depCell=CAN_EDIT
-      ? `${depTxt} <a title="سجّل عربون · record a deposit" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
-      : (depTxt||'—');
+      ? `<span>${depTxt}</span> <a title="سجّل عربون · record a deposit" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
+      : `<span>${depTxt||'—'}</span>`;
     const remCell=(o.remaining_usd!=null)?money(o.remaining_usd)
                  :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
-    return `<tr class="row">
-      <td><input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="toggleOrderSel('${o.order_id}',this.checked)"></td>
-      <td class="mono">${o.order_id}${o.source==="website"?`<br><span class="pill" style="background:#e0f2fe;color:#0369a1;font-size:9.5px" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:""}</td>
-      <td><b>${poEsc(o.customer)||"—"}</b><br><span class="mono" style="color:var(--muted)">${poEsc(o.phone)||""}</span></td>
-      <td>${itemsCell(o)}</td>
-      <td class="amt">${amt}</td>
-      <td class="amt" style="color:var(--good)">${depCell}</td>
-      <td class="amt"><b>${remCell}</b></td>
-      <td><input value="${poEsc(o.profile_box||'')}" style="width:54px;padding:3px 6px;font-size:11.5px"
-            onchange="setBox('${o.order_id}',this.value)"></td>
-      <td>${poEsc(o.batch)||"—"}</td>
-      <td>${dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))||'<span style="color:var(--muted)">—</span>'}</td>
-      <td>${statusSelect(o)}</td>
-      <td><input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="mono"
-            style="width:104px;padding:3px 6px;font-size:11px"
-            onchange="setAmazon('${o.order_id}',this.value)"></td>
-      <td>${waMenu(o)}</td>
-    </tr>`;}).join("");
-  $("footAmt").textContent=money(out);
-  if($("footDep")) $("footDep").textContent=money(totDep);
-  if($("footRem")) $("footRem").textContent=money(totRem);
+    const web=o.source==="website"?` <span class="pill" style="background:#e0f2fe;color:#0369a1;font-size:9.5px" title="طلب من متجر الموقع · placed on the website catalog">🌐</span>`:"";
+    const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
+      <input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="event.stopPropagation();toggleOrderSel('${o.order_id}',this.checked)">
+      <span class="mono" style="flex:none;font-weight:700">${o.order_id}</span>${web}
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(o.customer)||"—"}</b> <span class="mono" style="color:var(--muted);font-size:10.5px">${poEsc(o.phone)||""}</span></span>
+    </div>`;
+    return `<div class="poc-row">${pin}${lxtCells("od",{
+      items:  itemsCell(o),
+      collect:`<span class="amt">${amt}</span>`,
+      dep:    `<span class="amt" style="color:var(--good)">${depCell}</span>`,
+      rem:    `<b class="amt">${remCell}</b>`,
+      box:    `<input value="${poEsc(o.profile_box||'')}" style="width:100%;min-width:40px;padding:3px 6px;font-size:11.5px" onchange="setBox('${o.order_id}',this.value)">`,
+      batch:  poEsc(o.batch)||"—",
+      due:    dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))||'<span style="color:var(--muted)">—</span>',
+      ostatus:statusSelect(o),
+      amzn:   `<input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="mono" style="width:100%;min-width:80px;padding:3px 6px;font-size:11px" onchange="setAmazon('${o.order_id}',this.value)">`,
+      city:   odLocCell(o,"city"),
+      addr:   odLocCell(o,"address"),
+      otl:    o.tracking_number?`<span class="mono">${poEsc(o.tracking_number)}</span>`:"",
+      wa:     waMenu(o),
+    })}</div>`;}).join("");
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${rows.length} ${T("طلب · orders")} · ${T("المستحق · outstanding")}</div>
+      ${lxtCells("od",{collect:`<b>${money(out)}</b>`,dep:`<b>${money(totDep)}</b>`,rem:`<b>${money(totRem)}</b>`})}
+    </div>`;
+  const empty=`<div class="muted2" style="padding:16px">${T("لا طلبات مطابقة · no matching orders")}</div>`;
+  mount.innerHTML=lxtHead("od","الطلب والعميل · order & customer")
+    +lxtWrap("od",`<div class="pkg open"><div class="pkg-body">${rowsHtml||empty}${rowsHtml?totals:""}</div></div>`);
+  lxColwApply(); lxtGridApply("od",mount);
   VISIBLE_ORDER_IDS=rows.map(o=>o.order_id);
   updateBulkBar();
 }
@@ -2459,8 +2502,8 @@ function render(){
 let SELECTED_ORDERS=new Set(), VISIBLE_ORDER_IDS=[];
 function toggleOrderSel(id,on){ on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id); updateBulkBar(); }
 function toggleSelAll(on){ VISIBLE_ORDER_IDS.forEach(id=>on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id));
-  document.querySelectorAll('#rows .ordsel').forEach(cb=>cb.checked=on); updateBulkBar(); }
-function clearOrderSel(){ SELECTED_ORDERS.clear(); document.querySelectorAll('#rows .ordsel').forEach(cb=>cb.checked=false);
+  document.querySelectorAll('#odMount .ordsel').forEach(cb=>cb.checked=on); updateBulkBar(); }
+function clearOrderSel(){ SELECTED_ORDERS.clear(); document.querySelectorAll('#odMount .ordsel').forEach(cb=>cb.checked=false);
   const sa=$("selAll"); if(sa)sa.checked=false; updateBulkBar(); }
 function updateBulkBar(){
   const n=SELECTED_ORDERS.size, bar=$("bulkBar");
@@ -3255,6 +3298,7 @@ const LX_TABLES={
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults", mins:{}},
   "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane", mins:{}},
   "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl", mins:{}},
+  "od": {key:"od_colw", varn:"--odgrid",  head:".od-colhead .od-cols",   rows:"odMount", mins:{}},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -3784,6 +3828,21 @@ const LXT_COLS={
     {key:"status",    label:"استثناء · exception",   w:110},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
+  "od":[    // 🏠 Orders board (the staff CRM table)
+    {key:"items",  label:"منتجات · items",      w:170},
+    {key:"collect",label:"المبلغ · amount",     w:110, sortable:true},
+    {key:"dep",    label:"عربون · deposit",     w:90,  sortable:true},
+    {key:"rem",    label:"المتبقي · remaining", w:96,  sortable:true},
+    {key:"box",    label:"صندوق · box",         w:64},
+    {key:"batch",  label:"دفعة · batch",        w:64,  sortable:true},
+    {key:"due",    label:"الموعد · due",        w:88,  sortable:true},
+    {key:"ostatus",label:"الحالة · status",     w:132, sortable:true},
+    {key:"amzn",   label:"أمازون # · amazon #", w:120},
+    {key:"city",   label:"📍 المدينة · city",   w:92,  sortable:true},
+    {key:"addr",   label:"العنوان · address",   w:130},
+    {key:"otl",    label:"التتبع · tracking",   w:96},
+    {key:"wa",     label:"واتساب · whatsapp",   w:168},
+  ],
   "wf":[    // 📧 GAASH mail → ⚙️ Workflows table (HubSpot Automation style)
     {key:"onoff",    label:"تشغيل · on / off",       w:74,  sortable:true},
     {key:"trigger",  label:"المُشغّل · trigger",      w:210},
@@ -3805,10 +3864,10 @@ const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
                "pok":["pok-colhead","pok-cols"],"pop":["pop-colhead","pop-cols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
-               "en":["en-colhead","en-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md"};
+               "en":["en-colhead","en-cols"],"od":["od-colhead","od-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop","bs","wf","en"].forEach(t=>{
+["","p","k","po","pok","pop","bs","wf","en","od"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -3836,7 +3895,7 @@ function lxtCols(tbl){
   return lxtOrderApply(tbl,cols);
 }
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
-function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():(tbl==="wf"?gmRenderSeq():(tbl==="en"?gmEnrollRender():renderLeluxe()))); }
+function lxtRender(tbl){ (tbl==="po"||tbl==="pok"||tbl==="pop")?renderPurchases():(tbl==="bs"?bsRender():(tbl==="wf"?gmRenderSeq():(tbl==="en"?gmEnrollRender():(tbl==="od"?render():renderLeluxe())))); }
 function lxtColToggle(tbl,key){
   const h=LXT_HIDDEN[tbl]; h.has(key)?h.delete(key):h.add(key);
   try{ localStorage.setItem("lxt_hidden_"+tbl,JSON.stringify([...h])); }catch(e){}

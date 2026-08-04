@@ -35,6 +35,7 @@ def _row(o):
         "phone": ph["e164"] if ph else None,
         "wa": ph["wa"] if ph else None,
         "address": o["customer"]["address"],
+        "city": o["customer"].get("city", ""),
         "items": [{"asin": it.get("asin"), "url": it.get("clean_url"),
                    "needs_expand": it.get("needs_expand")} for it in o["items"]],
         "n_items": len(o["items"]),

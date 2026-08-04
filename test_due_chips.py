@@ -34,11 +34,14 @@ def main():
     check("late = red (var(--bad))", "d late" in html and "color:var(--bad)" in html)
     check("today/soon = orange (var(--warn))", '"today"' in html)
 
-    # 2) Orders table: the Due column + the row cell, done statuses quieted.
-    check("Orders thead has the Due column", "<th>Due</th>" in html)
+    # 2) Orders board: the Due column + the row cell, done statuses quieted.
+    #    (2026-08-04: the plain <table> became the LXT "od" board — the column
+    #    now lives in LXT_COLS.od and the totals in a bt-total row, not a tfoot.)
+    check("Orders board has the Due column",
+          '"od":[' in html and 'الموعد · due' in html)
     check("Orders row renders dueChip on est_delivery_customer",
           'dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"]' in html)
-    check("tfoot colspan widened for the new column", 'colspan="6"></td></tr></tfoot>' in html)
+    check("Orders totals row survives the board move", 'Σ ${rows.length} ${T("طلب · orders")}' in html)
 
     # 3) Purchases: the package urgency now lives in pkgStatusPill (redesign),
     #    which reuses the same red-late / green-arriving language via dueDays.
