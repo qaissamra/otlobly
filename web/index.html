@@ -10,6 +10,7 @@
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
     --bg2:#f9fafb; --bg3:#f2f4f7;
+    --tint-accent:#fff4ee;   /* the ONE orange highlight tint: open rows/cards, unread, active tabs (UI_AUDIT Batch 7) */
     --accent:#ff5a1f; --ink2:#111827; --good:#16a34a; --warn:#d97706; --bad:#dc2626;
     --info:#0ea5e9; --indigo:#6366f1; --cyan:#0891b2;
     --shadow:0 1px 2px rgba(16,24,40,.05),0 6px 16px rgba(16,24,40,.05);
@@ -140,8 +141,8 @@
     border-radius:9px;border:1px solid var(--line);background:var(--card);font-size:15px;line-height:1;flex:0 0 auto;
     transition:background .12s,border-color .12s,color .12s}
   .po-title:hover>.caret,.pkg-title-row:hover>.caret{border-color:#d0d5dd;background:var(--bg3)}
-  .po-card.open .po-title{background:#fff4ee}
-  .pkg.open .pkg-title-row{background:#fff4ee}
+  .po-card.open .po-title{background:var(--tint-accent)}
+  .pkg.open .pkg-title-row{background:var(--tint-accent)}
   .po-card.open .po-title>.caret,.pkg.open .pkg-title-row>.caret{color:#fff;background:var(--accent);border-color:var(--accent)}
   .po-head .muted{color:var(--muted);font-size:12px}
   /* action group: stays right-aligned and wraps tidily as a unit instead of piling up */
@@ -195,7 +196,7 @@
   .notif-row{display:flex;gap:9px;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:12.5px;
     align-items:flex-start;text-align:start;border:none;background:transparent;width:100%}
   .notif-row:hover{background:var(--bg2)}
-  .notif-row.unread{background:#fff4ee}
+  .notif-row.unread{background:var(--tint-accent)}
   .notif-row .t{font-weight:700}
   .notif-row .s{color:var(--muted);font-size:11px}
   @keyframes notifpulse{0%{transform:scale(1)}30%{transform:scale(1.3) rotate(-10deg)}60%{transform:scale(1.12) rotate(7deg)}100%{transform:scale(1)}}
@@ -399,7 +400,7 @@
   .ne-cust>div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ne-row{cursor:pointer;transition:background .12s}
   .ne-row:hover{background:var(--bg2)}
-  .ne-row.open{background:#fff4ee}
+  .ne-row.open{background:var(--tint-accent)}
   .ne-row .cc{width:44px;color:var(--muted);text-align:center;padding-left:10px}
   .ne-row .cc .caret{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
     border-radius:9px;border:1px solid var(--line);background:var(--card);font-size:18px;line-height:1;
@@ -547,7 +548,7 @@
     display:flex;align-items:center;justify-content:center;font-size:10.5px;
     background:var(--bg2);color:var(--muted)}
   .wiz-tab.done{color:var(--ink)} .wiz-tab.done i{background:#12a1501f;color:#12a150}
-  .wiz-tab.on{color:var(--ink);border-color:#f76808;background:#fff4ee}
+  .wiz-tab.on{color:var(--ink);border-color:#f76808;background:var(--tint-accent)}
   .wiz-tab.on i{background:#f76808;color:#fff}
   .wiz-tab:hover{color:var(--ink)}
   /* the choices that used to scroll out of sight, pinned as one line */
@@ -597,7 +598,7 @@
   #bulkModal.en-pick .az-box{width:min(1180px,96vw);max-width:96vw}
   #bulkModal .poc-row{cursor:pointer}
   #bulkModal .poc-row:hover{background:var(--bg2)}
-  #bulkModal .poc-row.en-on{background:#fff4ee}
+  #bulkModal .poc-row.en-on{background:var(--tint-accent)}
   #bulkModal .poc-row .bt-pin{display:flex;align-items:center;gap:2px}
   .en-list{border:1px solid var(--line);border-radius:11px;background:var(--card);
     max-height:46vh;overflow:auto}
@@ -605,7 +606,7 @@
     border-bottom:1px solid var(--line);cursor:pointer}
   .en-row:last-child{border-bottom:none}
   .en-row:hover{background:var(--bg2)}
-  .en-row.on{background:#fff4ee}
+  .en-row.on{background:var(--tint-accent)}
   .en-row.off{cursor:default;opacity:.55}
   .en-row.off:hover{background:none}
   .en-row>input[type=checkbox]{flex:none;margin-top:3px}
@@ -622,7 +623,7 @@
   .en-cf-r>b:first-child{flex:0 0 118px;font-size:10.5px;color:var(--muted);
     text-transform:uppercase;letter-spacing:.05em}
   .en-warn{border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.55}
-  .en-warn.live{background:#fff4ee;border:1px solid #f7680855}
+  .en-warn.live{background:var(--tint-accent);border:1px solid #f7680855}
   .en-warn.dry{background:var(--bg2);border:1px solid var(--line)}
   @media(max-width:640px){
     #bulkModal.en-pick .az-box{width:calc(100vw - 14px)}
@@ -661,7 +662,7 @@
   .gm-list{padding:6px;max-height:calc(100vh - 210px);overflow:auto}
   .gm-row{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
   .gm-row:hover{background:var(--bg2)}
-  .gm-row.on{background:#fff4ee;border-color:#f7680855}
+  .gm-row.on{background:var(--tint-accent);border-color:#f7680855}
   /* ✅ the cleared folder — closed by default, one click from its contents */
   .gm-fold{display:flex;align-items:center;gap:7px;padding:8px 10px;margin-top:8px;
     border-top:1px solid var(--line);cursor:pointer;font-size:12.5px;user-select:none}
@@ -694,7 +695,7 @@
      squeeze it out of existence — .gm-msgs is the flex:1 that absorbs the change */
   .gm-msgs{flex:1;min-height:120px;overflow:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
   .gm-msg{max-width:82%;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
-  .gm-msg.out{align-self:flex-end;background:#fff4ee;border-color:#f7680833;border-bottom-right-radius:4px}
+  .gm-msg.out{align-self:flex-end;background:var(--tint-accent);border-color:#f7680833;border-bottom-right-radius:4px}
   .gm-msg.in{align-self:flex-start;background:var(--card);border-bottom-left-radius:4px}
   .gm-msg.auto{opacity:.55}
   .gm-msg .gm-meta{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
@@ -740,7 +741,7 @@
   /* v2: sequence builder tree (HubSpot-style) + dashboard */
   .gsq-tree{max-width:640px;margin:0 auto}
   .gsq-step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:11px;align-items:flex-start}
-  .gsq-ic{width:38px;height:38px;border-radius:50%;border:2px solid #f76808;display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto;background:#fff4ee}
+  .gsq-ic{width:38px;height:38px;border-radius:50%;border:2px solid #f76808;display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto;background:var(--tint-accent)}
   .gsq-ic.task{border-color:#12a594;background:#e6f7f4}
   .gsq-mid{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
   .gsq-line{width:2px;height:14px;background:var(--line)}
@@ -800,7 +801,7 @@
   .cf-types{display:grid;grid-template-columns:1fr 1fr;gap:5px}
   .cf-type{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:12.5px;cursor:pointer;text-align:start}
   .cf-type:hover{border-color:#d0d5dd;background:var(--bg2)}
-  .cf-type.on{border-color:var(--accent);background:#fff4ee;font-weight:700}
+  .cf-type.on{border-color:var(--accent);background:var(--tint-accent);font-weight:700}
   .cf-type .cf-ic{width:18px;text-align:center;flex:0 0 auto;color:var(--muted)}
   .cf-cfg{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px}
   .cf-cfg label{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
@@ -840,7 +841,7 @@
   .wf-off .bt-pin b,.wf-off .wf-cols{opacity:.55}
   .wf-row>.bt-pin .caret{flex:none;transition:transform .15s}
   .wf-row:hover>.bt-pin{background:var(--bg2)}
-  .wf-row.wf-openrow,.wf-row.wf-openrow>.bt-pin{background:#fff4ee}
+  .wf-row.wf-openrow,.wf-row.wf-openrow>.bt-pin{background:var(--tint-accent)}
   .wf-openrow>.bt-pin .caret{transform:rotate(90deg);color:var(--accent)}
   .wf-exp{box-sizing:border-box;width:100%;padding:6px 10px 12px;background:#fff9f5;border-bottom:1px solid var(--line)}
   .wf-exp .wf-exp-h{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;margin:8px 0 4px;flex-wrap:wrap}
@@ -848,10 +849,10 @@
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
   /* the pin floats over scrolled content → its background must mirror every
      row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
-  .bt-wrap .po-card.open .po-title>.bt-pin{background:#fff4ee}
+  .bt-wrap .po-card.open .po-title>.bt-pin{background:var(--tint-accent)}
   .bt-wrap .pkg-title-row>.bt-pin{background:var(--bg2)}
   .bt-wrap .pkg-title-row:hover>.bt-pin{background:#efede8}
-  .bt-wrap .pkg.open>.pkg-head>.pkg-title-row>.bt-pin{background:#fff4ee}
+  .bt-wrap .pkg.open>.pkg-head>.pkg-title-row>.bt-pin{background:var(--tint-accent)}
   .bt-wrap .pkg.open>.pkg-head>.pkg-title-row:hover>.bt-pin{background:#ffeadf}
   .bt-wrap .poc-row.lx-tied>.bt-pin{background:var(--bg2);box-shadow:inset 3px 0 0 #f7680866}
   .btscrolled .poc-row.lx-tied>.bt-pin{box-shadow:inset 3px 0 0 #f7680866,6px 0 10px -6px rgba(16,24,40,.28)}
@@ -2352,6 +2353,23 @@ function editCell(el,opts,save,cancel){
   return inp;
 }
 
+// ── The ONE expand/open-state store (UI_AUDIT Batch 7). Every board tracks its
+// open rows/cards through this instead of a hand-rolled Set: `inverted:true`
+// means rows default OPEN and the set remembers the CLOSED ones;
+// `persist:"<key>"` mirrors the set to localStorage. Callers own re-rendering.
+function openStore(opts){
+  const o=opts||{}; let set=new Set();
+  if(o.persist){ try{ set=new Set(JSON.parse(localStorage.getItem(o.persist)||"[]")); }catch(e){} }
+  const save=()=>{ if(o.persist) try{ localStorage.setItem(o.persist,JSON.stringify([...set])); }catch(e){} };
+  return {
+    isOpen:k=>o.inverted?!set.has(k):set.has(k),
+    toggle(k){ set.has(k)?set.delete(k):set.add(k); save(); },
+    open(k){ o.inverted?set.delete(k):set.add(k); save(); },
+    close(k){ o.inverted?set.add(k):set.delete(k); save(); },
+    reset(keys){ set=new Set(keys||[]); save(); },   // replace the raw set wholesale
+  };
+}
+
 function statusSelect(o){
   // editable select, painted like the status pill (STATUS_COLOR) — UI_AUDIT Batch 2
   const [c,bg]=STATUS_COLOR[o.status]||["#555","#eee"];
@@ -2670,13 +2688,13 @@ function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
 // ---- Package prep (تجهيز الطرود): who can we pack & ship right now? --------- //
 // Crosses orders with received PO packages (استلمتها اطلبلي). READY = every live
 // piece in hand; WAITING = part received, part still on the way.
-let PKGPREP=null; const PP_OPEN=new Set();
+let PKGPREP=null; const PP_OPEN=openStore();
 async function loadPkgprep(){
   let d; try{ d=await (await fetch("/api/pkgprep")).json(); }catch(e){ d=null; }
   PKGPREP=d; renderPkgprep();
 }
 function ppToggle(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
-  if(PP_OPEN.has(c.key)) PP_OPEN.delete(c.key); else PP_OPEN.add(c.key); renderPkgprep(); }
+  PP_OPEN.toggle(c.key); renderPkgprep(); }
 function ppCopy(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
   (navigator.clipboard?navigator.clipboard.writeText(c.wa_text):Promise.reject())
     .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
@@ -2805,7 +2823,7 @@ function ppBody(c){
   }).join("");
 }
 function ppCard(c,bucket,i){
-  const open=PP_OPEN.has(c.key);
+  const open=PP_OPEN.isOpen(c.key);
   // Primary action: ask for a review on +972 / +970 (same number, either code).
   const rev=c.wa_review_970
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +972">📱 972</a>
@@ -2843,7 +2861,7 @@ function ppSection(emoji,label,count,sub,tone){
 // photos), the shipped packages (GWD + OTL) and the 📍 location — a DONE
 // customer no longer collapses to a bare name+phone row.
 function ppReviewCard(c,i){
-  const open=PP_OPEN.has(c.key);
+  const open=PP_OPEN.isOpen(c.key);
   const meta=[c.n_orders>1?`${c.n_orders} orders`:"",poEsc(c.phone||"")].filter(Boolean).join(" · ");
   const btns=c.wa_url_970
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +972 برسالة تقييم جاهزة">📱 972</a>
@@ -2956,7 +2974,7 @@ async function catDel(id){
 // ---- Leluxe: Amazon-bulk side business, mirrored live to ClickUp AZ (2) ----- //
 // The editor is rendered FROM the discovered ClickUp schema, so every custom
 // field (all 31) appears without hand-coding — new fields show up after Discover.
-let LX=null, LX_OPEN=new Set(), LX_POLL=null, LX_EDIT=null, LX_FIDS=[];
+let LX=null, LX_OPEN=openStore(), LX_POLL=null, LX_EDIT=null, LX_FIDS=[];
 // Which ClickUp fields to surface first in the editor, per tier (rest go under
 // "All ClickUp fields"). Everything is available on every task (list-level fields).
 const LX_PIN_ORDER=["name","name on packagee","visa","who paid","total amount","brand","card type","az id ver"];
@@ -3241,9 +3259,9 @@ function lxFind(id){
   for(const r of (LX.orphans||[])) if(r.id===id) return r;
   return null;
 }
-let LX_PCOL=new Set();   // collapsed package ids (packages default-open)
-function lxToggle(id){ LX_OPEN.has(id)?LX_OPEN.delete(id):LX_OPEN.add(id); renderLeluxe(); }
-function lxPkgToggle(id){ LX_PCOL.has(id)?LX_PCOL.delete(id):LX_PCOL.add(id); renderLeluxe(); }
+let LX_PCOL=openStore({inverted:true});   // packages default-open — the store remembers the CLOSED ones
+function lxToggle(id){ LX_OPEN.toggle(id); renderLeluxe(); }
+function lxPkgToggle(id){ LX_PCOL.toggle(id); renderLeluxe(); }
 function lxItemsOf(o){ return [...(o.items||[]), ...((o.packages||[]).flatMap(p=>p.items||[]))]; }
 // ---- ClickUp-style filter builder: field · operator · values, rows AND-ed ---- //
 let LX_FILTERS=[];
@@ -3529,13 +3547,12 @@ function lxFilteredOrders(){
   return {orders,orphans};
 }
 function lxExpandAll(open){
-  LX_OPEN.clear();
-  if(open)(LX.orders||[]).forEach(o=>LX_OPEN.add(o.id));
+  LX_OPEN.reset(open?(LX.orders||[]).map(o=>o.id):[]);
   renderLeluxe();   // (expansion only affects the orders sub-view; a plain re-render is always right)
 }
 function lxJumpOrder(id){
   LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
-  LX_OPEN.add(id); renderLeluxe();
+  LX_OPEN.open(id); renderLeluxe();
   const el=document.getElementById("lxo"+id);
   if(el){ el.scrollIntoView({block:"start"}); window.scrollBy(0,-120); }
 }
@@ -3545,7 +3562,7 @@ function lxViewMigrated(){
   LX_ONLY=new Set(LX_LAST_MIGRATED);
   const s=$("lxSearch"); if(s) s.value="";                 // a stale search must not hide them
   LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
-  LX_LAST_MIGRATED.forEach(id=>LX_OPEN.add(id));            // expand each new order
+  LX_LAST_MIGRATED.forEach(id=>LX_OPEN.open(id));            // expand each new order
   renderLeluxe();
   const el=document.getElementById("lxo"+LX_LAST_MIGRATED[0]);
   if(el){ el.scrollIntoView({behavior:"smooth",block:"center"});
@@ -3562,7 +3579,7 @@ function lxGroupSet(key){
 }
 function lxGroupDir(){ LX_GROUP_DIR=LX_GROUP_DIR==="asc"?"desc":"asc";
   try{ localStorage.setItem("lx_group_dir",LX_GROUP_DIR); }catch(e){} renderLeluxe(); }
-function lxGroupToggle(k){ LX_PCOL.has(k)?LX_PCOL.delete(k):LX_PCOL.add(k); renderLeluxe(); }
+function lxGroupToggle(k){ LX_PCOL.toggle(k); renderLeluxe(); }
 function lxGroupLabel(){ const f=lxFdef(LX_GROUP); return f?f.label:"None"; }
 function lxRenderSeparate(){
   const box=$("lxSeparate"); if(!box) return;
@@ -3659,7 +3676,7 @@ function renderLeluxe(){
       return LX_GROUP_DIR==="asc"?c:-c;
     });
     $("lxRows").innerHTML=pcolHead+lxtWrap("p",keys.map(v=>{
-      const gk=`g:${LX_GROUP}:${v}`, collapsed=LX_PCOL.has(gk), rows=groups.get(v);
+      const gk=`g:${LX_GROUP}:${v}`, collapsed=!LX_PCOL.isOpen(gk), rows=groups.get(v);
       return `<div class="pkg${collapsed?"":" open"}"><div class="pkg-head"><div class="pkg-title-row" onclick="lxGroupToggle('${poEsc(gk)}')" style="cursor:pointer">
           <span class="bt-pin"><span class="caret">${collapsed?"▸":"▾"}</span>
           ${lxGroupChip(gfdef,v)}
@@ -4679,7 +4696,7 @@ async function lxGoalBackfill(btn){
   else toast((r2&&r2.error)||"backfill failed");
 }
 function lxCardHtml(o){
-  const open=LX_OPEN.has(o.id), pkgs=o.packages||[], loose=o.items||[];
+  const open=LX_OPEN.isOpen(o.id), pkgs=o.packages||[], loose=o.items||[];
   const nItems=pkgs.reduce((a,p)=>a+(p.items||[]).length,0)+loose.length;
   const amt=lxF(o,"total amount");
   // Purchases-style tracking strip: GWD + live GASH + 🛵 Gerizim + ⏳ deadline + gash date
@@ -4809,9 +4826,9 @@ function lxVisualPkgs(o){
   if(![...groups.keys()].some(Boolean)) return null;   // nothing tracked → flat as before
   return [...groups.entries()].sort((a,b)=>(a[0]?0:1)-(b[0]?0:1)).map(([tn,items])=>({tn,items}));
 }
-function lxVPkgToggle(key){ LX_PCOL.has(key)?LX_PCOL.delete(key):LX_PCOL.add(key); renderLeluxe(); }
+function lxVPkgToggle(key){ LX_PCOL.toggle(key); renderLeluxe(); }
 function lxVPkgHtml(o,g){
-  const key=`v${o.id}:${g.tn}`, collapsed=LX_PCOL.has(key);
+  const key=`v${o.id}:${g.tn}`, collapsed=!LX_PCOL.isOpen(key);
   // pills read from the first enriched product in the group (they carry the GWD)
   const en=g.items.find(r=>r.data&&(r.data.tracking_status||r.data.gerizim_status||r.data.gaash_deadline))||g.items[0];
   const gashDate=g.items.map(it=>lxF(it,"gash date")).find(Boolean);
@@ -4876,7 +4893,7 @@ function lxVPkgHtml(o,g){
 // children PLUS any loose product absorbed by matching tracking) — defaults to
 // the package's own so every other caller is unchanged.
 function lxPkgHtml(o,pk,items){
-  const collapsed=LX_PCOL.has(pk.id);
+  const collapsed=!LX_PCOL.isOpen(pk.id);
   items=items||pk.items||[];
   const tn=lxPkgTn(pk);
   // an absorbed shell is often empty — fall back to the products for the pills
@@ -5342,9 +5359,9 @@ async function lxSave(btn){
   const isNew=!LX_EDIT.id;
   LX_EDIT.id=r.row.id;
   // keep the affected branch expanded so the new/edited row stays visible
-  if(r.row.kind==="order"||r.row.kind==="parent") LX_OPEN.add(r.row.id);
+  if(r.row.kind==="order"||r.row.kind==="parent") LX_OPEN.open(r.row.id);
   else if(r.row.parent_local_id){ const par=lxFind(r.row.parent_local_id);
-    LX_OPEN.add(r.row.parent_local_id); if(par&&par.parent_local_id) LX_OPEN.add(par.parent_local_id); }
+    LX_OPEN.open(r.row.parent_local_id); if(par&&par.parent_local_id) LX_OPEN.open(par.parent_local_id); }
   // order-level tracking number → auto-fill every loose product that has none
   // (products with their own number keep it — that's how multi-package splits work)
   if((r.row.kind==="order"||r.row.kind==="parent")&&payload.fields){
@@ -6548,7 +6565,7 @@ function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
 let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="all";
 let NE_COLL=new Set(JSON.parse(localStorage.getItem("ne_coll")||'["incart","ordered","deleted"]'));
-let NE_OPEN=new Set();   // order_ids whose product sub-rows are expanded
+let NE_OPEN=openStore();   // order_ids whose product sub-rows are expanded
 let NE_CART_SEL=new Set();   // To-order rows ticked to move into the cart
 function neCartToggle(id,on){ on?NE_CART_SEL.add(id):NE_CART_SEL.delete(id); neCartBar(); }
 function neCartBar(){
@@ -6572,7 +6589,7 @@ function neRowToggle(id){
   const det=$("nedet_"+id), row=$("nerow_"+id); if(!det||!row) return;
   const open=det.style.display==="none";
   det.style.display=open?"":"none"; row.classList.toggle("open",open);
-  open?NE_OPEN.add(id):NE_OPEN.delete(id);
+  open?NE_OPEN.open(id):NE_OPEN.close(id);
 }
 async function loadNeedOrder(){
   let d;
@@ -6671,7 +6688,7 @@ function neLocEdit(el,oid,fldKey){
   },renderNeedOrder);
 }
 function neRowHtml(o,kind){
-  const oid=o.order_id, isOpen=NE_OPEN.has(oid), items=o.items||[];
+  const oid=o.order_id, isOpen=NE_OPEN.isOpen(oid), items=o.items||[];
   // 1 product → thumbnail + title; 2+ → a strip of thumbnails (hover shows each name) + count.
   const neThumb=it=>it.image?`<img src="${poEsc(it.image)}" title="${poEsc(it.title||it.asin||'')}">`:`<div class="noimg" title="${poEsc(it.title||it.asin||'')}"></div>`;
   let prodCell;
@@ -7506,7 +7523,7 @@ async function saveSettings(b){
 }
 
 let POS=null, PO_MONEY=true, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
-let PO_COLLAPSED=new Set(JSON.parse(localStorage.getItem("po_collapsed")||"[]"));
+let PO_COLLAPSED=openStore({inverted:true, persist:"po_collapsed"});
 let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function importClickup(btn){
@@ -7829,8 +7846,8 @@ function poWho(p){ const c=[...new Set((p.packages||[]).flatMap(pk=>(pk.items||[
   const m=(p.ship_to||'').trim();
   return c.length===1?c[0]:(c.length>1?(m?`${m} · ${c.length} customers`:`${c.length} customers`):(m||'')); }
 function poKey(po,pkg){ return pkg!=null?`pkg:${po}:${pkg}`:`po:${po}`; }
-function poToggle(k){ PO_COLLAPSED.has(k)?PO_COLLAPSED.delete(k):PO_COLLAPSED.add(k); localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
-function poCollapseAll(on){ PO_COLLAPSED=new Set(); if(on){ POS.forEach(p=>{PO_COLLAPSED.add(poKey(p.po_id)); (p.packages||[]).forEach(pk=>PO_COLLAPSED.add(poKey(p.po_id,pk.package_no)));}); } localStorage.setItem("po_collapsed",JSON.stringify([...PO_COLLAPSED])); renderPurchases(); }
+function poToggle(k){ PO_COLLAPSED.toggle(k); renderPurchases(); }
+function poCollapseAll(on){ const keys=[]; if(on){ POS.forEach(p=>{keys.push(poKey(p.po_id)); (p.packages||[]).forEach(pk=>keys.push(poKey(p.po_id,pk.package_no)));}); } PO_COLLAPSED.reset(keys); renderPurchases(); }
 function poFind(id){ return POS.find(p=>p.po_id===id); }
 function poSave(po){ clearTimeout(poSaveTimers[po.po_id||'new']); poSaveTimers[po.po_id||'new']=setTimeout(async()=>{
   const r=await post("/api/purchase",po);
@@ -9496,7 +9513,7 @@ function poTn4(t,fs){
   return `<b class="mono" title="${poEsc(t)}" style="color:var(--ink);font-weight:600${sz}">${poEsc(t.slice(0,-4))}<span style="font-weight:800">${poEsc(t.slice(-4))}</span></b>`;
 }
 function poPkgHtml(p,pk,pi){
-  const k=poKey(p.po_id,pk.package_no), collapsed=PO_COLLAPSED.has(k);
+  const k=poKey(p.po_id,pk.package_no), collapsed=!PO_COLLAPSED.isOpen(k);
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
   const gaash=(pk.tracking_number||'').trim();
   const menu=popMenu([
@@ -12839,7 +12856,7 @@ function gmStepEdit(i){
   }
   const tpls=(GM.ov&&GM.ov.templates)||[];
   bulkOpen(T("اختر القالب · Pick the template"));
-  $("bulkBody").innerHTML=tpls.map(t=>`<button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:6px 0${t.id===st.template_id?";background:#fff4ee":""}" onclick="GM.edit.steps[${i}].template_id='${t.id}';bulkClose();gmRenderBuilder()"><b>${poEsc(t.name)}</b><span class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis">${poEsc(t.subject_tpl||"")}</span></button>`).join("")
+  $("bulkBody").innerHTML=tpls.map(t=>`<button class="fld-row" style="border:1px solid var(--line);border-radius:10px;margin:6px 0${t.id===st.template_id?";background:var(--tint-accent)":""}" onclick="GM.edit.steps[${i}].template_id='${t.id}';bulkClose();gmRenderBuilder()"><b>${poEsc(t.name)}</b><span class="muted2" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis">${poEsc(t.subject_tpl||"")}</span></button>`).join("")
     ||`<div class="muted2">${T("لا قوالب · no templates")}</div>`;
   $("bulkFoot").innerHTML=`<button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>`;
 }
