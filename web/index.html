@@ -1973,6 +1973,11 @@
 
 <script>
 let DATA = null;
+// ── PILL POLICY (UI_AUDIT.md) ── every status/tag pill must reuse an existing
+// helper: statusPill (order statuses, colors below) · lxStatusPill / lxCfPill
+// (ClickUp vocab) · tonePill / hexPill / solidPill (generic tones). NEVER
+// hand-roll a new `<span class="pill" style="…">` or invent pill CSS in new
+// code — legacy raw pills migrate batch-by-batch (UI_AUDIT.md Batch 4).
 const STATUS_COLOR = {
   REQUESTED:["#6b7280","#f3f4f6"], QUOTED:["#0891b2","#e0f2fe"], IN_CART:["#b45309","#fef3c7"],
   ORDERED:["#6366f1","#eef2ff"], SHIPPED:["#0ea5e9","#e0f2fe"],
@@ -2321,6 +2326,43 @@ function renderSummary(){
 
 function statusPill(s){const[c,bg]=STATUS_COLOR[s]||["#555","#eee"];
   return `<span class="pill" style="color:${c};background:${bg};border-color:${c}33">${s}</span>`;}
+
+// ── Shared meta-strip label field (UI_AUDIT.md Batch 1) — the one `fld()`.
+// Renders `<span class="field"><span class="lbl">…</span><span class="v">…</span></span>`
+// inside any .po-meta/.poc-meta/.ne-meta strip. Was duplicated per-view.
+const fld=(lbl,val,style='')=>`<span class="field"><span class="lbl">${lbl}</span><span class="v"${style?` style="${style}"`:''}>${val}</span></span>`;
+
+// ── The canonical replace-node inline edit (UI_AUDIT.md Batch 1) — ONE
+// implementation of the recipe poCfEdit/poPkgDueEdit/gmNameIdEdit/ppLocEdit
+// each hand-rolled. Swaps `el` for a focused <input>; blur or Enter commits
+// via save(value), Escape cancels via cancel(). The callbacks own their own
+// re-render; the helper owns only the input mechanics. opts:
+//   value/type/placeholder — input basics (type default text)
+//   props    — extra input properties to assign (step/min/max…)
+//   width    — css width ("" = none; default "100%"), minWidth (default 64px)
+//   fill     — true: empty `el` and mount INSIDE it instead of replaceWith
+//              (for anchors other code re-finds by class, e.g. .gmCandId)
+//   select   — true: select() the value after focus
+function editCell(el,opts,save,cancel){
+  const o=opts||{};
+  const inp=document.createElement("input");
+  if(o.type) inp.type=o.type;
+  if(o.placeholder) inp.placeholder=o.placeholder;
+  Object.assign(inp,o.props||{});
+  inp.value=o.value==null?"":o.value;
+  inp.style.cssText=(o.width===""?"":`width:${o.width||"100%"};`)+
+    `min-width:${o.minWidth||"64px"};font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff`;
+  inp.onclick=e=>e.stopPropagation();
+  let done=false;
+  inp.onblur=()=>{ if(done) return; done=true; save(inp.value); };
+  inp.onkeydown=e=>{
+    if(e.key==="Enter") inp.blur();
+    if(e.key==="Escape"){ if(done) return; done=true; cancel&&cancel(); }
+  };
+  if(o.fill){ el.innerHTML=""; el.appendChild(inp); } else el.replaceWith(inp);
+  inp.focus(); if(o.select) inp.select();
+  return inp;
+}
 
 function statusSelect(o){
   return `<select class="statussel" onchange="setStatus('${o.order_id}',this.value)">`+
@@ -2681,23 +2723,17 @@ function ppLocFld(c,bucket,i,fld,lbl){
   const edit=CAN_EDIT?` style="cursor:text;border-bottom:1px dashed var(--line)" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();ppLocEdit(this,'${bucket}',${i},'${fld}')"`:"";
   return `<span class="field"><span class="lbl">${lbl}</span><b${edit}>${val?poEsc(val):"—"}</b></span>`;
 }
-function ppLocEdit(el,bucket,i,fld){
+function ppLocEdit(el,bucket,i,fldKey){
   const c=((PKGPREP||{})[bucket]||[])[i]; if(!c||!CAN_EDIT) return;
-  const cur=c[fld]||"";
-  const inp=document.createElement("input");
-  inp.value=cur; inp.placeholder=fld==="city"?"المدينة · city":"العنوان · address";
-  inp.style.cssText="min-width:110px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
-  inp.onclick=e=>e.stopPropagation();
-  let done=false;
-  const save=async()=>{ if(done) return; done=true;
-    const v=inp.value.trim();
+  const cur=c[fldKey]||"";
+  editCell(el,{value:cur,width:"",minWidth:"110px",
+    placeholder:fldKey==="city"?"المدينة · city":"العنوان · address"},async v=>{
+    v=v.trim();
     if(v===cur){ renderPkgprep(); return; }
-    const body={}; body[fld]=v;
+    const body={}; body[fldKey]=v;
     for(const o of (c.orders||[])) await post("/api/order/edit",Object.assign({order_id:o.order_id},body));
-    c[fld]=v; toast("📍 حُفظ ✓"); renderPkgprep(); };
-  inp.onblur=save;
-  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPkgprep(); } };
-  el.replaceWith(inp); inp.focus();
+    c[fldKey]=v; toast("📍 حُفظ ✓"); renderPkgprep();
+  },renderPkgprep);
 }
 // Shared meta-strip fields (pieces, money, 📍 location) — one builder for the
 // ready/waiting cards AND the 📸 review cards, so DONE customers keep the
@@ -6479,7 +6515,6 @@ function neRowHtml(o,kind){
   else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
     ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا · remove permanently" onclick="event.stopPropagation();nePurge('${poEsc(o.trash_id)}','${nm}')">✕</button>`:''}`;
   // detail: customer info as a labelled meta strip (consistent with the order card), then the products
-  const fld=(lbl,val,style='')=>`<span class="field"><span class="lbl">${lbl}</span><span class="v"${style?` style="${style}"`:''}>${val}</span></span>`;
   const bits=[fld('Phone',`<span class="mono">${poEsc((o.phones&&o.phones.length?o.phones.join(' · '):o.phone)||'—')}</span>`)];
   if(o.id_number) bits.push(fld('🪪 هوية · ID',`<span class="mono">${poEsc(o.id_number)}</span>`,'font-weight:700'));
   if(o.city) bits.push(fld('City',poEsc(o.city)));
@@ -7563,12 +7598,9 @@ function poPkgDueCell(p,pk,pi){
 }
 function poPkgDueEdit(el,poId,pi){
   const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
-  const inp=document.createElement("input"); inp.type="date"; inp.value=(poPkgDue(pk)||"").slice(0,10);
-  inp.style.cssText="width:100%;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
-  inp.onclick=e=>e.stopPropagation(); let done=false;
-  const save=()=>{ if(done) return; done=true; pk.due_date=(inp.value||"").trim()||null; poSave(p); renderPurchases(); };
-  inp.onblur=save; inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPurchases(); } };
-  el.replaceWith(inp); inp.focus();
+  editCell(el,{type:"date",value:(poPkgDue(pk)||"").slice(0,10),minWidth:"120px"},v=>{
+    pk.due_date=(v||"").trim()||null; poSave(p); renderPurchases();
+  },renderPurchases);
 }
 async function poEstimateAll(btn){
   if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
@@ -8248,7 +8280,6 @@ function poRenderCustomers(mount,list){
     // Line 2 — the contact strip (two-tier header, same idea as .po-title/.po-meta).
     // Always rendered, open or collapsed, so phones/addresses are scannable.
     const inf=cust===NOCUST?null:poCustInfo(cust,ords);
-    const fld=(lbl,val,style='')=>`<span class="field"><span class="lbl">${lbl}</span><span class="v"${style?` style="${style}"`:''}>${val}</span></span>`;
     let meta="";
     {
       // the counts live here rather than in the pin — the pin is fixed-width and
@@ -8365,23 +8396,20 @@ function poCfEdit(el,poId,key){
     box.onclick=e=>{ e.stopPropagation(); const r=e.target.dataset.r; if(r==null) return; poCfSet(poId,key,+r?+r:""); };
     el.replaceWith(box); return;
   }
-  const inp=document.createElement("input");
-  inp.type=f.type==="number"||f.type==="money"||f.type==="progress"?"number"
-    :f.type==="date"?(f.include_time?"datetime-local":"date")
-    :f.type==="email"?"email":f.type==="url"?"url":f.type==="phone"?"tel":"text";
-  if(f.type==="money"||f.type==="number") inp.step=f.precision?String(1/Math.pow(10,f.precision)):"1";
-  if(f.type==="progress"){ inp.min=f.min||0; inp.max=(f.max||100); }
-  inp.value=(cur==null?"":cur);
-  inp.style.cssText="width:100%;min-width:64px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
-  inp.onclick=e=>e.stopPropagation();
-  let done=false;
-  const save=()=>{ if(done) return; done=true;
-    let v=String(inp.value||"").trim();
+  const props={};
+  if(f.type==="money"||f.type==="number") props.step=f.precision?String(1/Math.pow(10,f.precision)):"1";
+  if(f.type==="progress"){ props.min=f.min||0; props.max=(f.max||100); }
+  editCell(el,{
+    value:(cur==null?"":cur),
+    type:f.type==="number"||f.type==="money"||f.type==="progress"?"number"
+      :f.type==="date"?(f.include_time?"datetime-local":"date")
+      :f.type==="email"?"email":f.type==="url"?"url":f.type==="phone"?"tel":"text",
+    props
+  },v=>{
+    v=String(v||"").trim();
     if(v!==""&&(f.type==="number"||f.type==="money"||f.type==="progress")) v=parseFloat(v)||0;
-    poCfSet(poId,key,v); };
-  inp.onblur=save;
-  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPurchases(); } };
-  el.replaceWith(inp); inp.focus();
+    poCfSet(poId,key,v);
+  },renderPurchases);
 }
 // dropdown / labels value picker — colored option rows in a pop-menu at the cell
 function poCfPickOpen(el,poId,f,cur){
@@ -11688,14 +11716,10 @@ function gmNameIdEdit(el,gwd,fallbackName){
     });
   };
   const before=idOf(name);
-  const inp=document.createElement("input");
-  inp.value=before; inp.placeholder=T("رقم الهوية · ID number");
-  inp.style.cssText="width:100%;min-width:64px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
-  inp.onclick=e=>e.stopPropagation();
-  let done=false;
-  const save=async()=>{
-    if(done) return; done=true;
-    const v=(inp.value||"").trim();
+  // fill (not replace): repaint finds rows by the .gmCandId anchor class, and
+  // replaceWith would delete this row's anchor
+  editCell(el,{value:before,placeholder:T("رقم الهوية · ID number"),fill:true,select:true},async v=>{
+    v=(v||"").trim();
     if(v===before){ repaint(); return; }
     const r=await post("/api/gaash/name_id",{name,id_number:v});
     if(!r||!r.ok){ toast("⚠ "+((r&&r.error)||"could not save")); repaint(); return; }
@@ -11705,12 +11729,7 @@ function gmNameIdEdit(el,gwd,fallbackName){
     GM.ov.settings.name_ids=m2;
     toast(v?`🪪 ${poEsc(r.name)} → ${poEsc(v)}`:T("أُزيلت الهوية · ID cleared"));
     repaint();
-  };
-  inp.onblur=save;
-  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; repaint(); } };
-  // put the input INSIDE the .gmCandId anchor instead of replacing it — repaint
-  // finds rows by that class, and replaceWith would delete this row's anchor
-  el.innerHTML=""; el.appendChild(inp); inp.focus(); inp.select();
+  },repaint);
 }
 function gmNewGwds(){
   const set=new Set([...(GM.enrollSel||[])]);
