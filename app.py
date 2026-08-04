@@ -1318,6 +1318,18 @@ def api_customer():
                       city=b.get("city", ""), vip=bool(b.get("vip")),
                       notes=b.get("notes", ""),
                       payment_method=b.get("payment_method", "Cash on delivery"))
+    # MERGE guard: db.upsert_customer replaces data_json wholesale, so a profile
+    # save that omits fields (the edit form has no ID inputs; board inline edits
+    # post the record as-is) must never wipe what's already on file — keep the
+    # existing customer_id/created_at and any stored ID image/number.
+    existing = next((x for x in db.list_customers()
+                     if x.get("match_key") and x.get("match_key") == c.get("match_key")), None)
+    if existing:
+        c["customer_id"] = existing.get("customer_id") or c["customer_id"]
+        c["created_at"] = existing.get("created_at", c["created_at"])
+        for keep in ("id_image", "id_number"):
+            if existing.get(keep) and not c.get(keep):
+                c[keep] = existing[keep]
     db.upsert_customer(c)
     db.audit(auth.actor(), "save_customer", "customer", c["customer_id"], "")
     activity.log("set", "customer", c["customer_id"], c.get("name") or c["customer_id"],

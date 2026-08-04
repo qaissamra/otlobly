@@ -34,10 +34,10 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | Package prep done/review (`ppReviewCard` :2726) | ❌ | 🟡 title only | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ❌→✅ **Batch 0** | ✅ | ❌ | ❌→✅ **Batch 0** (backend stripped everything — pkgprep.py:300-304 `_make_review_card`) |
 | Leluxe orders/products (`renderLeluxe` :3447) | 🟡 `lxStatusPill` (correct for ClickUp) | ✅ `.pkg-head` | 🟡 | ✅ `lxThumbs` | ✅ GWD / ❌ OTL | ❌ (AZ world — n/a mostly) | ✅ | ✅ `""`/`p` | ✅ modal + selects |
 | Leluxe packages (`lxRenderPackages` :4007) | 🟡 | ✅ | 🟡 | ✅ | ✅ GWD | n/a | ✅ | ✅ `k` | ✅ |
-| To-order (`neRowHtml` :6399) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | 🟡 detail only | ✅ | 🟡 own resize only | ✅ |
+| To-order (`neRowHtml`) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | ✅ 📍 editable in detail *(Batch 6)* | ✅ | 🟡 own resize only | ✅ + location `editCell` |
 | Orders (`render`, LXT table `"od"`) | ✅ pill-colored `statusSelect` | ✅ board (pin + columns) | n/a | ❌ (asin links only) | ✅ order `tracking_number` col | ✅ 📍 city+addr editable | ✅ | ✅ `od` *(Batch 2)* | ✅ onchange + `editCell` |
 | Brain (`renderBrain`) | ✅ (audited Batch 5: uses shared `qchip`, no raw pills) | n/a dashboard tiles (`.panel` idiom) | ❌ | ❌ | n/a | n/a | ✅ `minibtn` | n/a | n/a |
-| Customers (LXT `"cu"`) | ✅ | ✅ board *(Batch 3)* | 🟡 `.kv` panel | ❌ | n/a | ✅ city col + profile | ✅ | ✅ `cu` | 🟡 panel (board inline-edit deferred — /api/customer upsert semantics need review first) |
+| Customers (LXT `"cu"`) | ✅ | ✅ board *(Batch 3)* | 🟡 `.kv` panel | ❌ | n/a | ✅ 📍 city editable on board *(Batch 6)* | ✅ | ✅ `cu` | ✅ board city `editCell` + ★ VIP toggle + panel form *(Batch 6 — /api/customer now MERGE-guards, fixing a latent bug where any profile save wiped the stored ID number/image)* |
 | Deposits (LXT `"dp"`) | ✅ | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | ❌ | ✅ | ✅ `dp` | n/a ledger (delete only) |
 | In cart (LXT `"ic"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 30px thumbs | n/a | n/a | ✅ | ✅ `ic` | ✅ cost input |
 | Catalog (LXT `"ct"`) | 🟡 | ✅ board *(Batch 3)* | ❌ | ✅ 34px in pin | n/a | n/a | 🟡 `.minibtn` | ✅ `ct` | ✅ onchange in cells |
@@ -117,7 +117,19 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   gzCuChip/pkgDocsPill/pkgDeadlinePill), a STATUS_COLOR-map exception pill,
   a bare default `.pill` count, or the policy comment itself. The pill layer
   is DONE — new raw pills are a review flag.
-- [ ] **Batch 6 — editability sweep**: audit every ❌/🟡 in the "Editable
-  fields" column; wire the shared inline-edit helper + endpoints.
+- [x] **Batch 6 — editability sweep** *(shipped 2026-08-04)*:
+  **(a) Latent data-loss bug fixed**: `/api/customer` rebuilt the record from
+  posted fields and `db.upsert_customer` replaces `data_json` wholesale — any
+  ✎ profile save silently wiped the stored `id_number`/`id_image` and re-keyed
+  `customer_id`. The endpoint now MERGE-guards against the existing record
+  (locked by 4 new checks in test_customer_id.py).
+  **(b) Customers board**: 📍 city inline-editable via `editCell` + ★/☆ VIP
+  click-to-toggle (gated `manage_customers`; client posts the full record —
+  safe with the guard).
+  **(c) To-order detail**: 📍 City/Address editable via `editCell` →
+  `/api/order/edit` (`neLocCell`/`neLocEdit` — same field Orders board +
+  Package prep edit).
+  Intentionally NOT editable (ledger/derived): Deposits rows, spent/orders
+  counts, Bulk search, P&L, Brain, order `due` (computed est_delivery_customer).
 - [ ] **Batch 7 — expand-state + open-CSS unification** (low priority, pure
   refactor).

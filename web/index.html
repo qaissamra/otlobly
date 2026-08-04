@@ -6647,6 +6647,29 @@ function neColReset(key){ delete NE_COLW[key]; localStorage.setItem("ne_colw",JS
   document.querySelectorAll(`.ne-tbl col[data-col="${key}"]`).forEach(c=>c.style.width=def>0?def+"px":""); }
 // One order = a clickable summary <tr> + a hidden detail <tr> (products as sub-rows).
 // kind ∈ 'pending' | 'ordered' | 'deleted'.
+// 📍 customer city/address on the To-order detail, editable in place (same
+// field the Orders board + Package prep cards edit) — /api/order/edit.
+function neLocCell(o,fldKey){
+  const v=o[fldKey]||"";
+  if(!CAN_EDIT) return v?poEsc(v):"";
+  return `<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();neLocEdit(this,'${o.order_id}','${fldKey}')">${v?poEsc(v):"—"}</span>`;
+}
+function neLocEdit(el,oid,fldKey){
+  if(!CAN_EDIT) return;
+  const rows=[...((NE_DATA||{}).orders||[]),...((NE_DATA||{}).ordered||[]),
+              ...((NE_DATA||{}).in_cart||[]),...((NE_DATA||{}).deleted||[])];
+  const o=rows.find(x=>x.order_id===oid); if(!o) return;
+  const cur=o[fldKey]||"";
+  editCell(el,{value:cur,width:"",minWidth:"84px",
+    placeholder:fldKey==="city"?"المدينة · city":"العنوان · address"},async v=>{
+    v=v.trim();
+    if(v===cur){ renderNeedOrder(); return; }
+    const body={order_id:oid}; body[fldKey]=v;
+    const r=await post("/api/order/edit",body);
+    if(r&&r.ok){ o[fldKey]=v; toast("📍 حُفظ ✓"); } else toast("⚠ "+((r&&r.error)||"failed"));
+    renderNeedOrder();
+  },renderNeedOrder);
+}
 function neRowHtml(o,kind){
   const oid=o.order_id, isOpen=NE_OPEN.has(oid), items=o.items||[];
   // 1 product → thumbnail + title; 2+ → a strip of thumbnails (hover shows each name) + count.
@@ -6679,8 +6702,9 @@ function neRowHtml(o,kind){
   // detail: customer info as a labelled meta strip (consistent with the order card), then the products
   const bits=[fld('Phone',`<span class="mono">${poEsc((o.phones&&o.phones.length?o.phones.join(' · '):o.phone)||'—')}</span>`)];
   if(o.id_number) bits.push(fld('🪪 هوية · ID',`<span class="mono">${poEsc(o.id_number)}</span>`,'font-weight:700'));
-  if(o.city) bits.push(fld('City',poEsc(o.city)));
-  if(o.address) bits.push(fld('Address',poEsc(o.address)));
+  const cityBit=neLocCell(o,'city'), addrBit=neLocCell(o,'address');
+  if(cityBit) bits.push(fld('📍 City',cityBit));
+  if(addrBit) bits.push(fld('Address',addrBit));
   if(o.payment_plan) bits.push(fld('الخطة · Plan', o.payment_plan==="prepaid"?"💰 دفع مسبق — 0% عمولة":"🛡️ زيرو ريسك — عربون + الباقي عند الاستلام"));
   if(o.deposit_usd>0) bits.push(fld('عربون · Deposit',`${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}`,'color:#15803d;font-weight:700'));
   if(kind==="ordered"&&o.amazon_order_number) bits.push(fld('Amazon #',`<span class="mono">${poEsc(o.amazon_order_number)}</span>`));
@@ -9919,6 +9943,32 @@ async function loadCustomers(){ const r=await fetch("/api/customers"); CUST=awai
   CUSTSUB="list"; $("custGrid").style.display="grid"; $("custGallery").classList.add("hidden");
   $("idToggleBtn").textContent="🪪 View IDs"; renderCustomers(); }
 function fillPayments(){ $("c_payment").innerHTML=(CUST.payment_methods||[]).map(p=>`<option>${p}</option>`).join(""); }
+// board inline edits (UI_AUDIT Batch 6): safe because /api/customer now MERGE-
+// guards server-side (keeps stored ID image/number + customer_id) — the client
+// posts the full record with just the edited field changed.
+function cuCanEdit(){ return (typeof ME==='undefined'||!ME) ? true
+  : (ME.local || (ME.perms&&ME.perms.includes('manage_customers'))); }
+async function cuSave(c,patch){
+  const body=Object.assign({name:c.name||"",whatsapp:c.whatsapp||"",email:c.email||"",
+    address:c.address||"",city:c.city||"",vip:!!c.vip,notes:c.notes||"",
+    payment_method:c.payment_method||"Cash on delivery"},patch);
+  const r=await post("/api/customer",body);
+  if(r&&r.ok){ Object.assign(c,patch); toast("✓ حُفظ"); } else toast("⚠ "+((r&&r.error)||"failed"));
+  renderCustomers();
+}
+function cuCityEdit(el,cid){
+  if(!cuCanEdit()) return;
+  const c=CUST.customers.find(x=>x.customer_id===cid); if(!c) return;
+  const cur=c.city||"";
+  editCell(el,{value:cur,width:"",minWidth:"84px",placeholder:"المدينة · city"},v=>{
+    v=v.trim(); if(v===cur){ renderCustomers(); return; } cuSave(c,{city:v});
+  },renderCustomers);
+}
+function cuVipToggle(cid){
+  if(!cuCanEdit()) return;
+  const c=CUST.customers.find(x=>x.customer_id===cid); if(!c) return;
+  cuSave(c,{vip:!c.vip});
+}
 function cuSortVal(c,k){
   switch(k){
     case "city":   return String(c.city||"");
@@ -9939,11 +9989,15 @@ function renderCustomers(){
     const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(c.name)||'—'}</b> <span class="mono" style="color:var(--muted);font-size:10.5px">${poEsc(c.whatsapp)||''}</span></span></div>`;
     return `<div class="poc-row" style="cursor:pointer" onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;showProfile('${c.customer_id}')">${pin}${lxtCells("cu",{
-      city:   poEsc(c.city)||"—",
+      city:   cuCanEdit()
+        ?`<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
+        :(poEsc(c.city)||"—"),
       orders: `<b>${c.order_count}</b>`,
       spent:  `<b class="amt">${money(c.total_spent_usd)}</b>`,
       idnum:  `<span title="${c.id_image?'ID on file':'no ID uploaded'}" style="color:${c.id_image?'inherit':'var(--muted)'}">${c.id_image?'🪪':'—'}</span>`,
-      vip:    c.vip?'★':'',
+      vip:    cuCanEdit()
+        ?`<span style="cursor:pointer" title="VIP — اضغط للتبديل · click to toggle" onclick="event.stopPropagation();cuVipToggle('${c.customer_id}')">${c.vip?'★':'☆'}</span>`
+        :(c.vip?'★':''),
     })}</div>`;}).join("");
   const totals=`<div class="poc-row bt-total">
       <div class="bt-pin">Σ ${rows.length} ${T("عميل · customers")}</div>
