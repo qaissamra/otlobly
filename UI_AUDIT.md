@@ -35,7 +35,7 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | Leluxe orders/products (`renderLeluxe` :3447) | 🟡 `lxStatusPill` (correct for ClickUp) | ✅ `.pkg-head` | 🟡 | ✅ `lxThumbs` | ✅ GWD / ❌ OTL | ❌ (AZ world — n/a mostly) | ✅ | ✅ `""`/`p` | ✅ modal + selects |
 | Leluxe packages (`lxRenderPackages` :4007) | 🟡 | ✅ | 🟡 | ✅ | ✅ GWD | n/a | ✅ | ✅ `k` | ✅ |
 | To-order (`neRowHtml` :6399) | ✅ | 🟡 table-row variant (`.ne-meta`) | ✅ `fld()` | ✅ | 🟡 | 🟡 detail only | ✅ | 🟡 own resize only | ✅ |
-| Orders (`render` :2365) | 🟡 `statusSelect` | ❌ plain table | ❌ | ❌ | ❌ | ❌ | 🟡 | ❌ | ✅ onchange inputs |
+| Orders (`render`, LXT table `"od"`) | ✅ pill-colored `statusSelect` | ✅ board (pin + columns) | n/a | ❌ (asin links only) | ✅ order `tracking_number` col | ✅ 📍 city+addr editable | ✅ | ✅ `od` *(Batch 2)* | ✅ onchange + `editCell` |
 | Brain (`renderBrain` :5837) | 🟡 raw pills | ❌ bespoke tiles | ❌ | ❌ | n/a | n/a | 🟡 | n/a | n/a |
 | Customers (`renderCustomers` :9671) | 🟡 | ❌ plain table | 🟡 `.kv` panel | ❌ | n/a | ✅ profile panel | 🟡 `.minibtn` | ❌ | 🟡 panel only |
 | Deposits (`renderDeposits` :5727) | ✅ | ❌ plain table | ❌ | ❌ | n/a | ❌ | 🟡 | ❌ | ❌ |
@@ -71,9 +71,14 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   the replace-node inline-edit recipe — `poCfEdit` (typed branch), `poPkgDueEdit`,
   `gmNameIdEdit` (fill mode) and `ppLocEdit` all migrated; pill policy comment
   sits above `STATUS_COLOR`. New code must use these three.
-- [ ] **Batch 2 — Orders view**: plain table → LXT table (follow the "bs"
-  checklist in the skill §2), `statusSelect` stays (editable) but pill-colored;
-  add OTL/GWD + location columns; inline edit via shared helper.
+- [x] **Batch 2 — Orders view** *(shipped 2026-08-04)*: plain table → LXT table
+  **`"od"`** (pin = checkbox + order # + customer + phone; 13 columns; resize/
+  drag-reorder/⊕ hide/sort/right-click menu all live). `statusSelect` pill-colored
+  via STATUS_COLOR; 📍 city (new in report.py `_row`) + address columns editable
+  via `editCell`/`odLocEdit`; order `tracking_number` column added; totals as a
+  `bt-total` row; bulk-select kept (select-all moved to the toolbar). Per-order
+  GWD (GAASH parcel number) deferred — needs a purchases-scan attach server-side;
+  fold into a later batch.
 - [ ] **Batch 3 — Customers / Deposits / Catalog / In cart / Trash / Team**:
   plain tables → LXT; editable cells via shared helper.
 - [ ] **Batch 4 — GAASH mail pill cleanup**: replace raw pills with
