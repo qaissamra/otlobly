@@ -435,7 +435,7 @@
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
   .lx-cols{display:grid;grid-template-columns:var(--lxgrid,78px 100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 104px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3236,16 +3236,18 @@ function lxThumb(url,size){ size=size||44;
 // split across packages) merge into a single thumb with a ×N badge, so the same
 // picture never paints twice. Photo-less products still get one empty box each
 // (= product exists but no ASIN yet). Click a slot to open that product's editor.
-function lxThumbs(items){
+function lxThumbs(items,max){
   items=items||[]; if(!items.length) return "";
   const seen=new Map(), uniq=[];
   items.forEach(it=>{ const img=lxAmz(it), prev=img?seen.get(img):null;
     if(prev){ prev.n++; prev.names.push(lxShort3(it.name)); }
     else{ const u={it,img,n:1,names:[lxShort3(it.name)]}; uniq.push(u); if(img) seen.set(img,u); } });
-  const max=8, shown=uniq.slice(0,max), extra=uniq.length-shown.length;
+  // Purchases parity (owner preference): the shared .po-thumbs img rule sizes
+  // these 32×32 and we cap at 4 + "+K", exactly like poThumbStrip.
+  max=max||4;
+  const shown=uniq.slice(0,max), extra=uniq.length-shown.length;
   const cell=u=>{
-    const inner=u.img?`<img src="${poEsc(u.img)}" style="width:26px;height:26px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff">`
-      :`<span style="width:26px;height:26px;border-radius:6px;border:1px dashed var(--line);background:var(--bg2);display:inline-block"></span>`;
+    const inner=u.img?`<img src="${poEsc(u.img)}">`:`<span class="noimg"></span>`;
     const tip=u.img?(u.n>1?`×${u.n} · `:"")+u.names.join(" · "):"no image — click to add an ASIN";
     return `<span title="${poEsc(tip)}" style="cursor:pointer;display:inline-flex;position:relative;flex:0 0 auto" onclick="event.stopPropagation();lxOpenEditor('item',${u.it.id},null)">${inner}${u.n>1?`<span class="xn">×${u.n}</span>`:""}</span>`;
   };
@@ -3316,7 +3318,7 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 const LX_TABLES={
   "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows", mins:{1:84}},
   "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows", mins:{2:84}},
-  "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows", mins:{}},
+  "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows", mins:{3:84}},
   "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
   "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree", mins:{7:84}},
   "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
@@ -3781,7 +3783,7 @@ const LXT_COLS={
     {key:"order",   label:"الطلب · order",   w:100, sortable:true},
     {key:"profile", label:"الحساب · profile",w:78,  sortable:true},
     {key:"value",   label:"≈ القيمة · ≈ value", w:86,  sortable:true},
-    {key:"status",  label:"الحالة · status",  w:104},
+    {key:"status",  label:"الحالة · status",  w:134, sortable:true},
     {key:"gash",    label:"الجمارك · gash",    w:128},
     {key:"mail",    label:"✉ البريد · ✉ mail",  w:60},
     {key:"deadline",label:"الموعد · deadline",w:110},
@@ -4215,6 +4217,8 @@ function lxKSortVal(r,key){
   if(key==="value") return r.est?r.est.sum:0;
   if(key==="due"){ const d=lxKDue(r); return d?(Number(d)||0):Infinity; }
   if(key==="profile") return lxAcctSortVal(lxKAcct(r));
+  if(key==="status"){ const u=[...new Set((r.items||[]).map(i=>i.status).filter(Boolean))];
+    return (u.length===1?u[0]:u.length>1?"mixed":(r.pk&&r.pk.status)||"~").toLowerCase(); }
   return ((r.o&&r.o.name)||(r.pk&&r.pk.name)||"").toLowerCase();
 }
 // first source that says anything — "mixed" (null) COUNTS as an answer, so a
@@ -4268,9 +4272,16 @@ function lxKRow(r){
   // when it is the row actually carrying that enrichment.
   const en=(pk&&lxEnriched(pk))?pk:(its.find(lxEnriched)||pk||its[0]||null);
   const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
-  const statusBit=u.length===1?lxStatusPill(u[0])
-    :u.length>1?tonePill("gray","mixed","products have different statuses")
-    :(pk?lxStatusPill(pk.status):"");
+  // Row-level status editing (Purchases parity, owner request): a real package
+  // subtask edits ITS OWN ClickUp task; a loose group of ONE product edits that
+  // product. Multi-product groups stay read-only — one control must never bulk-
+  // write N tasks (same rule as the order-card header). Writes are mirror-only
+  // (lxSetStatus → working list); the real AZ (2) stays behind az2_push.
+  const mixedHint=u.length>1?tonePill("gray","mixed","products have different statuses"):"";
+  const statusBit=pk?lxStatusSelect(pk)+mixedHint
+    :its.length===1?lxStatusSelect(its[0])
+    :u.length===1?lxStatusPill(u[0])
+    :mixedHint;
   const fmt=n=>(Math.round(n*100)/100).toLocaleString();
   const estTip=`≈ قيمة الطرد · منتجات ₪${fmt(e.items)}`+
     (e.share>0?` + حصة شحن/جمارك ₪${fmt(e.share)} (إجمالي الطلب ₪${fmt(e.total)} − المنتجات، ÷ ${e.n} طرود)`:"")+
@@ -4315,8 +4326,8 @@ function lxKRow(r){
     <div class="bt-pin">
       ${pk?lxDot(pk):""}
       <b class="pkg-title" style="font-size:12.5px">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
-      <span class="muted2" style="font-size:11px;flex:0 0 auto">${its.length} product${its.length===1?"":"s"}</span>
       ${lxThumbs(its)}
+      <span class="muted2" style="font-size:11px;flex:0 0 auto">${its.length} product${its.length===1?"":"s"}</span>
     </div>
     ${lxtCells("k",cells)}
   </div>`;
