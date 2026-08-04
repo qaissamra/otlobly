@@ -80,7 +80,11 @@ def main():
     seqs = gm.sequences_list()
     check("default sequence seeded once", len(seqs) == 1
           and seqs[0]["id"] == "seq_default" and len(seqs[0]["steps"]) == 4)
-    check("seed templates exist", len(gm.templates_list()) == 4)
+    # (2026-08-04) migrate_v2 later gained a 5th seeded template (tpl_followup) —
+    # assert the four clearance seeds exist rather than pinning the total count.
+    tpl_ids = {t["id"] for t in gm.templates_list()}
+    check("seed templates exist",
+          {"tpl_seed1", "tpl_seed2", "tpl_seed3", "tpl_seed4"} <= tpl_ids)
 
     print("— auto-ack classification (the owner's Glassix rule) —")
     now = datetime.now(timezone.utc)
@@ -590,6 +594,10 @@ def main():
     print("— 🪪 the one-pair name→ID writer (enroll picker's editable column) —")
     # set_name_id must MERGE — settings.apply replaces name_ids wholesale, so a
     # naive one-pair writer would wipe every other mapping
+    # (2026-08-04) the enroll-flow section above picked 'Nuray htab' for
+    # GWD009000023; re-point the pick at its board name so {name_id} follows
+    # the yahia mapping here (a pick outranks every other source).
+    gm.set_parcel_name("GWD009000023", "yahia")
     gm.set_name_id("yahia", "444555666")
     ids = gm._setts().get("name_ids") or {}
     check("set_name_id merges — the other mappings survive",

@@ -208,7 +208,10 @@ def main():
     # 11) shell: Brain is the first nav item and the boot landing.
     html = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
     check("brainBtn before homeBtn", html.index('id="brainBtn"') < html.index('id="homeBtn"'))
-    check("boot lands on brain", 'setView("brain")' in html)
+    # 2026-08-04: boot goes through restoreView() since the view-restore feature
+    # (f2d682e) — Brain is its explicit fallback for a fresh start.
+    check("boot lands on brain (restoreView fallback)",
+          'setView(restoreView("brain"))' in html and 'fallback=fallback||"brain"' in html)
     check("brain registered in VIEW_BTN", 'brain:"brainBtn"' in html)
 
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
