@@ -58,7 +58,12 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
    (Package prep's `ppFlds` keeps its `<b>`-value variant deliberately — bold values).
 3. ~~**Inline-edit recipe ×3**~~ ✅ Batch 1: one global `editCell()`; all four
    consumers (poCfEdit/poPkgDueEdit/gmNameIdEdit/ppLocEdit) migrated.
-4. **5 expand-state stores** for one visual state: `PO_VIEW`, `PO_COLLAPSED`, `LX_OPEN`/`LX_PCOL`, `NE_OPEN`, `PP_OPEN`; 2 CSS rules for the same #fff4ee.
+4. ~~**5 expand-state stores**~~ ✅ Batch 7: one `openStore()` (next to `editCell`)
+   now backs `PP_OPEN`, `NE_OPEN`, `LX_OPEN`, `LX_PCOL` (inverted) and
+   `PO_COLLAPSED` (inverted + persisted). `PO_VIEW` stays as-is — it is
+   tri-state ("open"/"closed"/unset→`poNeedsAction()` smart default), a feature
+   not a duplicate. The `#fff4ee` accent tint is single-sourced as
+   `--tint-accent` (17 sites).
 5. **Backend payload gap**: pkgprep review cards stripped server-side (fixed in Batch 0); OTL `customer_tracking` absent from pkgprep payload (Batch 0).
 6. **Customer location** (`customer.city`/`.address`, collected by /order intake) surfaced only on Purchases-customers + To-order detail; missing from Package prep (Batch 0), Orders, Deposits.
 
@@ -131,5 +136,15 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   Package prep edit).
   Intentionally NOT editable (ledger/derived): Deposits rows, spent/orders
   counts, Bulk search, P&L, Brain, order `due` (computed est_delivery_customer).
-- [ ] **Batch 7 — expand-state + open-CSS unification** (low priority, pure
-  refactor).
+- [x] **Batch 7 — expand-state + open-CSS unification** *(shipped 2026-08-04 —
+  the program's final batch)*: one `openStore({inverted, persist})` helper
+  replaces the five hand-rolled open-state Sets (23 call sites); `PO_VIEW`
+  deliberately kept (tri-state smart default). `--tint-accent:#fff4ee` defined
+  once in `:root` and used by all 17 former literal sites (open rows, unread,
+  active tabs, chat bubbles). New boards should use `openStore()` + the
+  `.open` classes; new tints use `var(--tint-accent)`.
+
+**Program complete.** All roadmap batches shipped 2026-08-04 (PRs #66–#73 + 7).
+Still open by choice: Team → LXT (interleaved pw-reset rows; tiny surface).
+Review flags from here: a raw `<span class="pill" style>`, a hand-rolled
+inline-edit input, a new open-state `Set`, or a literal `#fff4ee`.
