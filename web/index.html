@@ -2458,7 +2458,7 @@ function render(){
       : `<span>${depTxt||'—'}</span>`;
     const remCell=(o.remaining_usd!=null)?money(o.remaining_usd)
                  :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
-    const web=o.source==="website"?` <span class="pill" style="background:#e0f2fe;color:#0369a1;font-size:9.5px" title="طلب من متجر الموقع · placed on the website catalog">🌐</span>`:"";
+    const web=o.source==="website"?" "+hexPill("#0369a1","🌐","طلب من متجر الموقع · placed on the website catalog",{style:"font-size:9.5px"}):"";
     const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
       <input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="event.stopPropagation();toggleOrderSel('${o.order_id}',this.checked)">
       <span class="mono" style="flex:none;font-weight:700">${o.order_id}</span>${web}
@@ -2742,9 +2742,9 @@ function ppStatusPicker(pkg){
 function ppPkgRow(pkg){
   const shared=pkg.shared?tonePill("amber","⚠ مشترك","هذا الطرد يحوي أغراض زبائن آخرين — تغيير الحالة يغيّرها لهم أيضاً"):"";
   const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",cuLabel(pkg.otlobly_status)||"—");
-  const otl=pkg.customer_tracking?`<span class="pill" style="cursor:copy;color:var(--ink);background:var(--bg2);border-color:var(--line)"
-    title="رقم تتبع الزبون · OTL number — اضغط للنسخ"
-    onclick="event.stopPropagation();(navigator.clipboard?navigator.clipboard.writeText('${poEsc(pkg.customer_tracking)}'):Promise.reject()).then(()=>toast('OTL copied ✓')).catch(()=>toast('copy failed'))">${poEsc(pkg.customer_tracking)}</span>`:"";
+  const otl=pkg.customer_tracking?tonePill("gray",pkg.customer_tracking,"رقم تتبع الزبون · OTL number — اضغط للنسخ",
+    {style:"cursor:copy;color:var(--ink)",
+     attrs:`onclick="event.stopPropagation();(navigator.clipboard?navigator.clipboard.writeText('${poEsc(pkg.customer_tracking)}'):Promise.reject()).then(()=>toast('OTL copied ✓')).catch(()=>toast('copy failed'))"`}):"";
   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap">
     <b style="font-size:12px">📦 ${poEsc(pkg.po_id)}</b>
     <span class="muted" style="font-size:11px">طرد ${poEsc(pkg.package_no)} · ${pkg.n_items} قطعة${pkg.tracking_number?` · ${poEsc(pkg.tracking_number)}`:""}</span>
@@ -2811,8 +2811,8 @@ function ppCard(c,bucket,i){
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +972">📱 972</a>
       <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +970">📱 970</a>
       <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`
-    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم هاتف — انسخ الرسالة 📋">☎ بلا رقم</span>
-      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`;
+    :tonePill("gray","☎ بلا رقم","لا يوجد رقم هاتف — انسخ الرسالة 📋")
+      +`<button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`;
   // Secondary: the order-status + amount update message (the old one).
   const statusBtn=c.wa_url?`<a class="po-btn" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة حالة الطلب + المبلغ (تحديث للعميل)">📦 حالة</a>`:"";
   const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
@@ -2834,7 +2834,7 @@ function ppCard(c,bucket,i){
 function ppSection(emoji,label,count,sub,tone){
   return `<div style="display:flex;align-items:center;gap:9px;margin:4px 0 10px">
     <h2 style="margin:0;font-size:15px;font-weight:800">${emoji} ${label}</h2>
-    <span class="pill" style="${tone};font-weight:700">${count}</span>
+    ${tonePill(tone,String(count),null,{style:"font-weight:700"})}
     <span class="muted2" style="font-size:12px">${sub}</span></div>`;
 }
 // One collected customer to ask for a Facebook review. Two WhatsApp links
@@ -2848,7 +2848,7 @@ function ppReviewCard(c,i){
   const btns=c.wa_url_970
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +972 برسالة تقييم جاهزة">📱 972</a>
        <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +970 برسالة تقييم جاهزة">📱 970</a>`
-    :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم — انسخ الرسالة 📋">☎ بلا رقم</span>`;
+    :tonePill("gray","☎ بلا رقم","لا يوجد رقم — انسخ الرسالة 📋");
   const head=`<div class="po-head"><div class="po-title" onclick="ppToggle('reviews',${i})" style="cursor:pointer">
     <span class="caret">${open?"▾":"▸"}</span>
     <span style="font-size:15px">📸</span>
@@ -2876,9 +2876,9 @@ function renderPkgprep(){
   if(!d){ R.innerHTML=""; W.innerHTML=""; V.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
   $("ppSub").textContent=`1$ = ${d.rate} ₪ · تتغيّر من الإعدادات`;
   const ready=d.ready||[], waiting=d.waiting||[], reviews=d.reviews||[];
-  R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي",TONE.green)+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
-  W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع",TONE.amber)+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
-  V.innerHTML=reviews.length?ppSection("📸","اطلب تقييم — عملاء تم التسليم",reviews.length,"راسلهم واطلب تقييم على فيسبوك مقابل خصم",TONE.green)+reviews.map((c,i)=>ppReviewCard(c,i)).join(""):"";
+  R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي","green")+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
+  W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع","amber")+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
+  V.innerHTML=reviews.length?ppSection("📸","اطلب تقييم — عملاء تم التسليم",reviews.length,"راسلهم واطلب تقييم على فيسبوك مقابل خصم","green")+reviews.map((c,i)=>ppReviewCard(c,i)).join(""):"";
   const any=ready.length||waiting.length||reviews.length;
   E.style.display=any?"none":"";
   if(!any) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
@@ -3066,15 +3066,15 @@ function lxChip(sync,disabled){
   const el=$("lxSyncChip"); if(!el||!sync) return;
   const pend=(sync.dirty||0)+(sync.pushing||0), err=sync.error||0, conf=sync.conflict||0;
   let html;
-  if(disabled) html=`<span class="pill" style="color:#92400e;background:#fef3c7">⏸ push disabled</span>`;
-  else if(err) html=`<span class="pill" style="color:#b42318;background:#fee2e2" title="${poEsc((sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))}">⚠ ${err} failed</span> <button class="minibtn" onclick="lxRetry(this)">Retry</button>`;
-  else if(pend) html=`<span class="pill" style="color:#b45309;background:#fef3c7">↻ ${pend} syncing…</span>`;
-  else html=`<span class="pill" style="color:#16a34a;background:#ecfdf5">✓ all synced</span>`;
+  if(disabled) html=tonePill("amber","⏸ push disabled");
+  else if(err) html=tonePill("red",`⚠ ${err} failed`,(sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))+` <button class="minibtn" onclick="lxRetry(this)">Retry</button>`;
+  else if(pend) html=tonePill("amber",`↻ ${pend} syncing…`);
+  else html=tonePill("green","✓ all synced");
   // both-sides changes waiting on a manual pick — shown alongside any state above
   if(conf) html+=` <button class="po-btn" style="border-color:#e5484d;color:#b42318;background:#fef2f2" onclick="lxConflictsOpen()" title="طلبات تغيّرت في أوتلوبلي و AZ (2) معاً — اختر القيمة الصحيحة · orders changed in both Otlobly and AZ (2) — pick the winning value">⚠ ${conf} تعارض · conflict${conf===1?'':'s'}</button>`;
   // 🧹 dedupe's ClickUp twin-task deletions draining in the background
   const cudel=sync.cu_del_pending||0;
-  if(cudel) html+=` <span class="pill" style="color:#6d28d9;background:#f3e8ff" title="حذف مهام النسخ المكررة من قائمة العمل في ClickUp — يتقدّم تلقائياً في الخلفية ولا يلمس AZ (2) أبداً · duplicate twin tasks being deleted from the ClickUp working list — runs automatically in the background, AZ (2) is never touched">🧹 ${cudel} حذف ClickUp…</span>`;
+  if(cudel) html+=" "+hexPill("#6d28d9",`🧹 ${cudel} حذف ClickUp…`,"حذف مهام النسخ المكررة من قائمة العمل في ClickUp — يتقدّم تلقائياً في الخلفية ولا يلمس AZ (2) أبداً · duplicate twin tasks being deleted from the ClickUp working list — runs automatically in the background, AZ (2) is never touched");
   el.innerHTML=html;
 }
 function lxPollStart(){
@@ -4191,7 +4191,7 @@ function lxAcct(rows){
   return u.length===1?u[0]:(u.length?null:"");   // null = mixed
 }
 function lxProfileCell(v){
-  if(v===null) return `<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="${T('حسابات مختلفة · products bought on different accounts')}">mixed</span>`;
+  if(v===null) return tonePill("gray","mixed",T('حسابات مختلفة · products bought on different accounts'));
   return v?`<b class="mono" style="font-size:11.5px" title="${T('الحساب · profile / account')} (NAME): ${poEsc(v)}">${poEsc(v)}</b>`:"";
 }
 function lxKSortVal(r,key){
@@ -4252,7 +4252,7 @@ function lxKRow(r){
   const en=(pk&&lxEnriched(pk))?pk:(its.find(lxEnriched)||pk||its[0]||null);
   const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
   const statusBit=u.length===1?lxStatusPill(u[0])
-    :u.length>1?`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses">mixed</span>`
+    :u.length>1?tonePill("gray","mixed","products have different statuses")
     :(pk?lxStatusPill(pk.status):"");
   const fmt=n=>(Math.round(n*100)/100).toLocaleString();
   const estTip=`≈ قيمة الطرد · منتجات ₪${fmt(e.items)}`+
@@ -4283,7 +4283,7 @@ function lxKRow(r){
   const click=pk?`lxInfoOpen('package',${pk.id})`:(o?`lxJumpOrder(${o.id})`:"");
   const cells={
     order: o?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(o.name)}" onclick="event.stopPropagation();lxJumpOrder(${o.id})">${lxShortName(o.name)}</button>`
-      :(pk?`<span class="pill" style="background:#fef3c7;color:#92400e;font-size:10px" title="its parent order isn't in this list">w/o parent</span>`:""),
+      :(pk?tonePill("amber","w/o parent","its parent order isn't in this list",{style:"font-size:10px"}):""),
     profile: lxProfileCell(lxKAcct(r)),
     value: estCell,
     status: statusBit,
@@ -4692,7 +4692,7 @@ function lxCardHtml(o){
   const its=lxItemsOf(o), uStatus=[...new Set(its.map(i=>i.status).filter(Boolean))];
   const headStatus=its.length?(uStatus.length===1
       ?lxStatusPill(uStatus[0])
-      :`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses — expand to see each">mixed</span>`)
+      :tonePill("gray","mixed","products have different statuses — expand to see each"))
     :lxStatusPill(o.status);
   // header tracking: shared GWD if all agree, else "multiple"/"no tracking" —
   // the order's OWN number and real packages' numbers count too (an order-level
@@ -4991,7 +4991,7 @@ function lxOrphanRow(r){
       ${lxDot(r)}
       <b class="po-name" title="${poEsc(r.name)}">${lxShortName(r.name)}</b>
       ${lxCopyBtn(r.name)}
-      <span class="pill" style="background:#fef3c7;color:#92400e;font-size:10px" title="its parent order/package isn't in this list">${poEsc(r.kind)} w/o parent</span>
+      ${tonePill("amber",r.kind+" w/o parent","its parent order/package isn't in this list",{style:"font-size:10px"})}
       ${lxStatusSelect(r)}
       <span class="spacer" style="flex:1"></span>
       <button class="minibtn" onclick="lxOpenEditor('${poEsc(r.kind)}',${r.id},null)">✏️</button>
@@ -5154,7 +5154,7 @@ function lxInfoOpen(kind,id){
     if(seenIm.has(im)) return false; seenIm.add(im); return true; }).map(it=>lxThumb(lxAmz(it),34)).join("");
   let statusBit;
   if(k==="order"){ const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
-    statusBit=its.length?(u.length===1?lxStatusPill(u[0]):`<span class="pill" style="background:var(--bg3);color:var(--muted);border:1px solid var(--line)" title="products have different statuses">mixed</span>`):lxStatusPill(row.status);
+    statusBit=its.length?(u.length===1?lxStatusPill(u[0]):tonePill("gray","mixed","products have different statuses")):lxStatusPill(row.status);
   } else statusBit=lxStatusSelect(row);
   const gz=(trd.gerizim_status&&typeof trd.gerizim_status==="object")?trd.gerizim_status:null;
   const ts=trd.tracking_status||{};
@@ -5629,7 +5629,7 @@ async function lxSyncReportOpen(){
     const pushBtn=(sd&&row.task_id)?`<button class="minibtn" id="az2p_${row.id}" onclick="event.stopPropagation();lxAz2Push(${row.id},'${poEsc(String(sd.remote??""))}','${poEsc(String(sd.local??""))}')" title="write YOUR status into the AZ (2) task — tagged + commented there, undo in AZ (2) push history">⤴ Push to AZ (2)</button>`:"";
     return `<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
       <div style="font-weight:800;font-size:12.5px;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
-        ${row.syncing?`<span class="pill" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74">⏳ UPLOADING TO CLICKUP</span>`:""}<span style="flex:1"></span>${pushBtn}</div>
+        ${row.syncing?tonePill("amber","⏳ UPLOADING TO CLICKUP"):""}<span style="flex:1"></span>${pushBtn}</div>
       ${(row.diffs||[]).map(d=>`<div style="font-size:12px;padding:3px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
         <span class="muted2" style="min-width:120px">${poEsc(enLbl(d.label||d.field))}</span>
         <span class="muted2">ClickUp:</span><span dir="auto" style="text-decoration:line-through;opacity:.6">${lxCVal(d.remote)}</span>
@@ -5694,7 +5694,7 @@ async function lxAz2Undo(pushId,btn){
 let LX_CONF=[];
 function lxCVal(v){
   if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length)) return '<span class="muted2">— empty</span>';
-  if(Array.isArray(v)) return v.map(x=>`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">${poEsc(String(x))}</span>`).join(" ");
+  if(Array.isArray(v)) return v.map(x=>tonePill("gray",String(x))).join(" ");
   if(v===true) return "✓ نعم · yes";
   if(v===false) return "✗ لا · no";
   if(typeof v==="number"||(/^\d{11,}$/).test(String(v))) return poEsc(lxMs(v)||String(v));
@@ -6661,8 +6661,8 @@ function neRowHtml(o,kind){
     const extra=items.length>MAX?`<span class="more">+${items.length-MAX}</span>`:'';
     prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
   }
-  const badges=`${o.source==="website"?`<span class="pill" style="background:#e0f2fe;color:#0369a1" title="طلب من متجر الموقع · placed on the website catalog">🌐 موقع</span>`:''}${o.source==="website"&&!o.payment_plan?`<span class="pill" style="background:#f4f1ea;color:#8a7f6d" title="ترك الموقع قبل ما يختار الباقة — تواصل معه · left the site before choosing a plan">⏳ بدون باقة</span>`:''}${o.payment_plan==="prepaid"?`<span class="pill" style="background:#dcfce7;color:#15803d" title="يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front">💰 مسبق 0%</span>`:''}${o.payment_plan==="zero_risk"?`<span class="pill" style="background:#fef3c7;color:#92400e" title="عربون + الباقي عند الاستلام · deposit + cash on delivery">🛡️ زيرو ريسك</span>`:''}${o.customer_confirmed_at?`<span class="pill" style="background:#dcfce7;color:#15803d" title="أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link">✓ أكّد العميل</span>`:''}${o.deposit_usd>0?`<span class="pill" style="background:#dcfce7;color:#15803d" title="دفع عربون · paid a deposit">✅ عربون</span>`:''}${(o.has_id||o.has_id_number)?`<span class="pill" style="background:#dbeafe;color:#1d4ed8" title="${o.id_number?('رقم الهوية · ID '+poEsc(o.id_number)):'الهوية على الملف · ID on file'}">🪪 ${o.id_number?poEsc(o.id_number):'هوية'}</span>`:''}`;
-  const statusCell = kind==="deleted"?`<span class="pill" style="background:#fee2e2;color:#b42318">🗑 محذوف</span>`
+  const badges=`${o.source==="website"?hexPill("#0369a1","🌐 موقع","طلب من متجر الموقع · placed on the website catalog"):''}${o.source==="website"&&!o.payment_plan?hexPill("#8a7f6d","⏳ بدون باقة","ترك الموقع قبل ما يختار الباقة — تواصل معه · left the site before choosing a plan"):''}${o.payment_plan==="prepaid"?tonePill("green","💰 مسبق 0%","يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front"):''}${o.payment_plan==="zero_risk"?tonePill("amber","🛡️ زيرو ريسك","عربون + الباقي عند الاستلام · deposit + cash on delivery"):''}${o.customer_confirmed_at?tonePill("green","✓ أكّد العميل","أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link"):''}${o.deposit_usd>0?tonePill("green","✅ عربون","دفع عربون · paid a deposit"):''}${(o.has_id||o.has_id_number)?hexPill("#1d4ed8","🪪 "+(o.id_number?o.id_number:'هوية'),o.id_number?('رقم الهوية · ID '+o.id_number):'الهوية على الملف · ID on file'):''}`;
+  const statusCell = kind==="deleted"?tonePill("red","🗑 محذوف")
     : statusPill(o.status);   // shared per-status colour (same map as the card)
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
   const rem=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd-(o.deposit_usd||0)):'—';
@@ -7664,7 +7664,7 @@ function bulkRow(id,label,sub,right){ let r=document.getElementById("blk_"+id);
 function bulkFoot(html){ $("bulkFoot").innerHTML=html; }
 // Small status pill for the popup rows (same ClickUp values/colours as the row pills).
 function gaashMiniPill(bucket,text){
-  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">none</span>`;
+  if(!bucket&&!text) return tonePill("gray","none");
   if(bucket==="delivered") return tonePill("green","Delivered",text);
   const cu=gashLookup(text,null);
   if(cu) return solidPill(cu.hex,cu.label,text);
@@ -7673,7 +7673,7 @@ function gaashMiniPill(bucket,text){
   return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,text):tonePill("amber",txt,text);
 }
 function gzMiniPill(bucket,text){
-  if(!bucket&&!text) return `<span class="pill" style="${TONE.gray}">🛵 none</span>`;
+  if(!bucket&&!text) return tonePill("gray","🛵 none");
   return solidPill(GZ_HEX[bucket]||"#8d8d8d", `🛵 ${text||bucket}`, text);
 }
 // ── Check shipping with a LIVE popup: one row per GWD, old status → new status.
@@ -10453,13 +10453,13 @@ function bsModelRow(m,pinExtra,opts){
   const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
   const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
   return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${CE({
-    found:`<span class="pill" style="background:var(--bg3);border:1px solid var(--line)">⌚ Leluxe</span>${EB}`,
+    found:tonePill("gray","⌚ Leluxe")+EB,
     oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
     profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
     imgs: lxThumbs(lx.items),
     cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
     status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
-    gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?`<span class="pill" style="background:var(--bg2);border:1px solid var(--line)">${poEsc(lx.trk)}</span>`:'<span class="muted2">—</span>'),
+    gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?tonePill("gray",lx.trk):'<span class="muted2">—</span>'),
     gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
     value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
   })}</div>`};
