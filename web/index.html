@@ -155,7 +155,6 @@
   .pkg-title-row{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg2);flex-wrap:wrap;cursor:pointer}
   .pkg-title-row:hover{background:#efede8}
   .pkg.open .pkg-title-row:hover{background:#ffeadf}
-  #pkgInfoModal .az-box:has(.pop-menu.open),#lxInfoModal .az-box:has(.pop-menu.open){overflow:visible}
   .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   /* 👤 Customers view: a long name ellipsizes inside the fixed-width pin instead
      of being sliced mid-word (full name in the title attribute) */
@@ -201,17 +200,13 @@
   .notif-row .s{color:var(--muted);font-size:11px}
   @keyframes notifpulse{0%{transform:scale(1)}30%{transform:scale(1.3) rotate(-10deg)}60%{transform:scale(1.12) rotate(7deg)}100%{transform:scale(1)}}
   #notifBell.pulse{animation:notifpulse .8s ease}
-  /* cards clip to their rounded corners, which would cut the open ⋯ dropdown — lift it
-     above siblings (position+z-index) AND stop clipping while a menu is open */
-  .pkg:has(.pop-menu.open),.po-card:has(.pop-menu.open){overflow:visible;position:relative;z-index:40}
-  .pkg-body:has(.pop-menu.open),.po-body:has(.pop-menu.open){overflow:visible}
-  /* the fixed-width Products/Orders/Purchases grid cells clip too (.lxc has
-     overflow:hidden, and .lxc>span ellipsis-clips the .pop wrapper) — let the
-     open dropdown escape. .po-cols was MISSING here since the Purchases board
-     got the same grid cells (806c25f): clicking a package row's status button
-     opened the 30-option menu fully clipped inside an 84×25 cell — "the empty
-     white box" the owner kept reporting. */
-  .lx-cols .lxc:has(.pop-menu.open),.lx-pcols .lxc:has(.pop-menu.open),.lx-kcols .lxc:has(.pop-menu.open),.po-cols .lxc:has(.pop-menu.open),.pok-cols .lxc:has(.pop-menu.open),.pop-cols .lxc:has(.pop-menu.open),.bs-cols .lxc:has(.pop-menu.open),.wf-cols .lxc:has(.pop-menu.open),.en-cols .lxc:has(.pop-menu.open),.od-cols .lxc:has(.pop-menu.open),.cu-cols .lxc:has(.pop-menu.open),.dp-cols .lxc:has(.pop-menu.open),.ct-cols .lxc:has(.pop-menu.open),.ic-cols .lxc:has(.pop-menu.open),.tr-cols .lxc:has(.pop-menu.open){overflow:visible;position:relative;z-index:50}
+  /* Open dropdowns need NO ancestor-overflow escapes: every open path places the
+     menu position:fixed z-99 (popToggle → popPlace/fldPlace; lxtColMenu and
+     poCfPickOpen set it inline), so no ancestor can clip it. The old
+     :has(.pop-menu.open) escape rules that lived here flipped .bt-wrap/.pkg to
+     overflow:visible + z-index:40 on open — collapsing the h-scroll container
+     (sticky pin + header desync) and painting rows OVER the topbar. Don't
+     re-add them. */
   .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop,.od-cols .lxc>.pop,.cu-cols .lxc>.pop,.dp-cols .lxc>.pop,.ct-cols .lxc>.pop,.ic-cols .lxc>.pop,.tr-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
@@ -461,7 +456,6 @@
   .gm-cmp-row{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px;flex-wrap:wrap}
   .gm-cmp-row:last-child{border-bottom:none}
   .gm-cmp-lbl{flex:0 0 64px;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
-  #bulkModal .az-box:has(.pop-menu.open){overflow:visible}
   #bulkModal .en-cols .lxc>input{max-width:100%;min-width:0}
   /* the shared bulk modal's base size — every override below is id-scoped so it
      actually beats this, the way the old inline width never let them */
@@ -813,7 +807,6 @@
   .bt-wrap.pin-lg,.bt-clip.pin-lg{--btpin:380px}
   .bt-wrap.pin-md,.bt-clip.pin-md{--btpin:360px}
   @media(max-width:560px){.bt-wrap,.bt-clip,.bt-wrap.pin-lg,.bt-clip.pin-lg,.bt-wrap.pin-md,.bt-clip.pin-md{--btpin:200px}}
-  .bt-wrap:has(.pop-menu.open){overflow:visible}
   /* the cards' overflow:hidden would hijack the pin's sticky scroll box — undo
      it inside the scroll wrap; rows/cards size to content but never narrower
      than the viewport, so every grid at every nesting level scrolls as one */
@@ -2751,7 +2744,7 @@ function ppStatusPicker(pkg){
   return `<span class="pop" style="flex:0 0 auto" onclick="event.stopPropagation()">
     <button class="statussel" title="حالة أوطلبلي — غيّرها من هنا · Otlobly status"
       style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
-      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cuLabel(cur)||'—')} ▾</button>
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus({preventScroll:true})}">${poEsc(cuLabel(cur)||'—')} ▾</button>
     <div class="pop-menu cu-menu">
       <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
       ${rows}
@@ -3103,7 +3096,11 @@ function lxPollStart(){
     if(!s||!s.ok) return;
     lxChip(s,s.push_disabled);
     if(LX) LX.sync=s;
-    if(((s.dirty||0)+(s.pushing||0)+(s.cu_del_pending||0))===0){ clearInterval(LX_POLL); LX_POLL=null; loadLeluxe(); }
+    if(((s.dirty||0)+(s.pushing||0)+(s.cu_del_pending||0))===0){
+      // queue drained — but never yank an open dropdown out from under the user
+      // (same guard as the tracking sweep); keep polling, reload next quiet tick
+      if(document.querySelector(".pop-menu.open")) return;
+      clearInterval(LX_POLL); LX_POLL=null; loadLeluxe(); }
   },5000);
 }
 async function lxRetry(btn){
@@ -3122,17 +3119,21 @@ function lxStatusPill(s){
 }
 // Clickable status pill → searchable colored dropdown (same pattern as the
 // Purchases pkgCuSelect) — change the ClickUp status without opening the card.
-function lxStatusSelect(row){
-  const s=row.status||"", sts=((LX.schema&&LX.schema.statuses)||[]);
+// `disp` (optional) overrides what the button SHOWS — synthetic package rows have
+// no status of their own, so the k-row passes the products' shared status; the
+// change handler still writes THIS row (row.id).
+function lxStatusSelect(row,disp){
+  const own=row.status||"", s=(disp!==undefined?(disp||""):own), sts=((LX.schema&&LX.schema.statuses)||[]);
   const def=sts.find(x=>x.status===s), c=(def&&def.color)||"#8d8d8d";
+  const derived=!!s&&s!==own;
   const rows=sts.map(st=>`<button class="pop-item cu-item"${st.status===s?' style="font-weight:800"':''}
       onclick="event.stopPropagation();lxSetStatus(${row.id},this.dataset.s);this.closest('.pop-menu').classList.remove('open')" data-s="${poEsc(st.status)}">
       <span class="cu-ring" style="border-color:${st.color||'#8d8d8d'}"></span><b>${poEsc(st.status)}</b>${st.status===s?'<span style="color:var(--accent)">✓</span>':''}
     </button>`).join("");
   return `<span class="pop" style="flex:0 0 auto" onclick="event.stopPropagation()">
-    <button class="statussel" title="حالة كليك أب — انقر للتغيير · ClickUp status (click to change)"
+    <button class="statussel" title="حالة كليك أب — انقر للتغيير · ClickUp status (click to change)${derived?" — معروضة من حالة المنتجات · shown from the products' status":""}"
       style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
-      onclick="event.stopPropagation();popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(s)||"—"} ▾</button>
+      onclick="event.stopPropagation();popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus({preventScroll:true})}">${poEsc(s)||"—"} ▾</button>
     <div class="pop-menu cu-menu">
       <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
       ${rows}
@@ -4213,12 +4214,27 @@ function lxProfileCell(v){
   if(v===null) return tonePill("gray","mixed",T('حسابات مختلفة · products bought on different accounts'));
   return v?`<b class="mono" style="font-size:11.5px" title="${T('الحساب · profile / account')} (NAME): ${poEsc(v)}">${poEsc(v)}</b>`:"";
 }
+// A package row's EFFECTIVE status: its own when set to something REAL, else
+// the one status ALL its products share. Synthetic package rows are born with
+// "" (leluxe.py never stamps them) and pick up the list's ENTRY column
+// (type:"open", e.g. "order number") on working-list pull-back — ClickUp
+// auto-stamps that on every pushed row, so it counts as unset too (measured
+// live-shape data: 121 empty + 91 entry-stamped of 218 packages, while the
+// real statuses live on the products).
+function lxKEffStatus(items,pk){
+  const own=(pk&&pk.status)||"", sts=(LX.schema&&LX.schema.statuses)||[];
+  const entry=(sts.find(s=>s.type==="open")||sts[0]||{}).status||"";
+  if(own&&own!==entry) return own;
+  const u=[...new Set((items||[]).map(i=>i.status).filter(Boolean))];
+  return u.length===1?u[0]:own;
+}
 function lxKSortVal(r,key){
   if(key==="value") return r.est?r.est.sum:0;
   if(key==="due"){ const d=lxKDue(r); return d?(Number(d)||0):Infinity; }
   if(key==="profile") return lxAcctSortVal(lxKAcct(r));
-  if(key==="status"){ const u=[...new Set((r.items||[]).map(i=>i.status).filter(Boolean))];
-    return (u.length===1?u[0]:u.length>1?"mixed":(r.pk&&r.pk.status)||"~").toLowerCase(); }
+  if(key==="status"){ const eff=lxKEffStatus(r.items,r.pk);
+    if(eff) return eff.toLowerCase();
+    return new Set((r.items||[]).map(i=>i.status).filter(Boolean)).size>1?"mixed":"~"; }
   return ((r.o&&r.o.name)||(r.pk&&r.pk.name)||"").toLowerCase();
 }
 // first source that says anything — "mixed" (null) COUNTS as an answer, so a
@@ -4278,7 +4294,7 @@ function lxKRow(r){
   // write N tasks (same rule as the order-card header). Writes are mirror-only
   // (lxSetStatus → working list); the real AZ (2) stays behind az2_push.
   const mixedHint=u.length>1?tonePill("gray","mixed","products have different statuses"):"";
-  const statusBit=pk?lxStatusSelect(pk)+mixedHint
+  const statusBit=pk?lxStatusSelect(pk,lxKEffStatus(its,pk))+mixedHint
     :its.length===1?lxStatusSelect(its[0])
     :u.length===1?lxStatusPill(u[0])
     :mixedHint;
@@ -5183,7 +5199,7 @@ function lxInfoOpen(kind,id){
   let statusBit;
   if(k==="order"){ const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
     statusBit=its.length?(u.length===1?lxStatusPill(u[0]):tonePill("gray","mixed","products have different statuses")):lxStatusPill(row.status);
-  } else statusBit=lxStatusSelect(row);
+  } else statusBit=lxStatusSelect(row,k==="package"?lxKEffStatus(its,row):undefined);
   const gz=(trd.gerizim_status&&typeof trd.gerizim_status==="object")?trd.gerizim_status:null;
   const ts=trd.tracking_status||{};
   const dl=trd.gaash_deadline, gzDone=lxGzDone(tr), dlMoot=gzDone||ts.bucket==="delivered"||ts.bucket==="cleared";
@@ -9431,7 +9447,7 @@ function pkgCuSelect(p,pk,pi){
   return `<span class="pop" style="flex:0 0 auto">
     <button class="statussel" title="حالة أوطلبلي — أنت تحددها · Otlobly status (set by you)"
       style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;border-radius:7px"
-      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus()}">${poEsc(cuLabel(cur))} ▾</button>
+      onclick="popToggle(this);const i=this.nextElementSibling.querySelector('input');if(i){i.value='';cuFilter(i);i.focus({preventScroll:true})}">${poEsc(cuLabel(cur))} ▾</button>
     <div class="pop-menu cu-menu">
       <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
       ${rows}
