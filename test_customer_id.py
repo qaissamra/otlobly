@@ -68,6 +68,20 @@ def main():
     merged, _ = cust_mod.upsert(dd, fresh)
     check("re-sync without a number preserves the stored one",
           merged.get("id_number") == "ABC123")
+    # 2026-08-04 (UI_AUDIT Batch 6): /api/customer used to rebuild the record
+    # from the posted fields only and REPLACE data_json — a profile save (or a
+    # board inline edit) without ID fields silently wiped the stored ID. The
+    # endpoint now merge-guards against the existing record.
+    ps = adm.post("/api/customer", json={"name": "Sami", "whatsapp": PHONE,
+                                         "city": "Ramallah"}).get_json()
+    check("profile save succeeds", ps.get("ok") is True)
+    kept = next((x for x in db.list_customers()
+                 if x.get("match_key") == c.get("match_key")), {})
+    check("profile save without ID fields keeps the stored id_number",
+          kept.get("id_number") == "ABC123")
+    check("profile save keeps the original customer_id",
+          kept.get("customer_id") == c["customer_id"] and ps.get("customer_id") == c["customer_id"])
+    check("profile save applied the edited field", kept.get("city") == "Ramallah")
 
     print("— an order + its Purchases package (for the flow below) —")
     phones = normalize.collect_phones(PHONE)
