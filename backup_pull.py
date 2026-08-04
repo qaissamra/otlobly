@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -59,24 +60,47 @@ def main():
     out = dest / f"otlobly-backup-{datetime.now():%Y%m%d-%H%M%S}.zip"
 
     print(f"=== {datetime.now():%Y-%m-%d %H:%M:%S} pulling {args.base} -> {out}")
-    req = request.Request(args.base.rstrip("/") + "/api/backup",
-                          headers={"Authorization": f"Bearer {tok}"})
-    try:
-        with request.urlopen(req, timeout=300) as r, open(out, "wb") as f:
-            while True:
-                chunk = r.read(1 << 16)
-                if not chunk:
-                    break
-                f.write(chunk)
-    except error.HTTPError as e:
-        sys.exit(f"Backup FAILED: HTTP {e.code}"
-                 + (" — token mismatch? Check OTLOBLY_WORKER_TOKEN vs Render." if e.code == 401 else ""))
-    except OSError as e:
-        sys.exit(f"Backup FAILED: {e}")
+
+    # Download to a .part staging name so a failed/interrupted pull can NEVER
+    # leave a truncated *.zip in the retention set (2026-08-03 did exactly that:
+    # a connection reset mid-stream left a 43MB corpse the restore tools then
+    # tripped over). Retry transient failures — the server zips ~80MB+ while
+    # streaming and Render can stall between chunks or reset, so one attempt a
+    # night was fragile (timed out 3 nights running, 2026-08-02→04). The
+    # timeout is per socket operation (connect / each read), not the whole
+    # download.
+    tmp = out.with_suffix(".zip.part")
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        req = request.Request(args.base.rstrip("/") + "/api/backup",
+                              headers={"Authorization": f"Bearer {tok}"})
+        try:
+            with request.urlopen(req, timeout=600) as r, open(tmp, "wb") as f:
+                while True:
+                    chunk = r.read(1 << 16)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            break                                        # downloaded — verify below
+        except error.HTTPError as e:
+            tmp.unlink(missing_ok=True)
+            if e.code == 401:
+                sys.exit("Backup FAILED: HTTP 401 — token mismatch? Check OTLOBLY_WORKER_TOKEN vs Render.")
+            if attempt == attempts:
+                sys.exit(f"Backup FAILED: HTTP {e.code} after {attempts} attempts")
+            print(f"attempt {attempt}/{attempts} failed (HTTP {e.code}) — retrying in {30 * attempt}s")
+            time.sleep(30 * attempt)
+        except OSError as e:
+            tmp.unlink(missing_ok=True)                  # never leave a truncated file
+            if attempt == attempts:
+                sys.exit(f"Backup FAILED: {e} after {attempts} attempts")
+            print(f"attempt {attempt}/{attempts} failed ({e}) — retrying in {30 * attempt}s")
+            time.sleep(30 * attempt)
 
     # Verify before trusting it: intact zip, DB + manifest present, real rows.
+    # Only a verified download earns the final .zip name.
     try:
-        with zipfile.ZipFile(out) as z:
+        with zipfile.ZipFile(tmp) as z:
             bad = z.testzip()
             names = z.namelist()
             if bad or "otlobly.db" not in names or "manifest.json" not in names:
@@ -86,8 +110,9 @@ def main():
         if not counts.get("orders"):
             raise ValueError(f"manifest shows no orders: {counts}")
     except Exception as e:  # noqa — any problem means the backup is NOT trustworthy
-        out.rename(out.with_suffix(".zip.corrupt"))
+        tmp.rename(out.with_suffix(".zip.corrupt"))
         sys.exit(f"Backup verification FAILED ({e}) — kept as {out.name}.corrupt")
+    tmp.rename(out)
 
     print(f"OK {out.name}  {out.stat().st_size / 1e6:.1f} MB  "
           + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
