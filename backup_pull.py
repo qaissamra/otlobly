@@ -43,6 +43,25 @@ def load_env():
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+def notify(text):
+    """One Telegram line to the owner — the nightly run reports its own outcome
+    (silence would be ambiguous: failed vs never fired). Best effort: a notify
+    problem must never fail or re-run the backup itself."""
+    try:
+        sys.path.insert(0, str(HERE))
+        import telegram
+        r = telegram.send(text)
+        if not r.get("ok"):
+            print(f"(telegram notify skipped: {r.get('error')})")
+    except Exception as e:  # noqa: BLE001
+        print(f"(telegram notify skipped: {e})")
+
+
+def fail(msg):
+    notify(f"🚨 Otlobly backup FAILED · النسخة الاحتياطية فشلت\n{msg}")
+    sys.exit(f"Backup FAILED: {msg}")
+
+
 def main():
     load_env()
     ap = argparse.ArgumentParser(description="Pull an off-site Otlobly backup.")
@@ -52,7 +71,7 @@ def main():
 
     tok = os.environ.get("OTLOBLY_WORKER_TOKEN")
     if not tok:
-        sys.exit("No OTLOBLY_WORKER_TOKEN in .env — copy it from Render → otlobly → Environment.")
+        fail("No OTLOBLY_WORKER_TOKEN in .env — copy it from Render → otlobly → Environment.")
 
     dest = Path(os.environ.get("OTLOBLY_BACKUP_DIR")
                 or Path.home() / "OtloblyBackups").expanduser()
@@ -85,15 +104,15 @@ def main():
         except error.HTTPError as e:
             tmp.unlink(missing_ok=True)
             if e.code == 401:
-                sys.exit("Backup FAILED: HTTP 401 — token mismatch? Check OTLOBLY_WORKER_TOKEN vs Render.")
+                fail("HTTP 401 — token mismatch? Check OTLOBLY_WORKER_TOKEN vs Render.")
             if attempt == attempts:
-                sys.exit(f"Backup FAILED: HTTP {e.code} after {attempts} attempts")
+                fail(f"HTTP {e.code} after {attempts} attempts")
             print(f"attempt {attempt}/{attempts} failed (HTTP {e.code}) — retrying in {30 * attempt}s")
             time.sleep(30 * attempt)
         except OSError as e:
             tmp.unlink(missing_ok=True)                  # never leave a truncated file
             if attempt == attempts:
-                sys.exit(f"Backup FAILED: {e} after {attempts} attempts")
+                fail(f"{e} after {attempts} attempts")
             print(f"attempt {attempt}/{attempts} failed ({e}) — retrying in {30 * attempt}s")
             time.sleep(30 * attempt)
 
@@ -111,11 +130,15 @@ def main():
             raise ValueError(f"manifest shows no orders: {counts}")
     except Exception as e:  # noqa — any problem means the backup is NOT trustworthy
         tmp.rename(out.with_suffix(".zip.corrupt"))
+        notify(f"🚨 Otlobly backup verification FAILED · فشل التحقق\n{e} — kept as {out.name}.corrupt")
         sys.exit(f"Backup verification FAILED ({e}) — kept as {out.name}.corrupt")
     tmp.rename(out)
 
     print(f"OK {out.name}  {out.stat().st_size / 1e6:.1f} MB  "
           + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    notify(f"✅ Otlobly backup OK · النسخة الاحتياطية سليمة\n{out.name} · "
+           f"{out.stat().st_size / 1e6:.1f} MB · orders={counts.get('orders')} "
+           f"customers={counts.get('customers')}")
 
     # Retention: keep the newest N good zips.
     keep = int(os.environ.get("OTLOBLY_BACKUP_KEEP", "30"))
