@@ -82,6 +82,8 @@ def main():
         _pkg("sent rd", 3, [_pitem("OTL-0004", "B0EEE", 1)]),
     ]}]}
 
+    orders[0]["customer"]["city"] = "Ramallah"          # location surfaces on cards
+    orders[0]["customer"]["address"] = "Al-Tireh st 12"
     rep = pkgprep.build(orders, pdb, rate=3.1)
     ready = {c["name"]: c for c in rep["ready"]}
     waiting = {c["name"]: c for c in rep["waiting"]}
@@ -118,6 +120,9 @@ def main():
     check("card exposes contributing packages", ("PO-1", 1) in rpk and ("PO-1", 2) in rpk)
     check("package carries its otlobly_status", rpk[("PO-1", 1)]["otlobly_status"] == "recieved rd")
     check("package flagged shared (holds other customers too)", rpk[("PO-1", 1)]["shared"] is True)
+
+    check("card carries the customer's location",
+          rana["city"] == "Ramallah" and rana["address"] == "Al-Tireh st 12")
 
     wael = waiting["Waiting Wael"]
     check("waiting counts received vs missing", wael["n_received"] == 1 and wael["n_missing"] == 1)
@@ -174,6 +179,49 @@ def main():
     check("already-asked customer hidden from reviews",
           "Partial Pete" not in {c["name"]: c for c in rd3["reviews"]})
 
+    # ---- review cards keep the FULL detail (2026-08-04) --------------------- #
+    # DONE customers used to collapse to bare name+phone rows; the card now keeps
+    # orders (items w/ images), packages (GWD + OTL numbers), totals, location.
+    check("review card keeps orders + items",
+          bool(pete_rv) and [it["title"] for o in pete_rv["orders"] for it in o["items"]]
+          == ["Phone", "Case"])
+    check("review card items counted as sent",
+          bool(pete_rv) and all(it["sent_qty"] == it["qty"] and it["missing_qty"] == 0
+                                for o in pete_rv["orders"] for it in o["items"]))
+    check("review card exposes the shipped packages",
+          bool(pete_rv) and {(p["po_id"], p["package_no"]) for p in pete_rv["packages"]}
+          == {("PO-9", 1), ("PO-9", 2)})
+    check("review card totals filled",
+          bool(pete_rv) and pete_rv["totals"]["usd"] == 60.0
+          and pete_rv["totals"]["ils"] == 186)
+
+    coll = [_order("OTL-0201", "Collected Carla",
+                   [{"asin": "C0AAA", "title": "Lamp", "qty": 2}],
+                   status="COLLECTED", amount=90.0, deposit=30.0)]
+    coll[0]["customer"]["city"] = "Nablus"
+    coll[0]["customer"]["address"] = "Rafidia st 5"
+    cpkg = _pkg("complete", 1, [_pitem("OTL-0201", "C0AAA", 2, image="http://img/lamp.jpg")])
+    cpkg["tracking_number"] = "GWD123"
+    cpkg["customer_tracking"] = "OTL-P-0001"
+    pdb_c = {"purchase_orders": [{"po_id": "PO-7", "packages": [cpkg]}]}
+    rc = pkgprep.build(coll, pdb_c, rate=3.1)
+    carla = {c["name"]: c for c in rc["reviews"]}.get("Collected Carla")
+    check("COLLECTED order gets a full review card",
+          bool(carla) and carla["orders"][0]["items"][0]["title"] == "Lamp"
+          and carla["orders"][0]["items"][0]["sent_qty"] == 2)
+    check("COLLECTED item image falls back to the PO photo",
+          bool(carla) and carla["orders"][0]["items"][0]["image"] == "http://img/lamp.jpg")
+    check("review card carries the delivery location",
+          bool(carla) and carla["city"] == "Nablus" and carla["address"] == "Rafidia st 5")
+    check("package rows carry GWD + OTL numbers",
+          bool(carla) and carla["packages"][0]["tracking_number"] == "GWD123"
+          and carla["packages"][0]["customer_tracking"] == "OTL-P-0001")
+    rc_red = pkgprep.build(coll, pdb_c, rate=3.1, include_money=False)
+    carla_red = {c["name"]: c for c in rc_red["reviews"]}["Collected Carla"]
+    check("review totals redacted for non-money roles",
+          all(v is None for v in carla_red["totals"].values())
+          and all(o["amount_to_collect_usd"] is None for o in carla_red["orders"]))
+
     # ---- settings key ------------------------------------------------------ #
     cfgd = {"_seed": True}    # truthy — settings.read/apply treat {} as "load the real file"
     check("settings read defaults pkg rate 3.1", settings.read(cfgd)["pkg_ils_per_usd"] == 3.1)
@@ -199,6 +247,13 @@ def main():
     check("status edit gated on edit_fulfillment", "edit_fulfillment" in html and "function ppCanEdit(" in html)
     check("settings input exists", 'id="s_pkg_ils"' in html)
     check("settings save sends the key", "pkg_ils_per_usd:parseFloat($(\"s_pkg_ils\").value)||3.1" in html)
+    check("location fields editable inline",
+          "function ppLocEdit(" in html and "function ppLocFld(" in html
+          and '"/api/order/edit"' in html)
+    check("review card expandable with the shared body",
+          "ppToggle('reviews'" in html and "function ppBody(" in html
+          and "function ppFlds(" in html)
+    check("package row shows the OTL number", "pkg.customer_tracking" in html)
 
     print()
     if fails:

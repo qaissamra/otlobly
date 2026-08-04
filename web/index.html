@@ -2664,13 +2664,76 @@ function ppStatusPicker(pkg){
 function ppPkgRow(pkg){
   const shared=pkg.shared?tonePill("amber","⚠ مشترك","هذا الطرد يحوي أغراض زبائن آخرين — تغيير الحالة يغيّرها لهم أيضاً"):"";
   const ctrl=ppCanEdit()?ppStatusPicker(pkg):hexPill(CU_COLOR[pkg.otlobly_status]||"#8d8d8d",cuLabel(pkg.otlobly_status)||"—");
+  const otl=pkg.customer_tracking?`<span class="pill" style="cursor:copy;color:var(--ink);background:var(--bg2);border-color:var(--line)"
+    title="رقم تتبع الزبون · OTL number — اضغط للنسخ"
+    onclick="event.stopPropagation();(navigator.clipboard?navigator.clipboard.writeText('${poEsc(pkg.customer_tracking)}'):Promise.reject()).then(()=>toast('OTL copied ✓')).catch(()=>toast('copy failed'))">${poEsc(pkg.customer_tracking)}</span>`:"";
   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap">
     <b style="font-size:12px">📦 ${poEsc(pkg.po_id)}</b>
     <span class="muted" style="font-size:11px">طرد ${poEsc(pkg.package_no)} · ${pkg.n_items} قطعة${pkg.tracking_number?` · ${poEsc(pkg.tracking_number)}`:""}</span>
-    ${shared}<span class="spacer"></span>${ctrl}</div>`;
+    ${otl}${shared}<span class="spacer"></span>${ctrl}</div>`;
+}
+// 📍 Delivery location (customer.city / customer.address from the /order intake)
+// — shown on every prep card, inline-editable by edit_order roles. Saving writes
+// the value to EVERY order in the card (one person = one delivery location).
+function ppLocFld(c,bucket,i,fld,lbl){
+  const val=c[fld]||"";
+  if(!val&&!CAN_EDIT) return "";
+  const edit=CAN_EDIT?` style="cursor:text;border-bottom:1px dashed var(--line)" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();ppLocEdit(this,'${bucket}',${i},'${fld}')"`:"";
+  return `<span class="field"><span class="lbl">${lbl}</span><b${edit}>${val?poEsc(val):"—"}</b></span>`;
+}
+function ppLocEdit(el,bucket,i,fld){
+  const c=((PKGPREP||{})[bucket]||[])[i]; if(!c||!CAN_EDIT) return;
+  const cur=c[fld]||"";
+  const inp=document.createElement("input");
+  inp.value=cur; inp.placeholder=fld==="city"?"المدينة · city":"العنوان · address";
+  inp.style.cssText="min-width:110px;font:inherit;font-size:11.5px;border:1px solid var(--accent);border-radius:6px;padding:2px 5px;background:#fff";
+  inp.onclick=e=>e.stopPropagation();
+  let done=false;
+  const save=async()=>{ if(done) return; done=true;
+    const v=inp.value.trim();
+    if(v===cur){ renderPkgprep(); return; }
+    const body={}; body[fld]=v;
+    for(const o of (c.orders||[])) await post("/api/order/edit",Object.assign({order_id:o.order_id},body));
+    c[fld]=v; toast("📍 حُفظ ✓"); renderPkgprep(); };
+  inp.onblur=save;
+  inp.onkeydown=e=>{ if(e.key==="Enter") inp.blur(); if(e.key==="Escape"){ done=true; renderPkgprep(); } };
+  el.replaceWith(inp); inp.focus();
+}
+// Shared meta-strip fields (pieces, money, 📍 location) — one builder for the
+// ready/waiting cards AND the 📸 review cards, so DONE customers keep the
+// same strip instead of a bare title row.
+function ppFlds(c,bucket,i){
+  const t=c.totals||{}, money=t.usd!=null;
+  const flds=[];
+  if(c.n_received!=null) flds.push(`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`);
+  else if(c.n_items) flds.push(`<span class="field"><span class="lbl">قطع</span><b>${c.n_items}</b><span class="unit">قطعة</span></span>`);
+  if(money){
+    flds.push(`<span class="field"><span class="lbl">Total</span><b>${ppUsd(t.usd)}</b><span class="unit">≈ ₪${t.ils}</span></span>`);
+    if(t.deposit_usd>0){
+      flds.push(`<span class="field"><span class="lbl">عربون</span><b>${ppUsd(t.deposit_usd)}</b></span>`);
+      flds.push(`<span class="field"><span class="lbl">المتبقي</span><b>${ppUsd(t.remaining_usd)}</b><span class="unit">≈ ₪${t.remaining_ils}</span></span>`);
+    }
+    if(t.unpriced) flds.push(tonePill("amber","فيه طلب بدون تسعير","المجموع لا يشمل الطلب غير المسعّر"));
+  }
+  flds.push(ppLocFld(c,bucket,i,"city","📍 المدينة · City"));
+  flds.push(ppLocFld(c,bucket,i,"address","العنوان · Address"));
+  return flds.filter(Boolean).join("");
+}
+// Shared card body: the package-status block + each order's product rows.
+function ppBody(c){
+  const pkgs=(c.packages||[]);
+  const pkgsHtml=pkgs.length?`<div style="margin-top:8px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px">
+    <div class="lbl" style="margin-bottom:2px">حالة الطرد · package status${ppCanEdit()?" — غيّرها من هنا":""}</div>
+    ${pkgs.map(ppPkgRow).join("")}</div>`:"";
+  return pkgsHtml+(c.orders||[]).map(o=>{
+    const amt=o.amount_to_collect_usd!=null?`<span class="muted" style="font-size:11.5px">${ppUsd(o.amount_to_collect_usd)}</span>`:"";
+    return `<div style="padding:7px 12px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:9px 9px 0 0;display:flex;align-items:center;gap:8px">
+      <b style="font-size:12px">${poEsc(o.order_id)}</b>${statusPill(o.status)}${amt}</div>
+    <div style="border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;overflow:hidden">${(o.items||[]).map(ppItemRow).join("")||`<div class="muted2" style="padding:8px 10px;font-size:12px">لا توجد منتجات</div>`}</div>`;
+  }).join("");
 }
 function ppCard(c,bucket,i){
-  const open=PP_OPEN.has(c.key), t=c.totals||{}, money=t.usd!=null;
+  const open=PP_OPEN.has(c.key);
   // Primary action: ask for a review on +972 / +970 (same number, either code).
   const rev=c.wa_review_970
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +972">📱 972</a>
@@ -2681,15 +2744,6 @@ function ppCard(c,bucket,i){
   // Secondary: the order-status + amount update message (the old one).
   const statusBtn=c.wa_url?`<a class="po-btn" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة حالة الطلب + المبلغ (تحديث للعميل)">📦 حالة</a>`:"";
   const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
-  const flds=[`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`];
-  if(money){
-    flds.push(`<span class="field"><span class="lbl">Total</span><b>${ppUsd(t.usd)}</b><span class="unit">≈ ₪${t.ils}</span></span>`);
-    if(t.deposit_usd>0){
-      flds.push(`<span class="field"><span class="lbl">عربون</span><b>${ppUsd(t.deposit_usd)}</b></span>`);
-      flds.push(`<span class="field"><span class="lbl">المتبقي</span><b>${ppUsd(t.remaining_usd)}</b><span class="unit">≈ ₪${t.remaining_ils}</span></span>`);
-    }
-    if(t.unpriced) flds.push(tonePill("amber","فيه طلب بدون تسعير","المجموع لا يشمل الطلب غير المسعّر"));
-  }
   const head=`<div class="po-head">
     <div class="po-title" onclick="ppToggle('${bucket}',${i})" style="cursor:pointer">
       <span class="caret">${open?"▾":"▸"}</span>
@@ -2700,20 +2754,10 @@ function ppCard(c,bucket,i){
       ${rev}
       ${statusBtn}
     </div>
-    <div class="po-meta">${flds.join("")}</div>
+    <div class="po-meta">${ppFlds(c,bucket,i)}</div>
   </div>`;
   if(!open) return `<div class="po-card">${head}</div>`;
-  const pkgs=(c.packages||[]);
-  const pkgsHtml=pkgs.length?`<div style="margin-top:8px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px">
-    <div class="lbl" style="margin-bottom:2px">حالة الطرد · package status${ppCanEdit()?" — غيّرها من هنا":""}</div>
-    ${pkgs.map(ppPkgRow).join("")}</div>`:"";
-  const body=pkgsHtml+(c.orders||[]).map(o=>{
-    const amt=o.amount_to_collect_usd!=null?`<span class="muted" style="font-size:11.5px">${ppUsd(o.amount_to_collect_usd)}</span>`:"";
-    return `<div style="padding:7px 12px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:9px 9px 0 0;display:flex;align-items:center;gap:8px">
-      <b style="font-size:12px">${poEsc(o.order_id)}</b>${statusPill(o.status)}${amt}</div>
-    <div style="border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;overflow:hidden">${(o.items||[]).map(ppItemRow).join("")||`<div class="muted2" style="padding:8px 10px;font-size:12px">لا توجد منتجات</div>`}</div>`;
-  }).join("");
-  return `<div class="po-card open">${head}<div class="po-body">${body}</div></div>`;
+  return `<div class="po-card open">${head}<div class="po-body">${ppBody(c)}</div></div>`;
 }
 function ppSection(emoji,label,count,sub,tone){
   return `<div style="display:flex;align-items:center;gap:9px;margin:4px 0 10px">
@@ -2723,21 +2767,30 @@ function ppSection(emoji,label,count,sub,tone){
 }
 // One collected customer to ask for a Facebook review. Two WhatsApp links
 // (+972 / +970) because a Palestinian number may be reachable on either code.
+// Expandable like every other prep card: the body keeps the products (with
+// photos), the shipped packages (GWD + OTL) and the 📍 location — a DONE
+// customer no longer collapses to a bare name+phone row.
 function ppReviewCard(c,i){
+  const open=PP_OPEN.has(c.key);
   const meta=[c.n_orders>1?`${c.n_orders} orders`:"",poEsc(c.phone||"")].filter(Boolean).join(" · ");
   const btns=c.wa_url_970
     ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +972 برسالة تقييم جاهزة">📱 972</a>
        <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +970 برسالة تقييم جاهزة">📱 970</a>`
     :`<span class="pill" style="color:var(--muted);background:var(--bg2);border-color:var(--line)" title="لا يوجد رقم — انسخ الرسالة 📋">☎ بلا رقم</span>`;
-  return `<div class="po-card"><div class="po-head"><div class="po-title" style="cursor:default">
+  const head=`<div class="po-head"><div class="po-title" onclick="ppToggle('reviews',${i})" style="cursor:pointer">
+    <span class="caret">${open?"▾":"▸"}</span>
     <span style="font-size:15px">📸</span>
     <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
     <span class="muted" style="font-size:12px">${meta}</span>
+    ${tonePill("green","✓ مرسَل بالكامل","كل القطع أُرسلت أو استُلمت — جاهز لطلب تقييم")}
     <span class="spacer"></span>
     ${btns}
     <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewCopy(${i})" title="انسخ رسالة التقييم">📋</button>
     <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewDone('${poEsc(c.key)}')" title="تم التواصل — أخفِه من القائمة">✓ تم</button>
-  </div></div></div>`;
+  </div>
+  <div class="po-meta">${ppFlds(c,"reviews",i)}</div></div>`;
+  if(!open) return `<div class="po-card">${head}</div>`;
+  return `<div class="po-card open">${head}<div class="po-body">${ppBody(c)}</div></div>`;
 }
 function ppReviewCopy(i){ const c=((PKGPREP||{}).reviews||[])[i]; if(!c) return;
   (navigator.clipboard?navigator.clipboard.writeText(c.wa_review_text):Promise.reject())

@@ -63,6 +63,7 @@ def _tally(pdb):
                     "po_id": po_id, "package_no": pk.get("package_no"),
                     "otlobly_status": pk.get("otlobly_status"),
                     "tracking_number": pk.get("tracking_number"),
+                    "customer_tracking": pk.get("customer_tracking"),
                     "orders": set(), "n_items": 0})
                 pm["orders"].add(oid)
                 pm["n_items"] += int(it.get("qty") or 1)
@@ -92,6 +93,35 @@ def _person_key(order):
     if ph and ph.get("e164"):
         return ph["e164"]
     return "name:" + (order.get("customer", {}).get("name") or "").strip().lower()
+
+
+def _person_location(group):
+    """Delivery location for the card: latest non-empty city/address across the
+    person's orders (the /order intake collects both on order.customer)."""
+    city = addr = ""
+    for o in sorted(group, key=lambda x: x.get("order_id") or "", reverse=True):
+        cu = o.get("customer") or {}
+        if not city and (cu.get("city") or "").strip():
+            city = cu["city"].strip()
+        if not addr and (cu.get("address") or "").strip():
+            addr = cu["address"].strip()
+        if city and addr:
+            break
+    return city, addr
+
+
+def _pkgs_for(order_ids, pkgmeta):
+    """Package cards (owner status + GWD + OTL number) holding any of these
+    orders' pieces — the same shape everywhere a prep card lists parcels."""
+    return sorted(
+        ({"po_id": pm["po_id"], "package_no": pm["package_no"],
+          "otlobly_status": pm["otlobly_status"],
+          "tracking_number": pm.get("tracking_number"),
+          "customer_tracking": pm.get("customer_tracking"),
+          "n_items": pm["n_items"],
+          "shared": bool(pm["orders"] - order_ids)}   # also holds other customers?
+         for pm in pkgmeta.values() if pm["orders"] & order_ids),
+        key=lambda p: (p["po_id"] or "", p["package_no"] or 0))
 
 
 def _annotate_items(order, recv, sent, exc, meta):
@@ -139,6 +169,30 @@ def _annotate_items(order, recv, sent, exc, meta):
             "exceptions": exceptions,
             "missing_qty": missing,
             "state": state,
+        })
+    return out
+
+
+def _plain_items(order, meta):
+    """Items of a COLLECTED order for its review card: the goods are already with
+    the customer, so the whole qty counts as sent (no tally-pool consumption)."""
+    out = []
+    for it in order.get("items", []):
+        n = int(it.get("qty") or 1)
+        key = (order["order_id"], (it.get("asin") or "").upper() or None)
+        m = meta.get(key) or {}
+        out.append({
+            "asin": it.get("asin"),
+            "title": it.get("title") or m.get("title"),
+            "image": it.get("image") or m.get("image"),
+            "url": it.get("clean_url") or it.get("raw_url"),
+            "qty": n,
+            "received_qty": 0,
+            "sent_qty": n,
+            "exception_qty": 0,
+            "exceptions": [],
+            "missing_qty": 0,
+            "state": "sent",
         })
     return out
 
@@ -230,20 +284,50 @@ def _review_links(ph, text):
             f"https://wa.me/972{core}?text={enc}")
 
 
-def _make_review_card(key, group, facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
+def _make_review_card(key, entry, pkgmeta, rate, include_money,
+                      facebook_url=None, coupon_usd=DEFAULT_COUPON_USD):
     """One testimonial card for a person: name + phone + the +970/+972 WhatsApp
-    links carrying the prefilled review message. Copy-only when no phone."""
+    links carrying the prefilled review message. Copy-only when no phone.
+
+    Also carries the SAME detail the prep cards do — orders with items (images),
+    the packages that shipped (GWD + OTL numbers), totals and the delivery
+    location — so a DONE customer keeps their full card instead of collapsing
+    to a bare name+phone row."""
+    group = entry["group"]
     first = group[0]
     name = (first.get("customer", {}).get("name") or "").strip()
     ph = store.primary_phone(first)
     last_at = max((o.get("updated_at") or o.get("order_id") or "") for o in group)
     text = _review_message(name, facebook_url, coupon_usd)
     url_970, url_972 = _review_links(ph, text)
+    city, address = _person_location(group)
+    usd_r, dep_r = round(entry["usd"], 2), round(entry["dep"], 2)
+    totals = {
+        "usd": usd_r,
+        "ils": round(usd_r * rate),
+        "deposit_usd": dep_r,
+        "remaining_usd": round(usd_r - dep_r, 2),
+        "remaining_ils": round(round(usd_r - dep_r, 2) * rate),
+        "unpriced": entry["unpriced"],
+    }
+    card_orders = entry["orders"]
+    n_items = sum(it["qty"] for co in card_orders for it in (co["items"] or []))
+    if not include_money:             # same blackout the prep cards apply
+        totals = {k: None for k in totals}
+        for co in card_orders:
+            co["amount_to_collect_usd"] = None
+            co["deposit_usd"] = None
     return {
         "key": key,
         "name": name,
         "phone": ph.get("e164") if ph else None,
+        "city": city,
+        "address": address,
         "n_orders": len(group),
+        "n_items": n_items,
+        "orders": card_orders,
+        "packages": _pkgs_for({o["order_id"] for o in group}, pkgmeta),
+        "totals": totals,
         "last_at": last_at,
         "wa_review_text": text,
         "wa_url_970": url_970,
@@ -300,7 +384,11 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         if n_received == 0 and n_sent == 0:
             continue                  # nothing arrived and nothing sent — off-radar
         if n_received == 0 and n_missing == 0:
-            dispatched[key] = group   # every live piece already went out → testimonial
+            # Every live piece already went out → testimonial card. Keep the
+            # computed detail (annotated orders + money) so the review card can
+            # show what the person got — it used to collapse to name+phone only.
+            dispatched[key] = {"group": group, "orders": card_orders,
+                               "usd": usd, "dep": dep, "unpriced": unpriced}
             continue
         # else: still has pieces to pack (received) OR is partially sent with more
         # on the way (n_received==0, n_sent>0, n_missing>0) — keep on the board.
@@ -308,14 +396,7 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         # The PO packages holding this customer's pieces — each carries the
         # owner-set otlobly_status the card lets you change (recieved/sent/…).
         order_ids = {o["order_id"] for o in group}
-        card_pkgs = sorted(
-            ({"po_id": pm["po_id"], "package_no": pm["package_no"],
-              "otlobly_status": pm["otlobly_status"],
-              "tracking_number": pm.get("tracking_number"),
-              "n_items": pm["n_items"],
-              "shared": bool(pm["orders"] - order_ids)}   # also holds other customers?
-             for pm in pkgmeta.values() if pm["orders"] & order_ids),
-            key=lambda p: (p["po_id"] or "", p["package_no"] or 0))
+        card_pkgs = _pkgs_for(order_ids, pkgmeta)
 
         usd_r = round(usd, 2)
         dep_r = round(dep, 2)
@@ -329,6 +410,7 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
         }
         name = (first.get("customer", {}).get("name") or "").strip()
         ph = store.primary_phone(first)
+        city, address = _person_location(group)
         is_ready = n_missing == 0
         wa_text = (_ready_message(name, totals, include_money) if is_ready
                    else _waiting_message(name, sent_items, received_items, coming_items))
@@ -343,6 +425,8 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
             "name": name,
             "phone": ph.get("e164") if ph else None,
             "wa": wa,
+            "city": city,
+            "address": address,
             "orders": card_orders,
             "packages": card_pkgs,
             "totals": totals,
@@ -372,12 +456,29 @@ def build(orders, pdb, rate=DEFAULT_RATE, include_money=True,
     # workflow) OR an order marked COLLECTED. One card per person, deduped, minus
     # anyone already asked (review_asked).
     asked = asked or set()
-    review_groups = {k: list(g) for k, g in dispatched.items()}
+    review_entries = dict(dispatched)
     for o in orders or []:
-        if o.get("status") == COLLECTED_STATUS:
-            review_groups.setdefault(_person_key(o), []).append(o)
-    reviews = [_make_review_card(k, g, facebook_url, coupon_usd)
-               for k, g in review_groups.items() if k not in asked]
+        if o.get("status") != COLLECTED_STATUS:
+            continue
+        e = review_entries.setdefault(_person_key(o), {
+            "group": [], "orders": [], "usd": 0.0, "dep": 0.0, "unpriced": False})
+        e["group"] = e["group"] + [o]     # new list — never mutate the groups dict
+        amt = o.get("amount_to_collect_usd")
+        if amt is None:
+            e["unpriced"] = True
+        else:
+            e["usd"] += float(amt)
+        e["dep"] += float(o.get("deposit_usd") or 0)
+        e["orders"] = e["orders"] + [{
+            "order_id": o["order_id"],
+            "status": o.get("status"),
+            "amount_to_collect_usd": amt,
+            "deposit_usd": round(float(o.get("deposit_usd") or 0), 2),
+            "items": _plain_items(o, meta),
+        }]
+    reviews = [_make_review_card(k, e, pkgmeta, rate, include_money,
+                                 facebook_url, coupon_usd)
+               for k, e in review_entries.items() if k not in asked]
     reviews.sort(key=lambda c: c["last_at"], reverse=True)   # most-recent first
     return {
         "rate": rate,
