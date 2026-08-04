@@ -106,12 +106,17 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   correction: Brain was already conformant (`panel`/`qchip`/`minibtn` are shared
   idiom, no raw pills) and both Brain + P&L are dashboards where two-tier order
   headers don't apply — matrix cells fixed rather than force-converting.
-- [ ] **Batch 5b — scattered one-off raw pills** (small): ~18 single raw pills
-  across views (orders 🌐 badge, ppCard/ppReviewCard "بلا رقم", ppSection count,
-  ne/po/lx one-offs) → tonePill/hexPill with opts. NOTE: the other ~27 remaining
-  `<span class="pill"` sites are DOMAIN pill builders (statusPill, lxStatusPill,
-  lxCfPill, lxChip, lxMailPill, deadline/docs/gash pills…) — they ARE the
-  helpers; leave them.
+- [x] **Batch 5b — scattered one-off raw pills** *(shipped 2026-08-04)*: ~25
+  one-off raw pill sites converted to tonePill/hexPill (orders 🌐, pkgprep
+  "بلا رقم" ×2 + OTL copy pill + ppSection counts, lxChip's 5 sync states,
+  Leluxe "mixed" ×4 + "w/o parent" ×2 + UPLOADING + lxCVal chips +
+  lxProfileCell, To-order's 7-badge family + 🗑 محذوف, gaash/gz "none"
+  fallbacks, bulk-search ⌚ Leluxe + trk). **Raw `<span class="pill"` census:
+  45 → 20**, and every survivor is a helper implementation, a DOMAIN pill
+  builder (lxStatusPill/lxCfPill/lxGashPill/lxDeadlinePill/lxMailPill/
+  gzCuChip/pkgDocsPill/pkgDeadlinePill), a STATUS_COLOR-map exception pill,
+  a bare default `.pill` count, or the policy comment itself. The pill layer
+  is DONE — new raw pills are a review flag.
 - [ ] **Batch 6 — editability sweep**: audit every ❌/🟡 in the "Editable
   fields" column; wire the shared inline-edit helper + endpoints.
 - [ ] **Batch 7 — expand-state + open-CSS unification** (low priority, pure
