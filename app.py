@@ -1399,9 +1399,18 @@ def api_order_edit():
             changes["amount_to_collect_usd"] = round(float(b["amount"]), 2)
         except (TypeError, ValueError):
             pass
+    cust = dict(o.get("customer") or {})
+    cust_changed = False
     if (b.get("name") or "").strip():
-        cust = dict(o.get("customer") or {})
         cust["name"] = b["name"].strip()
+        cust_changed = True
+    for fld in ("city", "address"):
+        # present-as-string means "set it" (empty string deliberately clears);
+        # an absent key leaves the field untouched
+        if isinstance(b.get(fld), str):
+            cust[fld] = b[fld].strip()
+            cust_changed = True
+    if cust_changed:
         changes["customer"] = cust
     if not changes:
         return jsonify({"ok": False, "error": "nothing to change"}), 400
