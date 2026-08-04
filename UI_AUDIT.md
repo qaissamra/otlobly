@@ -50,8 +50,10 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 ## Cross-cutting defects (not per-view)
 
 1. **4 pill families + ~85 raw inline pills** — worst: GAASH mail :10168-12772, Meta leads :5795+.
-2. **`fld()` duplicated** :6429 + :8198 (+ Package prep inline variant :2684).
-3. **Inline-edit recipe ×3** :8305 / :7511 / :11636 — same cssText, guard, keys.
+2. ~~**`fld()` duplicated**~~ ✅ Batch 1: one global `fld()` next to `statusPill`
+   (Package prep's `ppFlds` keeps its `<b>`-value variant deliberately — bold values).
+3. ~~**Inline-edit recipe ×3**~~ ✅ Batch 1: one global `editCell()`; all four
+   consumers (poCfEdit/poPkgDueEdit/gmNameIdEdit/ppLocEdit) migrated.
 4. **5 expand-state stores** for one visual state: `PO_VIEW`, `PO_COLLAPSED`, `LX_OPEN`/`LX_PCOL`, `NE_OPEN`, `PP_OPEN`; 2 CSS rules for the same #fff4ee.
 5. **Backend payload gap**: pkgprep review cards stripped server-side (fixed in Batch 0); OTL `customer_tracking` absent from pkgprep payload (Batch 0).
 6. **Customer location** (`customer.city`/`.address`, collected by /order intake) surfaced only on Purchases-customers + To-order detail; missing from Package prep (Batch 0), Orders, Deposits.
@@ -63,9 +65,12 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   `city`/`address` + OTL `customer_tracking`; ppReviewCard expandable with
   product images + package rows; 📍 location editable on all prep cards
   (extends `/api/order/edit` with city/address).
-- [ ] **Batch 1 — shared primitives** (no visual change): one `fld()`, one
-  `editCell()` extracted from poCfEdit, pill policy doc'd at the top of the
-  script; migrate the 3 inline-edit copies onto it.
+- [x] **Batch 1 — shared primitives** (no visual change) *(shipped 2026-08-04)*:
+  global `fld()` (next to `statusPill`) replaced the To-order + Purchases-customers
+  duplicates; global `editCell(el,opts,save,cancel)` now carries the ONE copy of
+  the replace-node inline-edit recipe — `poCfEdit` (typed branch), `poPkgDueEdit`,
+  `gmNameIdEdit` (fill mode) and `ppLocEdit` all migrated; pill policy comment
+  sits above `STATUS_COLOR`. New code must use these three.
 - [ ] **Batch 2 — Orders view**: plain table → LXT table (follow the "bs"
   checklist in the skill §2), `statusSelect` stays (editable) but pill-colored;
   add OTL/GWD + location columns; inline edit via shared helper.
