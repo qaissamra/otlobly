@@ -50,7 +50,10 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 
 ## Cross-cutting defects (not per-view)
 
-1. **4 pill families + ~85 raw inline pills** — worst: GAASH mail :10168-12772, Meta leads :5795+.
+1. **4 pill families + raw inline pills** — GAASH mail block ✅ cleaned in
+   Batch 4 (27 sites → tonePill/hexPill; helpers gained opts `{style, attrs,
+   cls}` as the ONE sanctioned tweak path). ~45 raw pills remain elsewhere
+   (Meta leads, scattered one-offs) — Batch 5+.
 2. ~~**`fld()` duplicated**~~ ✅ Batch 1: one global `fld()` next to `statusPill`
    (Package prep's `ppFlds` keeps its `<b>`-value variant deliberately — bold values).
 3. ~~**Inline-edit recipe ×3**~~ ✅ Batch 1: one global `editCell()`; all four
@@ -88,8 +91,15 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
   wf-exp full-width-block pattern — tiny admin table, low value); Customers
   board inline-edit (POST /api/customer upsert may blank omitted fields — review
   its semantics before wiring editCell).
-- [ ] **Batch 4 — GAASH mail pill cleanup**: replace raw pills with
-  tonePill/hexPill/statusPill; adopt `fld()` in chat/builder headers.
+- [x] **Batch 4 — GAASH mail pill cleanup** *(shipped 2026-08-04)*: all 27 raw
+  `<span class="pill" style>` sites in the gm block (conversations list, chat
+  header, wizard, accounts, enroll picker, seq pills, Readiness, workflows,
+  rule cards, templates) now go through tonePill/hexPill. The helpers gained an
+  optional 4th arg `{style, attrs, cls}` — the one sanctioned way to tweak
+  size/handlers/extra class (documented at the definitions). Tones normalized
+  to TONE/hexPill recipes (tiny shade shifts accepted — that IS the
+  consistency). The audit's "adopt fld() in chat/builder headers" line had no
+  real target — the gm headers use chips, not label strips; dropped.
 - [ ] **Batch 5 — Meta leads / Brain / P&L**: adopt card language (two-tier
   headers, shared pills, `.po-btn`), keep their layouts.
 - [ ] **Batch 6 — editability sweep**: audit every ❌/🟡 in the "Editable
