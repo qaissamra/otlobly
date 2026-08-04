@@ -43,12 +43,15 @@ def main():
           'dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"]' in html)
     check("Orders totals row survives the board move", 'Σ ${rows.length} ${T("طلب · orders")}' in html)
 
-    # 3) Purchases: the package urgency now lives in pkgStatusPill (redesign),
-    #    which reuses the same red-late / green-arriving language via dueDays.
-    check("package urgency pill uses the due date",
-          "function pkgStatusPill(" in html and "days late" in html and "Arrives" in html)
-    check("delivered parcels never show 'late' (pill checks DELIVERED first)",
-          'if(st==="DELIVERED") return tonePill("green","Delivered")' in html)
+    # 3) Purchases: (re-anchored 2026-08-04) the redesign-era pkgStatusPill was
+    #    split into pkgDatePill (promised arrival, muted once DELIVERED) and
+    #    pkgDeadlinePill (GAASH lost-forever countdown) — both driven by dueDays.
+    check("package urgency pills use the due date (dueDays)",
+          "function pkgDatePill(" in html and "function pkgDeadlinePill(" in html
+          and "dueDays(pk&&pk.arrival)" in html)
+    check("delivered parcels never show 'late' (pills mute on DELIVERED/cleared)",
+          "if(pkgStatus(pk)===\"DELIVERED\") return ''" in html
+          and "b==='cleared'||b==='delivered'" in html)
     check("PO detail modal package header carries a chip", "يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}" in html)
 
     # 4) To-order: the summary row (next to the status pill) + the expanded ETA field.

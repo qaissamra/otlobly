@@ -38,14 +38,20 @@ def main():
           or "function poNeedsAction(p){ return (p.packages||[]).some(pkgLate)" in html)
 
     # 3) Status + one-date helpers.
+    # (2026-08-04, re-anchored) pkgStatusPill/fmtDue were split into
+    # pkgDatePill + pkgGaashPill + pkgDeadlinePill over dueChip/dueDays.
     check("status/date helpers exist",
-          all(s in html for s in ("function poSummaryPill(", "function pkgStatusPill(",
-                                  "function fmtDue(", "function tonePill(")))
+          all(s in html for s in ("function poSummaryPill(", "function pkgDatePill(",
+                                  "function pkgGaashPill(", "function dueChip(",
+                                  "function dueDays(", "function tonePill(")))
     check("late = red, arriving = green tones",
-          "days late" in html and "Arrives" in html and "TONE=" in html)
+          "TONE=" in html and "function dueChip(" in html)
 
     # 4) One status line per package; GAASH labeled; OTL not inline.
-    check("package status line class", "pkg-statusline" in html)
+    # (2026-08-04) the .pkg-statusline wrapper is gone — the one-line status
+    # strip is now composed per source: promised date + live GAASH + owner status.
+    check("package status strip: date + GAASH + owner pills per row",
+          "pkgDatePill(pk)" in html and "pkgGaashPill(pk)" in html and "pkgCuSelect(" in html)
     check("GAASH label inline", "GAASH" in html)
     check("no editable Arrives date input in the package row",
           "poPkgSet('${p.po_id}',${pi},'arrival',this.value)" not in html)
@@ -76,8 +82,10 @@ def main():
           and "Amazon order #" in html)
 
     # 7b) The profile/box name shows on the PO row (needed at a glance).
+    # (2026-08-04) the inline 🖥 chip became poProfileCell (a mono chip fed by
+    # p.profile_box, reused across the po/pok/pop boards).
     check("PO row shows the profile chip",
-          "p.profile_box||''" in html and "🖥 ${poEsc(p.profile_box)}" in html)
+          "function poProfileCell(" in html and 'p.profile_box||""' in html)
 
     # 8) #28 read-view still intact (grouped rows, item editor, 3-word clip).
     check("customer-grouped item rows survive", 'class="poc-cust' in html and "itemEditOpen(" in html)
