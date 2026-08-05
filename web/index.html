@@ -3211,11 +3211,23 @@ function lxMergedStatusPill(row){
   const gz=row.data&&row.data.gerizim_status;
   return (gz&&typeof gz==="object"&&(gz.label||gz.status))?lxGerizimPill(row):lxGashPill(row);
 }
+// checked-but-unknown: a live check ran and the carriers had nothing — a
+// visible mark so the parcel never renders as an untouched blank (Purchases
+// "Awaiting tracking" parity). Last in every gash-cell chain: a live pill or a
+// human-set GASH STATUS field value always outranks it.
+function lxNoDataPill(row){
+  const d=(row&&row.data)||{};
+  if(!d.tracking_checked||(d.tracking_status&&typeof d.tracking_status==="object")) return "";
+  const nf=d.gerizim_status==="notfound", ago=agoTxt(d.tracking_checked);
+  return tonePill("gray",`❔ لا يوجد تتبع · ${ago}`,
+    `آخر فحص ${ago} — غاش بلا سجل${nf?" · وليس عند جيرزيم":""} · checked ${ago} — no GAASH data${nf?", not in Gerizim":""} — تحقق من الرقم في ClickUp · check the Tracking Number in ClickUp`,
+    {style:"font-size:10px"});
+}
 // the group's "tracked row": the order itself, else the first package/item that
 // carries a tracking number or live enrichment (flat mirror keeps it on items)
 function lxTrackedRow(o){
   const rows=[o,...(o.packages||[]),...lxItemsOf(o)];
-  return rows.find(r=>r.data&&(r.data.tracking_status||r.data.gerizim_status||r.data.gaash_deadline))
+  return rows.find(lxEnriched)
       || rows.find(r=>(r.data&&r.data.tracking_number)||lxF(r,"tracking number"))
       || null;
 }
@@ -4331,7 +4343,7 @@ function lxKRow(r){
     profile: lxProfileCell(lxKAcct(r)),
     value: estCell,
     status: statusBit,
-    gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+    gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
     mail: lxMailPill(tn),
     deadline: `${en?lxDeadlinePill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
     due: done?"":lxDueChip(due,doneSt),
@@ -4771,7 +4783,7 @@ function lxCardHtml(o){
         status: headStatus,
         total: amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:"",
         tracking: headTn,
-        gash: lxMergedStatusPill(tr),
+        gash: lxMergedStatusPill(tr)||lxNoDataPill(tr),
         deadline: `${tr?lxDeadlinePill(tr,true):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}`,
         created: o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:"",
         due: delivered?"":lxDueChip(o.due_date,lxIsDone(o)),
@@ -4819,7 +4831,11 @@ function lxCardHtml(o){
 // live pk.items would corrupt lxItemsOf() and double-count products board-wide.
 function lxPkgTn(r){ return String(((r&&r.data)||{}).tracking_number||(r&&lxF(r,"tracking number"))||"").trim(); }
 function lxPkgKey(tn){ return String(tn||"").trim().toUpperCase(); }   // GWDs compare case-insensitively
-function lxEnriched(r){ const d=(r&&r.data)||{}; return !!(d.tracking_status||d.gerizim_status||d.gaash_deadline); }
+// live enrichment presence — dict Gerizim only (the "notfound" STRING is a
+// checked-marker, not data) + tracking_checked so a checked-but-unknown row is
+// still selected deliberately (its ❔ pill must surface)
+function lxEnriched(r){ const d=(r&&r.data)||{};
+  return !!(d.tracking_status||(d.gerizim_status&&typeof d.gerizim_status==="object")||d.gaash_deadline||d.tracking_checked); }
 // "does this string name a real parcel?" — a hand-typed note like "under" is not
 // a tracking number, and an EMPTY package carrying one is pure noise on the board
 function lxLooksTracked(tn){ tn=String(tn||"").trim(); return tn.length>=6&&/\d/.test(tn); }
@@ -4857,7 +4873,7 @@ function lxVPkgToggle(key){ LX_PCOL.toggle(key); renderLeluxe(); }
 function lxVPkgHtml(o,g){
   const key=`v${o.id}:${g.tn}`, collapsed=!LX_PCOL.isOpen(key);
   // pills read from the first enriched product in the group (they carry the GWD)
-  const en=g.items.find(r=>r.data&&(r.data.tracking_status||r.data.gerizim_status||r.data.gaash_deadline))||g.items[0];
+  const en=g.items.find(lxEnriched)||g.items[0];
   const gashDate=g.items.map(it=>lxF(it,"gash date")).find(Boolean);
   const gashStatus=g.items.map(it=>lxF(it,"gash status")).find(Boolean);
   const ordTn=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();  // prefill for set-tracking
@@ -4880,7 +4896,7 @@ function lxVPkgHtml(o,g){
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(it,o)),
         status: `${lxDot(it)}${lxStatusSelect(it)}`,
-        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
         due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
         menu: popMenu([
@@ -4904,7 +4920,7 @@ function lxVPkgHtml(o,g){
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(g.items,o)),
-        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        gash: `${gzBadge(g.tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
         deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
         menu: popMenu([
           [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
@@ -4938,7 +4954,7 @@ function lxPkgHtml(o,pk,items){
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(items,pk,o)),
-        gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)}`,
+        gash: `${gzBadge(tn)}${lxMergedStatusPill(en)||lxCfPill("gash status",gashStatus)||lxNoDataPill(en)}`,
         deadline: `${lxDeadlinePill(en)}${lxDueChip(gashDate,false)}`,
         menu: popMenu([
           [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
@@ -5155,12 +5171,43 @@ function lxRowImgs(row){
     if(!seen.has(m[1])){ seen.add(m[1]); out.push(m[1]); } }
   return out;
 }
-// single-GWD live refresh (the bulk 🚚 endpoint already accepts {tracking,force})
+// single-GWD live refresh (the bulk 🚚 endpoint already accepts {tracking,force}).
+// Sticky verdict in #lxProgress — the 3.5s toast dies mid-request, and a failed
+// call must NEVER read as "✓ refreshed". Own fetch (not post()): Flask errors
+// return HTML and the shared helper would swallow the status.
 async function lxCheckShipping(gwd){
-  toast(`🔎 checking ${gwd}…`);
-  let r; try{ r=await post("/api/leluxe/refresh_tracking",{tracking:gwd,force:true}); }catch(e){ r={}; }
-  if(r&&r.error){ toast(r.error); return; }
-  toast(`✓ ${gwd} refreshed`);
+  const pr=$("lxProgress"); pr.style.display="block";
+  pr.innerHTML=`<span class="spin"></span> 🔎 <b>${poEsc(gwd)}</b> — فحص غاش + جيرزيم · checking GAASH + Gerizim…`;
+  let r=null;
+  try{
+    const res=await fetch("/api/leluxe/refresh_tracking",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({tracking:gwd,force:true})});
+    try{ r=await res.json(); }catch(_){ r=null; }
+    if(!res.ok) r={ok:false,error:(r&&r.error)||`HTTP ${res.status}${res.status===401?" — انتهت الجلسة · session expired, reload":""}`};
+    else if(!r) r={ok:false,error:"استجابة غير مفهومة · unreadable server response"};
+  }catch(e){ r={ok:false,error:"لا اتصال بالخادم · network error"}; }
+  const ent=(r&&r.ok&&Array.isArray(r.results))?(r.results.find(x=>x.tracking===gwd)||r.results[0]):null;
+  if(!r.ok){
+    pr.innerHTML=`⚠ <b>${poEsc(gwd)}</b> — فشل الفحص · check failed: ${poEsc(r.error||"?")} — أعد المحاولة · try again`;
+  }else if(!ent){
+    pr.innerHTML=`❔ <b>${poEsc(gwd)}</b> — الرقم ليس على اللوحة · this number isn't on any board row`;
+  }else if(ent.gz&&ent.gz!=="notfound"){
+    // furthest leg wins — same rule as lxMergedStatusPill
+    const ar=GZ_AR[ent.gz], stage=ar?`${ar[0]} ${ar[1]}`:`🛵 ${ent.gz}`;
+    pr.innerHTML=`✅ <b>${poEsc(gwd)}</b> — جيرزيم · Gerizim: ${poEsc(stage)}`;
+    toast(`✅ ${gwd} — ${stage}`);
+  }else if(ent.found){
+    pr.innerHTML=`✅ <b>${poEsc(gwd)}</b> — غاش · GAASH: ${poEsc(ent.text||ent.bucket||"?")}`
+      +(ent.deadline?` <span class="muted2">· ⏳ ${poEsc(ent.deadline)}</span>`:"");
+    toast(`✅ ${gwd} — ${ent.text||ent.bucket}`);
+  }else if(ent.error){
+    pr.innerHTML=`⚠ <b>${poEsc(gwd)}</b> — تعذّر الفحص · ${poEsc(ent.error)} — أعد المحاولة بعد قليل · try again shortly`;
+  }else{
+    pr.innerHTML=`❌ <b>${poEsc(gwd)}</b> — غاش لا سجل لهذا الرقم · GAASH has no record of this number`
+      +(ent.gz==="notfound"?` · وليس عند جيرزيم · not in Gerizim either`:"")
+      +(ent.warn?` · ⚠ ${poEsc(ent.warn)}`:"")
+      +` — <b>تحقق من رقم التتبع في ClickUp · double-check the Tracking Number in ClickUp</b>`;
+  }
   loadLeluxe();
 }
 function lxInfoOpen(kind,id){
@@ -5168,7 +5215,7 @@ function lxInfoOpen(kind,id){
   const {row,pkg,order}=path, d=row.data||{};
   let k=row.kind==="parent"?"order":(row.kind||kind); if(k!=="package"&&k!=="item") k="order";
   // tracked row for the live pills: the row itself when enriched, else the group's
-  const tr=(d.tracking_status||d.gerizim_status||d.gaash_deadline)?row:(order?lxTrackedRow(order):row);
+  const tr=lxEnriched(row)?row:(order?lxTrackedRow(order):row);
   const trd=(tr&&tr.data)||{};
   const tn=String(d.tracking_number||lxF(row,"tracking number")||trd.tracking_number||(tr&&lxF(tr,"tracking number"))||"").trim();
   const f=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span class="muted2" style="flex:0 0 auto">${l}</span><b dir="auto" style="text-align:left;min-width:0;overflow-wrap:anywhere">${v||'—'}</b></div>`;
@@ -5209,7 +5256,12 @@ function lxInfoOpen(kind,id){
   const amt=lxF(row,"total amount");
   // KV rows per tier — grouped into 📋 info + 🚚 shipping sections
   const sec=(t,rs)=>rs?`<div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 2px">${t}</div>${rs}`:"";
-  const liveRow=ts.text||ts.label?`${poEsc(ts.text||ts.label)}${trd.tracking_checked?` <span class="muted2">· ${agoTxt(trd.tracking_checked)}</span>`:''}`:'';
+  const chkBit=trd.tracking_checked?` <span class="muted2">· آخر فحص ${agoTxt(trd.tracking_checked)}</span>`:'';
+  const liveRow=(ts.text||ts.label)
+    ? `${poEsc(ts.text||ts.label)}${chkBit}`
+    : (trd.tracking_checked
+        ? `<span class="muted2">❔ غاش بلا سجل · no GAASH record${trd.gerizim_status==="notfound"?" · ليس عند جيرزيم · not in Gerizim":""}</span>${chkBit}`
+        : '');
   let infoRows="",shipRows="";
   if(k==="order"){
     const onum=lxOrderNum(row.name)||row.name;
@@ -5264,7 +5316,7 @@ function lxInfoOpen(kind,id){
     :k==="package"?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`:"";
   $("lxInfoBody").innerHTML=`
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      ${thumbs}${statusBit}${lxMergedStatusPill(tr)}${lxMailPill(tn)}${tr&&!dlMoot?lxDeadlinePill(tr):""}
+      ${thumbs}${statusBit}${lxMergedStatusPill(tr)||lxNoDataPill(tr)}${lxMailPill(tn)}${tr&&!dlMoot?lxDeadlinePill(tr):""}
     </div>
     ${dl&&!dlMoot?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div><div style="font-weight:800">⏳ موعد غاش النهائي · GAASH deadline</div>

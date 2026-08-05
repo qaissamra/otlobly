@@ -2660,6 +2660,11 @@ def apply_gash_status(only=None, config=None):
 # can never match.
 GZ_ARRIVED = frozenset(GERIZIM_BUCKET_OPTIONS)
 
+# Canonical GAASH number shape — every real number on the board is GWD + 9
+# digits. Only ever used for an ADVISORY warn (a typo'd digit count is the
+# usual reason GAASH "has no record"); never blocks a lookup.
+GWD_CANON = re.compile(r"GWD\d{9}$")
+
 
 def _entry_status(config=None):
     """The list's ENTRY status (ClickUp type "open" — "order number").
@@ -2716,7 +2721,9 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     keeps gaash_mail's enrolled threads fresh, `force` is the per-row 🔎
     "check NOW". Every ATTEMPTED fetch stamps tracking_checked (success or
     not) so failing GWDs rotate out on the 30-min TTL instead of pinning the
-    head of the queue forever."""
+    head of the queue forever. `results` carries one honest per-GWD verdict
+    (found / carrier-has-no-record / error text) so the 🔎 UI can tell the
+    truth instead of toasting "refreshed" at a blank row."""
     import tracking
     import gerizim
     from datetime import timedelta
@@ -2745,8 +2752,11 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                 need = datetime.fromisoformat(d.get("tracking_checked") or "") <= cutoff
             except (ValueError, TypeError):
                 need = True
+        # only a DICT is real Gerizim presence — the stored "notfound" STRING
+        # must not pin eligible False forever (it used to block gaash_deadline
+        # from ever being fetched again, even with force)
         eligible = (ts.get("bucket") if isinstance(ts, dict) else None) \
-            not in ("cleared", "delivered") and not gz
+            not in ("cleared", "delivered") and not (isinstance(gz, dict) and gz)
         need_dl = False
         if eligible:
             try:
@@ -2758,17 +2768,25 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
             work.setdefault(tn, []).append((row["id"], need, need_dl))
     todo = list(work.items())[:batch]
     session = None
+    results = []
     for tn, targets in todo:
         want_track = any(t[1] for t in targets)
         want_dl = any(t[2] for t in targets)
-        st = gz_new = deadline = None
+        st = gz_new = deadline = gaash_err = None
         if want_track:
+            data = None
             try:
                 session = session or tracking.get_session()
                 data = tracking.fetch_one(tn, *session)
                 st = tracking.latest_status(data)
-            except Exception:  # noqa: BLE001 — one bad number must not stall the batch
+            except Exception as e:  # noqa: BLE001 — get_session scrape failed; one bad number must not stall the batch
                 st, data = None, None
+                gaash_err = f"GAASH: {e}"[:160]
+            if isinstance(data, dict) and data.get("_error"):
+                # fetch_one never raises — network/HTTP failures come back as
+                # data. Distinguish them from an honest "no record" (found
+                # False + error None), so the UI can say which one happened.
+                gaash_err = f"GAASH: {data['_error']}"[:160]
             if st:
                 try:
                     # feed the shared last-known cache — the public tracking widget
@@ -2785,6 +2803,18 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                 deadline = tracking.ops_deadline(tn)
             except Exception:  # noqa: BLE001
                 deadline = None
+        results.append({
+            "tracking": tn,
+            "found": bool(st),
+            "bucket": (st or {}).get("bucket"),
+            "text": (st or {}).get("text") or (st or {}).get("label"),
+            "error": gaash_err,
+            "gz": gz_new.get("bucket") if isinstance(gz_new, dict) else gz_new,
+            "deadline": deadline,
+            "warn": ("unusual GWD length — usually GWD + 9 digits"
+                     if tn.upper().startswith("GWD")
+                     and not GWD_CANON.match(tn.upper()) else None),
+        })
         stamp = now.isoformat()
         for row_id, _n, _d in targets:
             with db.connect() as c:
@@ -2803,7 +2833,11 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                     # used to pin list(work)[:batch] and re-run every POST;
                     # the 30-min TTL now rotates them out.
                     d["tracking_checked"] = stamp
-                if gz_new:
+                if gz_new and (isinstance(gz_new, dict)
+                               or not isinstance(d.get("gerizim_status"), dict)):
+                    # a dict always wins; the "notfound" marker only lands
+                    # where no real stage was ever stored (a transient Gerizim
+                    # 404 must never erase a known stage)
                     d["gerizim_status"] = gz_new
                 if want_dl:
                     d["gaash_deadline_checked"] = stamp
@@ -2815,7 +2849,8 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     # after storing fresh Gerizim stages, mirror them into the GASH STATUS field
     applied = apply_gash_status(only=only, config=config)
     return {"checked": len(todo), "remaining": max(0, len(work) - len(todo)),
-            "skipped": len(skip), "gash_applied": len(applied), "changes": applied}
+            "skipped": len(skip), "gash_applied": len(applied), "changes": applied,
+            "results": results}
 
 
 # --------------------------------------------------------------------------- #
