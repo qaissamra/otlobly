@@ -494,22 +494,30 @@ def flat_tracking_enrichment():
           o2["sync_state"] == "synced" and it2["sync_state"] == "synced")
 
 
-def _trk_stubs(calls, fetch_raises=False, deadline="2026-08-01"):
-    """sys.modules stubs for tracking/gerizim recording fetched GWDs."""
+def _trk_stubs(calls, fetch_raises=False, deadline="2026-08-01",
+               fetch_map=None, gz_track=None):
+    """sys.modules stubs for tracking/gerizim recording fetched GWDs.
+    fetch_map={tn: data} makes fetch_one/latest_status data-sensitive (real
+    semantics: a status only when data carries Statuses); gz_track overrides
+    gerizim.track (dict | "notfound" | None)."""
     import types
 
     def fetch(tn, *a, **k):
         calls.append(tn)
         if fetch_raises:
             raise RuntimeError("GAASH down")
-        return {}
+        return (fetch_map or {}).get(tn, {}) if fetch_map is not None else {}
+    latest = ((lambda d: {"bucket": "transit", "text": "In transit"}
+               if (d or {}).get("Statuses") else None)
+              if fetch_map is not None
+              else (lambda d: {"bucket": "transit", "text": "In transit"}))
     tstub = types.SimpleNamespace(
         clean_tracking=lambda s: (s or "").strip(),
         get_session=lambda **k: ("api", "nonce"),
         fetch_one=fetch,
-        latest_status=lambda d: {"bucket": "transit", "text": "In transit"},
+        latest_status=latest,
         ops_deadline=lambda tn, **k: deadline)
-    gstub = types.SimpleNamespace(track=lambda tn, **k: None)
+    gstub = types.SimpleNamespace(track=gz_track or (lambda tn, **k: None))
     return tstub, gstub
 
 
@@ -626,6 +634,130 @@ def tracking_failure_stamps():
               r3["checked"] == 1 and calls == ["GWD-X"])
         check("display-only: failure stamping never dirties the row",
               leluxe.get_row(row["id"])["sync_state"] == "synced")
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
+
+
+def tracking_results_payload():
+    """refresh_tracking returns one honest per-GWD verdict — found / carrier-
+    has-no-record (found False, error None) / error text — plus an advisory
+    warn on non-canonical GWD shapes. The 🔎 UI renders these instead of
+    toasting '✓ refreshed' at a blank row."""
+    import sys
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    mk = lambda name, gwd: leluxe.save_row(
+        {"kind": "order", "name": name, "fields": {"Tracking Number": gwd}})[0]
+    mk("1 ok", "GWD004794031")
+    mk("1 norec", "GWD004794032")
+    mk("1 err", "GWD004794033")
+    mk("1 typo", "GWD0004794032")          # 10 digits — the real-life typo shape
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='synced'")
+    calls = []
+    tstub, gstub = _trk_stubs(calls, fetch_map={
+        "GWD004794031": {"Statuses": [{}]},
+        "GWD004794032": {},
+        "GWD004794033": {"_error": "HTTP 500"},
+        "GWD0004794032": {},
+    }, gz_track=lambda tn, **k: "notfound")
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        r = leluxe.refresh_tracking(batch=10, force=True)
+        res = {e["tracking"]: e for e in r.get("results") or []}
+        ok, norec = res.get("GWD004794031"), res.get("GWD004794032")
+        err, typo = res.get("GWD004794033"), res.get("GWD0004794032")
+        check("results: found parcel carries its stage",
+              bool(ok) and ok["found"] and ok["bucket"] == "transit"
+              and not ok["error"])
+        check("results: no-record = found False, error None, gz notfound",
+              bool(norec) and not norec["found"] and norec["error"] is None
+              and norec["gz"] == "notfound" and norec["warn"] is None)
+        check("results: network error carried as text",
+              bool(err) and not err["found"] and "HTTP 500" in (err["error"] or ""))
+        check("results: 10-digit GWD gets the advisory warn",
+              bool(typo) and bool(typo["warn"]) and "9 digits" in typo["warn"])
+        r2 = leluxe.refresh_tracking(only="GWD-NOPE")
+        check("results: only= with no matching row -> empty list",
+              r2.get("results") == [] and r2["checked"] == 0)
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
+
+
+def tracking_notfound_still_checks_deadline():
+    """BUG regression: a stored gerizim_status 'notfound' STRING used to pin
+    eligible False forever, so gaash_deadline could never be fetched — not
+    even with force. Only a real dict may block the deadline leg."""
+    import sys
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    row, _ = leluxe.save_row({"kind": "order", "name": "1 NF",
+                              "fields": {"Tracking Number": "GWD-N"}})
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (row["id"],)).fetchone()
+        d = json.loads(r["data_json"]); d["gerizim_status"] = "notfound"
+        c.execute("UPDATE leluxe_orders SET data_json=?, sync_state='synced' WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), row["id"]))
+    calls = []
+    tstub, gstub = _trk_stubs(calls, gz_track=lambda tn, **k: "notfound")
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        leluxe.refresh_tracking(batch=5, force=True)
+        d2 = leluxe.get_row(row["id"])["data"]
+        check("'notfound' string no longer blocks the deadline fetch",
+              d2.get("gaash_deadline") == "2026-08-01")
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
+
+
+def tracking_gz_dict_survives_notfound():
+    """BUG regression: a transient Gerizim 404 ('notfound') must never erase a
+    real stored stage dict — and a real dict must replace a stored string."""
+    import sys
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    keep, _ = leluxe.save_row({"kind": "order", "name": "1 keep",
+                               "fields": {"Tracking Number": "GWD-S"}})
+    gain, _ = leluxe.save_row({"kind": "order", "name": "1 gain",
+                               "fields": {"Tracking Number": "GWD-T"}})
+    with db.connect() as c:
+        for rid, gz in ((keep["id"], {"bucket": "office", "label": "At Gerizim office",
+                                      "status": "office"}),
+                        (gain["id"], "notfound")):
+            r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                          (rid,)).fetchone()
+            d = json.loads(r["data_json"]); d["gerizim_status"] = gz
+            c.execute("UPDATE leluxe_orders SET data_json=?, sync_state='synced' WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), rid))
+    calls = []
+    tstub, gstub = _trk_stubs(calls, gz_track=lambda tn, **k: (
+        "notfound" if tn == "GWD-S"
+        else {"bucket": "office", "label": "At Gerizim office", "status": "office"}))
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        leluxe.refresh_tracking(batch=5, force=True)
+        kd = leluxe.get_row(keep["id"])["data"].get("gerizim_status")
+        gd = leluxe.get_row(gain["id"])["data"].get("gerizim_status")
+        check("stored stage dict survives a transient 'notfound'",
+              isinstance(kd, dict) and kd.get("bucket") == "office")
+        check("real dict replaces a stored 'notfound' string",
+              isinstance(gd, dict) and gd.get("bucket") == "office")
     finally:
         for name, old in (("tracking", old_t), ("gerizim", old_g)):
             if old is not None:
@@ -1527,6 +1659,9 @@ def main():
     print("flat tracking:");     flat_tracking_enrichment()
     print("tracking skip rules:"); tracking_skip_rules()
     print("tracking failure stamps:"); tracking_failure_stamps()
+    print("tracking results payload:"); tracking_results_payload()
+    print("notfound deadline unblock:"); tracking_notfound_still_checks_deadline()
+    print("gz dict vs notfound:"); tracking_gz_dict_survives_notfound()
     print("gash status sync:");  gash_status_sync()
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
