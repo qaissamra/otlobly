@@ -5828,12 +5828,30 @@ async function lxResolveAllRows(side){
 }
 async function lxRefreshTracking(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🚚 Live GAASH tracking…";
-  let rem=1,tc=0,ga=0;
-  while(rem>0){ let tr; try{ tr=await post("/api/leluxe/refresh_tracking",{}); }catch(e){ break; }
-    if(!tr.ok) break; tc+=tr.checked; rem=tr.remaining; ga+=tr.gash_applied||0;
-    pr.textContent=`🚚 GAASH tracking… ${tc} checked${rem?`, ~${rem} to go`:""}`; if(tr.checked===0&&rem>0) break; }
-  pr.textContent=`✅ Tracking updated (${tc} package${tc===1?"":"s"}${ga?` · ${ga} GASH STATUS field${ga===1?"":"s"} synced to the Gerizim stage`:""}).`;
-  btn.disabled=false; loadLeluxe(); if(ga) lxPollStart();
+  let rem=1,tc=0,ga=0,sk=0,total=0,prev=Infinity,stall=0;
+  const wasAuto=LX_TRK_AUTO; LX_TRK_AUTO=true;   // keep the silent auto sweep out while we run
+  try{
+    for(let i=0;i<60&&rem>0;i++){                // hard cap — can never loop forever
+      let tr; try{ tr=await post("/api/leluxe/refresh_tracking",{}); }catch(e){ break; }
+      if(!tr.ok) break;
+      tc+=tr.checked; rem=tr.remaining; ga+=tr.gash_applied||0; sk=tr.skipped||sk;
+      total=Math.max(total,tc+rem);              // stable, monotonic denominator
+      pr.textContent=`🚚 GAASH tracking… ${Math.min(tc,total)}/${total}${sk?` · ${sk} done pkgs skipped`:""}`;
+      if(tr.checked===0&&rem>0) break;           // server did nothing but claims more → bail
+      stall=rem>=prev?stall+1:0; prev=rem;       // remaining must shrink; 2 stalls → stop
+      if(stall>=2) break;
+      // live board update between batches — same guards as lxAutoTracking:
+      // only while the Leluxe view is showing, never while a menu is open
+      if(VIEW==="leluxe"&&!document.querySelector(".pop-menu.open")){
+        let d; try{ d=await (await fetch("/api/leluxe/orders")).json(); }catch(e){ d=null; }
+        if(d&&d.ok){ LX=d; renderLeluxe(); }
+      }
+    }
+  }finally{
+    LX_TRK_AUTO=wasAuto;
+    pr.textContent=`✅ Tracking updated (${tc} package${tc===1?"":"s"}${sk?` · ${sk} already-done skipped`:""}${ga?` · ${ga} GASH STATUS field${ga===1?"":"s"} synced to the Gerizim stage`:""}).`;
+    btn.disabled=false; loadLeluxe(); if(ga) lxPollStart();
+  }
 }
 async function lxFetchImages(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🖼 Fetching Amazon photos…";
