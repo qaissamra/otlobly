@@ -2652,7 +2652,71 @@ def apply_gash_status(only=None, config=None):
     return queued
 
 
+# ── Bulk-sweep skip rules (owner's 2026-08-05 ask) ──────────────────────────
+# The bulk sweep must not spend carrier calls on parcels whose journey is
+# over — received at the office / sent / delivered to the customer, or already
+# in Gerizim's last-mile hands. Any bucket key below means "the parcel reached
+# Gerizim"; gerizim.NOT_FOUND is stored as a bare STRING (never a dict) so it
+# can never match.
+GZ_ARRIVED = frozenset(GERIZIM_BUCKET_OPTIONS)
+
+
+def _entry_status(config=None):
+    """The list's ENTRY status (ClickUp type "open" — "order number").
+    ClickUp auto-stamps it on every pushed row, so it counts as UNSET —
+    server twin of the client's lxKEffStatus rule."""
+    sts = schema(config).get("statuses") or []
+    ent = next((s.get("status") for s in sts if s.get("type") == "open"),
+               (sts[0].get("status") if sts else ""))
+    return str(ent or "").strip().lower()
+
+
+def _stop_statuses(config=None):
+    """ClickUp statuses that END carrier checking (the box reached us or the
+    customer, or the task closed). Reuses the Settings-editable alerts stop
+    list — one vocabulary, one editor — plus "picked up by ger" (Gerizim has
+    it), added HERE only so the alerts rules keep their own semantics."""
+    import alerts
+    lst = cfg.get(config or cfg.load(), "alerts.stop_statuses", alerts.STOP_DEFAULT)
+    return {str(s).strip().lower() for s in lst if str(s).strip()} | {"picked up by ger"}
+
+
+def _skip_gwds(rows, config=None):
+    """GWDs the BULK sweep must not spend carrier calls on:
+    (a) any row shows the parcel AT Gerizim (dict bucket in GZ_ARRIVED),
+    (b) every REAL status across the GWD's rows (""/entry = unset) is in the
+        stop set — mixed statuses (one product done, one live) keep checking,
+    (c) any row's GASH STATUS field says DELIVERED (GERZIM/BRACHA DELIVERED —
+        authoritative on old rows, same rule as gaash_mail's candidates)."""
+    import tracking
+    entry, stop = _entry_status(config), _stop_statuses(config)
+    skip, real = set(), {}
+    for row in rows:
+        tn = tracking.clean_tracking(_row_tracking(row))
+        if not tn:
+            continue
+        d = row["data"]
+        gz = d.get("gerizim_status")
+        if isinstance(gz, dict) and gz.get("bucket") in GZ_ARRIVED:
+            skip.add(tn)
+        gash = next((v for k, v in (d.get("fields") or {}).items()
+                     if k.strip().lower() == GASH_FIELD), None)
+        if gash and re.search(r"delivered", str(gash), re.I):
+            skip.add(tn)
+        st = str(row.get("status") or "").strip().lower()
+        if st and st != entry:
+            real.setdefault(tn, set()).add(st)
+    skip.update(tn for tn, sts in real.items() if sts <= stop)
+    return skip
+
+
 def refresh_tracking(batch=5, only=None, force=False, config=None):
+    """One bounded batch of live GAASH + Gerizim checks. Skips parcels that
+    need no more carrier calls (_skip_gwds) UNLESS only/force is set: `only`
+    keeps gaash_mail's enrolled threads fresh, `force` is the per-row 🔎
+    "check NOW". Every ATTEMPTED fetch stamps tracking_checked (success or
+    not) so failing GWDs rotate out on the 30-min TTL instead of pinning the
+    head of the queue forever."""
     import tracking
     import gerizim
     from datetime import timedelta
@@ -2664,10 +2728,11 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    skip = set() if (only or force) else _skip_gwds(rows, config)
     work = {}
     for row in rows:
         tn = tracking.clean_tracking(_row_tracking(row))
-        if not tn or (only and tn != only):
+        if not tn or (only and tn != only) or tn in skip:
             continue
         d = row["data"]
         gz = d.get("gerizim_status") or {}
@@ -2733,6 +2798,10 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                     d = {}
                 if st:
                     d["tracking_status"] = st
+                if want_track:
+                    # stamp the ATTEMPT, success or not — unstamped failures
+                    # used to pin list(work)[:batch] and re-run every POST;
+                    # the 30-min TTL now rotates them out.
                     d["tracking_checked"] = stamp
                 if gz_new:
                     d["gerizim_status"] = gz_new
@@ -2746,7 +2815,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     # after storing fresh Gerizim stages, mirror them into the GASH STATUS field
     applied = apply_gash_status(only=only, config=config)
     return {"checked": len(todo), "remaining": max(0, len(work) - len(todo)),
-            "gash_applied": len(applied), "changes": applied}
+            "skipped": len(skip), "gash_applied": len(applied), "changes": applied}
 
 
 # --------------------------------------------------------------------------- #

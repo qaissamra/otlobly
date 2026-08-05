@@ -40,6 +40,8 @@ def check(name, cond):
 
 SCHEMA = {
     "statuses": [{"status": "order number", "color": "#f5cf78", "orderindex": 0, "type": "open"},
+                 {"status": "in clearance", "color": "#0f9d9f", "orderindex": 5, "type": "unstarted"},
+                 {"status": "picked up by ger", "color": "#f76808", "orderindex": 18, "type": "unstarted"},
                  {"status": "sent rd", "color": "#3dcc4e", "orderindex": 33, "type": "done"}],
     "fields": {
         "NAME": {"id": "f-name", "type": "drop_down",
@@ -490,6 +492,146 @@ def flat_tracking_enrichment():
     check("one GWD → one lookup", r.get("checked") == 1)
     check("enrichment never dirties rows (display-only)",
           o2["sync_state"] == "synced" and it2["sync_state"] == "synced")
+
+
+def _trk_stubs(calls, fetch_raises=False, deadline="2026-08-01"):
+    """sys.modules stubs for tracking/gerizim recording fetched GWDs."""
+    import types
+
+    def fetch(tn, *a, **k):
+        calls.append(tn)
+        if fetch_raises:
+            raise RuntimeError("GAASH down")
+        return {}
+    tstub = types.SimpleNamespace(
+        clean_tracking=lambda s: (s or "").strip(),
+        get_session=lambda **k: ("api", "nonce"),
+        fetch_one=fetch,
+        latest_status=lambda d: {"bucket": "transit", "text": "In transit"},
+        ops_deadline=lambda tn, **k: deadline)
+    gstub = types.SimpleNamespace(track=lambda tn, **k: None)
+    return tstub, gstub
+
+
+def tracking_skip_rules():
+    """The bulk sweep skips parcels whose journey is over — all-done ClickUp
+    statuses (Settings-reused alerts stop list), a stored Gerizim bucket at/past
+    the office, or a GASH STATUS field saying DELIVERED — while only= / force
+    bypass the skips (gaash_mail threads + the per-row 🔎 must still check)."""
+    import sys
+    import alerts  # noqa: F401 — bind the REAL tracking into alerts/purchases before stubbing
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    mk = lambda name, st, gwd: leluxe.save_row(     # flat-mirror rows (like live)
+        {"kind": "order", "name": name, "status": st,
+         "fields": {"Tracking Number": gwd}})[0]
+    mk("1 A done", "sent rd", "GWD-A")                 # all real statuses done → skip
+    mk("1 B live", "in clearance", "GWD-B")            # live status → check
+    mk("1 C done", "sent rd", "GWD-C")                 # mixed with next row → check
+    mk("1 C live", "in clearance", "GWD-C")
+    mk("1 D unset", "", "GWD-D")                       # ""/entry only → check
+    mk("1 D entry", "order number", "GWD-D")
+    e1 = mk("1 E office", "", "GWD-E1")                # gz office → skip
+    e2 = mk("1 E notfound", "", "GWD-E2")              # gz "notfound" STRING → check
+    mk("1 F field", "", "GWD-F1")                      # GASH STATUS DELIVERED → skip
+    f2 = mk("1 F planted", "", "GWD-F2")
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='synced'")
+
+    def plant(row_id, patch):                          # enrichment save_row can't set
+        with db.connect() as c:
+            r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                          (row_id,)).fetchone()
+            d = json.loads(r["data_json"]); d.update(patch)
+            c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), row_id))
+    plant(e1["id"], {"gerizim_status": {"bucket": "office", "label": "At Gerizim office"}})
+    plant(e2["id"], {"gerizim_status": "notfound"})
+    with db.connect() as c:                            # F1 via fields, F2 planted raw
+        r = c.execute("SELECT id,data_json FROM leluxe_orders").fetchall()
+        for row in r:
+            d = json.loads(row["data_json"])
+            if (d.get("fields") or {}).get("Tracking Number") == "GWD-F1":
+                d["fields"]["GASH STATUS"] = "GERZIM DELIVERED"
+            if (d.get("fields") or {}).get("Tracking Number") == "GWD-F2":
+                d["fields"]["GASH STATUS"] = "BRACHA DELIVERED"
+            c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), row["id"]))
+    calls = []
+    tstub, gstub = _trk_stubs(calls)
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        r1 = leluxe.refresh_tracking(batch=20)
+        check("skips done/office/field-delivered, checks the rest",
+              set(calls) == {"GWD-B", "GWD-C", "GWD-D", "GWD-E2"})
+        check("counts: checked=live, remaining=0, skipped=4",
+              r1["checked"] == 4 and r1["remaining"] == 0 and r1["skipped"] == 4)
+        calls.clear()
+        r2 = leluxe.refresh_tracking(only="GWD-A")
+        check("only= bypasses the skip (gaash_mail thread freshness)",
+              calls == ["GWD-A"] and r2["checked"] == 1)
+        calls.clear()
+        leluxe.refresh_tracking(batch=50, force=True)
+        check("force bypasses skip AND ttl (per-row 🔎)",
+              {"GWD-A", "GWD-E1", "GWD-F1", "GWD-F2"} <= set(calls))
+        # the stop list is the Settings-editable alerts list — one vocabulary
+        config = cfg.load()
+        cfg.set_path(config, "alerts.stop_statuses", ["in clearance"])
+        cfg.save(config)
+        with db.connect() as c:
+            rows = [leluxe._row(x) for x in c.execute(
+                "SELECT * FROM leluxe_orders WHERE deleted=0")]
+        sk = leluxe._skip_gwds(rows, cfg.load())
+        check("settings alerts.stop_statuses drives the status skip",
+              "GWD-B" in sk and "GWD-A" not in sk)
+        import alerts as _al
+        cfg.set_path(config, "alerts.stop_statuses", list(_al.STOP_DEFAULT))
+        cfg.save(config)
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
+
+
+def tracking_failure_stamps():
+    """A failed GAASH fetch still stamps tracking_checked (never
+    tracking_status), so the 30-min TTL rotates the failure out of the batch
+    head instead of re-attempting it on every POST forever."""
+    import sys
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    row, _ = leluxe.save_row({"kind": "order", "name": "1 Fail",
+                              "fields": {"Tracking Number": "GWD-X"}})
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='synced'")
+    calls = []
+    tstub, gstub = _trk_stubs(calls, fetch_raises=True)
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        r1 = leluxe.refresh_tracking(batch=5)
+        d = leluxe.get_row(row["id"])["data"]
+        check("failed fetch stamps the attempt, not a status",
+              r1["checked"] == 1 and d.get("tracking_checked")
+              and "tracking_status" not in d)
+        r2 = leluxe.refresh_tracking(batch=5)
+        check("ttl rotates the failure out (no head-pinning)",
+              r2["checked"] == 0 and r2["remaining"] == 0)
+        calls.clear()
+        r3 = leluxe.refresh_tracking(batch=5, force=True)
+        check("force retries a stamped failure now",
+              r3["checked"] == 1 and calls == ["GWD-X"])
+        check("display-only: failure stamping never dirties the row",
+              leluxe.get_row(row["id"])["sync_state"] == "synced")
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
 
 
 def gash_status_sync():
@@ -1383,6 +1525,8 @@ def main():
     print("3-tier push:");       push_3tier()
     print("status-only change:"); status_only_change()
     print("flat tracking:");     flat_tracking_enrichment()
+    print("tracking skip rules:"); tracking_skip_rules()
+    print("tracking failure stamps:"); tracking_failure_stamps()
     print("gash status sync:");  gash_status_sync()
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
