@@ -2804,7 +2804,9 @@ def api_gaash_account_add():
     res = gaash_mail.add_account(b.get("email"), b.get("app_password"),
                                  b.get("label"))
     if res.get("ok"):
-        db.audit(auth.actor(), "gaash_account_add", "gaash", res["email"], "")
+        db.audit(auth.actor(),
+                 "gaash_account_pw_update" if res.get("updated")
+                 else "gaash_account_add", "gaash", res["email"], "")
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
@@ -3115,17 +3117,10 @@ def api_gaash_test_send():
     """Send a test email from an account TO ITSELF — proves SMTP works from
     this host (Render may block outbound 587) without ever touching GAASH."""
     b = request.get_json(force=True, silent=True) or {}
-    acct = gaash_mail._account(b.get("account_id"))
-    if not acct:
-        return jsonify({"ok": False, "error": "account not found"}), 404
-    msg, _mid = gaash_mail._build_msg(
-        acct, acct["email"], "Otlobly GAASH-mail test",
-        "SMTP from the Otlobly server works. You can enable sequences.", [], [])
-    try:
-        gaash_mail._smtp_send(acct, msg)
-    except Exception as e:  # noqa
-        return jsonify({"ok": False, "error": str(e)[:200]})
-    return jsonify({"ok": True, "sent_to": acct["email"]})
+    res = gaash_mail.send_test(b.get("account_id"))
+    if res.get("error") == "account not found":
+        return jsonify(res), 404
+    return jsonify(res)
 
 
 # ── v2: sequences / templates / rules CRUD + dashboard + public tracking ────

@@ -185,6 +185,149 @@ def main():
     r = gm.send_manual("GWD400", "hello gaash")
     check("manual send blocked by dry-run", r["ok"] is False and r.get("dry_run"))
 
+    print("— accounts: app-password upsert + protocol-scoped errors —")
+    check("_clean_pw strips spaces/NBSP/zero-width/BOM",
+          gm._clean_pw(" abcd efgh\u00a0ijkl\u200b\u200c\u200d\u2060\ufeffmnop ")
+          == "abcdefghijklmnop")
+
+    class _FakeSMTP:                       # gmail double: rejects any other pw
+        ok_pw = "goodpassword1234"
+
+        def login(self, email, pw):
+            if pw != _FakeSMTP.ok_pw:
+                raise gm.smtplib.SMTPAuthenticationError(535, b"bad creds")
+
+        def send_message(self, msg):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _FakeIMAP:
+        def __init__(self, host, port):
+            pass
+
+        def login(self, email, pw):
+            if pw != _FakeSMTP.ok_pw:
+                raise gm.imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+
+        def status(self, *a):
+            return "OK", [b"INBOX (UIDVALIDITY 7 UIDNEXT 42)"]
+
+        def logout(self):
+            pass
+
+    real_connect, real_imap = gm._smtp_connect, gm.imaplib.IMAP4_SSL
+    real_send, real_chk = gm._smtp_send, gm._check_account
+    gm._smtp_connect = lambda timeout=30: _FakeSMTP()
+    gm.imaplib.IMAP4_SSL = _FakeIMAP
+    try:
+        r1 = gm.add_account("Upsert@Test.com", "good password 1234")
+        with db.connect() as c:
+            row = c.execute("SELECT * FROM gaash_accounts WHERE email=?",
+                            ("upsert@test.com",)).fetchone()
+        check("fresh add verifies + stores the cleaned password",
+              r1["ok"] and not r1.get("updated")
+              and row and row["app_password"] == "goodpassword1234")
+        aid1 = r1["id"]
+        _mk_thread("GWD700", step=1, state="active", account_id=aid1)
+
+        _FakeSMTP.ok_pw = "newpassword5678"
+        r2 = gm.add_account("  UPSERT@test.com", "new password 5678")
+        with db.connect() as c:
+            row = c.execute("SELECT * FROM gaash_accounts WHERE id=?",
+                            (aid1,)).fetchone()
+            n = c.execute("SELECT COUNT(*) n FROM gaash_accounts WHERE email=?",
+                          ("upsert@test.com",)).fetchone()["n"]
+        check("re-add same email updates in place (same id, no duplicate)",
+              r2["ok"] and r2.get("updated") and r2["id"] == aid1 and n == 1
+              and row["app_password"] == "newpassword5678"
+              and row["last_error"] is None)
+        check("the thread kept its sender",
+              gm.thread_get("GWD700")["account_id"] == aid1)
+
+        r3 = gm.add_account("upsert@test.com", "wrongpassword999")
+        with db.connect() as c:
+            row = c.execute("SELECT app_password FROM gaash_accounts "
+                            "WHERE id=?", (aid1,)).fetchone()
+        check("failed re-verify never clobbers the stored password",
+              r3["ok"] is False and r3["error"] == gm._AUTH_HELP
+              and row["app_password"] == "newpassword5678")
+
+        from email.message import EmailMessage as _EM
+        junk_acct = {"email": "upsert@test.com",
+                     "app_password": "new pass word 5678"}
+        try:
+            gm._smtp_send(junk_acct, _EM())
+            login_ok = True
+        except Exception:  # noqa
+            login_ok = False
+        check("login sites clean stored junk too (defense in depth)", login_ok)
+
+        settings_mod.apply({"gaash_mail": {"dry_run": False,
+                                           "to_address": "gaash@test.com"}})
+
+        def _boom(acct, msg):
+            raise gm.smtplib.SMTPAuthenticationError(535, b"revoked")
+        gm._smtp_send = _boom
+        r4 = gm.send_manual("GWD700", "hello")
+        with db.connect() as c:
+            arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
+                             (aid1,)).fetchone()
+            leftover = c.execute("SELECT 1 FROM gaash_msgs WHERE gwd='GWD700' "
+                                 "AND dir='out'").fetchone()
+        check("auth failure stamps thread AND account (SMTP-prefixed)",
+              r4["ok"] is False
+              and gm.thread_get("GWD700")["last_error"] == gm._AUTH_HELP
+              and arow["last_error"] == "SMTP: " + gm._AUTH_HELP
+              and leftover is None)
+
+        gm._check_account = lambda a, s, m, t: ([], {
+            "imap_last_uid": 1, "imap_uidvalidity": 7,
+            "last_check": gm.now_iso(), "seen_ids_json": "[]"})
+        gm.check_replies()
+        with db.connect() as c:
+            arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
+                             (aid1,)).fetchone()
+        check("a clean IMAP poll keeps the SMTP-owned error",
+              arow["last_error"] == "SMTP: " + gm._AUTH_HELP)
+        gm._account_set_error(aid1, "some imap trouble")
+        gm.check_replies()
+        with db.connect() as c:
+            arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
+                             (aid1,)).fetchone()
+        check("a clean IMAP poll clears its own (unprefixed) error",
+              arow["last_error"] is None)
+
+        gm._smtp_send = _boom
+        rt = gm.send_test(aid1)
+        with db.connect() as c:
+            arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
+                             (aid1,)).fetchone()
+        check("send_test maps auth failure to the friendly help + stamps",
+              rt["ok"] is False and rt["error"] == gm._AUTH_HELP
+              and arow["last_error"] == "SMTP: " + gm._AUTH_HELP)
+        check("send_test on a ghost id says so",
+              gm.send_test("acct_nope")["error"] == "account not found")
+
+        gm._smtp_send = lambda acct, msg: None
+        rt2 = gm.send_test(aid1)
+        r5 = gm.send_manual("GWD700", "hello again")
+        with db.connect() as c:
+            arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
+                             (aid1,)).fetchone()
+        check("working test-send + send clear the SMTP error",
+              rt2["ok"] and rt2["sent_to"] == "upsert@test.com"
+              and r5["ok"] and arow["last_error"] is None)
+    finally:
+        gm._smtp_connect, gm.imaplib.IMAP4_SSL = real_connect, real_imap
+        gm._smtp_send, gm._check_account = real_send, real_chk
+        settings_mod.apply({"gaash_mail": {"dry_run": True}})
+        _del_thread("GWD700")
+
     print("— routes: permissions —")
     co, ce, cs = client("otlo"), client("emp"), client("sal")
     anon = appmod.app.test_client()
