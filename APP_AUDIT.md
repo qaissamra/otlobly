@@ -18,18 +18,18 @@ audited · `n/a` doesn't apply. Tests column: suite name = dedicated coverage,
 
 | View (setView) | Works | Errors | Design | Mobile | Roles | Logic | Dup | Tests |
 |---|---|---|---|---|---|---|---|---|
-| 🧠 Brain (`brain`) | · | · | ✅ UI_AUDIT B5 | · | · | · | · | test_brain |
-| 📦 Purchases · orders tree | · | · | ✅ B-series | · | · | · | · | test_po_purchases_redesign, test_po_item_declutter, test_role_money |
-| 📦 Purchases · packages (`pok`) | · | · | ✅ | · | · | · | · | part (redesign markers) |
-| 📦 Purchases · products (`pop`) | · | · | ✅ | · | · | · | · | part |
-| 📦 Purchases · customers | · | · | ✅ | · | · | · | · | — |
-| 💡 To order (`needorder`) + quote tool | · | · | ✅ | · | · | · | · | test_notifications part; quote math — (F-002) |
-| ⌚ Leluxe · dashboard | · | · | ✅ | · | · | · | · | test_leluxe (mirror) |
-| ⌚ Leluxe · orders/products | · | · | ✅ | · | · | · | · | test_leluxe |
-| ⌚ Leluxe · packages | · | · | ✅ | · | · | ⚠ F-005 filter | · | — (render untested) |
-| ⌚ Leluxe · goal 🎯 | · | · | ✅ | · | · | · | · | test_leluxe_goal |
-| 💵 Deposits (`deposits`) | · | · | ✅ B3 | · | · | · | · | part (ledger math in test_money_and_auth; endpoint —) |
-| 🏠 Orders (`orders`) | · | · | ✅ B2 | · | · | · | ⚠ F-010 GWD col deferred | part (order code race, due chips) |
+| 🧠 Brain (`brain`) | ✅ 2a | ✅ | ✅ UI_AUDIT B5 | ✅ | · | ✅ | · | test_brain |
+| 📦 Purchases · orders tree | ✅ 2a | ✅ | ✅ B-series | ✅ | · | · | · | test_po_purchases_redesign, test_po_item_declutter, test_role_money |
+| 📦 Purchases · packages (`pok`) | ✅ 2a | ✅ | ✅ | ✅ pin 200 | · | ⚠ F-012 chips | · | part (redesign markers) |
+| 📦 Purchases · products (`pop`) | ✅ 2a | ✅ | ✅ | · | · | · | · | part |
+| 📦 Purchases · customers | ✅ 2a | ✅ | ✅ 2-tier meta ✓ | · | · | · | · | — |
+| 💡 To order (`needorder`) + quote tool | ✅ 2a | ✅ | ✅ | · | · | · | · | test_notifications part; quote math — (F-002) |
+| ⌚ Leluxe · Board (dashboard) | ✅ 2a | ✅ | ✅ | · | · | ⚠ F-013 $/₪ | · | test_leluxe (mirror) |
+| ⌚ Leluxe · orders/products | ✅ 2a | ✅ | ✅ | · | · | · | · | test_leluxe |
+| ⌚ Leluxe · packages | ✅ 2a header formula EXACT | ✅ | ✅ | · | · | ⚠ F-005 filter | · | — (render untested) |
+| ⌚ Leluxe · goal 🎯 | ✅ 2a render | ✅ | ✅ | · | · | · | · | test_leluxe_goal |
+| 💵 Deposits (`deposits`) | ✅ 2a Σ exact | ✅ | ✅ B3 | · | · | · | · | part (ledger math in test_money_and_auth; /api/payments endpoint —) |
+| 🏠 Orders (`orders`) | ✅ 2a | ✅ | ✅ B2 | ✅ | · | ⚠ F-014 batch Σ | ⚠ F-010 GWD col deferred | part (order code race, due chips) |
 | 🛒 In cart (`incart`) | · | · | ✅ B3 | · | · | · | · | test_role_money part |
 | 📣 Leads (`metaleads`) | · | · | ✅ B5 | · | · | · | · | — (modules untested) |
 | 👤 Customers (`customers`) | · | · | ✅ B3+B6 | · | · | · | · | test_customer_id part |
@@ -89,12 +89,15 @@ Rank: **P0** broken/data-loss · **P1** wrong money math / security / logic gap 
 | F-009 | P3 | Team view never got the LXT treatment (UI_AUDIT left it "open by choice" — password-reset rows need the wf-exp pattern) | owner call |
 | F-010 | P3 | Per-order GWD column on the Orders board deferred in UI_AUDIT Batch 2 (needs server-side purchases scan) | owner call |
 | F-011 | P3 | No CI: tests run only when a session runs them. `run_all_tests.sh` added (this PR); consider a GitHub Action on push later | partial |
+| F-012 | P2 | Purchases packages/products quick chips (`Late · N` …) count late **POs** while the view lists **packages** — Late·7 renders ~15 rows (all packages of late POs incl. non-late siblings; 8 packages are actually late). Same PO-level-vs-row-level family as F-005 — fix them together | open |
+| F-013 | P2 | Leluxe **Board** tiles label ₪ sums with **$**: "Total value $72,113" = Σ ClickUp `Total Amount` (₪ everywhere else — packages header shows the same money as ₪74.8k), also "Avg order", "$ at risk". Fix must check what the 🎯 goal engine converts (it has fx) before relabeling | open |
+| F-014 | P3 | Orders overview "By batch" rows include cancelled orders' amounts, so they sum to $4,472.43 under a "Total value $4,399.98" line — one panel, two definitions | open |
 
 ## Batch roadmap v2
 
 - [x] **Batch A0 (this PR)** — foundations: `run_all_tests.sh`, full-suite baseline run, this document, SKILL.md test-instruction fix.
 - [ ] **Batch T1** — `test_pnl.py` + `test_estimate.py` (F-001, F-002): lock the two money-math modules.
-- [ ] **Sweep 2a** — staff console part 1 (Brain, Purchases ×4, To-order+quote, Leluxe ×5, Deposits, Orders): fill Matrix A cells, file findings.
+- [x] **Sweep 2a** — done 2026-08-06 (12 sub-views). Math audits all EXACT: header outstanding = Σ collect over non-collected; To-order total; PO card total; pkgEstTotal row; Leluxe packages header replayed via the view's own recipe (157 · 207 · ₪74,856.93); Deposits Σ; Brain tiles = /api/brain pipeline. Interactions: ⋯ menus position:fixed unclipped, filters narrow, two-tier customer meta intact. Phone 390px: no page H-overflow, bt-pin caps at exactly 200px and stays sticky. Console: zero errors across all views. Filed F-012/F-013/F-014. NOT covered: Roles column (needs a non-admin login — do in 2b), per-view inline-edit deep pass.
 - [ ] **Sweep 2b** — staff console part 2 (remaining views + Settings panels + platform + hidden-views decision).
 - [ ] **Sweep 3** — public pages + sw.js offline + AR/RTL (Matrix B).
 - [ ] **Sweep 4** — flows/logic walk (Matrix C), incl. F-003 vocabulary proposal + F-006 store-race audit.
