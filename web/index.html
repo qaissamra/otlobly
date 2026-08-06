@@ -10756,7 +10756,7 @@ async function gmLoad(){
   if(!d.mailer_env) locks.push("🤖 "+T("المُرسِل التلقائي متوقف على هذا الخادم · auto-sequencer off on this server"));
   const acctErr=(d.accounts||[]).find(a=>a.last_error);
   $("gmBanner").innerHTML=
-    (acctErr?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px">⚠ ${poEsc(acctErr.email)}: ${poEsc(String(acctErr.last_error).slice(0,120))}</div>`:"")
+    (acctErr?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:12.5px;margin-bottom:10px;display:flex;gap:8px;align-items:center"><span style="flex:1;min-width:0" title="${poEsc(acctErr.last_error)}">⚠ ${poEsc(acctErr.email)}: ${poEsc(String(acctErr.last_error).slice(0,120))}</span>${CAN_ADMIN?`<button class="minibtn" style="flex:none" onclick="gmSettingsOpen();gmAcctFix('${poEsc(acctErr.email)}')" title="${T("أدخل كلمة مرور تطبيق جديدة لهذا الحساب · enter a fresh app password for this account")}">🔑 ${T("حدّث كلمة المرور · update password")}</button>`:""}</div>`:"")
     +(locks.length
       ?`<div class="panel" style="background:var(--bg2);font-size:12.5px;margin-bottom:10px">🔒 <b>${T("وضع آمن — لا يُرسل أي إيميل من تلقاء نفسه · safe mode — no email goes out by itself")}</b> · ${locks.join(" · ")} <span class="muted2">${T("— كل ما عدا الإرسال يعمل، جرّب براحة · — everything else works, explore freely")}</span></div>`
       :`<div class="panel" style="background:#f0fdf4;border-color:#bbf7d0;font-size:12.5px;margin-bottom:10px">🟢 <b>${T("الإرسال حي · sending is LIVE")}</b> — ${T("الإيميلات تخرج فعلاً إلى · real emails go out to")} <b dir="ltr">${poEsc(s.to_address||"?")}</b></div>`);
