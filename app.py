@@ -2819,6 +2819,27 @@ def api_gaash_account_remove():
     return jsonify(res)
 
 
+@app.route("/api/gaash/accounts/health")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_accounts_health():
+    return jsonify({"ok": True, **gaash_mail.accounts_health()})
+
+
+@app.route("/api/gaash/accounts/repair", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_gaash_accounts_repair():
+    """Rebuild a mailbox table whose index stopped matching its rows — the
+    failure that reads as 'Gmail rejected this login' on every account."""
+    res = gaash_mail.repair_accounts()
+    if res.get("ok"):
+        db.audit(auth.actor(), "gaash_accounts_repair", "gaash",
+                 ",".join(res.get("kept") or []),
+                 f"dropped {res.get('dropped')} unreadable row(s)")
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
 @app.route("/api/gaash/account/uses")
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
