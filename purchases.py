@@ -557,21 +557,36 @@ def refresh_tracking(only=None, force=False, batch=5):
             if not st and not gz_new and not deadline and not dl_stamp:
                 continue                  # every lookup failed / nothing new → no writes
             stamp = db.now_iso()
+            # Write into a FRESH load, not this request's snapshot: each GWD
+            # costs ~10s of live scraping, so `pdb` is seconds-to-minutes old
+            # by now, and saving it verbatim CLOBBERED any PO created or
+            # edited meanwhile (watched live: a just-created order vanished
+            # when the in-flight sweep saved over it). Only the tracking keys
+            # below belong to this writer; everything else is someone else's.
+            fresh = load()
+            fmap = {(fpo.get("po_id"), fpk.get("package_no")): fpk
+                    for fpo in fresh["purchase_orders"]
+                    for fpk in fpo.get("packages") or []
+                    if fpk.get("package_no") is not None}
             for po, pk, nt, nd in rows:
                 old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
                 gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
-                if st:
-                    pk["tracking_status"] = st
-                if cd_at:
-                    pk["gaash_cd_at"] = cd_at
-                if gz_new:
-                    pk["gerizim_status"] = gz_new
-                if nd and dl_stamp:
-                    pk["gaash_deadline_checked"] = dl_stamp
-                    if deadline:
-                        pk["gaash_deadline"] = deadline
-                if nt:
-                    pk["tracking_checked"] = stamp
+                # snapshot pk too: `changes`, the activity trail and later
+                # batches' TTL checks all read from it
+                fpk = fmap.get((po.get("po_id"), pk.get("package_no")))
+                for t in (pk, fpk) if fpk is not None else (pk,):
+                    if st:
+                        t["tracking_status"] = st
+                    if cd_at:
+                        t["gaash_cd_at"] = cd_at
+                    if gz_new:
+                        t["gerizim_status"] = gz_new
+                    if nd and dl_stamp:
+                        t["gaash_deadline_checked"] = dl_stamp
+                        if deadline:
+                            t["gaash_deadline"] = deadline
+                    if nt:
+                        t["tracking_checked"] = stamp
                 updated += 1
                 cur = st or old
                 changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
@@ -598,8 +613,11 @@ def refresh_tracking(only=None, force=False, batch=5):
                                  field="gerizim_status", old=got or None, new=gnt,
                                  detail=f"Package {pk.get('package_no')}", user="Gerizim")
             # Persist after EACH GWD so a timeout mid-batch never loses finished work.
-            save(pdb)
-    return {"updated": updated, "remaining": remaining, "changes": changes, "db": pdb}
+            save(fresh)
+    # the route serializes `db` back as the board state — return a fresh read
+    # so concurrent creates/edits survive on the client too, not just on disk
+    return {"updated": updated, "remaining": remaining, "changes": changes,
+            "db": load() if picked else pdb}
 
 
 def _pkg_label(po, pk):
