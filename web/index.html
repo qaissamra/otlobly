@@ -12450,15 +12450,16 @@ function gmSettingsOpen(){
   $("bulkBody").innerHTML=`
     <div style="margin:6px 0"><b style="font-size:13px">✉ ${T("حسابات Gmail · Gmail accounts")}</b>
       ${accts.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
-        <b>${poEsc(a.email)}</b>${a.last_error?`<span style="color:#b42318;font-size:11px">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
+        <b>${poEsc(a.email)}</b>${a.last_error?`<span style="color:#b42318;font-size:11px" title="${poEsc(a.last_error)}">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
         <span class="spacer"></span>
+        ${CAN_ADMIN&&a.last_error?`<button class="minibtn" onclick="gmAcctFix('${poEsc(a.email)}')" title="${T("أدخل كلمة مرور تطبيق جديدة لهذا الحساب · enter a fresh app password for this account")}">🔑</button>`:""}
         ${CAN_ADMIN?`<button class="minibtn" onclick="gmTestSend('${poEsc(a.id)}',this)">${T("إرسال تجريبي لنفسي · test to myself")}</button>
         <button class="minibtn" onclick="gmAcctRemove('${poEsc(a.id)}')">🗑</button>`:""}</div>`).join("")||`<div class="muted2" style="font-size:12px;padding:4px 0">${T("لا حسابات بعد · none yet")}</div>`}
       ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <input id="gmAcEmail" placeholder="email@gmail.com" style="flex:1;min-width:150px">
-        <input id="gmAcPw" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
+        <input id="gmAcPw" type="password" autocomplete="new-password" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
         <button class="minibtn" onclick="gmAcctAdd(this)">＋ ${T("أضف · Add")}</button></div>
-      <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")}</div>`:""}
+      <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة مرور حساب موجود أعد إدخال نفس البريد مع الكلمة الجديدة · to update an existing account's password, re-add the same email with the new one")}</div>`:""}
     </div>
     ${CAN_ADMIN?`<hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px">
@@ -12499,10 +12500,19 @@ function gmSettingsOpen(){
 }
 async function gmAcctAdd(btn){
   btn.disabled=true; btn.textContent="…";
-  const r=await post("/api/gaash/account/add",{email:($("gmAcEmail")||{}).value, app_password:($("gmAcPw")||{}).value});
+  // strip Gmail's group-of-4 spaces + NBSP/zero-width a paste can carry
+  const pw=((($("gmAcPw")||{}).value)||"").replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff]+/g,"");
+  const r=await post("/api/gaash/account/add",{email:((($("gmAcEmail")||{}).value)||"").trim(), app_password:pw});
   btn.disabled=false; btn.textContent="＋ "+T("أضف · Add");
   if(!r.ok){ toast(r.error||"failed"); return; }
-  toast("✓ "+r.email); await gmLoad(); gmSettingsOpen();
+  toast(r.updated?("🔑 "+T("حُدِّثت كلمة المرور · password updated")+" — "+r.email):("✓ "+r.email));
+  await gmLoad(); gmSettingsOpen();
+}
+function gmAcctFix(email){
+  // the 🔑 on a failing chip: prefill the form so the fix is one paste away
+  const e=$("gmAcEmail"), p=$("gmAcPw");
+  if(e) e.value=email;
+  if(p){ p.value=""; p.focus(); }
 }
 async function gmAcctRemove(id){
   // name the damage BEFORE it happens: deleting a mailbox leaves every

@@ -68,6 +68,14 @@ _AUTH_HELP = ("Gmail rejected this login. Use an App Password (not the normal "
               "password): turn on 2-Step Verification, then create one at "
               "myaccount.google.com/apppasswords and paste its 16 letters here.")
 
+# app passwords are 16 ASCII letters — a paste can carry Gmail's group-of-4
+# spaces plus NBSP/zero-width/BOM characters that \s alone doesn't cover
+_PW_JUNK = re.compile(r"[\s\u00a0\u200b\u200c\u200d\u2060\ufeff]+")
+
+
+def _clean_pw(pw):
+    return _PW_JUNK.sub("", str(pw or ""))
+
 
 def _setts():
     return settings_mod.read().get("gaash_mail") or {}
@@ -114,6 +122,21 @@ def _account(account_id):
     return dict(r) if r else None
 
 
+# The ⚠/✓ chip reads gaash_accounts.last_error, which the IMAP poll owns —
+# SMTP failures are prefixed so each protocol clears only its own verdict,
+# else a working poll would flip the chip green while every send still fails.
+def _account_set_error(account_id, msg):
+    with db.connect() as c:
+        c.execute("UPDATE gaash_accounts SET last_error=? WHERE id=?",
+                  (msg, account_id))
+
+
+def _account_clear_smtp_error(account_id):
+    with db.connect() as c:
+        c.execute("UPDATE gaash_accounts SET last_error=NULL "
+                  "WHERE id=? AND last_error LIKE 'SMTP:%'", (account_id,))
+
+
 def _mailbox_status(M):
     """(uidvalidity, uidnext) of INBOX, or (None, None)."""
     try:
@@ -128,17 +151,22 @@ def _mailbox_status(M):
 
 
 def add_account(email_addr, app_password, label=None):
-    """Verify SMTP+IMAP logins, then store the account. Never raises."""
+    """Verify SMTP+IMAP logins, then store the account. Never raises.
+
+    Re-adding an email that already exists UPDATES its password in place —
+    same verification first, and the id survives, so every conversation bound
+    to the mailbox keeps its sender (remove+re-add would orphan them all).
+    That's the recovery path when Google revokes an app password."""
     email_addr = (email_addr or "").strip().lower()
-    pw = (app_password or "").replace(" ", "").strip()   # Gmail shows it in 4s
+    pw = _clean_pw(app_password)
     if not email_addr or "@" not in email_addr:
         return {"ok": False, "error": "enter a valid email address"}
     if not pw:
         return {"ok": False, "error": "enter the app password"}
     with db.connect() as c:
-        if c.execute("SELECT 1 FROM gaash_accounts WHERE email=?",
-                     (email_addr,)).fetchone():
-            return {"ok": False, "error": f"{email_addr} is already added"}
+        row = c.execute("SELECT id FROM gaash_accounts WHERE email=?",
+                        (email_addr,)).fetchone()
+    existing_id = row["id"] if row else None
     try:
         with _smtp_connect(timeout=25) as s:
             s.login(email_addr, pw)
@@ -162,6 +190,19 @@ def add_account(email_addr, app_password, label=None):
                 " (Also make sure IMAP is enabled in Gmail settings.)"}
     except Exception as e:  # noqa
         return {"ok": False, "error": f"IMAP connection failed: {str(e)[:120]}"}
+    if existing_id:
+        # fresh creds verified for a known mailbox: swap the password only.
+        # added_at and the IMAP cursor stay — the next poll then ingests any
+        # replies that arrived while the password was broken (a UIDVALIDITY
+        # renumber self-heals in _check_account).
+        with db.connect() as c:
+            c.execute("UPDATE gaash_accounts SET app_password=?, "
+                      "last_error=NULL WHERE id=?", (pw, existing_id))
+            if (label or "").strip():
+                c.execute("UPDATE gaash_accounts SET label=? WHERE id=?",
+                          ((label or "").strip(), existing_id))
+        return {"ok": True, "id": existing_id, "email": email_addr,
+                "updated": True}
     aid = f"acct_{int(time.time() * 1000)}"
     with db.connect() as c:
         c.execute("""INSERT INTO gaash_accounts
@@ -2325,8 +2366,29 @@ def _fill(tpl, gwd, thread=None, step=None):
 # --------------------------------------------------------------------------- #
 def _smtp_send(acct, msg):
     with _smtp_connect() as s:
-        s.login(acct["email"], acct.get("app_password") or "")
+        # _clean_pw also heals rows stored before saves were normalized
+        s.login(acct["email"], _clean_pw(acct.get("app_password")))
         s.send_message(msg)
+
+
+def send_test(account_id):
+    """Send a test email from a mailbox TO ITSELF — proves SMTP works from
+    this host (Render may block outbound 587) without ever touching GAASH."""
+    acct = _account(account_id)
+    if not acct:
+        return {"ok": False, "error": "account not found"}
+    msg, _mid = _build_msg(
+        acct, acct["email"], "Otlobly GAASH-mail test",
+        "SMTP from the Otlobly server works. You can enable sequences.", [], [])
+    try:
+        _smtp_send(acct, msg)
+    except smtplib.SMTPAuthenticationError:
+        _account_set_error(acct["id"], "SMTP: " + _AUTH_HELP)
+        return {"ok": False, "error": _AUTH_HELP}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": str(e)[:200]}
+    _account_clear_smtp_error(acct["id"])
+    return {"ok": True, "sent_to": acct["email"]}
 
 
 def _build_msg(acct, to_addr, subject, body, attachments, chain, html=None):
@@ -2411,6 +2473,8 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
         with db.connect() as c:
             c.execute("DELETE FROM gaash_msgs WHERE id=?", (mrow,))
         _thread_set(gwd, last_error=_AUTH_HELP)
+        # stamp the mailbox that actually failed (may be the fan-out override)
+        _account_set_error(acct["id"], "SMTP: " + _AUTH_HELP)
         return {"ok": False, "error": _AUTH_HELP}
     except Exception as e:  # noqa
         with db.connect() as c:
@@ -2427,6 +2491,7 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
         c.execute("UPDATE gaash_msgs SET message_id=?, attachments_json=? "
                   "WHERE id=?", (mid, json.dumps(atts), mrow))
     _thread_set(gwd, subject=base, last_error=None, last_activity=now)
+    _account_clear_smtp_error(acct["id"])   # a working send proves SMTP
     return {"ok": True, "message_id": mid, "msg_row": mrow}
 
 
@@ -2858,7 +2923,7 @@ def _check_account(acct, setts, our_mids, thread_gwds):
 
     M = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
     try:
-        M.login(acct["email"], acct.get("app_password") or "")
+        M.login(acct["email"], _clean_pw(acct.get("app_password")))
         uv, un = _mailbox_status(M)
         if uv and acct.get("imap_uidvalidity") and uv != acct["imap_uidvalidity"]:
             last = max(0, (un or 1) - 1)    # mailbox renumbered — resume at the end
@@ -2948,8 +3013,12 @@ def check_replies():
                           "WHERE id=?", (now_iso(), msg, a["id"]))
             continue
         with db.connect() as c:
+            # a clean poll proves IMAP only — an SMTP:-prefixed error must
+            # survive it (see _account_set_error)
             c.execute("UPDATE gaash_accounts SET imap_last_uid=?, "
-                      "imap_uidvalidity=?, last_check=?, last_error=NULL, "
+                      "imap_uidvalidity=?, last_check=?, "
+                      "last_error=CASE WHEN last_error LIKE 'SMTP:%' "
+                      "THEN last_error ELSE NULL END, "
                       "seen_ids_json=? WHERE id=?",
                       (patch["imap_last_uid"], patch["imap_uidvalidity"],
                        patch["last_check"], patch["seen_ids_json"], a["id"]))
