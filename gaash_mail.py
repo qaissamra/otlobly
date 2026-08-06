@@ -68,6 +68,42 @@ _AUTH_HELP = ("Gmail rejected this login. Use an App Password (not the normal "
               "password): turn on 2-Step Verification, then create one at "
               "myaccount.google.com/apppasswords and paste its 16 letters here.")
 
+# Gmail refuses a login for three different reasons and they need three
+# different fixes, but smtplib raises the same exception for all of them. We
+# used to store _AUTH_HELP for every one — so a sign-in Google had BLOCKED read
+# as a bad password, and the owner could regenerate app passwords forever
+# without ever fixing it. Read what Gmail actually said and answer that.
+_AUTH_BLOCKED = (
+    "Google BLOCKED this sign-in — it does not trust where the server is "
+    "signing in from. A new App Password will not help: open this mailbox, "
+    "find Google's 'Critical security alert' and confirm it was you (or visit "
+    "accounts.google.com/DisplayUnlockCaptcha), then try again.")
+_AUTH_NOT_APP_PW = (
+    "That is the account's normal password, not an App Password. Create one at "
+    "myaccount.google.com/apppasswords and paste its 16 letters instead.")
+
+
+def _auth_help(exc=None):
+    """The advice that fits the refusal Gmail actually sent, with its own words
+    kept on the end — the raw reply is the only thing that tells these apart."""
+    raw = ""
+    if exc is not None:
+        err = getattr(exc, "smtp_error", b"") or b""
+        if isinstance(err, bytes):
+            err = err.decode("utf-8", "replace")
+        code = getattr(exc, "smtp_code", "") or ""
+        raw = " ".join(str(x) for x in (code, err) if x).strip()
+    low = raw.lower()
+    if "5.7.14" in low or "web browser" in low or "blocked" in low:
+        base = _AUTH_BLOCKED
+    elif "5.7.9" in low or "application-specific password required" in low:
+        base = _AUTH_NOT_APP_PW
+    else:
+        base = _AUTH_HELP
+    # one line, collapsed: Gmail pads these replies with newlines and a URL
+    raw = " ".join(raw.split())[:220]
+    return f"{base} — Gmail said: {raw}" if raw else base
+
 # app passwords are 16 ASCII letters — a paste can carry Gmail's group-of-4
 # spaces plus NBSP/zero-width/BOM characters that \s alone doesn't cover
 _PW_JUNK = re.compile(r"[\s\u00a0\u200b\u200c\u200d\u2060\ufeff]+")
@@ -170,8 +206,10 @@ def add_account(email_addr, app_password, label=None):
     try:
         with _smtp_connect(timeout=25) as s:
             s.login(email_addr, pw)
-    except smtplib.SMTPAuthenticationError:
-        return {"ok": False, "error": _AUTH_HELP}
+    except smtplib.SMTPAuthenticationError as e:
+        # the most valuable place to be specific: the owner is standing here
+        # with a freshly generated password wondering why it was refused
+        return {"ok": False, "error": _auth_help(e)}
     except Exception as e:  # noqa
         return {"ok": False, "error": f"SMTP connection failed: {str(e)[:120]}"}
     uv = un = None
@@ -185,9 +223,15 @@ def add_account(email_addr, app_password, label=None):
                 M.logout()
             except Exception:  # noqa
                 pass
-    except imaplib.IMAP4.error:
-        return {"ok": False, "error": _AUTH_HELP +
-                " (Also make sure IMAP is enabled in Gmail settings.)"}
+    except imaplib.IMAP4.error as e:
+        # IMAP speaks its own refusal (not an SMTPAuthenticationError), and it
+        # says WEB_LOGIN_REQUIRED for the same block SMTP calls 5.7.14
+        said = " ".join(str(e).split())[:200]
+        blocked = "web_login" in said.lower() or "webloginrequired" in said.lower()
+        return {"ok": False,
+                "error": (_AUTH_BLOCKED if blocked else _AUTH_HELP)
+                + " (Also make sure IMAP is enabled in Gmail settings.)"
+                + (f" — Gmail said: {said}" if said else "")}
     except Exception as e:  # noqa
         return {"ok": False, "error": f"IMAP connection failed: {str(e)[:120]}"}
     if existing_id:
@@ -2544,9 +2588,10 @@ def send_test(account_id):
         "SMTP from the Otlobly server works. You can enable sequences.", [], [])
     try:
         _smtp_send(acct, msg)
-    except smtplib.SMTPAuthenticationError:
-        _account_set_error(acct["id"], "SMTP: " + _AUTH_HELP)
-        return {"ok": False, "error": _AUTH_HELP}
+    except smtplib.SMTPAuthenticationError as e:
+        help_ = _auth_help(e)
+        _account_set_error(acct["id"], "SMTP: " + help_)
+        return {"ok": False, "error": help_}
     except Exception as e:  # noqa
         return {"ok": False, "error": str(e)[:200]}
     _account_clear_smtp_error(acct["id"])
@@ -2631,13 +2676,14 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
                           chain, html=_html_body(body or "", mrow))
     try:
         _smtp_send(acct, msg)
-    except smtplib.SMTPAuthenticationError:
+    except smtplib.SMTPAuthenticationError as e:
         with db.connect() as c:
             c.execute("DELETE FROM gaash_msgs WHERE id=?", (mrow,))
-        _thread_set(gwd, last_error=_AUTH_HELP)
+        help_ = _auth_help(e)
+        _thread_set(gwd, last_error=help_)
         # stamp the mailbox that actually failed (may be the fan-out override)
-        _account_set_error(acct["id"], "SMTP: " + _AUTH_HELP)
-        return {"ok": False, "error": _AUTH_HELP}
+        _account_set_error(acct["id"], "SMTP: " + help_)
+        return {"ok": False, "error": help_}
     except Exception as e:  # noqa
         with db.connect() as c:
             c.execute("DELETE FROM gaash_msgs WHERE id=?", (mrow,))
@@ -3184,7 +3230,12 @@ def check_replies():
         except Exception as e:  # noqa - one bad account must not stop the rest
             msg = str(e)[:150]
             if "AUTHENTICATIONFAILED" in msg.upper():
-                msg = _AUTH_HELP
+                # keep IMAP's own words: WEB_LOGIN_REQUIRED here means Google
+                # blocked the sign-in, which no new app password will fix
+                said = " ".join(str(e).split())[:200]
+                blocked = "web_login" in said.lower() or "webloginrequired" in said.lower()
+                msg = ((_AUTH_BLOCKED if blocked else _AUTH_HELP)
+                       + (f" — Gmail said: {said}" if said else ""))
             errors[a.get("email") or a["id"]] = msg
             with db.connect() as c:
                 c.execute("UPDATE gaash_accounts SET last_check=?, last_error=? "

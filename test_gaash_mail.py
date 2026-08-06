@@ -254,7 +254,7 @@ def main():
             row = c.execute("SELECT app_password FROM gaash_accounts "
                             "WHERE id=?", (aid1,)).fetchone()
         check("failed re-verify never clobbers the stored password",
-              r3["ok"] is False and r3["error"] == gm._AUTH_HELP
+              r3["ok"] is False and r3["error"].startswith(gm._AUTH_HELP)
               and row["app_password"] == "newpassword5678")
 
         from email.message import EmailMessage as _EM
@@ -281,9 +281,13 @@ def main():
                                  "AND dir='out'").fetchone()
         check("auth failure stamps thread AND account (SMTP-prefixed)",
               r4["ok"] is False
-              and gm.thread_get("GWD700")["last_error"] == gm._AUTH_HELP
-              and arow["last_error"] == "SMTP: " + gm._AUTH_HELP
+              and gm.thread_get("GWD700")["last_error"].startswith(gm._AUTH_HELP)
+              and arow["last_error"].startswith("SMTP: " + gm._AUTH_HELP)
               and leftover is None)
+        # the refusal Gmail actually sent rides along — without it a BLOCKED
+        # sign-in is indistinguishable from a bad password
+        check("...and carries Gmail's own reply",
+              "Gmail said:" in arow["last_error"] and "revoked" in arow["last_error"])
 
         gm._check_account = lambda a, s, m, t: ([], {
             "imap_last_uid": 1, "imap_uidvalidity": 7,
@@ -293,7 +297,7 @@ def main():
             arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
                              (aid1,)).fetchone()
         check("a clean IMAP poll keeps the SMTP-owned error",
-              arow["last_error"] == "SMTP: " + gm._AUTH_HELP)
+              arow["last_error"].startswith("SMTP: " + gm._AUTH_HELP))
         gm._account_set_error(aid1, "some imap trouble")
         gm.check_replies()
         with db.connect() as c:
@@ -308,8 +312,8 @@ def main():
             arow = c.execute("SELECT last_error FROM gaash_accounts WHERE id=?",
                              (aid1,)).fetchone()
         check("send_test maps auth failure to the friendly help + stamps",
-              rt["ok"] is False and rt["error"] == gm._AUTH_HELP
-              and arow["last_error"] == "SMTP: " + gm._AUTH_HELP)
+              rt["ok"] is False and rt["error"].startswith(gm._AUTH_HELP)
+              and arow["last_error"].startswith("SMTP: " + gm._AUTH_HELP))
         check("send_test on a ghost id says so",
               gm.send_test("acct_nope")["error"] == "account not found")
 
