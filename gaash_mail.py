@@ -1238,24 +1238,24 @@ def _thread_set(gwd, **fields):
                   (*fields.values(), gwd))
 
 
-def thread_delete(gwd):
-    """Erase an accidental enrollment COMPLETELY — thread, messages, queued
-    files. Refused once the thread has real CORRESPONDENCE — mark it ✓ done
-    instead. Two independent signals say 'real', and either one is enough:
+def real_correspondence(gwd, c=None):
+    """Who this thread has REALLY been talking to, or "" when nobody has.
+
+    Two independent signals say 'real', and either one is enough:
 
       • somebody wrote back (any inbound message), or
       • an email actually went to the configured recipient — the live GAASH
         address on the sequence or in Settings.
 
     An email that only ever went to the owner's own test inbox is NOT
-    correspondence: nobody at GAASH has it, so there is no history to protect
-    and erasing it is the honest way to keep the 🧭 Overview counting real work
-    only. Dry-run-blocked attempts leave no outbound message at all, so a
-    purely-accidental thread always qualifies."""
+    correspondence: nobody at GAASH has it, so there is no history to protect.
+    Dry-run-blocked and SMTP-failed attempts leave no outbound message at all,
+    so a purely-accidental thread always comes back empty.
+
+    Pass an open connection to run inside someone else's transaction."""
     g = (gwd or "").strip().upper()
-    with db.connect() as c:
-        if not c.execute("SELECT 1 FROM gaash_threads WHERE gwd=?", (g,)).fetchone():
-            return {"ok": False, "error": "thread not found"}
+
+    def _ask(c):
         inbound = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=? AND "
                             "dir='in'", (g,)).fetchone()["n"]
         real_to = {a for a in (
@@ -1267,8 +1267,28 @@ def thread_delete(gwd):
             "SELECT DISTINCT to_addr FROM gaash_msgs WHERE gwd=? AND dir='out' "
             "AND kind IN ('sent','resent')", (g,))
             if (r["to_addr"] or "").strip().lower() in real_to]
-        if inbound or sent_real:
-            who = sent_real[0] if sent_real else "GAASH"
+        if sent_real:
+            return sent_real[0]
+        return "GAASH" if inbound else ""
+
+    if c is not None:
+        return _ask(c)
+    with db.connect() as conn:
+        return _ask(conn)
+
+
+def thread_delete(gwd):
+    """Erase an accidental enrollment COMPLETELY — thread, messages, queued
+    files. Refused once the thread has real correspondence (see
+    `real_correspondence`) — mark it ✓ done instead. Erasing a thread nobody at
+    GAASH ever received is the honest way to keep the 🧭 Overview counting real
+    work only."""
+    g = (gwd or "").strip().upper()
+    with db.connect() as c:
+        if not c.execute("SELECT 1 FROM gaash_threads WHERE gwd=?", (g,)).fetchone():
+            return {"ok": False, "error": "thread not found"}
+        who = real_correspondence(g, c)
+        if who:
             return {"ok": False, "error":
                     f"مراسلة حقيقية مع {who} — علّمها ✓ منجزة بدلاً من الحذف · "
                     f"real correspondence with {who} — mark it ✓ done instead"}
@@ -2794,7 +2814,7 @@ def _fanout_step1(gwd, msg_row, account_id):
 
 
 def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
-                  schedule=None, docs=None):
+                  schedule=None, docs=None, replace=False):
     """Create one thread per GWD (one GWD per email — replies map 1:1) and try
     to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
     (and therefore the ID) before email 1 goes out.
@@ -2802,7 +2822,11 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
     `schedule` = {GWD: iso} holds step 1 back to that moment instead of sending
     now — the daemon picks it up when due. Spacing a batch out matters when the
     recipient is a human queue: fourteen identical emails arriving in the same
-    minute read as automation and get triaged as one. Returns per-GWD results."""
+    minute read as automation and get triaged as one.
+
+    `replace` re-enrols a GWD whose first enrollment never actually reached
+    GAASH, wiping the dead thread first. It cannot touch a thread that really
+    corresponded — thread_delete refuses those. Returns per-GWD results."""
     seq_id = seq_id or default_sequence_id()
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     schedule = {str(k or "").strip().upper(): v
@@ -2834,6 +2858,18 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
         if existing and existing.get("state") == "proposed":
             with db.connect() as c:                # a trigger suggestion → real
                 c.execute("DELETE FROM gaash_threads WHERE gwd=?", (gwd,))
+            existing = None
+        if existing and replace:
+            # Re-enrolling an enrollment that never actually reached GAASH — a
+            # dry-run block, a dead app password, an SMTP refusal. thread_delete
+            # is the wipe AND the guard: it refuses the moment the thread has
+            # real correspondence, so a live conversation can never be restarted
+            # from behind the owner's back (that is 🔁 restart's job, inside it).
+            wiped = thread_delete(gwd)
+            if not wiped.get("ok"):
+                out.append({"gwd": gwd, "ok": False,
+                            "error": wiped.get("error") or "thread already exists"})
+                continue
             existing = None
         if existing:
             out.append({"gwd": gwd, "ok": False, "error": "thread already exists"})
@@ -3587,6 +3623,14 @@ def candidates(include_enrolled=False):
     pmap = parcel_name_map()
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)
     ac = autoclear_set()                 # the in-app ✅ tag, filterable in rules
+    # Who each enrolled parcel has REALLY written to. The picker needs it to
+    # tell an enrollment that is under way from one that only looks it: a
+    # dry-run block or a dead app password leaves a thread at step 0 having
+    # reached nobody, and that one is safe to enrol again. One connection for
+    # the lot — this runs on every overview poll.
+    with db.connect() as _c:
+        corr = {g: real_correspondence(g, _c) for g, t in thmap.items()
+                if t.get("state") != "proposed"}
     for cd in out:
         cd["pname"] = pmap.get(cd["gwd"], "")
         cd["pname_id"] = emap.get(cd["gwd"], "")
@@ -3595,13 +3639,19 @@ def candidates(include_enrolled=False):
         th = thmap.get(cd["gwd"])
         cd["thread"] = (None if not th else
                         {"state": th.get("state"), "step": th.get("step") or 0,
-                         "seq_id": th.get("seq_id")})
+                         "seq_id": th.get("seq_id"),
+                         "sent_to": corr.get(cd["gwd"], ""),
+                         "can_reenroll": not corr.get(cd["gwd"], ""),
+                         "last_error": th.get("last_error") or ""})
 
-    # what still NEEDS enrolling first, then suggestions, then already-running;
-    # inside each group Leluxe first (has clearance status), then by GWD
+    # what still NEEDS enrolling first, then the ones waiting on a tick
+    # (suggestions, and enrollments that never reached anybody), then the
+    # genuinely running. Inside each group Leluxe first, then by GWD.
     def _grp(cd):
         t = cd.get("thread")
-        return 0 if not t else (1 if t["state"] == "proposed" else 2)
+        if not t:
+            return 0
+        return 1 if (t["state"] == "proposed" or t["can_reenroll"]) else 2
     out.sort(key=lambda x: (_grp(x), x["source"] != "leluxe", x["gwd"]))
     return out
 

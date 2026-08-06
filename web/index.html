@@ -11551,15 +11551,27 @@ function gmWizPickSeq(id){
   gmWizFlow(); gmWizSummary();
 }
 // ── 🧵 sequence column: is this parcel already in a workflow? ──
-// block = its checkbox is disabled. Only a live thread blocks; a 'proposed'
-// suggestion stays selectable because start_threads converts it cleanly.
-function gmSeqBlock(t){ return !!(t&&t.state!=="proposed"); }
+// block = its checkbox is disabled. Only a thread that really REACHED somebody
+// blocks. A 'proposed' suggestion stays selectable because start_threads
+// converts it cleanly, and so does an enrollment that never sent — a dry-run
+// block or a dead app password leaves a thread sitting at step 0 that nobody at
+// GAASH ever saw, and refusing to enrol that again just strands the parcel.
+function gmSeqBlock(t){ return !!(t&&t.state!=="proposed"&&!t.can_reenroll); }
+// the row is enrolled, but the enrollment never left the building
+function gmSeqRedo(t){ return !!(t&&t.state!=="proposed"&&t.can_reenroll); }
 function gmSeqPill(t,gwd){
   if(!t) return `<span class="muted2" style="opacity:.5" title="${T("غير مسجل في أي سير عمل بعد · not in any workflow yet")}">—</span>`;
   const jump=`onclick="event.stopPropagation();bulkClose();gmTab('conv');gmOpen('${poEsc(gwd)}')"`;
   const stp=t.step||0;
   if(t.state==="proposed")
     return tonePill("amber","💡 "+T("مقترح · suggested"),T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real"),{style:"font-size:10.5px"});
+  // enrolled, but nothing ever left: say so plainly rather than showing a
+  // reassuring "running · 0" for a parcel GAASH has never heard about
+  if(gmSeqRedo(t))
+    return hexPill("#c2410c","⚠ "+T("لم يُرسل · not sent"),
+      T("مسجّل لكن لم يصل غاش شيء — اختره لإعادة التسجيل من جديد · enrolled but nothing reached GAASH — tick it to enrol again from scratch")
+      +(t.last_error?" · "+String(t.last_error).slice(0,120):""),
+      {style:"font-size:10.5px;cursor:pointer",attrs:jump});
   if(t.state==="goal_met"||t.state==="done")
     return hexPill("#12a150","🏁 "+T("منجز · done"),T("وصل هدفه — افتح محادثته · goal met — open its conversation"),{style:"font-size:10.5px;cursor:pointer",attrs:jump});
   if(t.state==="paused")
@@ -11586,7 +11598,7 @@ function gmCandMode(m){
 }
 function gmEnrollSelectShown(on){
   gmEnrollFiltered().forEach(c=>{
-    if(on&&gmSeqBlock(c.thread)) return;   // running/paused rows can't re-enroll
+    if(on&&gmSeqBlock(c.thread)) return;   // rows already corresponding with GAASH
     on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd);
   });
   gmEnrollRender();
@@ -11630,11 +11642,17 @@ function gmEnrollRender(){
   });
   const rows=list.map(c=>{
     const nm=c.pname||"", blocked=gmSeqBlock(c.thread), on=GM.enrollSel.has(c.gwd)&&!blocked;
+    // name WHO already has mail about this parcel — "already enrolled" alone
+    // reads as a bug when the enrollment is the one that silently failed
+    const why=blocked
+      ? T("مسجل مسبقاً وقد وصلت رسائل فعلاً إلى")+" "+(c.thread.sent_to||"GAASH")
+        +" — "+T("افتح محادثته واستخدم 🔁 بدل إعادة التسجيل · already corresponding — open it and use 🔁 restart instead")
+      : "";
     const pin=`<div class="bt-pin">
       <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""} ${blocked?"disabled":""}
         onclick="event.stopPropagation()" onchange="gmRowCb(this,'${poEsc(c.gwd)}')"
         style="flex:0 0 auto;margin-inline-end:4px${blocked?";opacity:.35":""}"
-        ${blocked?` title="${T("مسجل مسبقاً — افتح محادثته بدل إعادة التسجيل · already enrolled — open its conversation instead")}"`:""}>
+        ${blocked?` title="${poEsc(why)}"`:""}>
       <span class="mono" style="font-size:12px">${poEsc(c.gwd)}</span></div>`;
     return `<div class="poc-row${on?" en-on":""}" onclick="gmRowPick(this,'${poEsc(c.gwd)}')">${pin}${lxtCells("en",{
       pname:`<select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
@@ -12474,8 +12492,11 @@ async function gmNewStart(btn){
   // documents are shared by the whole batch. The thread gets both.
   const docs={};
   Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=[d.id]; });
+  // replace:true lets a dead enrollment be re-enrolled — the server still
+  // refuses any parcel GAASH has actually been written to, so this cannot
+  // restart a live conversation even from a pasted GWD
   const r=await post("/api/gaash/start",{gwds, id_doc_id:(st.docIds||[]), account_id:(st.acctIds||[]),
-    seq_id:st.seqId||null, names:st.names||{}, docs});
+    seq_id:st.seqId||null, names:st.names||{}, docs, replace:true});
   btn.disabled=false;
   bulkClose();
   const res=(r&&r.results)||[];

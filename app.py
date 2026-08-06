@@ -2947,7 +2947,8 @@ def api_gaash_start():
                                    seq_id=(b.get("seq_id") or "").strip() or None,
                                    names=b.get("names") if isinstance(b.get("names"), dict) else None,
                                    schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None,
-                                   docs=b.get("docs") if isinstance(b.get("docs"), dict) else None)
+                                   docs=b.get("docs") if isinstance(b.get("docs"), dict) else None,
+                                   replace=bool(b.get("replace")))
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
