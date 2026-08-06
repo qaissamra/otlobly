@@ -9588,7 +9588,15 @@ function pkgInfoOpen(id,pi){
         +f('آخر فحص · Last checked', agoTxt(pk.tracking_checked))
         +(gz?f('🛵 جيرزيم · Gerizim', `${poEsc(gz.label||gz.status||'')}${gz.shelf?` · رف ${poEsc(gz.shelf)}`:''}${gz.sms_at?` · SMS ${poEsc(gz.sms_at)}`:''} · ${gz.delivery?'توصيل للبيت':'استلام من النقطة'}`):'')
         +f('المستندات · Docs', pk.gaash_docs_at?(docsWarn?`<span style="color:#b42318">⚠ رُفعت ${pk.gaash_docs_at.slice(0,10)} لكن غاش طلبتها مجدداً — أعد الرفع · not received</span>`:`أُرسلت · sent ${pk.gaash_docs_at.slice(0,10)}`):'');
-      return sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows); })()}
+      // the checkout screenshot(s) — BIG, like the Leluxe popup's ClickUp
+      // screenshot section. PO-level (uploaded per order), PO_MONEY-gated:
+      // GET /api/po_image is view_cost-only (paid Amazon totals), so an
+      // ungated <img> would render broken for fulfillment roles.
+      const atts=PO_MONEY?podAtts(p):[];
+      const imgSec=atts.length?sec(`🖼 لقطة الشراء · checkout screenshot <span style="font-weight:600;text-transform:none;letter-spacing:0">— من الطلب · from the order</span>`,
+        atts.map(fn=>{ const u='/api/po_image?file='+encodeURIComponent(fn);
+          return `<img src="${poEsc(u)}" loading="lazy" title="انقر للفتح بالحجم الكامل · click to open full size" style="width:100%;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:zoom-in;display:block;margin:6px 0 8px" onclick="window.open('${poEsc(u)}','_blank','noopener')">`; }).join("")):"";
+      return sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows)+imgSec; })()}
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
       <button class="po-btn" onclick="pkgInfoClose();trackPkg(null,'${p.po_id}',${pi})">🔎 تتبع الشحنة · Check shipping</button>
       ${gwd?`<button class="po-btn" onclick="pkgInfoClose();gaashUploadOpen('${p.po_id}',${pi})">🪪 رفع مستندات · Upload docs</button>`:''}
@@ -9854,7 +9862,7 @@ async function ieDelete(){ if(!IE)return; const ref=IE; IE=null; $("itemEditModa
 let NO=null;   // {profile, customer, amount, amazon, arrival, gaash, rows:[{link,title,qty,customer}]}
 function addPO(){ newOrderOpen(); }              // "+ New order" (Purchases)
 function newOrderOpen(items){                    // items = optional prefill (quote flow)
-  NO={profile:"", customer:"", amount:"", amazon:"", arrival:"", gaash:"",
+  NO={profile:"", customer:"", amount:"", amazon:"", arrival:"", gaash:"", images:[],
       rows:(items&&items.length?items:[{}]).map(it=>({
         link:it&&(it.clean_url||it.link)||"", title:it&&it.title||"",
         asin:it&&it.asin||"", qty:it&&it.qty||1, customer:it&&it.customer_name||""}))};
@@ -9868,6 +9876,22 @@ function noAddRow(){ if(NO){ NO.rows.push({customer:NO.customer||""}); noRender(
 function noDelRow(i){ if(NO){ NO.rows.splice(i,1); if(!NO.rows.length) NO.rows.push({}); noRender(); } }
 function noRefreshRowCust(){ /* default blank rows to the order customer without clobbering typed ones */
   (NO.rows||[]).forEach(r=>{ if(!r.customer) r._defaultCust=NO.customer; }); }
+// staged checkout screenshots: /api/po_image needs an existing po_id, so the
+// form holds data-URLs and noSave uploads them right after create
+function noStageImage(file){
+  if(!NO||!file) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ if(!NO) return; (NO.images=NO.images||[]).push(rd.result); noRender();
+    toast("📋 صورة جاهزة للرفع · image staged"); };
+  rd.readAsDataURL(file);
+}
+function noImgDel(i){ if(NO&&NO.images){ NO.images.splice(i,1); noRender(); } }
+function noPickImage(){
+  const inp=document.createElement("input");
+  inp.type="file"; inp.accept="image/*"; inp.multiple=true;
+  inp.onchange=()=>{ [...(inp.files||[])].forEach(noStageImage); };
+  inp.click();
+}
 function noRender(){
   if(!NO) return;
   const cur=((QSETTINGS&&QSETTINGS.card_labels)||{}).currency||'USD';
@@ -9898,6 +9922,13 @@ function noRender(){
     <label class="fld" style="margin-top:12px">المنتجات · Products</label>
     ${rows}
     <button class="minibtn" onclick="noAddRow()" style="margin-top:2px">＋ إضافة منتج · add product</button>
+    <label class="fld" style="margin-top:12px">🖼 لقطة الشراء · checkout screenshot <span class="muted2">(optional)</span></label>
+    ${(NO.images||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px">${NO.images.map((d,i)=>`<span style="position:relative;display:inline-block">
+        <img src="${d}" style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
+        <span onclick="noImgDel(${i})" title="إزالة · remove" style="position:absolute;top:-5px;right:-5px;background:#fff;border:1px solid var(--line);border-radius:50%;width:17px;height:17px;line-height:15px;text-align:center;font-size:10px;cursor:pointer">✕</span>
+      </span>`).join("")}</div>`:""}
+    <div onclick="noPickImage()" style="border:2px dashed var(--line);border-radius:12px;padding:12px;text-align:center;cursor:pointer;color:var(--muted);font-size:12.5px;background:#fcfcfa" title="paste or upload">
+      📋 <b>Cmd/Ctrl + V</b> الصق لقطة الشاشة هنا مباشرة — أو انقر للرفع<br>paste the checkout screenshot anywhere in this window, or click to upload</div>
     <div id="no_err" style="color:var(--bad);font-size:12px;margin-top:10px"></div>
     <div class="az-actions" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
       <button class="po-btn" onclick="noClose()">إلغاء · Cancel</button>
@@ -9920,12 +9951,19 @@ async function noSave(btn){
     packages:[{package_no:1, arrival:(NO.arrival||"").trim(), tracking_number:(NO.gaash||"").trim(), items}]};
   btn.disabled=true; let r; try{ r=await post("/api/purchase",body); }catch(e){ r=null; } btn.disabled=false;
   if(!r||!r.ok){ $("no_err").textContent=(r&&r.error)||"تعذّر إنشاء الطلب · couldn't create order"; return; }
+  // upload the staged checkout screenshots now that the PO exists
+  const staged=(NO.images||[]).slice(); let up=0, upFail=false;
+  for(const d of staged){
+    let ir; try{ ir=await post("/api/po_image",{po_id:r.po_id,filename:"pasted.png",data_base64:d}); }catch(e){ ir=null; }
+    if(ir&&ir.ok) up++; else upFail=true;
+  }
   noClose();
   try{ PO_VIEW[r.po_id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); }catch(e){}
   PO_MOUNT="poTree"; PO_ONLY=null; setView("purchases"); await loadPurchases();
   const el=[...document.querySelectorAll('#poTree .po-card')].find(c=>c.querySelector('.po-name')&&c.querySelector('.po-name').textContent.includes(r.po_id));
   if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.style.outline="2px solid var(--accent)"; setTimeout(()=>{el.style.outline="";},1600); }
-  toast(`✅ ${r.po_id} · ${items.length} product${items.length===1?'':'s'}`);
+  if(upFail) toast(`⚠ ${r.po_id} أُنشئ لكن رفع الصورة فشل — الصقها من تفاصيل الطلب · order created, image upload failed — paste it in the order detail`);
+  else toast(`✅ ${r.po_id} · ${items.length} product${items.length===1?'':'s'}${up?` · 🖼 ${up}`:''}`);
   loadHomeActivity();
 }
 async function poDelete(id){ if(!confirm("Delete this purchase order? It moves to Trash — you can restore it."))return; const r=await post("/api/purchase/delete",{id}); if(r.ok){ POS=POS.filter(p=>p.po_id!==id); renderPurchases(); toast("Moved to Trash"); loadHomeActivity(); } }
@@ -10042,6 +10080,17 @@ document.addEventListener("paste",e=>{           // Cmd/Ctrl+V while the order d
           podRender(); renderPurchases(); toast("📋 تم لصق الصورة ✓ · image pasted"); }
         else toast("Paste upload failed"); };
       rd.readAsDataURL(f);
+      break;
+    }
+  }
+});
+document.addEventListener("paste",e=>{           // Cmd/Ctrl+V while "+ New order" is open
+  if(!NO||$("newOrderModal").classList.contains("hidden")) return;
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(const it of items){
+    if(it.type&&it.type.startsWith("image/")){
+      e.preventDefault();
+      noStageImage(it.getAsFile());   // staged only — uploaded after create (needs a po_id)
       break;
     }
   }
