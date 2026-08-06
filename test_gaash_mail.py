@@ -328,6 +328,97 @@ def main():
         settings_mod.apply({"gaash_mail": {"dry_run": True}})
         _del_thread("GWD700")
 
+    print("— declaration contents: blank titles resolve, regrouped packages —")
+    import purchases as purch
+    with db.connect() as c:
+        c.execute("INSERT OR REPLACE INTO orders (order_code, data_json) "
+                  "VALUES ('OTL-T90', ?)",
+                  (json.dumps({"items": [{"asin": "B0TESTAAA1",
+                                          "title": "Kindle Paperwhite 16GB"}]}),))
+    pdb = purch.load()
+    pdb["purchase_orders"].append({
+        "po_id": "PO-T9", "ship_to": "Decl Buyer", "packages": [
+            {"package_no": 1, "tracking_number": "GWD009100001",
+             "otlobly_status": "", "items": [
+                 {"item_id": "it_a", "title": "", "asin": "B0TESTAAA1",
+                  "qty": 2, "customer_order_id": "OTL-T90"},
+                 {"item_id": "it_b", "title": "", "asin": "B0TESTBBB2",
+                  "qty": 1, "customer_order_id": None},
+                 {"item_id": "it_c", "title": "Named Product", "asin": None,
+                  "qty": 1}]}]})
+    purch.save(pdb)
+    got = gm.package_contents("GWD009100001")
+    check("blank title resolves from the customer order (with qty)",
+          {"title": "Kindle Paperwhite 16GB", "qty": 2} in got)
+    check("unresolvable blank falls back to the ASIN label (count integrity)",
+          {"title": "Amazon item B0TESTBBB2", "qty": 1} in got)
+    check("a titled item passes through untouched",
+          {"title": "Named Product", "qty": 1} in got and len(got) == 3)
+
+    import amazon_import
+    real_imp = amazon_import.import_product
+    calls = []
+
+    def _fake_import(url_or_asin, config=None, refresh=False):
+        calls.append(url_or_asin)
+        return {"title": "Fetched Widget Pro", "asin": url_or_asin}
+    amazon_import.import_product = _fake_import
+    try:
+        r = gm._declaration_fill_titles("GWD009100001")
+    finally:
+        amazon_import.import_product = real_imp
+    pdb = purch.load()
+    its = {it["item_id"]: it for p in pdb["purchase_orders"]
+           for k in p.get("packages") or []
+           if str(k.get("tracking_number")) == "GWD009100001"
+           for it in k["items"]}
+    check("fill resolves order-chain + fetches ONLY the orderless asin",
+          r == {"filled": 2, "fetched": 1} and calls == ["B0TESTBBB2"])
+    check("resolved titles persist into the PO store",
+          its["it_a"]["title"] == "Kindle Paperwhite 16GB"
+          and its["it_b"]["title"] == "Fetched Widget Pro"
+          and its["it_c"]["title"] == "Named Product")
+    check("a second fill is a no-op (nothing blank left)",
+          gm._declaration_fill_titles("GWD009100001") == {"filled": 0,
+                                                          "fetched": 0})
+
+    res = gm.declaration_make("GWD009100001")
+    check("declaration builds for the package", res.get("ok") is True)
+    if res.get("ok"):
+        pdf = gm.id_file_path(res["filename"]).read_bytes()
+        check("the PDF lists the real products, not (not itemised)",
+              b"Kindle Paperwhite" in pdf and b"Fetched Widget" in pdf
+              and b"not itemised" not in pdf)
+
+    now_ms2 = str(int(now.timestamp() * 1000))
+    with db.connect() as c:              # regrouped mirror: GWD on the PACKAGE row
+        c.execute("""INSERT INTO leluxe_orders (kind,name,status,date_created,data_json)
+            VALUES ('package','PACKAGE 1','on hold',?,?)""",
+                  (now_ms2, json.dumps({"tracking_number": "GWD009100002",
+                                        "fields": {"NAME": "x"}})))
+        pkg_id = c.execute("SELECT id FROM leluxe_orders WHERE "
+                           "kind='package' AND name='PACKAGE 1'").fetchone()["id"]
+        c.execute("""INSERT INTO leluxe_orders
+            (kind,name,status,date_created,parent_local_id,data_json)
+            VALUES ('item','Steve Madden Wallet Brown','on hold',?,?,?)""",
+                  (now_ms2, pkg_id,
+                   json.dumps({"fields": {"Quantity ordered ": "3"}})))
+        c.execute("""INSERT INTO leluxe_orders
+            (kind,name,status,date_created,parent_local_id,data_json)
+            VALUES ('item','PACKAGE 2','on hold',?,?,?)""",
+                  (now_ms2, pkg_id, json.dumps({"fields": {}})))
+    check("regrouped package: children found via the package row, labels skipped",
+          gm.package_contents("GWD009100002")
+          == [{"title": "Steve Madden Wallet Brown", "qty": 3}])
+    with db.connect() as c:              # tidy the fixtures
+        c.execute("DELETE FROM leluxe_orders WHERE parent_local_id=?", (pkg_id,))
+        c.execute("DELETE FROM leluxe_orders WHERE id=?", (pkg_id,))
+        c.execute("DELETE FROM orders WHERE order_code='OTL-T90'")
+    pdb = purch.load()
+    pdb["purchase_orders"] = [p for p in pdb["purchase_orders"]
+                              if p.get("po_id") != "PO-T9"]
+    purch.save(pdb)
+
     print("— routes: permissions —")
     co, ce, cs = client("otlo"), client("emp"), client("sal")
     anon = appmod.app.test_client()
