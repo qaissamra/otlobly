@@ -19,7 +19,7 @@ audited · `n/a` doesn't apply. Tests column: suite name = dedicated coverage,
 | View (setView) | Works | Errors | Design | Mobile | Roles | Logic | Dup | Tests |
 |---|---|---|---|---|---|---|---|---|
 | 🧠 Brain (`brain`) | ✅ 2a | ✅ | ✅ UI_AUDIT B5 | ✅ | · | ✅ | · | test_brain |
-| 📦 Purchases · orders tree | ✅ 2a | ✅ | ✅ B-series | ✅ | · | · | · | test_po_purchases_redesign, test_po_item_declutter, test_role_money |
+| 📦 Purchases · orders tree | ✅ 2a | ✅ | ✅ B-series | ✅ | ✅ 2b money:false verified live | · | · | test_po_purchases_redesign, test_po_item_declutter, test_role_money |
 | 📦 Purchases · packages (`pok`) | ✅ 2a | ✅ | ✅ | ✅ pin 200 | · | ⚠ F-012 chips | · | part (redesign markers) |
 | 📦 Purchases · products (`pop`) | ✅ 2a | ✅ | ✅ | · | · | · | · | part |
 | 📦 Purchases · customers | ✅ 2a | ✅ | ✅ 2-tier meta ✓ | · | · | · | · | — |
@@ -30,19 +30,19 @@ audited · `n/a` doesn't apply. Tests column: suite name = dedicated coverage,
 | ⌚ Leluxe · goal 🎯 | ✅ 2a render | ✅ | ✅ | · | · | · | · | test_leluxe_goal |
 | 💵 Deposits (`deposits`) | ✅ 2a Σ exact | ✅ | ✅ B3 | · | · | · | · | part (ledger math in test_money_and_auth; /api/payments endpoint —) |
 | 🏠 Orders (`orders`) | ✅ 2a | ✅ | ✅ B2 | ✅ | · | ⚠ F-014 batch Σ | ⚠ F-010 GWD col deferred | part (order code race, due chips) |
-| 🛒 In cart (`incart`) | · | · | ✅ B3 | · | · | · | · | test_role_money part |
-| 📣 Leads (`metaleads`) | · | · | ✅ B5 | · | · | · | · | — (modules untested) |
-| 👤 Customers (`customers`) | · | · | ✅ B3+B6 | · | · | · | · | test_customer_id part |
-| 🎁 Package prep (`pkgprep`) | · | · | ✅ B0 | · | · | · | · | test_pkgprep |
-| 🔎 Bulk search (`bulksearch`) | · | · | ✅ | · | · | · | · | — |
-| 📧 GAASH mail (5 tabs) | · | · | ✅ B4 | · | · | · | · | test_gaash_mail |
-| 📊 P&L (`pnl`) | · | · | ✅ B5 | · | · | · | · | — ⚠ F-001 (money math untested) |
-| 🕑 Activity (`activity`) | · | · | ✅ | · | · | · | · | part (recent() only) |
-| ⚙️ Settings (every panel) | · | · | · | · | · | · | · | part (isolation, one gate, GAASH validator) |
-| 👥 Team (`team`) | · | · | ⚠ F-009 non-LXT | · | · | · | · | test_users_scoping (backend) |
-| 🗑 Trash (`trash`) | · | · | ✅ B3 | · | · | · | · | part (file isolation; restore/purge —) |
-| (hidden) Catalog / Picking / quote | · | · | · | · | · | ⚠ F-007 revive-or-delete | ⚠ F-007 | — |
-| 🏗 Platform console (5 views) | · | · | · | · | n/a super-admin | · | · | test_platform, test_provisioning, test_quotas |
+| 🛒 In cart (`incart`) | ✅ 2b empty-state | ✅ | ✅ B3 | · | ✅ redacted | · | · | test_role_money part |
+| 📣 Leads (`metaleads`) | ✅ 2b (unconfigured notice honest) | ✅ | ✅ B5 | · | · | · | · | — (modules untested) |
+| 👤 Customers (`customers`) | ✅ 2b 23 rows | ✅ | ✅ B3+B6 | · | · | · | · | test_customer_id part |
+| 🎁 Package prep (`pkgprep`) | ✅ 2b empty-state + fx | ✅ | ✅ B0 | · | · | · | · | test_pkgprep |
+| 🔎 Bulk search (`bulksearch`) | ✅ 2b (2 found + 1 missing + Σ; dup GWD across POs → 2 rows, correct) | ✅ | ✅ | · | · | · | · | — |
+| 📧 GAASH mail (6 tabs incl 🩺) | ✅ 2b all panes switch | ✅ | ✅ B4 | · | · | safe-mode banner honest | · | test_gaash_mail |
+| 📊 P&L (`pnl`) | ✅ 2b ALL tiles = /api/pnl totals; equation exact; cross-view ✓ (To-order, batches) | ✅ | ✅ B5 | · | ✅ 403 for fulfillment | ⚠ F-015 undated Meta vs daily chart | · | — ⚠ F-001 (money math untested) |
+| 🕑 Activity (`activity`) | ✅ 2b feed + filters | ✅ | ✅ | · | · | · | · | part (recent() only) |
+| ⚙️ Settings (every panel) | ✅ 2b all panels render (read-only pass) | ✅ | · | · | · | · | · | part (isolation, one gate, GAASH validator) |
+| 👥 Team (`team`) | ✅ 2b renders | ✅ | ⚠ F-009 non-LXT | · | · | ⚠ F-016 no remove/deactivate | · | test_users_scoping (backend) |
+| 🗑 Trash (`trash`) | ✅ 2b 10 items | ✅ | ✅ B3 | · | · | · | · | part (file isolation; restore/purge —) |
+| (hidden) Catalog / Picking / quote | ✅ 2b both render fully when forced | ✅ | · | · | · | ⚠ F-007 revive-or-delete | ⚠ F-007 | — |
+| 🏗 Platform console (5 views) | ✅ 2b all render (MRR $29 = Brain strip) | ✅ | · | · | n/a super-admin | · | · | test_platform, test_provisioning, test_quotas |
 
 ## Matrix B — public / customer pages
 
@@ -92,13 +92,15 @@ Rank: **P0** broken/data-loss · **P1** wrong money math / security / logic gap 
 | F-012 | P2 | Purchases packages/products quick chips (`Late · N` …) count late **POs** while the view lists **packages** — Late·7 renders ~15 rows (all packages of late POs incl. non-late siblings; 8 packages are actually late). Same PO-level-vs-row-level family as F-005 — fix them together | open |
 | F-013 | P2 | Leluxe **Board** tiles label ₪ sums with **$**: "Total value $72,113" = Σ ClickUp `Total Amount` (₪ everywhere else — packages header shows the same money as ₪74.8k), also "Avg order", "$ at risk". Fix must check what the 🎯 goal engine converts (it has fx) before relabeling | open |
 | F-014 | P3 | Orders overview "By batch" rows include cancelled orders' amounts, so they sum to $4,472.43 under a "Total value $4,399.98" line — one panel, two definitions | open |
+| F-015 | P3 | P&L: undated Meta spend (manual $250, ad_days 0) is deducted from the headline but absent from the by_day series — the daily chart's profit sums to gross $443.63 vs the $193.63 headline. Equation itself is honest; chart can't reconcile | open |
+| F-016 | P3 | Team: staff accounts can be created but the UI offers NO remove/deactivate control (and `DELETE /api/users/<id>` 404s) — parallels the known no-delete-broker gap | open |
 
 ## Batch roadmap v2
 
 - [x] **Batch A0 (this PR)** — foundations: `run_all_tests.sh`, full-suite baseline run, this document, SKILL.md test-instruction fix.
 - [ ] **Batch T1** — `test_pnl.py` + `test_estimate.py` (F-001, F-002): lock the two money-math modules.
 - [x] **Sweep 2a** — done 2026-08-06 (12 sub-views). Math audits all EXACT: header outstanding = Σ collect over non-collected; To-order total; PO card total; pkgEstTotal row; Leluxe packages header replayed via the view's own recipe (157 · 207 · ₪74,856.93); Deposits Σ; Brain tiles = /api/brain pipeline. Interactions: ⋯ menus position:fixed unclipped, filters narrow, two-tier customer meta intact. Phone 390px: no page H-overflow, bt-pin caps at exactly 200px and stays sticky. Console: zero errors across all views. Filed F-012/F-013/F-014. NOT covered: Roles column (needs a non-admin login — do in 2b), per-view inline-edit deep pass.
-- [ ] **Sweep 2b** — staff console part 2 (remaining views + Settings panels + platform + hidden-views decision).
+- [x] **Sweep 2b** — done 2026-08-06. In cart/Pkgprep honest empty states; Leads unconfigured notice; Customers 23 rows; Bulk search functional (Σ footer, amber missing row, duplicate GWD across two POs correctly yields two rows); GAASH mail 6 panes switch cleanly, safe-mode banner honest; P&L: every tile = /api/pnl totals, equation to the cent, cross-view consistency with To-order + Orders batches; Activity/Settings/Team/Trash render; platform console 5/5; hidden Catalog+Picking fully alive when forced (F-007 data point). ROLES verified live via a temp fulfillment login: /api/purchases money:false with all costs nulled, /api/po_image 403, /api/incart nulled, /api/pnl 403. Zero console errors. Filed F-015, F-016.
 - [ ] **Sweep 3** — public pages + sw.js offline + AR/RTL (Matrix B).
 - [ ] **Sweep 4** — flows/logic walk (Matrix C), incl. F-003 vocabulary proposal + F-006 store-race audit.
 - [ ] **Fix batches** — sized and ordered by the ledger after the sweeps (P0/P1 first).
