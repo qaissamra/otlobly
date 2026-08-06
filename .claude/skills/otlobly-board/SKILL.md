@@ -454,8 +454,10 @@ mail ID library (`gaash_ids`, the `{id_name}` token): a customer's **ID NUMBER**
 1. `node --check` the extracted `<script>` block:
    `python3 - <<'EOF'` extract `re.findall(r"<script>(.*?)</script>", src, re.S)` to a
    scratch file `EOF` then `node --check` it.
-2. Python touched? `./.venv/bin/python -m pytest test_leluxe.py` (and the
-   relevant test_*.py). Worktrees reuse the MAIN repo venv:
+2. Python touched? `./.venv/bin/python test_leluxe.py` (and the relevant
+   test_*.py) — the suites are SCRIPT-style (main()+check()), NEVER pytest
+   (33/37 collect zero cases under it). Before any merge run them ALL:
+   `bash run_all_tests.sh`. Worktrees reuse the MAIN repo venv:
    `/Users/leluxegroup2/projects/otlobly-orders/.venv`.
 3. Live check — run the app FROM THE WORKTREE with real-message channels neutered
    (env wins over `.env` because app.py uses `os.environ.setdefault`):
