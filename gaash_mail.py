@@ -276,6 +276,90 @@ def remove_account(account_id):
         return {"ok": cur.rowcount > 0, "orphaned": orphaned}
 
 
+# The columns as they are declared, so a rebuild recreates the table exactly.
+_ACCT_DDL = """CREATE TABLE gaash_accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  label TEXT,
+  app_password TEXT,
+  added_at TEXT,
+  last_check TEXT,
+  last_error TEXT,
+  imap_uidvalidity INTEGER,
+  imap_last_uid INTEGER,
+  seen_ids_json TEXT)"""
+
+
+def accounts_health():
+    """Is the mailbox table readable — i.e. does looking an account up by id
+    actually return THAT account? Cheap enough to call on every overview."""
+    bad, rows = [], []
+    with db.connect() as c:
+        try:
+            rows = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
+        except Exception as e:  # noqa - a table too broken to scan
+            return {"ok": False, "unreadable": str(e)[:120], "junk": 0, "mismatched": []}
+        junk = [r for r in rows if not (isinstance(r.get("email"), str)
+                                        and "@" in r["email"])]
+        for r in rows:
+            if r in junk:
+                continue
+            got = c.execute("SELECT email FROM gaash_accounts WHERE id=?",
+                            (r["id"],)).fetchone()
+            # the row that comes back must BE the row we asked for; a corrupt
+            # index hands over a neighbour instead, and the app then tries to
+            # send from a mailbox with no password
+            if not got or got["email"] != r["email"]:
+                bad.append({"id": r["id"], "email": r["email"],
+                            "got": (got["email"] if got else None)})
+    return {"ok": not bad and not junk, "junk": len(junk), "mismatched": bad,
+            "total": len(rows)}
+
+
+def repair_accounts():
+    """Rebuild gaash_accounts around the real mailboxes.
+
+    SQLite let this table grow duplicate rowids, so its primary-key index stops
+    agreeing with the table: `WHERE id=?` hands back a NEIGHBOURING row. The app
+    then sends using that row's (missing) password and Gmail answers
+    BadCredentials — a broken table wearing the mask of a wrong password.
+
+    Rescue every row that is really a mailbox (an address with an @, which is
+    the only thing add_account will store), recreate the table, put them back,
+    and REINDEX. Passwords ride along untouched, so nothing has to be re-entered.
+    Threads keep pointing at the same account ids."""
+    before = accounts_health()
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
+        cols = [x[1] for x in c.execute("PRAGMA table_info(gaash_accounts)")]
+        good, seen = [], set()
+        for r in rows:
+            e = r.get("email")
+            if not (isinstance(e, str) and "@" in e) or r["id"] in seen:
+                continue                      # junk, or a duplicated id
+            seen.add(r["id"])
+            good.append(r)
+        if not good:
+            # never leave the owner with an empty mailbox list: without a single
+            # rescuable row a rebuild would delete the only copy of the passwords
+            return {"ok": False, "error": "no real mailbox rows to rescue — "
+                    "not rebuilding", "before": before}
+        c.execute("ALTER TABLE gaash_accounts RENAME TO gaash_accounts_bad")
+        c.execute(_ACCT_DDL)
+        c.executemany(
+            "INSERT INTO gaash_accounts (%s) VALUES (%s)"
+            % (",".join(cols), ",".join("?" * len(cols))),
+            [[g.get(k) for k in cols] for g in good])
+        c.execute("DROP TABLE gaash_accounts_bad")
+        c.commit()
+        c.execute("REINDEX")
+        c.commit()
+    after = accounts_health()
+    return {"ok": after["ok"], "before": before, "after": after,
+            "kept": [g["email"] for g in good],
+            "dropped": before.get("junk", 0)}
+
+
 # --------------------------------------------------------------------------- #
 # ID library (reusable ID documents — picked per sequence, attached to email 1)
 # --------------------------------------------------------------------------- #
