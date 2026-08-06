@@ -282,6 +282,7 @@ def declaration_make(gwd):
     g = (gwd or "").strip().upper()
     if not re.match(r"GWD\d+$", g):
         return {"ok": False, "error": "not a tracking number"}
+    filled = _declaration_fill_titles(g)        # blank PO titles → real names
     try:
         fn, data = declaration.build(
             gwd=g, name=parcel_name(g), id_number=id_number_for_email(g),
@@ -298,6 +299,8 @@ def declaration_make(gwd):
     for o in old:
         ids_remove(o["id"])
     res = ids_add(name, fn, data, folder="declaration")
+    if filled.get("fetched"):                   # metered lookups are never silent
+        res["titles_fetched"] = filled["fetched"]
     return {**res, "name": name, "gwd": g}
 
 
@@ -2229,6 +2232,63 @@ TPL_CORE_TOKENS = [
 ]
 
 
+# mirror rows named "PACKAGE 2" are the regroup's own grouping labels, never a
+# product — a declaration listing "PACKAGE 1" tells an officer nothing
+_PKG_LABEL = re.compile(r"(?i)^\s*package\s*\d*\s*$")
+
+
+def _leluxe_item_qty(fields):
+    for k, v in (fields or {}).items():         # 'Quantity ordered ' — trailing space
+        if " ".join(str(k).lower().split()) == "quantity ordered":
+            return _cf_stringify(v)
+    return ""
+
+
+def _po_package(g):
+    """(po, package) from the Purchases store for one GWD, or (None, None)."""
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            if str(pk.get("tracking_number") or "").strip().upper() == g:
+                return p, pk
+    return None, None
+
+
+def _order_titles(order_codes):
+    """{order_code: {ASIN: title}} from the customer-order store — the order a
+    PO item was bought FOR often knows the product's name when the PO row
+    doesn't (catalog/instant-quote orders carry titles; pasted-link ones may)."""
+    codes = sorted({str(o or "").strip() for o in (order_codes or ()) if o})
+    out = {}
+    if not codes:
+        return out
+    try:
+        with db.connect() as c:
+            rows = c.execute(
+                "SELECT order_code, data_json FROM orders WHERE order_code IN "
+                f"({','.join('?' * len(codes))})", codes).fetchall()
+    except Exception:  # noqa
+        return out
+    for r in rows:
+        try:
+            items = (json.loads(r["data_json"] or "{}")).get("items") or []
+        except Exception:  # noqa
+            continue
+        m = {}
+        for it in items:
+            a = str(it.get("asin") or "").strip().upper()
+            t = str(it.get("title") or it.get("product") or it.get("name")
+                    or "").strip()
+            if a and t:
+                m[a] = t
+        out[r["order_code"]] = m
+    return out
+
+
 def package_contents(gwd):
     """[{title, qty}] — what is actually inside ONE package, for the customs
     declaration. Deliberately does NOT go through _leluxe_row_for: that returns
@@ -2241,9 +2301,10 @@ def package_contents(gwd):
     try:                                        # ── Leluxe: the item ROWS ──
         with db.connect() as c:
             rows = c.execute(
-                "SELECT kind, name, data_json FROM leluxe_orders "
+                "SELECT id, kind, name, data_json FROM leluxe_orders "
                 "WHERE deleted=0 AND data_json LIKE ? ORDER BY id",
                 (f"%{g}%",)).fetchall()
+        seen_rows, pkg_rows = set(), []
         for r in rows:
             try:
                 d = json.loads(r["data_json"] or "{}")
@@ -2256,35 +2317,116 @@ def package_contents(gwd):
                     if k.strip().lower() == "tracking number":
                         tn = str(v or "").strip().upper()
                         break
-            if tn != g or r["kind"] != "item":
+            if tn != g:
                 continue
-            qty = ""
-            for k, v in f.items():              # 'Quantity ordered ' — trailing space
-                if " ".join(str(k).lower().split()) == "quantity ordered":
-                    qty = _cf_stringify(v)
-                    break
+            if r["kind"] == "package":
+                pkg_rows.append(r["id"])
+                continue
+            if r["kind"] != "item":
+                continue
             title = str(r["name"] or "").strip()
-            if title:
-                out.append({"title": title, "qty": _int_or(qty, 1)})
+            if title and not _PKG_LABEL.match(title):
+                seen_rows.add(r["id"])
+                out.append({"title": title, "qty": _int_or(_leluxe_item_qty(f), 1)})
+        # regrouped mirrors put the GWD on a kind='package' row whose item rows
+        # are CHILDREN with no tracking field of their own — walk them too, or
+        # a regrouped package declares as "(not itemised)"
+        if pkg_rows:
+            with db.connect() as c:
+                kids = c.execute(
+                    "SELECT id, name, data_json FROM leluxe_orders WHERE "
+                    f"kind='item' AND deleted=0 AND parent_local_id IN "
+                    f"({','.join('?' * len(pkg_rows))}) ORDER BY id",
+                    pkg_rows).fetchall()
+            for r in kids:
+                title = str(r["name"] or "").strip()
+                if r["id"] in seen_rows or not title or _PKG_LABEL.match(title):
+                    continue
+                try:
+                    f = (json.loads(r["data_json"] or "{}")).get("fields") or {}
+                except Exception:  # noqa
+                    f = {}
+                out.append({"title": title, "qty": _int_or(_leluxe_item_qty(f), 1)})
     except Exception:  # noqa
         pass
     if out:
         return out
-    try:                                        # ── Purchases: the package items ──
-        import purchases
-        pos = (purchases.load() or {}).get("purchase_orders") or []
-    except Exception:  # noqa
-        pos = []
-    for p in pos:
-        for pk in (p.get("packages") or []):
-            if str(pk.get("tracking_number") or "").strip().upper() != g:
-                continue
-            for it in (pk.get("items") or []):
-                t = str(it.get("title") or "").strip()
-                if t:
-                    out.append({"title": t, "qty": _int_or(it.get("qty"), 1)})
-            return out
+    _, pk = _po_package(g)                      # ── Purchases: the package items ──
+    if pk:
+        items = pk.get("items") or []
+        idx = _order_titles(it.get("customer_order_id") for it in items)
+        for it in items:
+            t = str(it.get("title") or "").strip()
+            a = str(it.get("asin") or "").strip().upper()
+            if not t:                           # the order it was bought for
+                t = (idx.get(it.get("customer_order_id")) or {}).get(a, "")
+            if not t and a:
+                # last resort: the count still matches the box, and the code IS
+                # the product's identity — better than silently dropping a row
+                t = f"Amazon item {a}"
+            if t:
+                out.append({"title": t, "qty": _int_or(it.get("qty"), 1)})
     return out
+
+
+_TITLE_FETCH_CAP = 12                           # metered lookups per declaration
+
+
+def _declaration_fill_titles(g):
+    """Resolve blank Purchases item titles for one package before declaring it:
+    the linked customer order's matching item first (free), then the ASIN's
+    Amazon lookup (amazon_import — cached in reports/import_cache.json, metered
+    SerpAPI only for a NEW asin). Resolved titles are PERSISTED into the PO
+    store so the cost is paid once and every surface gains the name. Returns
+    {"filled": n, "fetched": n} — best-effort, never raises."""
+    po, pk = _po_package(g)
+    items = (pk or {}).get("items") or []
+    blanks = [it for it in items if not str(it.get("title") or "").strip()]
+    if not blanks:
+        return {"filled": 0, "fetched": 0}
+    idx = _order_titles(it.get("customer_order_id") for it in blanks)
+    fill, need = {}, {}                         # item_id→title / ASIN→[item_id]
+    for it in blanks:
+        iid = it.get("item_id")
+        a = str(it.get("asin") or "").strip().upper()
+        t = (idx.get(it.get("customer_order_id")) or {}).get(a, "")
+        if iid and t:
+            fill[iid] = t
+        elif iid and a:
+            need.setdefault(a, []).append(iid)
+    fetched = 0
+    if need:
+        try:
+            import amazon_import
+            for a in list(need)[:_TITLE_FETCH_CAP]:
+                d = amazon_import.import_product(a) or {}
+                t = str(d.get("title") or "").strip()
+                if t:
+                    fetched += 1
+                    for iid in need[a]:
+                        fill[iid] = t
+        except Exception:  # noqa — no keys / offline: the ASIN fallback stands
+            pass
+    if not fill:
+        return {"filled": 0, "fetched": 0}
+    try:                # persist AFTER the slow fetches: fresh load-merge-save,
+        import purchases    # never hold the store across network calls
+        pdb = purchases.load()
+        changed = False
+        for p in (pdb.get("purchase_orders") or []):
+            for k in (p.get("packages") or []):
+                if str(k.get("tracking_number") or "").strip().upper() != g:
+                    continue
+                for it in (k.get("items") or []):
+                    t = fill.get(it.get("item_id"))
+                    if t and not str(it.get("title") or "").strip():
+                        it["title"] = t
+                        changed = True
+        if changed:
+            purchases.save(pdb)
+    except Exception:  # noqa — order-sourced titles re-resolve on the next
+        pass           # read; fetch-sourced ones fall back to the ASIN label
+    return {"filled": len(fill), "fetched": fetched}
 
 
 def _int_or(v, dflt):
