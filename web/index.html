@@ -12595,6 +12595,7 @@ function gmSettingsOpen(){
   bulkOpen("⚙ "+T("حسابات وقوالب غاش · GAASH accounts & templates"));
   $("bulkBody").innerHTML=`
     <div style="margin:6px 0"><b style="font-size:13px">✉ ${T("حسابات Gmail · Gmail accounts")}</b>
+      <div id="gmAcctHealth"></div>
       ${accts.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
         <b>${poEsc(a.email)}</b>${a.last_error?`<span style="color:#b42318;font-size:11px" title="${poEsc(a.last_error)}">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
         <span class="spacer"></span>
@@ -12643,6 +12644,34 @@ function gmSettingsOpen(){
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%">
     <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>
     ${CAN_ADMIN?`<button class="accent" onclick="gmSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
+  gmAcctHealthDraw();
+}
+// ── is the mailbox LIST itself readable? ───────────────────────────────────────
+// A table whose index stopped matching its rows answers a lookup with the WRONG
+// account — one with no password — so Gmail refuses every send and the owner is
+// sent chasing app passwords that were never the problem. Say it plainly, and
+// put the repair one click away instead of in a console.
+async function gmAcctHealthDraw(){
+  const box=$("gmAcctHealth"); if(!box) return;
+  let h=null;
+  try{ h=await (await fetch("/api/gaash/accounts/health")).json(); }catch(e){ return; }
+  if(!h||h.ok){ box.innerHTML=""; return; }
+  const n=(h.mismatched||[]).length;
+  box.innerHTML=`<div class="en-warn live" style="margin:6px 0;font-size:12px">
+    <b>⚠ ${T("قائمة الحسابات تالفة · this account list is damaged")}</b>
+    <div style="margin-top:3px">${T("البحث عن حساب يُرجع حساباً آخر بلا كلمة مرور — لذلك يرفض Gmail كل إرسال. كلمات المرور سليمة · looking an account up returns a DIFFERENT row with no password — which is why Gmail refuses every send. Your passwords are fine.")}</div>
+    <div class="muted2" style="margin-top:3px">${n} ${T("حساب لا يُقرأ · unreadable")}${h.junk?` · ${h.junk} ${T("صف غريب · junk row(s)")}`:""}</div>
+    ${CAN_ADMIN?`<button class="minibtn" style="margin-top:6px" onclick="gmAcctRepair(this)"
+      title="${T("يعيد بناء الجدول ويُبقي كل صندوق بريد وكلمة مروره · rebuilds the table, keeping every mailbox and its password")}">🔧 ${T("أصلح القائمة · Rebuild the list")}</button>`:""}</div>`;
+}
+async function gmAcctRepair(btn){
+  if(!confirm(T("يعيد بناء قائمة الحسابات ويحذف الصفوف غير المقروءة. كل صندوق بريد وكلمة مروره تبقى · Rebuilds the account list and drops the unreadable rows. Every mailbox and its password is kept."))) return;
+  btn.disabled=true; btn.textContent="…";
+  const r=await post("/api/gaash/accounts/repair",{});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر الإصلاح · repair failed")); gmAcctHealthDraw(); return; }
+  toast("🔧 "+T("أُصلحت · repaired")+" — "+(r.kept||[]).length+" "+T("صندوق بريد · mailbox(es)"));
+  await gmLoad(); gmSettingsOpen();
 }
 async function gmAcctAdd(btn){
   btn.disabled=true; btn.textContent="…";
