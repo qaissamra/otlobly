@@ -3796,7 +3796,7 @@ const LXT_COLS={
   ],
   "p":[
     {key:"order",     label:"الطلب · order",       w:84,  sortable:true},
-    {key:"profile",   label:"الحساب · profile",     w:52,  sortable:true},
+    {key:"profile",   label:"الحساب · profile",     w:64,  sortable:true},
     {key:"status",    label:"الحالة · status",      w:104},
     {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
     {key:"tracking",  label:"التتبع · tracking",    w:104},
@@ -4237,7 +4237,21 @@ function lxAcct(rows){
 }
 function lxProfileCell(v){
   if(v===null) return tonePill("gray","mixed",T('حسابات مختلفة · products bought on different accounts'));
-  return v?`<b class="mono" style="font-size:11.5px" title="${T('الحساب · profile / account')} (NAME): ${poEsc(v)}">${poEsc(v)}</b>`:"";
+  return lxProfileChip(v,`${T('الحساب · profile / account')} (NAME): ${v}`);
+}
+// ClickUp paints a NAME value as a solid colour chip, and that colour IS how the
+// owner reads this column — the codes themselves (B37 / E-B24 / E-B42) are near
+// impossible to tell apart in plain black. So take ClickUp's own hex.
+// Solid, not tinted: the palette runs from #DBE3DB (near-white) to #91151B, so
+// half the accounts would be unreadable as coloured text on a light row —
+// solidPill flips the ink by luminance, which is what ClickUp draws too.
+// Plain text while LX is still null: Purchases and bulk search can be opened
+// before Leluxe, and lxOptColor dereferences LX.schema unguarded.
+function lxProfileChip(v,tip){
+  if(!v) return "";
+  if(!gmLxReady())
+    return `<b class="mono" style="font-size:11.5px" title="${poEsc(tip||v)}">${poEsc(v)}</b>`;
+  return solidPill(lxOptColor("name",v),v,tip||v,{cls:"mono",style:"font-size:10px"});
 }
 // A package row's EFFECTIVE status: its own when set to something REAL, else
 // the one status ALL its products share. Synthetic package rows are born with
@@ -7889,7 +7903,10 @@ function poNameCell(txt,warn){ txt=(txt||"").trim();
     :(warn?`<span style="color:#b45309;font-size:10.5px" title="لا اسم بعد · not set">—</span>`:""); }
 // the AZ / Multilogin profile (box) the order was placed under — a compact 🖥 chip
 function poProfileCell(p){ const v=(p.profile_box||"").trim();
-  return v?`<span class="mono" title="${T('البروفايل · profile')}: ${poEsc(v)}" style="font-size:13px;font-weight:700;color:var(--ink)">${poEsc(v)}</span>`
+  // profile_box is Purchases' own field, but it holds the same B-codes as
+  // Leluxe's ClickUp NAME dropdown — so the same code wears the same colour on
+  // both boards. The "—" stays: a table column needs a placeholder.
+  return v?lxProfileChip(v,`${T('البروفايل · profile')}: ${v}`)
     :`<span class="muted2" style="opacity:.5">—</span>`; }
 // editable package due date — a colored due chip that becomes a date input on click
 // the customer order a package belongs to promises a delivery date
@@ -8878,8 +8895,8 @@ function hexPill(hex,txt,tip,opts){ const o=opts||{};
 function inkFor(hex){ const m=hex.replace('#','');
   const r=parseInt(m.slice(0,2),16),g=parseInt(m.slice(2,4),16),b=parseInt(m.slice(4,6),16);
   return (0.299*r+0.587*g+0.114*b)>150?'#1f2430':'#fff'; }
-function solidPill(hex,txt,tip){
-  return `<span class="pill" style="color:${inkFor(hex)};background:${hex};border-color:${hex};font-weight:700"${tip?` title="${poEsc(tip)}"`:''}>${poEsc(txt)}</span>`; }
+function solidPill(hex,txt,tip,opts){ const o=opts||{};
+  return `<span class="pill${o.cls?" "+o.cls:""}" style="color:${inkFor(hex)};background:${hex};border-color:${hex};font-weight:700${o.style?";"+o.style:""}"${tip?` title="${poEsc(tip)}"`:''}${o.attrs?" "+o.attrs:""}>${poEsc(txt)}</span>`; }
 // GAASH bucket → hex fallback for statuses the GASH_STATUS map doesn't know yet.
 const GAASH_HEX={transit:"#4466ff",arrived:"#e5484d",customs:"#f76808",cleared:"#0f9d9f"};
 // GAASH status text/code → the owner's ClickUp "GASH STATUS" values + colours
@@ -10701,7 +10718,7 @@ function bsModelRow(m,pinExtra,opts){
   return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${CE({
     found:tonePill("gray","⌚ Leluxe")+EB,
     oname:`<span style="font-size:11.5px" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
-    profile: prof?`<span class="mono" style="font-size:13px;font-weight:700">${poEsc(prof)}</span>`:'<span class="muted2" style="opacity:.5">—</span>',
+    profile: prof?lxProfileChip(prof,`${T('الحساب · profile / account')} (NAME): ${prof}`):'<span class="muted2" style="opacity:.5">—</span>',
     imgs: lxThumbs(lx.items),
     cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
     status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
