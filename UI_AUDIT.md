@@ -45,6 +45,7 @@ Legend: ✅ uses the shared standard · 🟡 bespoke/hand-rolled equivalent ·
 | P&L (`renderPnl`) | ✅ (margin via tonePill, *Batch 5*) | n/a dashboard tiles (`.card` idiom) | ❌ | ❌ | n/a | n/a | 🟡 | n/a | n/a |
 | GAASH mail (gm* :10448-12770) | 🟡 ~50 raw pills | 🟡 mixed | ❌ | ✅ via bs rows | ✅ | n/a | ✅ | ✅ `wf`/`en` only | 🟡 |
 | Bulk search (`bsRender` :10195) | ✅ mixed correctly | ✅ | ✅ | ✅ | ✅ both | ❌ | ✅ | ✅ `bs` | n/a read-only |
+| Goals (`renderGoals`) | ✅ qchip warns only | n/a hero + `.gl-cat` cards (lx-goal idiom) | ❌ | ❌ | n/a | n/a | ✅ `.minibtn` | n/a (card grid) | ✅ target/label `editCell` + ⚙ strip |
 | Trash (LXT `"tr"`) | n/a | ✅ board *(Batch 3)* | ❌ | ❌ | n/a | n/a | ✅ | ✅ `tr` | n/a |
 | Team/Activity/Picking | 🟡 | ❌ plain tables (Team deferred: interleaved pw-reset rows need the wf-exp translate pattern) | ❌ | ❌ | n/a | n/a | ✅ Team / 🟡 rest | ❌ | 🟡 |
 

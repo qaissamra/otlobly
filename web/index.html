@@ -897,6 +897,16 @@
   @keyframes lxfall{0%{transform:translateY(-30px) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.55}}
   .lx-confetti{position:fixed;inset:0;pointer-events:none;z-index:99}
   .lx-confetti i{position:absolute;top:0;width:9px;height:14px;border-radius:2px;animation:lxfall 1.4s ease-in forwards}
+  /* 🏆 Goals view: per-category cards on the same design language as the 🎯 hero */
+  .gl-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
+  .gl-cat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .gl-track{position:relative;height:10px;border-radius:99px;background:var(--bg3);margin:9px 0 5px;overflow:hidden}
+  .gl-fill{position:absolute;inset-block:0;inset-inline-start:0;border-radius:99px;min-width:3px;transition:width .6s}
+  .gl-edit{cursor:pointer;border-bottom:1px dashed var(--muted)}
+  .gl-edit:hover{color:var(--accent);border-color:var(--accent)}
+  .gl-row{display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .gl-row:last-child{border-bottom:0}
+  .gl-row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @media(max-width:820px){.pnl-2col{grid-template-columns:1fr}}
   .po-title:hover .lx-copy,.poc-row:hover .lx-copy{opacity:.7}
   /* popup KV rows have no hover scope — keep their copy buttons faintly visible */
@@ -965,6 +975,7 @@
     <button id="poBtn" onclick="setView('purchases')"><span class="ic">📦</span><span data-en="Purchases" data-ar="المشتريات">Purchases</span></button>
     <button id="needBtn" onclick="setView('needorder')" title="orders waiting to be placed on Amazon — includes the price-quote tool"><span class="ic">💡</span><span data-en="To order" data-ar="للطلب">To order</span></button>
     <button id="leluxeBtn" style="display:none" onclick="setView('leluxe')" title="Leluxe — Amazon bulk (AZ) orders, mirrored live to ClickUp"><span class="ic">⌚</span><span data-en="Leluxe" data-ar="ليلوكس">Leluxe</span></button>
+    <button id="goalsBtn" style="display:none" onclick="setView('goals')" title="🏆 حملة المبيعات — IT · PC · ساعات · اطلبلي، أرقام حيّة من ClickUp والمشتريات · the multi-source sales campaign, live from ClickUp + Purchases"><span class="ic">🏆</span><span data-en="Goals" data-ar="الأهداف">Goals</span></button>
     <button id="depositsBtn" onclick="setView('deposits')" title="deposits / عربون customers paid — with remaining balance"><span class="ic">💵</span><span data-en="Deposits" data-ar="العرابين">Deposits</span></button>
     <button id="homeBtn" onclick="setView('orders')"><span class="ic">🏠</span><span data-en="Orders" data-ar="الطلبات">Orders</span></button>
     <button id="cartBtn" onclick="setView('incart')" title="orders you've added to the Amazon cart — profit preview before you buy"><span class="ic">🛒</span><span data-en="In cart" data-ar="في السلة">In cart</span></button>
@@ -1685,6 +1696,21 @@
     <div id="bsResults" style="margin-top:14px"></div>
   </div>
 
+  <!-- 🏆 Goals: the multi-source sales campaign — IT / PC (ClickUp "IT Products"),
+       watches (ClickUp "Le Luxe Products"), Otlobly (Purchases POs). Near-live:
+       a ClickUp webhook bumps the server stamp, the page polls every 10s. -->
+  <div id="goalsView" class="hidden">
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:17px;font-weight:800">🏆 <span data-en="Goals" data-ar="الأهداف">Goals</span></h2>
+      <span id="glSync"></span>
+      <span class="spacer"></span>
+      <button class="minibtn" id="glSetBtn" onclick="glSettingsToggle()" data-en="⚙ Edit goals" data-ar="⚙ تعديل الأهداف">⚙ Edit goals</button>
+      <button class="minibtn" onclick="loadGoals(true)" title="re-read ClickUp now" data-en="↻ Refresh" data-ar="↻ تحديث">↻ Refresh</button>
+    </div>
+    <div id="glSettings" class="panel hidden" style="max-width:860px;margin-bottom:12px"></div>
+    <div id="glRows"><div class="muted2" style="padding:36px;text-align:center;font-size:14px">🏆 Loading…</div></div>
+  </div>
+
   <!-- 📧 GAASH mail: automated clearance-email sequences — one chat per GWD -->
   <div id="gmView" class="hidden">
     <div class="toolbar" style="flex-wrap:wrap;gap:8px">
@@ -2066,7 +2092,7 @@ async function applyRole(){
     // including the otlobly-only buttons that default to display:none. Hostname-guarded:
     // offline-in-prod with no cached /api/me must NOT unhide the admin nav.
     if(["localhost","127.0.0.1"].includes(location.hostname))
-      ["leluxeBtn","metaLeadsBtn"].forEach(id=>{const el=$(id); if(el) el.style.display="";});
+      ["leluxeBtn","goalsBtn","metaLeadsBtn"].forEach(id=>{const el=$(id); if(el) el.style.display="";});
     return;
   }
   const p=ME.perms;
@@ -2090,6 +2116,9 @@ async function applyRole(){
   // Leluxe: the owner's Amazon-bulk side business — admin-only (VISA labels,
   // buyer accounts) and Otlobly-only via the feature flag.
   hide("leluxeBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
+  // 🏆 Goals: the owner's cross-business campaign (ClickUp AZ lists + Purchases) —
+  // money + ClickUp internals, so admin-only and Otlobly-only like Leluxe.
+  hide("goalsBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
   // GAASH mail: clearance chasing is fulfillment work (edit_fulfillment), Otlobly-only.
   hide("gaashMailBtn", p.includes("edit_fulfillment") && FEAT.leluxe!==false);
   hide("depositsBtn", p.includes("view_money"));
@@ -2581,7 +2610,7 @@ const REFRESH_VIEWS  =new Set(["orders","brain","picking"]);    // views load() 
 const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
   activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
   brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-  usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
+  usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",goals:"goalsBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
 // A refresh used to always land back on the Brain — restore the page the user was on
 // instead. Platform views restore separately (tatabu_view); a view whose nav button is
 // role/feature-hidden falls back so nobody lands on a page they can't reach.
@@ -2606,7 +2635,7 @@ function setView(v){
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
   if(!PLAT_VIEWS.has(v)){ try{ localStorage.setItem("otl_view",v); }catch(e){} }   // survive a refresh
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="goals"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -2634,6 +2663,7 @@ function setView(v){
   $("depositsView").classList.toggle("hidden",v!=="deposits");
   $("catalogView").classList.toggle("hidden",v!=="catalog");
   $("leluxeView").classList.toggle("hidden",v!=="leluxe");
+  $("goalsView").classList.toggle("hidden",v!=="goals");
   $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
   $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
   $("gmView").classList.toggle("hidden",v!=="gaashmail");
@@ -2641,7 +2671,7 @@ function setView(v){
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",goals:"Goals",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -2672,6 +2702,7 @@ function setView(v){
   if(v==="deposits"){ loadDeposits(); }
   if(v==="catalog"){ loadCatalog(); }
   if(v==="leluxe"){ loadLeluxe(); }
+  if(v==="goals"){ loadGoals(); glPollStart(); }
   if(v==="pkgprep"){ loadPkgprep(); }
   if(v==="bulksearch"){ bsInit(); }
   if(v==="gaashmail"){ gmLoad().then(()=>{ if(GM.ov && GM.tab!=="conv") gmTab(GM.tab); }); }   // re-show the restored tab once data is in
@@ -4652,6 +4683,218 @@ function lxGoalCelebrate(milestone,month){
   document.body.appendChild(box);
   setTimeout(()=>box.remove(),2400);
   toast(milestone>=100?"🏆 GOAL SMASHED!":`🔥 ${milestone}% milestone!`);
+}
+// ── 🏆 Goals view: the multi-source campaign (ClickUp "IT Products" + "Le Luxe
+//    Products" + Purchases POs). Numbers come from /api/goals — the server keeps
+//    a stamp-keyed ClickUp cache that the /webhook/clickup receiver busts, so the
+//    10s poll below makes a value typed in ClickUp land here within ~12s. ──
+let GOALS=null, GOALS_BUSY=false, GOALS_POLL=null;
+const GL_OPEN={};                                    // category key → breakdown expanded
+const GL_COLORS={it:"#3e63dd",pc:"#12a594",watches:"#f59e0b",otlobly:"#f76808",itpc:"#3e63dd"};
+async function loadGoals(refresh){
+  if(GOALS_BUSY) return;
+  GOALS_BUSY=true;
+  let d; try{ d=await (await fetch("/api/goals"+(refresh?"?refresh=1":""))).json(); }catch(e){ d=null; }
+  GOALS_BUSY=false;
+  if(d&&d.ok){ GOALS=d; if(VIEW==="goals") renderGoals(); }
+  else if(!GOALS && $("glRows")) $("glRows").innerHTML=`<div class="muted2" style="padding:36px;text-align:center;font-size:14px">🏆 Couldn't load the goals — <button class="minibtn" onclick="loadGoals(true)">↻ try again</button></div>`;
+}
+function glPollStart(){
+  if(GOALS_POLL) return;
+  GOALS_POLL=setInterval(()=>{
+    if(VIEW!=="goals"){ clearInterval(GOALS_POLL); GOALS_POLL=null; return; }
+    // never yank an inline edit / open menu out from under the user
+    const ae=document.activeElement;
+    if(ae && $("goalsView").contains(ae) && (ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")) return;
+    if(document.querySelector(".pop-menu.open")) return;
+    loadGoals();
+  },10000);
+}
+function renderGoals(){
+  if(!GOALS){ loadGoals(); return; }
+  const g=GOALS.goals, w=g.window, t=g.totals, wh=GOALS.webhook||{};
+  if($("glSetBtn")) $("glSetBtn").style.display=CAN_ADMIN?"":"none";
+  $("glSync").innerHTML=(g.clickup_error
+      ?`<span class="qchip alert" title="${poEsc(g.clickup_error)}">⚠ ClickUp</span> `
+      :"")+(wh.configured
+      ?`<span class="qchip" style="color:#16a34a" title="ClickUp webhooks متصلة — أي تعديل يظهر خلال ثوانٍ · live via webhooks${wh.last_bump?` · last signal ${poEsc(String(wh.last_bump).slice(11,16))}`:""}">⚡ live</span>`
+      :`<span class="qchip alert" style="cursor:pointer" onclick="glSettingsToggle(true)" title="بدون webhook الأرقام تتحدث كل دقيقتين — افتح الإعدادات ووصّل المزامنة الفورية · without a webhook data refreshes every ~2 min — click to connect">⏱ ~2 min</span>`);
+  // combine IT + PC into one bar (split still shown as chips)
+  let cats=g.categories.slice();
+  if(g.combine_it_pc){
+    const it=cats.find(c=>c.key==="it"), pc=cats.find(c=>c.key==="pc");
+    if(it&&pc){
+      const m={key:"itpc",label:it.label+" + "+pc.label,mode:"combo",
+        target:+(it.target+pc.target).toFixed(2),actual:+(it.actual+pc.actual).toFixed(2),
+        n:(it.n||0)+(pc.n||0),need_per_day:+((it.need_per_day||0)+(pc.need_per_day||0)).toFixed(2),
+        breakdown:[...(it.breakdown||[]),...(pc.breakdown||[])].sort((a,b)=>String(b.day||"").localeCompare(String(a.day||""))),
+        breakdown_more:(it.breakdown_more||0)+(pc.breakdown_more||0),
+        warnings:[...(it.warnings||[]),...(pc.warnings||[])],
+        split:[{label:it.label,actual:it.actual},{label:pc.label,actual:pc.actual}]};
+      m.pct=m.target?+(m.actual/m.target*100).toFixed(1):0;
+      cats=[m,...cats.filter(c=>c.key!=="it"&&c.key!=="pc")];
+    }
+  }
+  const done=t.pct>=100, width=Math.min(100,t.pct);
+  const ticks=[25,50,75,100].map(x=>`<span class="lx-goal-tick${t.pct>=x?" hit":""}" style="inset-inline-start:${x}%"><i>${x===100?"🏆":x+"%"}</i></span>`).join("");
+  const mx=Math.max(1,...g.by_day.map(d=>d.usd));
+  const cols=g.by_day.map(d=>`<span class="c${d.d===w.today?" today":""}${d.usd?"":" zero"}" title="${d.d} — ${lxGm(d.usd)}"><span class="f" style="height:${Math.max(3,Math.round(100*d.usd/mx))}%"></span></span>`).join("");
+  const todayUsd=(g.by_day.find(d=>d.d===w.today)||{}).usd||0;
+  const card=(l,v,cls,title)=>`<div class="card"${title?` title="${poEsc(title)}"`:""}><div class="n ${cls||""}">${v}</div><div class="l">${poEsc(l)}</div></div>`;
+  const dd=s=>s?`${s.slice(8)}/${s.slice(5,7)}`:"—";
+  $("glRows").innerHTML=`
+    <div class="lx-goal-hero">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+        <div>
+          <div class="muted2" style="font-size:12px;font-weight:700">🏆 حملة ${dd(w.start)} → ${dd(w.end)}${w.active?"":(w.days_left?` · تبدأ ${dd(w.start)}`:" · انتهت")}</div>
+          <div class="lx-goal-big">${lxGm(t.actual)} <small>/ ${lxGm(t.target)}</small></div>
+        </div>
+        <span class="spacer" style="flex:1"></span>
+        <div style="text-align:end">
+          <div class="lx-goal-pct" style="color:${done?"#16a34a":"var(--accent)"}">${t.pct}%</div>
+        </div>
+      </div>
+      <div class="lx-goal-track">${ticks}<span class="lx-goal-fill${done?" done":""}" style="width:${width}%"></span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+        <span>${done?"فوق الهدف 🎉":"باقي "+lxGm(t.remaining)}</span><span class="spacer" style="flex:1"></span>
+        <span>${w.days_left} day${w.days_left===1?"":"s"} left of ${w.days_total}</span>
+      </div>
+      <div class="lx-goal-line">${poEsc(g.line||"")}</div>
+    </div>
+    <div class="lx-dash">
+      ${card("Today",lxGm(todayUsd),"money","orders dated today (Amman time)")}
+      ${card("Need / day",lxGm(t.need_per_day),t.need_per_day>t.avg_per_day?"neg":"good","remaining ÷ days left (incl. today)")}
+      ${card("Avg / day",lxGm(t.avg_per_day),"money","window so far ÷ days elapsed")}
+      ${card("Best day",t.best_day?`${lxGm(t.best_day.usd)} <small style="font-size:11px;color:var(--muted)">${dd(t.best_day.d)}</small>`:"—","money","the window's strongest day")}
+    </div>
+    <div class="lx-sec">الأهداف · the goals</div>
+    <div class="gl-cats">${cats.map(c=>glCatCard(c)).join("")}</div>
+    <div class="lx-sec">يوم بيوم · day by day</div>
+    <div class="lx-goal-cols">${cols}</div>
+    <div class="muted2" style="font-size:11px;margin-top:10px">آخر حساب ${poEsc(String(g.generated_at||"").slice(11,16))} · ${wh.configured?"⚡ يتحدث فور أي تعديل في ClickUp":"⏱ يتحدث كل دقيقتين تقريبًا"}</div>`;
+  lxGoalCelebrate(t.milestone,"goals:"+w.start);
+}
+function glCatCard(c){
+  const color=GL_COLORS[c.key]||"var(--accent)";
+  const done=c.actual>=c.target, width=Math.min(100,c.target?c.actual/c.target*100:0);
+  const open=!!GL_OPEN[c.key], editable=CAN_ADMIN&&c.key!=="itpc";
+  const warns=(c.warnings||[]).filter(x=>x.kind!=="brand_missing");
+  const missing=(c.warnings||[]).filter(x=>x.kind==="brand_missing");
+  const brands=c.mode==="brand"&&(c.brands||[]).length?` <span class="muted2" style="font-size:10.5px">(${poEsc(c.brands.join(", "))})</span>`:"";
+  const split=(c.split||[]).map(s=>`<span class="qchip" style="font-size:10.5px">${poEsc(s.label)}: <b>${lxGm(s.actual)}</b></span>`).join(" ");
+  const dd=s=>s?`${s.slice(8)}/${s.slice(5,7)}`:"—";
+  const rows=!open?"":`<div style="margin-top:8px;max-height:260px;overflow:auto">${
+    (c.breakdown||[]).map(u=>`<div class="gl-row"${u.warn?' style="opacity:.75"':''}>
+        <span class="n" title="${poEsc(u.top_name&&u.top_name!==u.name?u.top_name+" › "+u.name:u.name)}">${u.url?`<a href="${poEsc(u.url)}" target="_blank" rel="noopener" style="color:inherit">${poEsc(u.name||"—")}</a>`:poEsc(u.name||"—")}</span>
+        ${u.brand?`<span class="pill" style="background:var(--bg3);color:var(--ink)">${poEsc(u.brand)}</span>`:""}
+        ${u.warn?`<span class="qchip alert" style="font-size:10px" title="${u.warn==="no_amount"?"لا يوجد Total Amount على المهمة — عبّيه في ClickUp":"احتُسب مبلغ مهمة الـ Order # لأن منتجاتها بلا أسعار"}">${u.warn==="no_amount"?"⚠ بلا مبلغ":"⚠ Order #"}</span>`:""}
+        <span class="muted2" style="font-variant-numeric:tabular-nums">${dd(u.day)}</span>
+        <b style="font-variant-numeric:tabular-nums">${u.usd?lxGm(u.usd):"—"}</b>
+      </div>`).join("")||`<div class="muted2" style="font-size:12px;padding:6px 0">لا طلبات ضمن الفترة بعد · nothing in the window yet</div>`}
+    ${c.breakdown_more?`<div class="muted2" style="font-size:11px;padding:4px 0">+ ${c.breakdown_more} more…</div>`:""}</div>`;
+  return `<div class="gl-cat">
+    <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+      <b style="font-size:13.5px">${editable?`<span class="gl-edit" onclick="glEditLabel(this,'${c.key}')" title="اضغط لتعديل الاسم · click to rename">${poEsc(c.label)}</span>`:poEsc(c.label)}</b>${brands}
+      <span class="spacer" style="flex:1"></span>
+      <span style="font-weight:900;font-variant-numeric:tabular-nums;color:${done?"#16a34a":"inherit"}">${c.pct}%</span>
+    </div>
+    <div style="font-size:19px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:2px">${lxGm(c.actual)} <small style="font-size:12px;color:var(--muted)">/ ${editable?`<span class="gl-edit" onclick="glEditTarget(this,'${c.key}')" title="اضغط لتعديل الهدف · click to edit the target">${lxGm(c.target)}</span>`:lxGm(c.target)}</small></div>
+    <div class="gl-track"><span class="gl-fill" style="width:${Math.max(2,width)}%;background:${done?"linear-gradient(90deg,#16a34a,#22c55e)":color}"></span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--muted)">
+      <span>${c.n||0} order${c.n===1?"":"s"}</span>
+      ${c.need_per_day?`<span>· ${lxGm(c.need_per_day)}/day</span>`:""}
+      <span class="spacer" style="flex:1"></span>
+      ${warns.length?`<span class="qchip alert" style="cursor:pointer;font-size:10.5px" onclick="glToggleBreak('${c.key}')" title="مهام تحتاج انتباه — افتح التفاصيل">⚠ ${warns.length}</span>`:""}
+      <button class="minibtn" onclick="glToggleBreak('${c.key}')">${open?"▴":"▾"} تفاصيل</button>
+    </div>
+    ${split?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${split}</div>`:""}
+    ${missing.map(x=>`<div class="qchip alert" style="margin-top:6px" title="أضف خيار البراند في حقل Brand داخل قائمة ClickUp حتى تُفرز مهام الـPC — بدونه كل شيء يُحسب ضمن IT">⚠ البراند "${poEsc(x.name)}" غير موجود في ClickUp بعد</div>`).join("")}
+    ${rows}</div>`;
+}
+function glToggleBreak(key){ GL_OPEN[key]=!GL_OPEN[key]; renderGoals(); }
+function glEditTarget(el,key){
+  if(!CAN_ADMIN||!GOALS) return;
+  const c=(GOALS.goals.categories||[]).find(x=>x.key===key); if(!c) return;
+  editCell(el,{type:"number",value:c.target,minWidth:"90px",width:"110px",select:true},async v=>{
+    const n=Number(v);
+    if(!n||n<=0||n===c.target){ renderGoals(); return; }
+    await glSaveSettings({categories:[{key,target:n}]});
+  },()=>renderGoals());
+}
+function glEditLabel(el,key){
+  if(!CAN_ADMIN||!GOALS) return;
+  const c=(GOALS.goals.categories||[]).find(x=>x.key===key); if(!c) return;
+  editCell(el,{value:c.label,minWidth:"120px",width:"160px",select:true},async v=>{
+    const label=(v||"").trim();
+    if(!label||label===c.label){ renderGoals(); return; }
+    await glSaveSettings({categories:[{key,label}]});
+  },()=>renderGoals());
+}
+async function glSaveSettings(body,btn){
+  if(btn) btn.disabled=true;
+  let r; try{ r=await post("/api/goals/settings",body); }catch(e){ r={}; }
+  if(btn) btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||"Couldn't save"); renderGoals(); return false; }
+  toast("Saved ✓");
+  await loadGoals();                       // the save bumped the stamp → fresh numbers
+  if(!$("glSettings").classList.contains("hidden")) glSettingsRender();
+  return true;
+}
+function glSettingsToggle(force){
+  const el=$("glSettings");
+  const show=force===true?true:el.classList.contains("hidden");
+  el.classList.toggle("hidden",!show);
+  if(show) glSettingsRender();
+}
+function glSettingsRender(){
+  const el=$("glSettings");
+  if(!GOALS){ el.innerHTML=`<div class="muted2" style="padding:10px">Loading…</div>`; return; }
+  const st=GOALS.settings||{}, wh=GOALS.webhook||{};
+  const pc=(st.categories||[]).find(c=>c.key==="pc")||{};
+  el.innerHTML=`
+    <div style="font-weight:800;font-size:13px;margin-bottom:8px">⚙ إعدادات الحملة · campaign settings <span class="muted2" style="font-weight:400;font-size:11px">(الأهداف والأسماء تُعدَّل بالضغط عليها فوق مباشرة)</span></div>
+    <div class="form-grid">
+      <label class="fld"><span data-en="From" data-ar="من">من</span><input type="date" id="glWs" value="${poEsc(st.window_start||"")}"></label>
+      <label class="fld"><span data-en="To" data-ar="إلى">إلى</span><input type="date" id="glWe" value="${poEsc(st.window_end||"")}"></label>
+      <label class="fld"><span>PC brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هدف الـPC — مفصولة بفواصل، غير حساسة لحالة الأحرف">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="PC"></label>
+      <label class="fld"><span>حالات مستثناة · excluded statuses <span class="gm-q" title="مهام بهذه الحالات لا تُحسب أبدًا (على مستوى الطلب أو المنتج)">?</span></span><input id="glExcl" value="${poEsc((st.excluded||[]).join(", "))}" placeholder="cancelled"></label>
+      <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>دمج IT + PC في شريط واحد ($${((st.categories||[]).filter(c=>["it","pc"].includes(c.key)).reduce((a,c)=>a+(+c.target||0),0)).toLocaleString()}) · combine IT + PC into one bar</span></label>
+      <div class="full" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="accent" onclick="glSettingsSave(this)" data-en="Save" data-ar="حفظ">حفظ · Save</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+      <div style="font-weight:800;font-size:12.5px">⚡ المزامنة الفورية · instant sync ${wh.configured?`<span class="qchip" style="color:#16a34a">متصلة</span>`:`<span class="qchip alert">غير متصلة</span>`}</div>
+      <div class="muted2" style="font-size:11.5px;margin:4px 0 8px">webhook من ClickUp إلى ${poEsc(wh.endpoint||"التطبيق المباشر")} — أي تعديل على القائمتين يحدّث الصفحة خلال ثوانٍ. يعمل فقط على السيرفر المباشر (وليس محليًا).</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="minibtn" onclick="glWebhook('create',this)">⚡ ${wh.configured?"إعادة توصيل · reconnect":"توصيل · connect"}</button>
+        <button class="minibtn" onclick="glWebhook('status',this)">🩺 فحص · status</button>
+        ${wh.configured?`<button class="minibtn" onclick="if(confirm('فصل المزامنة الفورية؟')) glWebhook('delete',this)">✕ فصل</button>`:""}
+      </div>
+      <div id="glWhStatus" style="margin-top:8px"></div>
+    </div>`;
+}
+async function glSettingsSave(btn){
+  const body={window_start:$("glWs").value,window_end:$("glWe").value,
+    combine_it_pc:$("glCombine").checked,
+    excluded:($("glExcl").value||"").split(",").map(s=>s.trim()).filter(Boolean)};
+  const brands=($("glBrands").value||"").split(",").map(s=>s.trim()).filter(Boolean);
+  if(brands.length) body.categories=[{key:"pc",brands}];
+  await glSaveSettings(body,btn);
+}
+async function glWebhook(action,btn){
+  if(btn) btn.disabled=true;
+  let r; try{ r=await post("/api/goals/webhook_setup",{action}); }catch(e){ r={}; }
+  if(btn) btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||"webhook call failed"); return; }
+  const wjs=r.webhook||{}, hooks=wjs.hooks||[];
+  const el=$("glWhStatus");
+  if(el) el.innerHTML=hooks.length
+    ?hooks.map(h=>`<div style="font-size:12px">list ${poEsc(String(h.list_id||"?"))} — <b style="color:${(h.health&&h.health.status)==="active"?"#16a34a":"#b45309"}">${poEsc((h.health&&h.health.status)||"?")}</b>${h.health&&h.health.fail_count?` · ${h.health.fail_count} fails`:""}</div>`).join("")
+    :`<div class="muted2" style="font-size:12px">لا يوجد webhooks مسجّلة${wjs.endpoint?` على ${poEsc(wjs.endpoint)}`:""}</div>`;
+  if(action==="create") toast("⚡ المزامنة الفورية متصلة");
+  if(action==="delete") toast("تم الفصل");
+  if(action!=="status"){ await loadGoals(true); glSettingsRender(); }
 }
 // ── 🎯 Goal settings modal (⋮ menu / the Goal view button) ──
 function lxGoalSettingsOpen(){

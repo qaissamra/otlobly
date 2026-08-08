@@ -50,6 +50,7 @@ import customers as cust_mod
 import db
 import estimate
 import settings as settings_mod
+import goals
 import google_login
 import mailer
 import memlog
@@ -3479,6 +3480,71 @@ def api_leluxe_goal_backfill():
 
 
 # --------------------------------------------------------------------------- #
+# 🏆 Goals — the multi-source campaign tracker (ClickUp lists + Purchases)
+# --------------------------------------------------------------------------- #
+@app.route("/api/goals")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_goals():
+    """The whole 🏆 Goals snapshot. ?refresh=1 busts the ClickUp cache; the
+    page's 10s poll serves the stamp-keyed cache, so it stays cheap until a
+    webhook (or a settings save) bumps the stamp."""
+    snap = goals.compute(refresh=request.args.get("refresh") == "1")
+    return jsonify({"ok": True, "goals": snap, "settings": goals.settings(),
+                    "webhook": goals.webhook_info()})
+
+
+@app.route("/api/goals/settings", methods=["GET", "POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_goals_settings():
+    if request.method == "GET":
+        return jsonify({"ok": True, "settings": goals.settings()})
+    st, err = goals.save_settings(request.get_json(force=True, silent=True) or {})
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    goals.bump_stamp("settings")    # excluded/window edits must bust every worker's cache
+    tgt = " + ".join(f"{c['label']} ${c['target']:,.0f}" for c in st["categories"])
+    activity.log("set", "goals", "multi", "Goals settings",
+                 detail=f"{st['window_start']} → {st['window_end']} · {tgt}", user=_user())
+    return jsonify({"ok": True, "settings": st})
+
+
+@app.route("/api/goals/webhook_setup", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_goals_webhook_setup():
+    """{action:"status"} → live ClickUp webhook health; {action:"create"} →
+    register the instant-sync webhooks (one per source list, idempotent);
+    {action:"delete"} → remove them. Create refuses a localhost base —
+    ClickUp can't reach it."""
+    b = request.get_json(force=True, silent=True) or {}
+    action = (b.get("action") or "status").strip()
+    if action == "create":
+        base = _portal_base()
+        if "localhost" in base or "127.0.0.1" in base:
+            return jsonify({"ok": False, "error": "webhooks need the public app "
+                            "(PORTAL_BASE_URL) — ClickUp can't reach localhost"}), 400
+        out, err = goals.webhook_create(base)
+        if err:
+            return jsonify({"ok": False, "error": err}), 502
+        activity.log("set", "goals", "webhook", "Goals instant sync",
+                     detail=f"webhooks → {out.get('endpoint')}", user=_user())
+        return jsonify({"ok": True, "webhook": out})
+    if action == "delete":
+        out, err = goals.webhook_delete()
+        if err:
+            return jsonify({"ok": False, "error": err}), 502
+        activity.log("set", "goals", "webhook", "Goals instant sync",
+                     detail="webhooks removed", user=_user())
+        return jsonify({"ok": True, "webhook": out})
+    out, err = goals.webhook_status()
+    if err:
+        return jsonify({"ok": False, "error": err}), 502
+    return jsonify({"ok": True, "webhook": out})
+
+
+# --------------------------------------------------------------------------- #
 # Platform admin: brokers — Otlobly's super-admin provisions Tatabu tenants.
 # --------------------------------------------------------------------------- #
 def _platform_admin():
@@ -4890,6 +4956,22 @@ def manychat_webhook():
     b = request.get_json(force=True, silent=True) or {}
     status = _wa_login_consume(b.get("phone"), b.get("text"))
     return jsonify({"ok": True, "status": status})
+
+
+@app.route("/webhook/clickup", methods=["POST"])
+def clickup_webhook():
+    """ClickUp → 🏆 Goals freshness ping. The payload itself is never trusted
+    or parsed for data — a valid X-Signature (HMAC of the raw body with a
+    stored webhook secret) just bumps the goals stamp so every worker's cache
+    refetches on the next poll. Always a fast 200: ClickUp counts non-2xx
+    responses and suspends the webhook."""
+    try:
+        if goals.verify_signature(request.get_data(),
+                                  request.headers.get("X-Signature", "")):
+            goals.bump_stamp("webhook")
+    except Exception:  # noqa — never fail a webhook delivery
+        app.logger.exception("clickup webhook")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/customer/wa_login/poll")
