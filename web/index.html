@@ -6071,7 +6071,7 @@ async function lxAz2Push(rowId,remoteNow,mine){
 // ── 📦⤴ Organize in ClickUp: mirror the app's order → 📦 GWD → products tree
 //    into the REAL AZ (2) list. Same guardrails as az2 push: dry-run preview
 //    first, every step journalled, per-step undo in push history. ──
-function lxAz2Sum(r){ return `${r.creates_pkg||0} new 📦 · ${r.moves||0} moved · ${r.renames||0} renamed · ${r.creates_item||0} new products · ${r.field_sets||0} field fixes (GWD/qty/profile/$) · ${r.due_sets||0} due dates`
+function lxAz2Sum(r){ return `${r.creates_pkg||0} new 📦 · ${r.moves||0} moved · ${r.renames||0} renamed · ${r.creates_item||0} new products · ${r.field_sets||0} field fixes (GWD/qty/profile/brand/name/$) · ${r.due_sets||0} due dates`
   +(r.adopts?` · ${r.adopts} adopted`:"")
   +(r.extra_deletes?` · ${r.extra_deletes} extras deleted (qty-proven)`:"")
   +(r.status_sets?` · ${r.status_sets} 📦 status`:"")

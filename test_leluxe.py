@@ -52,6 +52,14 @@ SCHEMA = {
         "Total Amount": {"id": "f-amt", "type": "currency", "options": []},
         "Tracking Number": {"id": "f-trk", "type": "short_text", "options": []},
         "ASIN": {"id": "f-asin", "type": "short_text", "options": []},
+        # Brand + NAME ON PACKAGEE are deliberately STALE here — the live list
+        # also has "MIX" and "QAIS". Organize must encode from each task's own
+        # inline options (the _inline_fdef lesson), never from this cache.
+        "Brand": {"id": "f-brand", "type": "drop_down",
+                  "options": [{"id": "opt-polo", "name": "POLO", "orderindex": 12, "color": None},
+                              {"id": "opt-anne", "name": "annie klein", "orderindex": 0, "color": None}]},
+        "NAME ON PACKAGEE": {"id": "f-ship", "type": "drop_down",
+                             "options": [{"id": "opt-faisal", "name": "FAISAL ", "orderindex": 1, "color": None}]},
         "gash date": {"id": "f-gd", "type": "date", "options": []},
         # like live: GERZIM DELIVERED / GAASH-leg options exist; تم التسليم, SMS
         # and STILL NOT ARRIVED do NOT (unmapped stages must be skipped)
@@ -1275,23 +1283,46 @@ def fake_azo_http(url, method="GET", body=None, _retried=False):
         if method == "GET":
             out = {k: v for k, v in t.items() if k not in ("cf", "cf_defs")}
             # like real ClickUp: every field entry ships its full type_config
-            namedef = {"type": "drop_down", "type_config": {"options": [
-                {"id": "opt-a", "name": "A", "orderindex": 0},
-                {"id": "opt-b5", "name": "B5", "orderindex": 37},
-                {"id": "opt-newly", "name": "NEWLY", "orderindex": 99}]}}
+            LIVEDEF = {
+                "f-name": {"type": "drop_down", "type_config": {"options": [
+                    {"id": "opt-a", "name": "A", "orderindex": 0},
+                    {"id": "opt-b5", "name": "B5", "orderindex": 37},
+                    {"id": "opt-newly", "name": "NEWLY", "orderindex": 99}]}},
+                # live has MIX / QAIS; the cached SCHEMA above does not
+                "f-brand": {"type": "drop_down", "type_config": {"options": [
+                    {"id": "opt-anne", "name": "annie klein", "orderindex": 0},
+                    {"id": "opt-mix", "name": "MIX", "orderindex": 8},
+                    {"id": "opt-polo", "name": "POLO", "orderindex": 12}]}},
+                "f-ship": {"type": "drop_down", "type_config": {"options": [
+                    {"id": "opt-qais", "name": "QAIS", "orderindex": 0},
+                    {"id": "opt-faisal", "name": "FAISAL ", "orderindex": 1}]}},
+            }
             out["custom_fields"] = [
-                {"id": k, "value": v, **(namedef if k == "f-name" else {})}
+                {"id": k, "value": v, **LIVEDEF.get(k, {})}
                 for k, v in (t.get("cf") or {}).items()]
+            # ClickUp ships EVERY list field on every task, valued or not —
+            # that is where an unset dropdown's live options come from
+            out["custom_fields"] += [
+                {"id": k, **d} for k, d in LIVEDEF.items()
+                if k not in (t.get("cf") or {})
+                and not any(x.get("id") == k for x in t.get("cf_defs") or [])]
             out["custom_fields"] += t.get("cf_defs") or []
             if "include_subtasks" in url:
-                subs = []
-                for x in AZO["tasks"].values():
-                    if x.get("parent") == tid:
-                        e = {k: v for k, v in x.items() if k not in ("cf", "cf_defs")}
-                        e["subtasks_count"] = sum(1 for y in AZO["tasks"].values()
-                                                  if y.get("parent") == x["id"])
-                        subs.append(e)
-                out["subtasks"] = subs
+                # like real ClickUp: the WHOLE descendant tree, NESTED — each
+                # entry carries its own `subtasks` list and there is no
+                # `subtasks_count` key anywhere. The fake used to invent one,
+                # which is exactly why v4.4's "full-depth scan" passed here
+                # and stayed blind in production.
+                def _entry(x, d=0):
+                    e = {k: v for k, v in x.items()
+                         if k not in ("cf", "cf_defs")}
+                    kids = [_entry(y, d + 1) for y in AZO["tasks"].values()
+                            if y.get("parent") == x["id"]] if d < 6 else []
+                    if kids:
+                        e["subtasks"] = kids
+                    return e
+                out["subtasks"] = [_entry(x) for x in AZO["tasks"].values()
+                                   if x.get("parent") == tid]
             return 200, out
         if method == "PUT":
             for k in ("name", "parent", "due_date"):
@@ -1310,7 +1341,9 @@ def az2_organize_flow():
     """📦⤴ Organize in ClickUp: the board's order → 📦 GWD → products tree is
     mirrored into AZ (2) — packages created, products re-parented, split
     quantities renamed, splits created, and every product/package carries its
-    GWD + split quantity + profile NAME + due date; empty shells are never
+    GWD + split quantity + profile NAME + Brand + ship name (parents roll their
+    products' Brand/ASIN up to one shared value or MIX) + due date; products
+    hidden under a product-named task are found and lifted; empty shells are never
     created (and previously-created ones are pruned); bare-quantity names are
     flagged, never mirrored; every step journalled + undoable; a second run is
     a no-op."""
@@ -1365,8 +1398,15 @@ def az2_organize_flow():
         d, err = leluxe.az2_organize(oid, dry_run=True)
         check("dry-run plans the tree", err is None and d["creates_pkg"] == 2
               and d["moves"] == 1 and d["renames"] == 1 and d["creates_item"] == 1)
-        check("dry-run plans the fields (GWD + qty + profile) and the due date",
-              d["field_sets"] == 3 and d["due_sets"] == 1)
+        check("dry-run plans the fields (GWD + qty + profile + ship name) and "
+              "the due date", d["field_sets"] == 4 and d["due_sets"] == 1)
+        check("a blank ship name falls back to the FAISAL default — and the "
+              "ORDER's own blank is left for the owner to pick",
+              [s["new"] for s in d["steps"]
+               if s.get("fname") == "NAME ON PACKAGEE"] == ["FAISAL"])
+        check("no Brand/ASIN invented when nothing in the order names one",
+              not [s for s in d["steps"]
+                   if s.get("fname") in ("Brand", "ASIN")])
         check("untracked package is not planned", d["packages"] == 3)
         check("empty tracked package is never created as a shell",
               d["skipped_empty"] == 1 and d["prunes"] == 0)
@@ -1378,7 +1418,7 @@ def az2_organize_flow():
               not [1 for m_, u, b in CALLS if m_ in ("PUT", "POST", "DELETE")])
 
         rep, err = leluxe.az2_organize(oid, user="qais")
-        check("organize ok", err is None and len(rep["steps"]) == 9)
+        check("organize ok", err is None and len(rep["steps"]) == 10)
         pkg1_tid = (leluxe.get_row(p1)["data"] or {}).get("source_task_id")
         pkg2_tid = (leluxe.get_row(p2)["data"] or {}).get("source_task_id")
         itb_tid = (leluxe.get_row(itB)["data"] or {}).get("source_task_id")
@@ -1423,8 +1463,8 @@ def az2_organize_flow():
         check("journal carries every step in order",
               [x["field"] for x in j] ==
               ["pkg_create", "parent", "name", "cf:Tracking Number",
-               "cf:Quantity ordered", "cf:NAME", "due_date",
-               "pkg_create", "item_create"]
+               "cf:Quantity ordered", "cf:NAME", "cf:NAME ON PACKAGEE",
+               "due_date", "pkg_create", "item_create"]
               and all(x["state"] == "pushed" for x in j))
         d2, err = leluxe.az2_organize(oid, dry_run=True)
         check("second run is a no-op (structure, fields, dues)", err is None
@@ -1471,17 +1511,21 @@ def az2_organize_flow():
               and cf("A", "f-qty") == "5")
 
         # j: 0 pkg_create p1 · 1 parent A · 2 name A · 3 cf trk · 4 cf qty ·
-        #    5 cf NAME · 6 due_date · 7 pkg_create p2 · 8 item_create B
+        #    5 cf NAME · 6 cf NAME ON PACKAGEE · 7 due_date · 8 pkg_create p2 ·
+        #    9 item_create B
         _, err = leluxe.az2_undo(j[5]["id"], user="qais")
         check("profile undo clears the dropdown (old was empty)", err is None
               and (AZO["tasks"]["A"].get("cf") or {}).get("f-name") in (None, ""))
         _, err = leluxe.az2_undo(j[6]["id"], user="qais")
+        check("ship-name undo clears the dropdown (old was empty)", err is None
+              and (AZO["tasks"]["A"].get("cf") or {}).get("f-ship") in (None, ""))
+        _, err = leluxe.az2_undo(j[7]["id"], user="qais")
         check("due-date undo clears it back (old was empty)", err is None
               and AZO["tasks"]["A"].get("due_date") is None)
         _, err = leluxe.az2_undo(j[0]["id"])
         check("package undo refused while it still holds products",
               err is not None and "still holds products" in err)
-        _, err = leluxe.az2_undo(j[8]["id"], user="qais")
+        _, err = leluxe.az2_undo(j[9]["id"], user="qais")
         check("created product undone (deleted + unlinked)", err is None
               and itb_tid not in AZO["tasks"]
               and not (leluxe.get_row(itB)["data"] or {}).get("source_task_id"))
@@ -1764,6 +1808,130 @@ def az2_organize_flow():
               and any("quantities don't add up" in s["note"]
                       for s in dq2["skipped"])
               and "EX2" in AZO["tasks"])
+
+        # ---- the LIVE shape of order # 114-1928954-5920239: three products
+        # nested under a sibling PRODUCT ("2 U.S. Polo", whose name looks
+        # nothing like a package) survived run after run, because v4.4 keyed
+        # its descent on `subtasks_count` — a key ClickUp does not return, so
+        # nothing but 📦/GWD-named tasks was ever opened. Blind to the
+        # originals, organize also minted a fresh "9 Anne Klein" copy every
+        # run. Same order carries the Brand / ASIN / ship-name ensure-set. ----
+        ol = leluxe._insert_row("order", "Order # 114-1928954-5920239",
+                                status="order number",
+                                extra={"source_task_id": "ORDN"})
+        pn1 = leluxe._insert_row("package", "📦 GWD778", parent_local_id=ol,
+                                 extra={"tracking_number": "GWD778",
+                                        "source_task_id": "CONTN"})
+        pn2 = leluxe._insert_row("package", "📦 GWD781", parent_local_id=ol,
+                                 extra={"tracking_number": "GWD781",
+                                        "source_task_id": "CONTM"})
+        n_host = leluxe._insert_row("item", "2 U.S. Polo", status="oredered",
+                                    parent_local_id=pn1,
+                                    extra={"source_task_id": "HOSTN"})
+        n_p9 = leluxe._insert_row("item", "9 U.S. Polo", status="oredered",
+                                  parent_local_id=pn1,
+                                  extra={"source_task_id": "POLO9"})
+        n_ak = leluxe._insert_row("item", "9 Anne Klein AK-1980BKGB",
+                                  status="oredered", parent_local_id=pn1,
+                                  extra={"source_task_id": "COPYN"})  # ours
+        n_four = leluxe._insert_row("item", "4 U.S. Polo", status="oredered",
+                                    parent_local_id=pn2,
+                                    extra={"source_task_id": "FOURN"})
+        AZO["tasks"].update({
+            "ORDN": {"id": "ORDN", "name": "Order # 114-1928954-5920239",
+                     "parent": None, "status": {"status": "order number"},
+                     "cf": {"f-qty": "24", "f-ship": "opt-faisal"}},
+            "CONTN": {"id": "CONTN", "name": "📦 GWD778", "parent": "ORDN",
+                      "status": {"status": "package"},
+                      "tags": [{"name": "otl-push"}], "cf": {"f-trk": "GWD778"}},
+            # the pseudo-package: a PRODUCT-named task holding three products
+            "HOSTN": {"id": "HOSTN", "name": "2 U.S. Polo", "parent": "CONTN",
+                      "status": {"status": "package"},
+                      "cf": {"f-trk": "GWD778", "f-qty": "2",
+                             "f-brand": "opt-polo", "f-asin": "B075V89JMP"}},
+            "NEST1": {"id": "NEST1", "name": "9 Anne Klein AK-1980BKGB",
+                      "parent": "HOSTN", "status": {"status": "oredered"},
+                      "cf": {"f-trk": "GWD778", "f-qty": "9",
+                             "f-brand": "opt-anne", "f-ship": "opt-faisal"}},
+            "NEST2": {"id": "NEST2", "name": "9 Anne Klein Glitter",
+                      "parent": "HOSTN", "status": {"status": "oredered"},
+                      "cf": {"f-trk": "GWD778", "f-qty": "9"}},
+            "NEST3": {"id": "NEST3", "name": "2 U.S. Polo",
+                      "parent": "HOSTN", "status": {"status": "oredered"},
+                      "cf": {"f-trk": "GWD778", "f-qty": "2"}},
+            "POLO9": {"id": "POLO9", "name": "9 U.S. Polo", "parent": "CONTN",
+                      "status": {"status": "oredered"},
+                      "cf": {"f-trk": "GWD778", "f-qty": "9",
+                             "f-asin": "B09SJ6Y7JR", "f-ship": "opt-qais"}},
+            "COPYN": {"id": "COPYN", "name": "9 Anne Klein AK-1980BKGB",
+                      "parent": "CONTN", "status": {"status": "oredered"},
+                      "tags": [{"name": "otl-push"}],
+                      "cf": {"f-trk": "GWD778", "f-qty": "9"}},
+            "CONTM": {"id": "CONTM", "name": "📦 GWD781", "parent": "ORDN",
+                      "status": {"status": "package"},
+                      "tags": [{"name": "otl-push"}], "cf": {"f-trk": "GWD781"}},
+            "FOURN": {"id": "FOURN", "name": "4 U.S. Polo", "parent": "CONTM",
+                      "status": {"status": "oredered"},
+                      "tags": [{"name": "otl-push"}],
+                      "cf": {"f-trk": "GWD781", "f-qty": "4"}},
+        })
+        with db.connect() as c:
+            for row_, tid_ in ((n_ak, "COPYN"), (n_four, "FOURN")):
+                c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                             old_value, new_value, ts, user, state)
+                             VALUES (?,?,?,?,?,?,?,'pushed')""",
+                          (row_, tid_, "item_create", "",
+                           AZO["tasks"][tid_]["name"], db.now_iso(), "qais"))
+        dn, err = leluxe.az2_organize(ol, dry_run=True)
+        check("products nested under a PRODUCT-named task are seen at last "
+              "(ClickUp has no subtasks_count — the nested list is the signal)",
+              err is None and dn["creates_item"] == 0
+              and any(s["op"] == "move" and s["task_id"] == "NEST1"
+                      for s in dn["steps"]))
+        check("board Σ (2+9+9+4) == the order's 24 → the two nested strays are "
+              "provable extras", dn["extra_deletes"] == 2
+              and {s["task_id"] for s in dn["steps"]
+                   if s["op"] == "extra_delete"} == {"NEST2", "NEST3"})
+        repn, err = leluxe.az2_organize(ol, user="qais")
+        check("the nesting is finally gone: original lifted, copy pruned, "
+              "extras deleted", err is None
+              and AZO["tasks"]["NEST1"]["parent"] == "CONTN"
+              and "COPYN" not in AZO["tasks"]
+              and "NEST2" not in AZO["tasks"] and "NEST3" not in AZO["tasks"]
+              and not [t for t in AZO["tasks"].values()
+                       if t.get("parent") == "HOSTN"]
+              and (leluxe.get_row(n_ak)["data"] or {}).get("source_task_id")
+              == "NEST1")
+        check("the owner's hand-made original kept its real status + Brand",
+              AZO["tasks"]["NEST1"]["status"]["status"] == "oredered"
+              and cf("NEST1", "f-brand") == "opt-anne")
+        check("a blank product Brand is filled from its split family (POLO)",
+              cf("POLO9", "f-brand") == "opt-polo"
+              and cf("FOURN", "f-brand") == "opt-polo")
+        check("a parcel whose products disagree takes MIX — an option the "
+              "CACHED schema doesn't have, so it can only come from the "
+              "task's LIVE inline options",
+              cf("CONTN", "f-brand") == "opt-mix"
+              and cf("CONTN", "f-asin") == "MIX")
+        check("a parcel whose products agree takes their one Brand",
+              cf("CONTM", "f-brand") == "opt-polo")
+        check("the ORDER task summarises the whole order the same way",
+              cf("ORDN", "f-brand") == "opt-mix"
+              and cf("ORDN", "f-asin") == "MIX")
+        check("the order's ship name is inherited by everything that lacked it",
+              cf("CONTN", "f-ship") == "opt-faisal"
+              and cf("CONTM", "f-ship") == "opt-faisal"
+              and cf("HOSTN", "f-ship") == "opt-faisal"
+              and cf("FOURN", "f-ship") == "opt-faisal")
+        check("an owner-picked ship name is NEVER overwritten "
+              "(parcel-name-authority)", cf("POLO9", "f-ship") == "opt-qais")
+        for _n in (2, 3):
+            dn2, err = leluxe.az2_organize(ol, dry_run=True)
+            check(f"run {_n} on the live shape plans ZERO changes", err is None
+                  and dn2["creates_item"] == 0 and dn2["creates_pkg"] == 0
+                  and dn2["moves"] == 0 and dn2["adopts"] == 0
+                  and dn2["prunes"] == 0 and dn2["extra_deletes"] == 0
+                  and dn2["field_sets"] == 0 and dn2["renames"] == 0)
     finally:
         leluxe._http = real
 
