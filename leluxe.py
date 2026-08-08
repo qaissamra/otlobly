@@ -2524,6 +2524,13 @@ def az2_organize(order_id, user="", dry_run=False):
         t_ = containers.get(tid, {}).get("task") or {}
         return any((x or {}).get("name") == st["tag"] for x in t_.get("tags") or [])
 
+    # every remote task known to belong to THIS order — a product parented
+    # under any of these (e.g. hand-nested under a sibling PRODUCT) is
+    # mis-placed and gets lifted to its GWD's parcel; only parents OUTSIDE
+    # the order are a human choice organize never fights
+    subtree_ids = {src_order} | set(containers) | \
+        {rp["id"] for rp in remote_products}
+
     # every AZ (2) task some local row already points at (adoption must not
     # steal them), and every task organize itself created (prune candidates)
     with db.connect() as c:
@@ -2687,12 +2694,15 @@ def az2_organize(order_id, user="", dry_run=False):
             cur_name = (task.get("name") or "").strip()
             if cur_parent == (pkg_src or ""):
                 pass                                 # already under its parcel
-            elif cur_parent and cur_parent not in (src_order, pkg_src or ""):
+            elif cur_parent and cur_parent not in subtree_ids \
+                    and cur_parent != src_order:
                 skipped.append({"row_id": it["id"], "name": want_name,
-                                "note": "already moved under a different task "
+                                "note": "moved under a task OUTSIDE this order "
                                         "in ClickUp — left alone"})
                 continue
             else:
+                # flat under the order, in the wrong parcel, or hand-nested
+                # under a sibling product — the GWD decides where it belongs
                 steps.append({"op": "move", "row_id": it["id"],
                               "task_id": it_src, "old_parent": cur_parent,
                               "pkg_row": canon_row["id"], "snapshot": task})
