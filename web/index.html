@@ -3367,30 +3367,37 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // ── column widths: drag a header edge (persisted); double-click resets all ──
 // Two tables share the machinery: ""=orders header (.lx-colhead), "p"=products
 // header (.lx-pcolhead). Both write CSS vars on #lxRows (a common ancestor).
-// mins: per-column width floors (by header index). The STATUS column is floored
-// at 84px in BOTH the drag clamp and lxColwApply — a status column once dragged
-// to the 30px generic floor persisted in localStorage and re-collapsed the
-// status button on every load/deploy ("the empty orange box" bug); clamping at
-// apply time self-heals an already-poisoned saved value.
+// Width floors are KEY-keyed on LXT_COLS (`min` per column, resolved by
+// lxtColMin) — never by header index: hide/reorder shifts indices, and an
+// index-keyed floor lands on the wrong column. Status columns carry min:84
+// (the .statussel control's own min-width) — a status column once dragged to
+// the old 30px generic floor persisted in localStorage and re-collapsed the
+// status button on every load/deploy ("the empty orange box" bug); clamping
+// at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows", mins:{1:84}},
-  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows", mins:{2:84}},
-  "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows", mins:{3:84}},
-  "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree", mins:{6:84}},
-  "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree", mins:{7:84}},
-  "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree", mins:{}},
-  "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults", mins:{}},
-  "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane", mins:{}},
-  "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl", mins:{}},
-  "od": {key:"od_colw", varn:"--odgrid",  head:".od-colhead .od-cols",   rows:"odMount", mins:{}},
-  "cu": {key:"cu_colw", varn:"--cugrid",  head:".cu-colhead .cu-cols",   rows:"cuMount", mins:{}},
-  "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount", mins:{}},
-  "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount", mins:{}},
-  "ic": {key:"ic_colw", varn:"--icgrid",  head:".ic-colhead .ic-cols",   rows:"cartList", mins:{}},
-  "tr": {key:"tr_colw", varn:"--trgrid",  head:".tr-colhead .tr-cols",   rows:"trashList", mins:{}},
+  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows"},
+  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows"},
+  "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows"},
+  "po":{key:"po_colw",  varn:"--pogrid",  head:".po-colhead .po-cols",   rows:"poTree"},
+  "pok":{key:"pok_colw",varn:"--pokgrid", head:".pok-colhead .pok-cols", rows:"poTree"},
+  "pop":{key:"pop_colw",varn:"--popgrid", head:".pop-colhead .pop-cols", rows:"poTree"},
+  "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
+  "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane"},
+  "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl"},
+  "od": {key:"od_colw", varn:"--odgrid",  head:".od-colhead .od-cols",   rows:"odMount"},
+  "cu": {key:"cu_colw", varn:"--cugrid",  head:".cu-colhead .cu-cols",   rows:"cuMount"},
+  "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount"},
+  "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
+  "ic": {key:"ic_colw", varn:"--icgrid",  head:".ic-colhead .ic-cols",   rows:"cartList"},
+  "tr": {key:"tr_colw", varn:"--trgrid",  head:".tr-colhead .tr-cols",   rows:"trashList"},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
+// effective width floor for one column def: its declared min (status pills carry
+// the .statussel min-width:84), else the smaller of 48px and the column's own
+// default — so narrow-by-design columns (qty 40, ⋯ menu 28) keep their defaults
+// untouched, and nothing can collapse below a readable width.
+function lxtColMin(c){ return (c&&c.min)||Math.min(48,(c&&c.w)||48); }
 function lxColwApply(){
   for(const tbl in LX_TABLES){
     const t=LX_TABLES[tbl], rows=$(t.rows); if(!rows) continue;
@@ -3398,9 +3405,10 @@ function lxColwApply(){
     const arr=lxColwGet(tbl);
     // only apply when the saved width count matches the live column count —
     // so a stale array from an older layout (e.g. the pre-merge 9-wide) is dropped
-    if(head&&Array.isArray(arr)&&arr.length===head.children.length)
-      rows.style.setProperty(t.varn, arr.map((w,i)=>Math.max((t.mins&&t.mins[i])||0,w)+"px").join(" "));
-    else rows.style.removeProperty(t.varn);
+    if(head&&Array.isArray(arr)&&arr.length===head.children.length){
+      const vis=lxtVisible(tbl);
+      rows.style.setProperty(t.varn, arr.map((w,i)=>Math.max(lxtColMin(vis[i]),w)+"px").join(" "));
+    }else rows.style.removeProperty(t.varn);
   }
 }
 function lxRszDown(ev,i,tbl){
@@ -3408,15 +3416,18 @@ function lxRszDown(ev,i,tbl){
   tbl=tbl||""; const t=LX_TABLES[tbl], h=document.querySelector(t.head); if(!h) return;
   const cur=getComputedStyle(h).gridTemplateColumns.split(" ").map(x=>Math.round(parseFloat(x))||30);
   if(cur.length!==h.children.length) return;
+  // header cells map lxtVisible 1:1 (saved order + cf_ columns applied), so
+  // visible index i resolves this column's floor; the set can't change mid-drag
+  const min=lxtColMin(lxtVisible(tbl)[i]);
   const startX=ev.clientX, startW=cur[i], handle=ev.target, rows=$(t.rows);
   handle.classList.add("dragging");
-  const move=e=>{ cur[i]=Math.max((t.mins&&t.mins[i])||30,Math.round(startW+e.clientX-startX));
+  const move=e=>{ cur[i]=Math.max(min,Math.round(startW+e.clientX-startX));
     rows.style.setProperty(t.varn, cur.map(w=>w+"px").join(" ")); };
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
-    handle.classList.remove("dragging"); lxColwSet(tbl,cur.slice()); };
+    handle.classList.remove("dragging"); lxColwSet(tbl,cur.slice()); popResync(); };
   window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
 }
-function lxRszReset(ev,tbl){ ev.preventDefault(); ev.stopPropagation(); lxColwSet(tbl||"",null); lxColwApply(); toast("Column widths reset to default"); }
+function lxRszReset(ev,tbl){ ev.preventDefault(); ev.stopPropagation(); lxColwSet(tbl||"",null); lxColwApply(); popResync(); toast("Column widths reset to default"); }
 // field registry: built-ins + every discovered ClickUp custom field (type-driven)
 function lxFields(){
   const out=[{key:"__status",label:"Status",type:"status"},
@@ -3816,7 +3827,7 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 const LXT_COLS={
   "":[
     {key:"profile", label:"الحساب · profile", w:78,  sort:"profile"},
-    {key:"status",  label:"الحالة · status",  w:100, sort:"status"},
+    {key:"status",  label:"الحالة · status",  w:100, min:84, sort:"status"},
     {key:"total",   label:"الإجمالي · total",   w:66,  sort:"total"},
     {key:"tracking",label:"التتبع · tracking",w:98,  sort:"tracking"},
     {key:"gash",    label:"الجمارك · gash",    w:160, sort:"gash"},
@@ -3828,7 +3839,7 @@ const LXT_COLS={
   "p":[
     {key:"order",     label:"الطلب · order",       w:84,  sortable:true},
     {key:"profile",   label:"الحساب · profile",     w:64,  sortable:true},
-    {key:"status",    label:"الحالة · status",      w:104},
+    {key:"status",    label:"الحالة · status",      w:104, min:84},
     {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
     {key:"tracking",  label:"التتبع · tracking",    w:104},
     {key:"gashstatus",label:"حالة الجمارك · gaash status",w:128},
@@ -3840,7 +3851,7 @@ const LXT_COLS={
     {key:"order",   label:"الطلب · order",   w:100, sortable:true},
     {key:"profile", label:"الحساب · profile",w:78,  sortable:true},
     {key:"value",   label:"≈ القيمة · ≈ value", w:86,  sortable:true},
-    {key:"status",  label:"الحالة · status",  w:134, sortable:true},
+    {key:"status",  label:"الحالة · status",  w:134, min:84, sortable:true},
     {key:"gash",    label:"الجمارك · gash",    w:128},
     {key:"mail",    label:"✉ البريد · ✉ mail",  w:60},
     {key:"deadline",label:"الموعد · deadline",w:110},
@@ -3858,7 +3869,7 @@ const LXT_COLS={
     {key:"deadline",  label:"الموعد · deadline",    w:98},
     {key:"docs",      label:"الوثائق · docs",        w:74},
     {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
-    {key:"status",    label:"الحالة · status",      w:134},
+    {key:"status",    label:"الحالة · status",      w:134, min:84},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
   "pok":[   // Purchases → 📦 Packages flat view
@@ -3874,7 +3885,7 @@ const LXT_COLS={
     {key:"docs",      label:"الوثائق · docs",        w:74},
     {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
     {key:"idnum",     label:"🪪 الهوية · ID number",  w:110, sortable:true},
-    {key:"status",    label:"الحالة · status",      w:134},
+    {key:"status",    label:"الحالة · status",      w:134, min:84},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
   "bs":[    // 🔎 Bulk search results (mixed Purchases + Leluxe rows)
@@ -4161,7 +4172,7 @@ function lxtGridApply(tbl,mount){
   const el=mount||$(LX_TABLES[tbl].rows); if(!el) return;
   const vis=lxtVisible(tbl), saved=lxColwGet(tbl);
   const use=(Array.isArray(saved)&&saved.length===vis.length)?saved:vis.map(c=>c.w);
-  el.style.setProperty(LX_TABLES[tbl].varn,use.map(w=>Math.max(30,w)+"px").join(" "));
+  el.style.setProperty(LX_TABLES[tbl].varn,use.map((w,i)=>Math.max(lxtColMin(vis[i]),w)+"px").join(" "));
   // re-apply the user's pinned-column width (inline var on clip+wrap beats the
   // pin-lg/pin-md class defaults); phones keep the 200px media cap
   const pinw=lxtPinW(tbl);
