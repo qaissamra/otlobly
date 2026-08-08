@@ -1046,6 +1046,161 @@ def main():
     check("missing event deep-links to the page", ev["view"] == "gaashmail"
           and "GWD400" in ev["sub"])
 
+    print("— ✍️ owner replies from Gmail itself (Sent-folder scan) —")
+    with db.connect() as c:
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(gaash_accounts)")}
+    check("migration adds the Sent cursor columns",
+          {"sent_uidvalidity", "sent_last_uid"} <= cols)
+
+    class _LGood:
+        def list(self):
+            return "OK", [b'(\\HasChildren) "/" "[Gmail]"',
+                          b'(\\Sent \\HasNoChildren) "/" [Gmail]/Localized-Sent']
+
+    class _LBad:
+        def list(self):
+            return "NO", []
+    check("sent folder resolved by the \\Sent flag (and quoted)",
+          gm._sent_folder(_LGood()) == '"[Gmail]/Localized-Sent"')
+    check("sent folder falls back to the canonical name",
+          gm._sent_folder(_LBad()) == '"[Gmail]/Sent Mail"')
+
+    _mk_thread("GWD800", 1, "waiting_reply", None)
+    _mk_out("GWD800", "2026-08-01T09:00:00+00:00", mid="<out800@test>")
+    OUR = {"<out800@test>"}
+
+    def _hdr(mid, subj, frm, to, irt=None):
+        m = EmailMessage()
+        m["Message-ID"] = mid
+        m["Subject"] = subj
+        m["From"] = frm
+        m["To"] = to
+        if irt:
+            m["In-Reply-To"] = irt
+        return m
+    check("sent-match: our own SMTP copy is skipped",
+          gm.match_sent_thread(_hdr("<out800@test>", "Re: GWD800", "o@t", "g@glassix.support"),
+                               "glassix.support", OUR, ["GWD800"]) is None)
+    check("sent-match: References beat everything",
+          gm.match_sent_thread(_hdr("<own1@gmail>", "whatever", "o@t", "x@else.com",
+                                    irt="<out800@test>"),
+                               "glassix.support", OUR, ["GWD800"]) == "GWD800")
+    check("sent-match: recipient domain + GWD subject fallback",
+          gm.match_sent_thread(_hdr("<own2@gmail>", "about GWD800 please",
+                                    "o@t", "GaashWW@glassix.support"),
+                               "glassix.support", OUR, ["GWD800"]) == "GWD800")
+    check("sent-match: support domain as SENDER does not match",
+          gm.match_sent_thread(_hdr("<own3@gmail>", "about GWD800",
+                                    "GaashWW@glassix.support", "someone@else.com"),
+                               "glassix.support", OUR, ["GWD800"]) is None)
+    check("sent-match: unrelated mail is ignored",
+          gm.match_sent_thread(_hdr("<own4@gmail>", "dinner?", "o@t", "friend@else.com"),
+                               "glassix.support", OUR, ["GWD800"]) is None)
+
+    def _raw(mid, subj, frm, to, body, irt=None, attach=False):
+        m = EmailMessage()
+        m["Message-ID"] = mid
+        m["Subject"] = subj
+        m["From"] = frm
+        m["To"] = to
+        m["Date"] = "Thu, 06 Aug 2026 09:02:00 +0300"
+        if irt:
+            m["In-Reply-To"] = irt
+            m["References"] = irt
+        m.set_content(body)
+        if attach:
+            m.add_attachment(b"%PDF-1.4 test", maintype="application",
+                             subtype="pdf", filename="import-certificate.pdf")
+        return m.as_bytes()
+
+    SENT_MSGS = {
+        9: _raw("<out800@test>", "Re: GWD800", "app@t", "GaashWW@glassix.support",
+                "step 2 body"),                                  # our own SMTP copy
+        10: _raw("<own10@gmail>", "Re: Urgent Request GWD800", "owner@test.com",
+                 "GaashWW@glassix.support", "Sure I will attach it in this email.",
+                 irt="<out800@test>", attach=True),              # the owner's reply
+        11: _raw("<own11@gmail>", "dinner?", "owner@test.com", "friend@else.com",
+                 "unrelated"),                                   # personal mail
+    }
+
+    class _SentIMAP:
+        def __init__(self):
+            self.searches = []
+
+        def list(self):
+            return "OK", [b'(\\Sent \\HasNoChildren) "/" "[Gmail]/Sent Mail"']
+
+        def status(self, folder, spec):
+            return "OK", [b'"[Gmail]/Sent Mail" (UIDVALIDITY 3 UIDNEXT 12)']
+
+        def select(self, folder, readonly=False):
+            return "OK", [b"11"]
+
+        def uid(self, cmd, *args):
+            if cmd == "search":
+                self.searches.append(args)
+                return "OK", [b"9 10 11"]
+            raw = SENT_MSGS.get(int(args[0]))
+            return ("OK", [(b"h", raw)]) if raw else ("NO", [])
+
+    setts8 = {"to_address": "GaashWW@glassix.support"}
+    acct8 = {"id": "acct_s8", "email": "owner@test.com",
+             "sent_last_uid": 8, "sent_uidvalidity": 3}
+    M8 = _SentIMAP()
+    recs, spatch = gm._scan_sent(M8, acct8, setts8, OUR, ["GWD800"], set())
+    check("incremental scan uses the UID cursor",
+          M8.searches and M8.searches[0][1] == "UID" and M8.searches[0][2] == "9:*")
+    check("exactly the owner's message ingested (echo + unrelated skipped)",
+          len(recs) == 1 and recs[0][0] == "GWD800")
+    rec8 = recs[0][1]
+    check("record shape: out/gmail, notified, dated by the Date header",
+          rec8["dir"] == "out" and rec8["kind"] == "gmail"
+          and rec8["notified"] is True and rec8["message_id"] == "<own10@gmail>"
+          and "Sure I will attach" in rec8["body"] and rec8["at"].startswith("2026-08-06"))
+    check("attachment stored on disk",
+          len(rec8["attachments"]) == 1 and rec8["attachments"][0]["size"] > 0
+          and gm.attachment_path("GWD800", rec8["attachments"][0]["file"]).exists())
+    check("sent cursor advances to the newest UID",
+          spatch == {"sent_uidvalidity": 3, "sent_last_uid": 11})
+
+    M9 = _SentIMAP()
+    recs2, spatch2 = gm._scan_sent(M9, {"id": "acct_s9", "email": "o2@test.com",
+                                        "sent_last_uid": 0, "sent_uidvalidity": None},
+                                   setts8, OUR, ["GWD800"], set())
+    check("first scan backfills a bounded SINCE window",
+          M9.searches and M9.searches[0][1] == "SINCE"
+          and len(recs2) == 1 and spatch2["sent_last_uid"] == 11)
+    M10 = _SentIMAP()
+    recs3, spatch3 = gm._scan_sent(M10, {"id": "acct_sA", "email": "o3@test.com",
+                                         "sent_last_uid": 99, "sent_uidvalidity": 2},
+                                   setts8, OUR, ["GWD800"], set())
+    check("UIDVALIDITY renumber falls back to the SINCE window",
+          M10.searches and M10.searches[0][1] == "SINCE" and spatch3["sent_uidvalidity"] == 3)
+
+    grec = ("GWD800", dict(rec8))
+    real_chk2 = gm._check_account
+    gm._check_account = lambda a, s, m, t: ([grec], {
+        "imap_last_uid": 1, "imap_uidvalidity": 7, "last_check": gm.now_iso(),
+        "seen_ids_json": "[]", "sent_uidvalidity": 3, "sent_last_uid": 11})
+    try:
+        rchk = gm.check_replies()
+    finally:
+        gm._check_account = real_chk2
+    with db.connect() as c:
+        grow = c.execute("SELECT * FROM gaash_msgs WHERE gwd='GWD800' AND "
+                         "kind='gmail'").fetchall()
+        acur = c.execute("SELECT sent_last_uid, sent_uidvalidity FROM "
+                         "gaash_accounts LIMIT 1").fetchone()
+    th8 = gm.thread_get("GWD800")
+    check("check_replies stores the Gmail message once (dup-proof across accounts)",
+          len(grow) == 1 and grow[0]["dir"] == "out" and grow[0]["notified"] == 1
+          and rchk["gmail"] == 1)
+    check("owner's message touches neither unread nor the state machine",
+          int(th8["unread"] or 0) == 0 and th8["state"] == "waiting_reply")
+    check("sent cursor persisted on the account",
+          acur["sent_last_uid"] == 11 and acur["sent_uidvalidity"] == 3)
+    _del_thread("GWD800")
+
     print()
     if fails:
         print(f"FAILED: {len(fails)} — {fails}")

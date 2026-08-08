@@ -506,6 +506,11 @@ def migrate():
         # them so {id_name} and the chat pill keep resolving.
         if "docs_json" not in _columns(c, "gaash_threads"):
             c.execute("ALTER TABLE gaash_threads ADD COLUMN docs_json TEXT")
+        # 📧 Owner replies written in Gmail itself land in [Gmail]/Sent Mail,
+        # never INBOX — a second per-account UID cursor tracks that folder.
+        if "sent_last_uid" not in _columns(c, "gaash_accounts"):
+            c.execute("ALTER TABLE gaash_accounts ADD COLUMN sent_uidvalidity INTEGER")
+            c.execute("ALTER TABLE gaash_accounts ADD COLUMN sent_last_uid INTEGER")
         # 🪪 The document library splits into folders: reusable IDs vs the
         # per-package declaration papers. Existing rows are sorted once, by name —
         # the only signal there is — and anything ambiguous lands in 'id', which

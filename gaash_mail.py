@@ -173,10 +173,10 @@ def _account_clear_smtp_error(account_id):
                   "WHERE id=? AND last_error LIKE 'SMTP:%'", (account_id,))
 
 
-def _mailbox_status(M):
-    """(uidvalidity, uidnext) of INBOX, or (None, None)."""
+def _mailbox_status(M, folder="INBOX"):
+    """(uidvalidity, uidnext) of a mailbox, or (None, None)."""
     try:
-        typ, data = M.status("INBOX", "(UIDVALIDITY UIDNEXT)")
+        typ, data = M.status(folder, "(UIDVALIDITY UIDNEXT)")
         s = b" ".join(x for x in (data or []) if isinstance(x, bytes)).decode(errors="replace")
         uv = re.search(r"UIDVALIDITY (\d+)", s)
         un = re.search(r"UIDNEXT (\d+)", s)
@@ -184,6 +184,29 @@ def _mailbox_status(M):
                 int(un.group(1)) if un else None)
     except Exception:  # noqa
         return None, None
+
+
+def _sent_folder(M):
+    """The account's Sent mailbox, found by the IMAP \\Sent special-use flag
+    (Gmail advertises it whatever the account's display language), quoted for
+    STATUS/SELECT. Falls back to Gmail's canonical English name."""
+    try:
+        typ, rows = M.list()
+        if typ == "OK":
+            for r in rows or []:
+                s = r.decode(errors="replace") if isinstance(r, (bytes, bytearray)) else str(r)
+                if "\\Sent" not in s:
+                    continue
+                m = re.match(r'\([^)]*\)\s+"[^"]*"\s+(.+)$', s)
+                if not m:
+                    continue
+                name = m.group(1).strip()
+                if not (name.startswith('"') and name.endswith('"')):
+                    name = f'"{name}"'
+                return name
+    except Exception:  # noqa
+        pass
+    return '"[Gmail]/Sent Mail"'
 
 
 def add_account(email_addr, app_password, label=None):
@@ -3170,6 +3193,34 @@ def match_thread(hdr_msg, to_domain, our_mids, thread_gwds):
     return None
 
 
+def match_sent_thread(hdr_msg, to_domain, our_mids, thread_gwds):
+    """GWD for a message the OWNER wrote in Gmail itself (found in the Sent
+    folder), or None. Gmail also files this app's own SMTP sends into Sent —
+    their Message-IDs are ours, so they're skipped first. The direction flips
+    vs match_thread's fallback: here the RECIPIENT must be the support domain."""
+    mid = (str(hdr_msg.get("Message-ID") or "")).strip()
+    if mid and mid in our_mids:                 # our own SMTP copy
+        return None
+    refs = set()
+    for h in ("In-Reply-To", "References"):
+        refs.update(re.findall(r"<[^<>]+>", str(hdr_msg.get(h) or "")))
+    if refs:
+        with db.connect() as c:
+            for ref in refs:
+                r = c.execute("SELECT gwd FROM gaash_msgs WHERE message_id=?",
+                              (ref,)).fetchone()
+                if r:
+                    return r["gwd"]
+    rcpt = " ".join(str(hdr_msg.get(h) or "") for h in ("To", "Cc")).lower()
+    if to_domain and to_domain in rcpt:
+        gwds = {g.upper() for g in re.findall(
+            r"GWD\d+", str(hdr_msg.get("Subject") or ""), re.I)}
+        hit = gwds & set(thread_gwds)
+        if hit:
+            return sorted(hit)[0]
+    return None
+
+
 def _matches_closed(setts, *texts):
     phrases = [str(p).lower() for p in (setts.get("resend_phrases") or []) if p]
     blob = " ".join(t or "" for t in texts).lower()
@@ -3222,8 +3273,81 @@ def _fetch_bytes(M, uid, spec):
     return None
 
 
+# First scan of a Sent folder (or after a UIDVALIDITY renumber) reaches back a
+# bounded window instead of skipping to the end — so an owner reply from a few
+# days ago still shows up the first time this feature runs. Dedup (Message-ID
+# ring + the gwd+message_id DB check) makes the overlap harmless.
+SENT_BACKFILL_DAYS = 14
+SENT_BACKFILL_CAP = 200
+
+
+def _scan_sent(M, acct, setts, our_mids, thread_gwds, seen):
+    """Owner replies written in Gmail itself: scan the account's Sent folder
+    with its own UID cursor (the app's SMTP sends are filed there too — they
+    are skipped by Message-ID). Returns (records, cursor_patch). Records are
+    display-only rows: dir=out, kind=gmail, notified — they must never touch
+    unread counts or the sequence state machine."""
+    to_domain = (setts.get("to_address") or "").split("@")[-1].lower()
+    folder = _sent_folder(M)
+    uv, un = _mailbox_status(M, folder)
+    typ, _sel = M.select(folder, readonly=True)
+    if typ != "OK":
+        return [], {}
+    last = int(acct.get("sent_last_uid") or 0)
+    stored_uv = acct.get("sent_uidvalidity")
+    if not last or (uv and stored_uv and uv != stored_uv):
+        since = (datetime.now(timezone.utc)
+                 - timedelta(days=SENT_BACKFILL_DAYS)).strftime("%d-%b-%Y")
+        typ, data = M.uid("search", None, "SINCE", since)
+        uids = []
+        if typ == "OK" and data and data[0]:
+            uids = sorted(int(x) for x in data[0].split())[-SENT_BACKFILL_CAP:]
+        max_uid = max(0, (un or 1) - 1, *(uids or [0]))
+    else:
+        typ, data = M.uid("search", None, "UID", f"{last + 1}:*")
+        uids = []
+        if typ == "OK" and data and data[0]:
+            # IMAP quirk: "n:*" past the end still returns the last UID
+            uids = sorted(u for u in (int(x) for x in data[0].split()) if u > last)
+        max_uid = max([last, *uids])
+    records = []
+    for uid in uids:
+        hdr = _fetch_bytes(M, uid, "(BODY.PEEK[HEADER])")
+        if not hdr:
+            continue
+        hm = message_from_bytes(hdr, policy=policy.default)
+        mid = (str(hm.get("Message-ID") or "")).strip() or \
+            f"<sent-{uv}-{uid}@{acct['email']}>"
+        if mid in seen:
+            continue
+        seen.add(mid)
+        gwd = match_sent_thread(hm, to_domain, our_mids, thread_gwds)
+        if not gwd:
+            continue
+        raw = _fetch_bytes(M, uid, "(BODY.PEEK[])")
+        if not raw:
+            continue
+        msg = message_from_bytes(raw, policy=policy.default)
+        sent_at = _msg_datetime(msg)
+        records.append((gwd, {
+            "dir": "out", "kind": "gmail",
+            "at": sent_at.astimezone().isoformat(timespec="seconds"),
+            "from_addr": str(msg.get("From") or ""),
+            "to_addr": str(msg.get("To") or ""),
+            "subject": str(msg.get("Subject") or ""),
+            "message_id": mid,
+            "in_reply_to": (str(msg.get("In-Reply-To") or "")).strip() or None,
+            "body": _extract_text(msg),
+            "attachments": _save_incoming_attachments(gwd, msg),
+            "imap_uid": uid,
+            "notified": True,       # the owner wrote it — nothing to alert about
+        }))
+    return records, {"sent_uidvalidity": uv or stored_uv, "sent_last_uid": max_uid}
+
+
 def _check_account(acct, setts, our_mids, thread_gwds):
-    """Poll one Gmail INBOX. Returns (new_records, patch). Raises on conn errors."""
+    """Poll one Gmail INBOX (+ its Sent folder for owner-written replies).
+    Returns (new_records, patch). Raises on conn errors."""
     to_domain = (setts.get("to_address") or "").split("@")[-1].lower()
     seen = set(json.loads(acct.get("seen_ids_json") or "[]"))
     last = int(acct.get("imap_last_uid") or 0)
@@ -3284,6 +3408,16 @@ def _check_account(acct, setts, our_mids, thread_gwds):
                 "imap_uid": uid,
                 "notified": kind != "reply",   # only real replies get notified
             }))
+        # Owner replies written in Gmail itself live in the Sent folder, never
+        # INBOX — scan it too. Best-effort: a Sent hiccup must not lose the
+        # inbox results (cursor patch stays empty → retried next poll).
+        sent_patch = {}
+        try:
+            sent_records, sent_patch = _scan_sent(M, acct, setts, our_mids,
+                                                  thread_gwds, seen)
+            new_records.extend(sent_records)
+        except Exception:  # noqa
+            pass
     finally:
         try:
             M.logout()
@@ -3293,7 +3427,8 @@ def _check_account(acct, setts, our_mids, thread_gwds):
     patch = {"imap_last_uid": max_uid if uids else last,
              "imap_uidvalidity": uv or acct.get("imap_uidvalidity"),
              "last_check": now_iso(), "last_error": None,
-             "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:])}
+             "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:]),
+             **sent_patch}
     return new_records, patch
 
 
@@ -3306,7 +3441,7 @@ def check_replies():
             "SELECT message_id FROM gaash_msgs WHERE dir='out' "
             "AND message_id IS NOT NULL")}
     setts = _setts()
-    n_reply = n_ack = 0
+    n_reply = n_ack = n_gmail = 0
     errors = {}
     for a in accts:
         try:
@@ -3327,19 +3462,30 @@ def check_replies():
             continue
         with db.connect() as c:
             # a clean poll proves IMAP only — an SMTP:-prefixed error must
-            # survive it (see _account_set_error)
+            # survive it (see _account_set_error). Sent-folder cursors are
+            # COALESCEd: a skipped/failed Sent scan keeps the old cursor.
             c.execute("UPDATE gaash_accounts SET imap_last_uid=?, "
                       "imap_uidvalidity=?, last_check=?, "
+                      "sent_uidvalidity=COALESCE(?, sent_uidvalidity), "
+                      "sent_last_uid=COALESCE(?, sent_last_uid), "
                       "last_error=CASE WHEN last_error LIKE 'SMTP:%' "
                       "THEN last_error ELSE NULL END, "
                       "seen_ids_json=? WHERE id=?",
                       (patch["imap_last_uid"], patch["imap_uidvalidity"],
-                       patch["last_check"], patch["seen_ids_json"], a["id"]))
+                       patch["last_check"],
+                       patch.get("sent_uidvalidity"), patch.get("sent_last_uid"),
+                       patch["seen_ids_json"], a["id"]))
         for gwd, rec in recs:
             with db.connect() as c:
                 dup = c.execute("SELECT 1 FROM gaash_msgs WHERE gwd=? AND "
                                 "message_id=?", (gwd, rec["message_id"])).fetchone()
             if dup:
+                continue
+            if rec["kind"] == "gmail":
+                # the owner's own Gmail-composed message: show it in the
+                # thread, touch nothing else (no unread, no state machine)
+                _msg_add(gwd, rec)
+                n_gmail += 1
                 continue
             _msg_add(gwd, rec)
             th = thread_get(gwd) or {}
@@ -3369,8 +3515,8 @@ def check_replies():
             _thread_set(gwd, **upd)
     _notify_pending()
     resent = process_resends()
-    return {"ok": True, "new": n_reply, "acks": n_ack, "resent": resent,
-            "errors": errors}
+    return {"ok": True, "new": n_reply, "acks": n_ack, "gmail": n_gmail,
+            "resent": resent, "errors": errors}
 
 
 # --------------------------------------------------------------------------- #
