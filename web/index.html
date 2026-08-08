@@ -6231,12 +6231,14 @@ async function lxResolveAllRows(side){
 async function lxRefreshTracking(btn){
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🚚 Live GAASH tracking…";
   let rem=1,tc=0,ga=0,sk=0,total=0,prev=Infinity,stall=0;
+  const bad=new Set();                           // non-GAASH numbers, for the owner to clean
   const wasAuto=LX_TRK_AUTO; LX_TRK_AUTO=true;   // keep the silent auto sweep out while we run
   try{
     for(let i=0;i<60&&rem>0;i++){                // hard cap — can never loop forever
       let tr; try{ tr=await post("/api/leluxe/refresh_tracking",{}); }catch(e){ break; }
       if(!tr.ok) break;
       tc+=tr.checked; rem=tr.remaining; ga+=tr.gash_applied||0; sk=tr.skipped||sk;
+      (tr.excluded||[]).forEach(x=>bad.add(x.tracking));
       total=Math.max(total,tc+rem);              // stable, monotonic denominator
       pr.textContent=`🚚 GAASH tracking… ${Math.min(tc,total)}/${total}${sk?` · ${sk} done pkgs skipped`:""}`;
       if(tr.checked===0&&rem>0) break;           // server did nothing but claims more → bail
@@ -6251,7 +6253,7 @@ async function lxRefreshTracking(btn){
     }
   }finally{
     LX_TRK_AUTO=wasAuto;
-    pr.textContent=`✅ Tracking updated (${tc} package${tc===1?"":"s"}${sk?` · ${sk} already-done skipped`:""}${ga?` · ${ga} GASH STATUS field${ga===1?"":"s"} synced to the Gerizim stage`:""}).`;
+    pr.textContent=`✅ Tracking updated (${tc} parcel${tc===1?"":"s"}${sk?` · ${sk} already-done skipped`:""}${ga?` · ${ga} GASH STATUS field${ga===1?"":"s"} synced to the Gerizim stage`:""}${bad.size?` · ${bad.size} not GAASH number${bad.size===1?"":"s"}: ${[...bad].slice(0,4).join(", ")}${bad.size>4?"…":""} — fix these on the board`:""}).`;
     btn.disabled=false; loadLeluxe(); if(ga) lxPollStart();
   }
 }

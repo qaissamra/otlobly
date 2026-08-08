@@ -530,6 +530,93 @@ def _trk_stubs(calls, fetch_raises=False, deadline="2026-08-01",
     return tstub, gstub
 
 
+def tracking_parcel_grouping():
+    """ONE parcel = ONE lookup, and its answer lands on every copy. 📦⤴ Organize
+    spreads a parcel over a package task plus one task per product, and the GWD
+    lives on the package — so products inherit their parcel's number, the
+    container's structural 'package' status never masquerades as a live stage,
+    and values GAASH can't answer for (UPS, typed notes) leave the bulk sweep."""
+    import sys
+    import alerts  # noqa: F401 — bind the REAL tracking before stubbing
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    F = "Tracking Number"
+
+    def parcel(tag, gwd, pkg_status, item_statuses):
+        """order → 📦 package (carries the GWD) → bare products, like live."""
+        o = leluxe._insert_row("order", f"Order # {tag}", status="order number")
+        p = leluxe._insert_row("package", f"📦 {gwd}", status=pkg_status,
+                               parent_local_id=o,
+                               extra={"tracking_number": gwd})
+        kids = [leluxe._insert_row("item", f"{n + 1} Watch {tag}", status=st,
+                                   parent_local_id=p)
+                for n, st in enumerate(item_statuses)]
+        return p, kids
+
+    # A: live parcel, 3 bare products under a 📦 container
+    pA, kidsA = parcel("A", "GWD100", "package", ["oredered"] * 3)
+    # B: every product done — the 📦 container's status must not block the skip
+    pB, kidsB = parcel("B", "GWD200", "package", ["sent rd", "sent rd"])
+    # C: a REAL status on the package row still counts (not structural)
+    parcel("C", "GWD300", "rd", ["oredered"])
+    # D: mixed products keep checking
+    parcel("D", "GWD400", "package", ["sent rd", "in clearance"])
+    # E: not a GAASH number at all
+    parcel("E", "1Z81FV500492323083", "package", ["oredered"])
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='synced'")
+
+    calls = []
+    tstub, gstub = _trk_stubs(calls)
+    old_t, old_g = sys.modules.get("tracking"), sys.modules.get("gerizim")
+    sys.modules["tracking"], sys.modules["gerizim"] = tstub, gstub
+    try:
+        with db.connect() as c:
+            rows = [leluxe._row(x) for x in c.execute(
+                "SELECT * FROM leluxe_orders WHERE deleted=0")]
+        sk = leluxe._skip_gwds(rows, cfg.load())
+        check("skip verdict is per PARCEL: the 📦 container's structural "
+              "'package' status never masks its products' done statuses",
+              "GWD200" in sk and "GWD300" not in sk and "GWD400" not in sk
+              and "GWD100" not in sk)
+        r = leluxe.refresh_tracking(batch=50)
+        check("one lookup per parcel, however many rows carry the number",
+              calls.count("GWD100") == 1)
+        check("a product with no number of its own rides its parcel's",
+              all((leluxe.get_row(k)["data"] or {}).get("tracking_status")
+                  for k in kidsA)
+              and (leluxe.get_row(pA)["data"] or {}).get("tracking_status"))
+        check("the 📦 container's 'package' status is structural — an all-done "
+              "parcel is skipped, not re-checked forever", "GWD200" not in calls)
+        check("a REAL status on a package row still counts", "GWD300" in calls)
+        check("mixed products keep checking", "GWD400" in calls)
+        check("non-GAASH numbers leave the bulk sweep and are reported",
+              "1Z81FV500492323083" not in calls
+              and [x["tracking"] for x in r["excluded"]]
+              == ["1Z81FV500492323083"])
+        check("excluded numbers never enter the queue (stall detector safe)",
+              r["remaining"] == 0)
+        # only= (gaash_mail's per-thread refresh) names the PARCEL; its bare
+        # products must be reached through the number they inherit. GWD200 was
+        # skipped above, so nothing has stamped it — the TTL can't mask this.
+        calls.clear()
+        leluxe.refresh_tracking(only="GWD200")
+        check("only= reaches a parcel's bare products through the number they "
+              "inherit", calls == ["GWD200"]
+              and all((leluxe.get_row(k)["data"] or {}).get("tracking_status")
+                      for k in kidsB))
+        calls.clear()
+        r2 = leluxe.refresh_tracking(batch=50, force=True)
+        check("force still checks a non-GAASH number the owner points 🔎 at",
+              "1Z81FV500492323083" in calls and not r2["excluded"])
+    finally:
+        for name, old in (("tracking", old_t), ("gerizim", old_g)):
+            if old is not None:
+                sys.modules[name] = old
+            else:
+                sys.modules.pop(name, None)
+
+
 def tracking_skip_rules():
     """The bulk sweep skips parcels whose journey is over — all-done ClickUp
     statuses (Settings-reused alerts stop list), a stored Gerizim bucket at/past
@@ -2356,6 +2443,7 @@ def main():
     print("3-tier push:");       push_3tier()
     print("status-only change:"); status_only_change()
     print("flat tracking:");     flat_tracking_enrichment()
+    print("parcel grouping:");   tracking_parcel_grouping()
     print("tracking skip rules:"); tracking_skip_rules()
     print("tracking failure stamps:"); tracking_failure_stamps()
     print("tracking results payload:"); tracking_results_payload()

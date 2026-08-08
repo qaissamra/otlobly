@@ -66,6 +66,10 @@ def push_disabled():
 TOP_KINDS = ("order", "parent")
 KIND_RANK = {"order": 0, "parent": 0, "package": 1, "item": 2}
 
+# The ClickUp status 📦⤴ Organize stamps on every parcel container. It says what
+# a task IS, not where its parcel got to — see _structural_statuses.
+PKG_STATUS = "package"
+
 
 # --------------------------------------------------------------------------- #
 # HTTP (clickup.py style, but token read per-call and one 429 retry)
@@ -2883,7 +2887,7 @@ def az2_organize(order_id, user="", dry_run=False):
                               "task_id": pkg_src, "old": cur_pname_,
                               "new": f"📦 {gwd}", "snapshot": pkg_task})
             cur_pst = ((pkg_task.get("status") or {}).get("status") or "").strip()
-            if "package" in statuses and cur_pst.casefold() != "package":
+            if PKG_STATUS in statuses and cur_pst.casefold() != PKG_STATUS:
                 steps.append({"op": "status_set", "row_id": canon_row["id"],
                               "task_id": pkg_src, "old": cur_pst,
                               "new": "package", "snapshot": pkg_task})
@@ -3165,8 +3169,8 @@ def az2_organize(order_id, user="", dry_run=False):
                              s["task_id"], "", {}, user)
             elif op == "pkg_create":
                 body = {"name": s["name"], "parent": src_order}
-                if "package" in statuses:
-                    body["status"] = "package"
+                if PKG_STATUS in statuses:
+                    body["status"] = PKG_STATUS
                 if s.get("due"):
                     body["due_date"] = int(s["due"])
                 time.sleep(_pace())
@@ -3181,7 +3185,7 @@ def az2_organize(order_id, user="", dry_run=False):
                 with db.connect() as c:      # zero-diff on the next Sync
                     c.execute("UPDATE leluxe_orders SET status=? WHERE id=? "
                               "AND (status IS NULL OR status='')",
-                              ("package" if "package" in statuses else "",
+                              (PKG_STATUS if PKG_STATUS in statuses else "",
                                s["row_id"]))
                 if tn_fid:
                     _http(f"{CLICKUP_API}/task/{tid}/field/{tn_fid}",
@@ -3652,7 +3656,7 @@ def resolve_conflict(row_id, choices=None, choice=None):
 # order/item rows themselves on a flat mirror.
 # --------------------------------------------------------------------------- #
 def _row_tracking(row):
-    """A row's tracking number: data.tracking_number (packages) or the
+    """A row's OWN tracking number: data.tracking_number (packages) or the
     'Tracking Number' custom field (flat orders/items), case-blind."""
     tn = row["data"].get("tracking_number")
     if not tn:
@@ -3661,6 +3665,27 @@ def _row_tracking(row):
                 tn = v
                 break
     return str(tn or "").strip()
+
+
+def _eff_tn_map(rows):
+    """row id → the PARCEL number that row belongs to. A product's GWD lives on
+    its PACKAGE row in ClickUp, not on the product, so a child with no number of
+    its own inherits its parcel's — the same rule the board already renders
+    (muted, "from the package"). Without it a parcel's products were invisible
+    to the sweep: one lookup happened, but its answer reached only the rows that
+    happened to carry the number, and the rest sat blank forever.
+
+    Derived per sweep and NEVER written back — an inherited number stored in
+    data would push a phantom Tracking Number to ClickUp on the next sync."""
+    by_id = {r["id"]: r for r in rows}
+    out = {}
+    for r in rows:
+        tn = _row_tracking(r)
+        if not tn:
+            p = by_id.get(r.get("parent_local_id"))
+            tn = _row_tracking(p) if p else ""
+        out[r["id"]] = str(tn or "").strip()
+    return out
 
 
 # ── GASH STATUS ← live tracking stage ───────────────────────────────────────
@@ -3818,9 +3843,10 @@ def apply_gash_status(only=None, config=None):
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    eff = _eff_tn_map(rows)          # same parcel grouping the sweep uses
     queued = []
     for row in rows:
-        if only and tracking.clean_tracking(_row_tracking(row)) != only:
+        if only and tracking.clean_tracking(eff.get(row["id"]) or "") != only:
             continue
         target = _gash_target(row, fdef)
         if not target:
@@ -3853,6 +3879,20 @@ GZ_ARRIVED = frozenset(GERIZIM_BUCKET_OPTIONS)
 # usual reason GAASH "has no record"); never blocks a lookup.
 GWD_CANON = re.compile(r"GWD\d{9}$")
 
+# GAASH's own namespace. The board also holds UPS numbers (1Z…) and typed-in
+# notes ("under", "-", "NO FUNDS") in the tracking slot; GAASH can never answer
+# for those, so they never reach a done status and were re-fetched on every
+# sweep forever. Bulk skips them and REPORTS them; only=/force still check
+# anything the owner points the 🔎 at on purpose. Deliberately a PREFIX test,
+# not GWD_CANON's exact shape — a typo'd digit count IS ours to ask about, and
+# GWD_CANON already warns about it in the results.
+GWD_LOOKUP = re.compile(r"\s*GWD", re.I)
+
+# PKG_STATUS (top of file) is the parcel-container marker — a SHAPE, not a
+# stage. Counted as a live workflow status it kept 44 finished parcels in the
+# sweep (54 skipped where 98 should have been), because a done parcel's own 📦
+# row always disagreed with its products.
+
 
 def _entry_status(config=None):
     """The list's ENTRY status (ClickUp type "open" — "order number").
@@ -3874,18 +3914,34 @@ def _stop_statuses(config=None):
     return {str(s).strip().lower() for s in lst if str(s).strip()} | {"picked up by ger"}
 
 
+def _structural_statuses(config=None):
+    """Statuses that say what a row IS, not where its parcel got to. Organize
+    stamps 'package' on every 📦 container, so counting it as a live stage made
+    a finished parcel look mixed forever. Settings-overridable the same way the
+    stop list is (leluxe.structural_statuses)."""
+    lst = cfg.get(config or cfg.load(), "leluxe.structural_statuses",
+                  [PKG_STATUS])
+    return {str(s).strip().lower() for s in lst if str(s).strip()}
+
+
 def _skip_gwds(rows, config=None):
     """GWDs the BULK sweep must not spend carrier calls on:
     (a) any row shows the parcel AT Gerizim (dict bucket in GZ_ARRIVED),
-    (b) every REAL status across the GWD's rows (""/entry = unset) is in the
-        stop set — mixed statuses (one product done, one live) keep checking,
+    (b) every REAL status across the GWD's rows (""/entry/'package' = unset) is
+        in the stop set — mixed statuses (one product done, one live) keep
+        checking,
     (c) any row's GASH STATUS field says DELIVERED (GERZIM/BRACHA DELIVERED —
-        authoritative on old rows, same rule as gaash_mail's candidates)."""
+        authoritative on old rows, same rule as gaash_mail's candidates).
+
+    Rows are grouped by their EFFECTIVE parcel number, so a product inherits
+    its 📦 parcel's GWD and one verdict covers every copy of the parcel."""
     import tracking
     entry, stop = _entry_status(config), _stop_statuses(config)
+    unset = _structural_statuses(config) | {entry}
+    eff = _eff_tn_map(rows)
     skip, real = set(), {}
     for row in rows:
-        tn = tracking.clean_tracking(_row_tracking(row))
+        tn = tracking.clean_tracking(eff.get(row["id"]) or "")
         if not tn:
             continue
         d = row["data"]
@@ -3897,7 +3953,7 @@ def _skip_gwds(rows, config=None):
         if gash and re.search(r"delivered", str(gash), re.I):
             skip.add(tn)
         st = str(row.get("status") or "").strip().lower()
-        if st and st != entry:
+        if st and st not in unset:
             real.setdefault(tn, set()).add(st)
     skip.update(tn for tn, sts in real.items() if sts <= stop)
     return skip
@@ -3924,10 +3980,17 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
     skip = set() if (only or force) else _skip_gwds(rows, config)
-    work = {}
+    eff = _eff_tn_map(rows)
+    bulk = not (only or force)
+    work, excluded = {}, {}
     for row in rows:
-        tn = tracking.clean_tracking(_row_tracking(row))
+        # the row's EFFECTIVE parcel number — a product with no number of its
+        # own rides its 📦 parcel's, so ONE lookup lands on every copy
+        tn = tracking.clean_tracking(eff.get(row["id"]) or "")
         if not tn or (only and tn != only) or tn in skip:
+            continue
+        if bulk and not GWD_LOOKUP.match(tn):
+            excluded[tn] = "not a GAASH number — GAASH can't answer for it"
             continue
         d = row["data"]
         gz = d.get("gerizim_status") or {}
@@ -4038,7 +4101,11 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     applied = apply_gash_status(only=only, config=config)
     return {"checked": len(todo), "remaining": max(0, len(work) - len(todo)),
             "skipped": len(skip), "gash_applied": len(applied), "changes": applied,
-            "results": results}
+            "results": results,
+            # never folded into checked/remaining — the UI's stall detector
+            # keys off remaining, and these never enter the queue at all
+            "excluded": [{"tracking": t, "reason": r}
+                         for t, r in sorted(excluded.items())]}
 
 
 # --------------------------------------------------------------------------- #
