@@ -4856,6 +4856,7 @@ function glSettingsRender(){
     <div class="form-grid">
       <label class="fld"><span data-en="From" data-ar="من">من</span><input type="date" id="glWs" value="${poEsc(st.window_start||"")}"></label>
       <label class="fld"><span data-en="To" data-ar="إلى">إلى</span><input type="date" id="glWe" value="${poEsc(st.window_end||"")}"></label>
+      ${(st.categories||[]).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
       <label class="fld"><span>PC brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هدف الـPC — مفصولة بفواصل، غير حساسة لحالة الأحرف">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="PC"></label>
       <label class="fld"><span>حالات مستثناة · excluded statuses <span class="gm-q" title="مهام بهذه الحالات لا تُحسب أبدًا (على مستوى الطلب أو المنتج)">?</span></span><input id="glExcl" value="${poEsc((st.excluded||[]).join(", "))}" placeholder="cancelled"></label>
       <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>دمج IT + PC في شريط واحد ($${((st.categories||[]).filter(c=>["it","pc"].includes(c.key)).reduce((a,c)=>a+(+c.target||0),0)).toLocaleString()}) · combine IT + PC into one bar</span></label>
@@ -4878,8 +4879,17 @@ async function glSettingsSave(btn){
   const body={window_start:$("glWs").value,window_end:$("glWe").value,
     combine_it_pc:$("glCombine").checked,
     excluded:($("glExcl").value||"").split(",").map(s=>s.trim()).filter(Boolean)};
+  // per-category targets: blank = keep as is; anything typed goes to the
+  // server, whose validation (>0, numeric) owns the error message
+  const cats={};
+  ((GOALS&&GOALS.settings&&GOALS.settings.categories)||[]).forEach(c=>{
+    const el=$("glT_"+c.key);
+    if(el&&String(el.value).trim()!=="") cats[c.key]={key:c.key,target:Number(el.value)};
+  });
   const brands=($("glBrands").value||"").split(",").map(s=>s.trim()).filter(Boolean);
-  if(brands.length) body.categories=[{key:"pc",brands}];
+  if(brands.length){ cats.pc=cats.pc||{key:"pc"}; cats.pc.brands=brands; }
+  const list=Object.values(cats);
+  if(list.length) body.categories=list;
   await glSaveSettings(body,btn);
 }
 async function glWebhook(action,btn){
