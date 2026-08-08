@@ -6040,13 +6040,15 @@ async function lxAz2Push(rowId,remoteNow,mine){
 //    into the REAL AZ (2) list. Same guardrails as az2 push: dry-run preview
 //    first, every step journalled, per-step undo in push history. ──
 function lxAz2Sum(r){ return `${r.creates_pkg||0} new 📦 · ${r.moves||0} moved · ${r.renames||0} renamed · ${r.creates_item||0} new products · ${r.field_sets||0} field fixes (GWD/qty/profile) · ${r.due_sets||0} due dates`
-  +(r.prunes||r.pruned?` · ${r.pruned!=null&&!r.dry_run?r.pruned:r.prunes} empty 📦 removed`:"")
+  +(r.adopts?` · ${r.adopts} adopted`:"")
+  +(r.status_sets?` · ${r.status_sets} 📦 status`:"")
+  +(r.prunes||r.pruned?` · ${r.pruned!=null&&!r.dry_run?r.pruned:r.prunes} duplicate/empty 📦 removed`:"")
   +(r.skipped_empty?` · ${r.skipped_empty} empty skipped`:"")
   +((r.skipped||[]).length?` · ${(r.skipped||[]).length} skipped`:""); }
 async function lxAz2Organize(orderId,quiet){
   let d; try{ d=await post("/api/leluxe/az2_organize",{order_id:orderId,dry_run:true}); }catch(e){ d={}; }
   if(!d.ok){ if(!quiet) toast(d.error||"Couldn't plan the organize"); return {ok:false,error:d.error}; }
-  const total=(d.creates_pkg||0)+(d.moves||0)+(d.renames||0)+(d.creates_item||0)+(d.field_sets||0)+(d.due_sets||0)+(d.prunes||0);
+  const total=(d.creates_pkg||0)+(d.moves||0)+(d.renames||0)+(d.creates_item||0)+(d.field_sets||0)+(d.due_sets||0)+(d.prunes||0)+(d.adopts||0)+(d.status_sets||0);
   if(!total){ if(!quiet) toast("AZ (2) already matches the board ✓"); return {ok:true,noop:true}; }
   if(!quiet&&!confirm(`نظّم الطرود في ClickUp؟ · Organize "${d.order||""}" in AZ (2)?\n\n${lxAz2Sum(d)}\n\nكل خطوة مسجّلة وقابلة للتراجع · every step is journalled — undo from Tools → ⤴ AZ (2) push history.`)) return {ok:false};
   let r; try{ r=await post("/api/leluxe/az2_organize",{order_id:orderId}); }catch(e){ r={}; }

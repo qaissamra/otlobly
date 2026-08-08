@@ -2718,10 +2718,23 @@ def az2_organize(order_id, user="", dry_run=False):
                               "task_id": it_src,
                               "old": str(task.get("due_date") or ""),
                               "new": it_due, "snapshot": task})
-        # the parcel's own identity: total, GWD, profile, ETA
+        # the parcel's own identity: total, GWD, profile, ETA — and an adopted
+        # hand-made container is NORMALIZED to look like every other parcel:
+        # renamed to "📦 <GWD>" and given the 'package' status (the products
+        # keep their own, real statuses — those are the truth)
         if pkg_create is not None:
             pkg_create["qty_total"] = qty_total or None
         elif pkg_task is not None:
+            cur_pname_ = (pkg_task.get("name") or "").strip()
+            if cur_pname_ != f"📦 {gwd}":
+                steps.append({"op": "rename", "row_id": canon_row["id"],
+                              "task_id": pkg_src, "old": cur_pname_,
+                              "new": f"📦 {gwd}", "snapshot": pkg_task})
+            cur_pst = ((pkg_task.get("status") or {}).get("status") or "").strip()
+            if "package" in statuses and cur_pst.casefold() != "package":
+                steps.append({"op": "status_set", "row_id": canon_row["id"],
+                              "task_id": pkg_src, "old": cur_pst,
+                              "new": "package", "snapshot": pkg_task})
             if qty_fid and qty_total and \
                     not _num_eq(_task_cf(pkg_task, qty_fid), qty_total):
                 steps.append({"op": "cf_set", "row_id": canon_row["id"],
@@ -2761,6 +2774,7 @@ def az2_organize(order_id, user="", dry_run=False):
               "creates_item": sum(1 for s in steps if s["op"] == "item_create"),
               "field_sets": sum(1 for s in steps if s["op"] == "cf_set"),
               "due_sets": sum(1 for s in steps if s["op"] == "due_set"),
+              "status_sets": sum(1 for s in steps if s["op"] == "status_set"),
               "adopts": sum(1 for s in steps if s["op"] in ("adopt", "unlink")),
               "prunes": sum(1 for s in steps if s["op"] in ("pkg_prune",
                                                             "item_prune")),
@@ -2885,6 +2899,15 @@ def az2_organize(order_id, user="", dry_run=False):
                     return report, (f"AZ (2) refused the due date ({code}): "
                                     f"{(resp or {}).get('_error') or resp}")
                 _az2_journal(s["row_id"], s["task_id"], "due_date",
+                             s["old"], s["new"], s.get("snapshot"), user)
+            elif op == "status_set":
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/task/{s['task_id']}",
+                                   "PUT", {"status": s["new"]})
+                if code != 200:
+                    return report, (f"AZ (2) refused the status ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                _az2_journal(s["row_id"], s["task_id"], "status",
                              s["old"], s["new"], s.get("snapshot"), user)
             elif op == "item_create":
                 dest = pkg_tid.get(s["pkg_row"])
