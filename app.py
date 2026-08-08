@@ -2669,6 +2669,26 @@ def api_leluxe_az2_pushes():
     return jsonify({"ok": True, "pushes": leluxe_mod.az2_push_history()})
 
 
+@app.route("/api/leluxe/az2_organize", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_az2_organize():
+    """Mirror one order's 📦 GWD package tree into the REAL AZ (2) list —
+    {order_id, dry_run:true} previews the step plan, without dry_run it writes
+    (each step journalled in az2_pushes with per-entry undo)."""
+    b = request.get_json(force=True, silent=True) or {}
+    rep, err = leluxe_mod.az2_organize(b.get("order_id"), user=_user(),
+                                       dry_run=bool(b.get("dry_run")))
+    if err:
+        return jsonify({"ok": False, "error": err, **(rep or {})}), 400
+    if not rep.get("dry_run") and rep.get("steps"):
+        activity.log("pushed", "leluxe", b.get("order_id"), rep.get("order") or "",
+                     detail=f"AZ (2) organized: {rep['packages']} pkg · "
+                            f"{rep['moves']} moved · {rep['creates_item']} added"
+                            f" · {rep['creates_pkg']} pkg created", user=_user())
+    return jsonify({"ok": True, **rep})
+
+
 @app.route("/api/leluxe/status", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

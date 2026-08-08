@@ -2292,48 +2292,301 @@ def az2_push_status(row_id, expected_remote=None, user=""):
             "tagged": stcode in (200, 201)}, None
 
 
+def _az2_link_source(row_id, src_task_id):
+    """Link (or, with None, unlink) a local row to the AZ (2) task organize
+    created for it — unlike _adopt_source this may clear, because undoing a
+    created package/product deletes the remote task and the row must forget it."""
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (row_id,)).fetchone()
+        if not r:
+            return
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        if src_task_id:
+            d["source_task_id"] = src_task_id
+        else:
+            d.pop("source_task_id", None)
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), row_id))
+
+
+def _az2_journal(row_id, task_id, field, old, new, snapshot, user):
+    now = db.now_iso()
+    with db.connect() as c:
+        return c.execute(
+            """INSERT INTO az2_pushes (row_id, task_id, field, old_value,
+               new_value, snapshot_json, ts, user, state)
+               VALUES (?,?,?,?,?,?,?,?,'pushed')""",
+            (row_id, task_id, field, old, new,
+             json.dumps(snapshot or {}, ensure_ascii=False), now, user)).lastrowid
+
+
+def az2_organize(order_id, user="", dry_run=False):
+    """Mirror the app's order → 📦 GWD → products tree into the REAL AZ (2)
+    list — the same nesting the board shows ("just like Otlobly, in ClickUp").
+    Guarded like az2_push_status: manual only, per-write journal (undoable),
+    otl-push tag on created tasks, comment trail on the order, paced.
+
+    Per tracked package: create a "📦 <GWD>" task under the order (status
+    'package' when the list has it, Tracking Number field set) unless the local
+    package already links to a live AZ (2) task; re-parent each product task
+    under its package; rename products whose split quantity changed the name;
+    CREATE products that exist only locally (quantity-split remainders have no
+    source task). Products someone already re-parented differently in ClickUp
+    are skipped, never fought. Created/linked ids are written back to the local
+    rows (source_task_id) so the next Sync sees an identical tree and stays
+    quiet. dry_run returns the same report without writing.
+
+    Returns (report, error); report.steps lists every action taken/planned."""
+    st = _az2_settings()
+    if not st["enabled"]:
+        return None, "AZ (2) push is disabled (leluxe:az2 setting)"
+    order = get_row(order_id)
+    if not order or order.get("deleted") or order.get("kind") not in TOP_KINDS:
+        return None, "order not found"
+    src_order = (order.get("data") or {}).get("source_task_id")
+    if not src_order:
+        return None, "this order has no AZ (2) link (no source task)"
+    sch = schema(None)
+    sfields = sch.get("fields") or {}
+    statuses = set(status_names(None))
+    tn_fid = (sfields.get("Tracking Number") or {}).get("id")
+    with db.connect() as c:
+        pkgs = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND "
+            "kind='package' AND deleted=0 ORDER BY id", (order_id,))]
+        items = {p["id"]: [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND "
+            "kind='item' AND deleted=0 ORDER BY id", (p["id"],))]
+            for p in pkgs}
+    pkgs = [p for p in pkgs if _row_tn(p, sfields)]
+    if not pkgs:
+        return None, "no tracked packages to organize — assign GWDs first"
+    code, _order_task = _http(f"{CLICKUP_API}/task/{src_order}")
+    if code != 200:
+        return None, f"couldn't read the AZ (2) order ({code})"
+
+    steps, skipped = [], []
+    for p in pkgs:
+        gwd = _row_tn(p, sfields)
+        pkg_src = (p.get("data") or {}).get("source_task_id")
+        pkg_task = None
+        if pkg_src:
+            code, pkg_task = _http(f"{CLICKUP_API}/task/{pkg_src}")
+            if code != 200 or not isinstance(pkg_task, dict):
+                pkg_src, pkg_task = None, None          # deleted remotely → recreate
+        if not pkg_src:
+            steps.append({"op": "pkg_create", "row_id": p["id"], "gwd": gwd,
+                          "name": f"📦 {gwd}"})
+        for it in items.get(p["id"], []):
+            it_src = (it.get("data") or {}).get("source_task_id")
+            want_name = (it.get("name") or "").strip()
+            if not it_src:
+                steps.append({"op": "item_create", "row_id": it["id"],
+                              "name": want_name, "pkg_row": p["id"],
+                              "status": (it.get("status") or "").strip()})
+                continue
+            code, task = _http(f"{CLICKUP_API}/task/{it_src}")
+            if code != 200 or not isinstance(task, dict):
+                skipped.append({"row_id": it["id"], "name": want_name,
+                                "note": "source task is gone from AZ (2)"})
+                continue
+            cur_parent = task.get("parent") or ""
+            cur_name = (task.get("name") or "").strip()
+            if cur_parent == (pkg_src or ""):
+                pass                                     # already under its package
+            elif cur_parent and cur_parent not in (src_order, pkg_src or ""):
+                skipped.append({"row_id": it["id"], "name": want_name,
+                                "note": "already moved under a different task "
+                                        "in ClickUp — left alone"})
+                continue
+            else:
+                steps.append({"op": "move", "row_id": it["id"],
+                              "task_id": it_src, "old_parent": cur_parent,
+                              "pkg_row": p["id"], "snapshot": task})
+            if want_name and cur_name and want_name != cur_name:
+                steps.append({"op": "rename", "row_id": it["id"],
+                              "task_id": it_src, "old": cur_name,
+                              "new": want_name, "snapshot": task})
+    report = {"order": order.get("name"), "packages": len(pkgs),
+              "creates_pkg": sum(1 for s in steps if s["op"] == "pkg_create"),
+              "moves": sum(1 for s in steps if s["op"] == "move"),
+              "renames": sum(1 for s in steps if s["op"] == "rename"),
+              "creates_item": sum(1 for s in steps if s["op"] == "item_create"),
+              "skipped": skipped, "steps": [], "dry_run": bool(dry_run)}
+    if dry_run:
+        report["steps"] = [{k: v for k, v in s.items() if k != "snapshot"}
+                           for s in steps]
+        return report, None
+
+    src_lid = source_list_id(None)
+    pkg_tid = {p["id"]: (p.get("data") or {}).get("source_task_id")
+               for p in pkgs}
+    done = 0
+    for s in steps:
+        op = s["op"]
+        try:
+            if op == "pkg_create":
+                body = {"name": s["name"], "parent": src_order}
+                if "package" in statuses:
+                    body["status"] = "package"
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/list/{src_lid}/task",
+                                   "POST", body)
+                tid = (resp or {}).get("id") if code == 200 else None
+                if not tid:
+                    return report, (f"AZ (2) refused the package ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                pkg_tid[s["row_id"]] = tid
+                _az2_link_source(s["row_id"], tid)
+                with db.connect() as c:      # zero-diff on the next Sync
+                    c.execute("UPDATE leluxe_orders SET status=? WHERE id=? "
+                              "AND (status IS NULL OR status='')",
+                              ("package" if "package" in statuses else "",
+                               s["row_id"]))
+                if tn_fid:
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{tn_fid}",
+                          "POST", {"value": s["gwd"]})
+                time.sleep(_pace())
+                _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
+                      "POST", {})
+                _az2_journal(s["row_id"], tid, "pkg_create", "", s["name"],
+                             {}, user)
+                s = {**s, "task_id": tid}
+            elif op == "move":
+                dest = pkg_tid.get(s["pkg_row"])
+                if not dest:
+                    skipped.append({"row_id": s["row_id"],
+                                    "note": "its package wasn't created"})
+                    continue
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/task/{s['task_id']}",
+                                   "PUT", {"parent": dest})
+                if code != 200:
+                    return report, (f"AZ (2) refused the move ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                _az2_journal(s["row_id"], s["task_id"], "parent",
+                             s["old_parent"], dest, s.get("snapshot"), user)
+            elif op == "rename":
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/task/{s['task_id']}",
+                                   "PUT", {"name": s["new"]})
+                if code != 200:
+                    return report, (f"AZ (2) refused the rename ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                _az2_journal(s["row_id"], s["task_id"], "name",
+                             s["old"], s["new"], s.get("snapshot"), user)
+            elif op == "item_create":
+                dest = pkg_tid.get(s["pkg_row"])
+                if not dest:
+                    skipped.append({"row_id": s["row_id"],
+                                    "note": "its package wasn't created"})
+                    continue
+                body = {"name": s["name"], "parent": dest}
+                if s.get("status") and s["status"] in statuses:
+                    body["status"] = s["status"]
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/list/{src_lid}/task",
+                                   "POST", body)
+                tid = (resp or {}).get("id") if code == 200 else None
+                if not tid:
+                    return report, (f"AZ (2) refused the product ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                _az2_link_source(s["row_id"], tid)
+                time.sleep(_pace())
+                _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
+                      "POST", {})
+                _az2_journal(s["row_id"], tid, "item_create", "", s["name"],
+                             {}, user)
+                s = {**s, "task_id": tid}
+            done += 1
+            report["steps"].append({k: v for k, v in s.items()
+                                    if k != "snapshot"})
+        except Exception as e:  # noqa: BLE001 - report what landed, stop clean
+            return report, f"stopped after {done} step(s): {str(e)[:150]}"
+    _az2_comment(src_order,
+                 f"📦 Otlobly organized this order: {report['packages']} package(s)"
+                 f" · {report['moves']} moved · {report['creates_item']} added"
+                 f" · by {user or 'admin'} · {db.now_iso()[:16].replace('T', ' ')}"
+                 f" (every step undoable in Otlobly)")
+    return report, None
+
+
 def az2_undo(push_id, user=""):
     """Revert one journalled push — CAS-guarded: AZ (2) must still hold the
-    value we wrote, else the undo aborts untouched. Returns (entry, error)."""
+    value we wrote, else the undo aborts untouched. Handles every write kind
+    organize journals: status/name revert, parent move-back, and deletion of
+    tasks we created (a package only once its products were moved back).
+    Returns (entry, error)."""
     with db.connect() as c:
         p = c.execute("SELECT * FROM az2_pushes WHERE id=?", (push_id,)).fetchone()
     if not p:
         return None, "push not found"
     p = dict(p)
-    if p["state"] != "pushed" or p["field"] != "status":
+    field = p["field"]
+    if p["state"] != "pushed" or \
+            field not in ("status", "name", "parent", "pkg_create", "item_create"):
         return None, "this entry can't be undone"
-    code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}")
-    if code != 200 or not isinstance(task, dict):
-        return None, f"couldn't read the AZ (2) task ({code})"
-    cur = ((task.get("status") or {}).get("status") or "").strip()
-    if cur != (p["new_value"] or "").strip():
-        return None, (f"AZ (2) changed after this push — it now says {cur!r}, "
-                      f"so the undo was aborted. Review it in ClickUp.")
-    time.sleep(_pace())
-    code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}", "PUT",
-                       {"status": p["old_value"]})
-    if code != 200:
-        return None, (f"AZ (2) refused the revert ({code}): "
-                      f"{(resp or {}).get('_error') or resp}")
+    sub = "?include_subtasks=true" if field == "pkg_create" else ""
+    code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}{sub}")
+    deleted_task = False
+    if field in ("pkg_create", "item_create"):
+        if code == 404:
+            deleted_task = True                  # already gone — just close the entry
+        elif code != 200 or not isinstance(task, dict):
+            return None, f"couldn't read the AZ (2) task ({code})"
+        elif field == "pkg_create" and (task.get("subtasks") or []):
+            return None, ("the package still holds products in AZ (2) — undo "
+                          "their moves first, then undo the package")
+        if not deleted_task:
+            time.sleep(_pace())
+            code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}", "DELETE")
+            if code not in (200, 204):
+                return None, (f"AZ (2) refused the delete ({code}): "
+                              f"{(resp or {}).get('_error') or resp}")
+        _az2_link_source(p["row_id"], None)      # the local row forgets the task
+        restored = "(deleted)"
+    else:
+        if code != 200 or not isinstance(task, dict):
+            return None, f"couldn't read the AZ (2) task ({code})"
+        cur = {"status": ((task.get("status") or {}).get("status") or ""),
+               "name": (task.get("name") or ""),
+               "parent": (task.get("parent") or "")}[field].strip()
+        if cur != (p["new_value"] or "").strip():
+            return None, (f"AZ (2) changed after this push — it now says {cur!r}, "
+                          f"so the undo was aborted. Review it in ClickUp.")
+        if not (p["old_value"] or "").strip():
+            return None, "this entry has no previous value to restore"
+        time.sleep(_pace())
+        code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}", "PUT",
+                           {field: p["old_value"]})
+        if code != 200:
+            return None, (f"AZ (2) refused the revert ({code}): "
+                          f"{(resp or {}).get('_error') or resp}")
+        restored = p["old_value"]
     now = db.now_iso()
     with db.connect() as c:
         c.execute("UPDATE az2_pushes SET state='undone' WHERE id=?", (push_id,))
         c.execute("""INSERT INTO az2_pushes (row_id, task_id, field, old_value,
                      new_value, ts, user, state, undo_of)
                      VALUES (?,?,?,?,?,?,?,'undo',?)""",
-                  (p["row_id"], p["task_id"], "status", p["new_value"],
+                  (p["row_id"], p["task_id"], field, p["new_value"],
                    p["old_value"], now, user, push_id))
         others = c.execute("SELECT COUNT(*) n FROM az2_pushes WHERE task_id=? "
                            "AND state='pushed'", (p["task_id"],)).fetchone()["n"]
-    _az2_comment(p["task_id"], f"↩️ Otlobly undo: Status back to "
-                               f"'{p['old_value']}' · by {user or 'admin'}"
-                               f" · {now[:16].replace('T', ' ')}")
-    if others == 0:                     # last active push undone → drop the marker
-        time.sleep(_pace())
-        _http(f"{CLICKUP_API}/task/{p['task_id']}/tag/"
-              f"{urlquote(_az2_settings()['tag'])}", "DELETE")
+    if not deleted_task and field not in ("pkg_create", "item_create"):
+        _az2_comment(p["task_id"], f"↩️ Otlobly undo: {field} back to "
+                                   f"'{p['old_value']}' · by {user or 'admin'}"
+                                   f" · {now[:16].replace('T', ' ')}")
+        if others == 0:                 # last active push undone → drop the marker
+            time.sleep(_pace())
+            _http(f"{CLICKUP_API}/task/{p['task_id']}/tag/"
+                  f"{urlquote(_az2_settings()['tag'])}", "DELETE")
     return {"id": push_id, "task_id": p["task_id"],
-            "restored": p["old_value"]}, None
+            "restored": restored}, None
 
 
 def az2_push_history(limit=200):

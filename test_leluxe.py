@@ -13,6 +13,7 @@ the endpoints are admin-only + Otlobly-only.
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -1240,6 +1241,158 @@ def az2_push_and_undo():
         leluxe._http = real
 
 
+AZO = {"tasks": {}, "n": 0}
+
+
+def fake_azo_http(url, method="GET", body=None, _retried=False):
+    """In-memory AZ (2): create-in-list, GET (with ?include_subtasks), PUT
+    name/parent/status, DELETE. Tag/field/comment sub-paths are accepted no-ops."""
+    CALLS.append((method, url, body))
+    base = url.split("?")[0]
+    m = re.match(r".*/task/([^/]+)(/.*)?$", base)
+    tid = m.group(1) if m else None
+    sub = m.group(2) if m else None
+    if "/list/" in base and base.endswith("/task") and method == "POST":
+        AZO["n"] += 1
+        nid = f"NEW{AZO['n']}"
+        AZO["tasks"][nid] = {"id": nid, "name": (body or {}).get("name") or "",
+                             "status": {"status": (body or {}).get("status") or "order number"},
+                             "parent": (body or {}).get("parent")}
+        return 200, {"id": nid}
+    if sub:                                    # /tag /field /comment
+        return 200, {}
+    if tid:
+        t = AZO["tasks"].get(tid)
+        if not t:
+            return 404, {"_error": "not found"}
+        if method == "GET":
+            out = dict(t)
+            if "include_subtasks" in url:
+                out["subtasks"] = [dict(x) for x in AZO["tasks"].values()
+                                   if x.get("parent") == tid]
+            return 200, out
+        if method == "PUT":
+            for k in ("name", "parent"):
+                if k in (body or {}):
+                    t[k] = body[k]
+            if "status" in (body or {}):
+                t["status"] = {"status": body["status"]}
+            return 200, dict(t)
+        if method == "DELETE":
+            del AZO["tasks"][tid]
+            return 204, {}
+    return 200, {}
+
+
+def az2_organize_flow():
+    """📦⤴ Organize in ClickUp: the board's order → 📦 GWD → products tree is
+    mirrored into AZ (2) — packages created, products re-parented, split
+    quantities renamed, splits created; every step journalled + undoable;
+    foreign moves skipped; a second run is a no-op."""
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.save(config)
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+        c.execute("DELETE FROM az2_pushes")
+    oid = leluxe._insert_row("order", "Order # 999-TEST", status="order number",
+                            extra={"source_task_id": "ORD"})
+    p1 = leluxe._insert_row("package", "📦 GWD111", parent_local_id=oid,
+                            extra={"tracking_number": "GWD111"})
+    p2 = leluxe._insert_row("package", "📦 GWD222", parent_local_id=oid,
+                            extra={"tracking_number": "GWD222"})
+    p0 = leluxe._insert_row("package", "📦 no tracking", parent_local_id=oid)
+    itA = leluxe._insert_row("item", "2 U.S. Polo", status="sent rd",
+                             parent_local_id=p1, extra={"source_task_id": "A"})
+    itB = leluxe._insert_row("item", "8 U.S. Polo", status="sent rd",
+                             parent_local_id=p2)
+    itC = leluxe._insert_row("item", "9 Accutime", status="sent rd",
+                             parent_local_id=p2, extra={"source_task_id": "C"})
+    AZO["tasks"] = {
+        "ORD": {"id": "ORD", "name": "Order # 999-TEST", "parent": None,
+                "status": {"status": "order number"}},
+        "A": {"id": "A", "name": "10 U.S. Polo", "parent": "ORD",
+              "status": {"status": "sent rd"}},
+        "C": {"id": "C", "name": "9 Accutime", "parent": "OTHER",
+              "status": {"status": "sent rd"}},
+        "OTHER": {"id": "OTHER", "name": "someone else's box", "parent": None,
+                  "status": {"status": "order number"}},
+    }
+    AZO["n"] = 0
+    real = leluxe._http
+    leluxe._http = fake_azo_http
+    try:
+        CALLS.clear()
+        d, err = leluxe.az2_organize(oid, dry_run=True)
+        check("dry-run plans the tree", err is None and d["creates_pkg"] == 2
+              and d["moves"] == 1 and d["renames"] == 1 and d["creates_item"] == 1)
+        check("untracked package is not planned", d["packages"] == 2)
+        check("foreign move is skipped, not fought",
+              len(d["skipped"]) == 1 and "different task" in d["skipped"][0]["note"])
+        check("dry-run wrote NOTHING",
+              not [1 for m_, u, b in CALLS if m_ in ("PUT", "POST", "DELETE")])
+
+        rep, err = leluxe.az2_organize(oid, user="qais")
+        check("organize ok", err is None and len(rep["steps"]) == 5)
+        pkg1_tid = (leluxe.get_row(p1)["data"] or {}).get("source_task_id")
+        pkg2_tid = (leluxe.get_row(p2)["data"] or {}).get("source_task_id")
+        itb_tid = (leluxe.get_row(itB)["data"] or {}).get("source_task_id")
+        check("packages created under the order + linked back",
+              pkg1_tid and pkg2_tid
+              and AZO["tasks"][pkg1_tid]["parent"] == "ORD"
+              and AZO["tasks"][pkg1_tid]["name"] == "📦 GWD111"
+              and AZO["tasks"][pkg2_tid]["name"] == "📦 GWD222")
+        check("product moved under its package + split qty renamed",
+              AZO["tasks"]["A"]["parent"] == pkg1_tid
+              and AZO["tasks"]["A"]["name"] == "2 U.S. Polo")
+        check("split remainder created + linked back",
+              itb_tid and AZO["tasks"][itb_tid]["parent"] == pkg2_tid
+              and AZO["tasks"][itb_tid]["name"] == "8 U.S. Polo")
+        check("no 'package' status in schema → created without status",
+              not any((b or {}).get("status") == "package"
+                      for m_, u, b in CALLS if m_ == "POST" and "/list/" in u))
+        check("created tasks tagged otl-push",
+              sum(1 for m_, u, b in CALLS
+                  if m_ == "POST" and "/tag/otl-push" in u) >= 3)
+        with db.connect() as c:
+            j = [dict(r) for r in c.execute(
+                "SELECT * FROM az2_pushes ORDER BY id")]
+        check("journal carries every step in order",
+              [x["field"] for x in j] ==
+              ["pkg_create", "parent", "name", "pkg_create", "item_create"]
+              and all(x["state"] == "pushed" for x in j))
+        d2, err = leluxe.az2_organize(oid, dry_run=True)
+        check("second run is a no-op", err is None and d2["creates_pkg"] == 0
+              and d2["moves"] == 0 and d2["renames"] == 0
+              and d2["creates_item"] == 0)
+
+        # j: [0] pkg_create p1 · [1] parent A · [2] name A · [3] pkg_create p2 · [4] item_create B
+        _, err = leluxe.az2_undo(j[0]["id"])
+        check("package undo refused while it still holds products",
+              err is not None and "still holds products" in err)
+        _, err = leluxe.az2_undo(j[4]["id"], user="qais")
+        check("created product undone (deleted + unlinked)", err is None
+              and itb_tid not in AZO["tasks"]
+              and not (leluxe.get_row(itB)["data"] or {}).get("source_task_id"))
+        _, err = leluxe.az2_undo(j[1]["id"], user="qais")
+        check("move undone — product back under the order", err is None
+              and AZO["tasks"]["A"]["parent"] == "ORD")
+        _, err = leluxe.az2_undo(j[0]["id"], user="qais")
+        check("empty package undo deletes + unlinks", err is None
+              and pkg1_tid not in AZO["tasks"]
+              and not (leluxe.get_row(p1)["data"] or {}).get("source_task_id"))
+        AZO["tasks"]["A"]["name"] = "changed by faisal"
+        _, err = leluxe.az2_undo(j[2]["id"])
+        check("rename undo aborts when AZ (2) drifted",
+              err is not None and "changed after" in err)
+        AZO["tasks"]["A"]["name"] = "2 U.S. Polo"
+        _, err = leluxe.az2_undo(j[2]["id"], user="qais")
+        check("rename undone", err is None
+              and AZO["tasks"]["A"]["name"] == "10 U.S. Polo")
+    finally:
+        leluxe._http = real
+
+
 def endpoints_gated():
     import app as appmod
     import auth
@@ -1273,6 +1426,9 @@ def endpoints_gated():
           brk.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
           and sales.post("/api/leluxe/az2_push", json={"row_id": 1}).status_code == 403
           and sales.get("/api/leluxe/az2_pushes").status_code == 403)
+    check("az2 organize blocked for broker + sales",
+          brk.post("/api/leluxe/az2_organize", json={"order_id": 1}).status_code == 403
+          and sales.post("/api/leluxe/az2_organize", json={"order_id": 1}).status_code == 403)
     check("diag route blocked for broker + sales",
           brk.get("/api/leluxe/diag").status_code == 403
           and sales.get("/api/leluxe/diag").status_code == 403)
@@ -1669,6 +1825,7 @@ def main():
     print("regroup + sweep:");   regroup_and_sweep()
     print("sync kept report:");  sync_kept_report()
     print("az2 push + undo:");   az2_push_and_undo()
+    print("az2 organize:");      az2_organize_flow()
     print("endpoint gates:");    endpoints_gated()
     print("frozen row thaws:"); frozen_row_thaws()
     print("conflict review flow:"); conflict_review_flow()
