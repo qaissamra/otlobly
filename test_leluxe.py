@@ -1284,8 +1284,14 @@ def fake_azo_http(url, method="GET", body=None, _retried=False):
                 for k, v in (t.get("cf") or {}).items()]
             out["custom_fields"] += t.get("cf_defs") or []
             if "include_subtasks" in url:
-                out["subtasks"] = [dict(x) for x in AZO["tasks"].values()
-                                   if x.get("parent") == tid]
+                subs = []
+                for x in AZO["tasks"].values():
+                    if x.get("parent") == tid:
+                        e = {k: v for k, v in x.items() if k not in ("cf", "cf_defs")}
+                        e["subtasks_count"] = sum(1 for y in AZO["tasks"].values()
+                                                  if y.get("parent") == x["id"])
+                        subs.append(e)
+                out["subtasks"] = subs
             return 200, out
         if method == "PUT":
             for k in ("name", "parent", "due_date"):
@@ -1658,6 +1664,67 @@ def az2_organize_flow():
               and AZO["tasks"]["P8"]["parent"] == pkg8["id"]
               and AZO["tasks"]["N8"]["parent"] == pkg8["id"]
               and AZO["tasks"]["N9"]["parent"] == "OTHER")
+
+        # ---- the "keeps adding" loop (live: 9 Anne Klein copies): originals
+        # nested at level 3 under a pseudo-package product were invisible to
+        # the 2-level scan, so every run minted another copy ----
+        o9 = leluxe._insert_row("order", "Order # NESTLOOP",
+                                status="order number",
+                                extra={"source_task_id": "ORDL"})
+        pl = leluxe._insert_row("package", "📦 GWD661", parent_local_id=o9,
+                                extra={"tracking_number": "GWD661",
+                                       "source_task_id": "CONTL"})
+        r1 = leluxe._insert_row("item", "2 Host Watch", status="sent rd",
+                                parent_local_id=pl,
+                                extra={"source_task_id": "PL"})
+        r2 = leluxe._insert_row("item", "9 Anne Klein Loop", status="sent rd",
+                                parent_local_id=pl,
+                                extra={"source_task_id": "CL"})   # our copy!
+        r3 = leluxe._insert_row("item", "9 Anne Klein Loop", status="sent rd",
+                                parent_local_id=pl)               # board dup
+        AZO["tasks"].update({
+            "ORDL": {"id": "ORDL", "name": "Order # NESTLOOP", "parent": None,
+                     "status": {"status": "order number"}},
+            "CONTL": {"id": "CONTL", "name": "📦 GWD661", "parent": "ORDL",
+                      "status": {"status": "package"},
+                      "cf": {"f-trk": "GWD661"}},
+            "PL": {"id": "PL", "name": "2 Host Watch", "parent": "CONTL",
+                   "status": {"status": "package"},
+                   "cf": {"f-trk": "GWD661"}},
+            "NL1": {"id": "NL1", "name": "9 Anne Klein Loop", "parent": "PL",
+                    "status": {"status": "sent rd"},
+                    "cf": {"f-trk": "GWD661"}},
+            "NL2": {"id": "NL2", "name": "9 Glitter Loop", "parent": "PL",
+                    "status": {"status": "sent rd"}},
+            "CL": {"id": "CL", "name": "9 Anne Klein Loop", "parent": "CONTL",
+                   "status": {"status": "oredered"},
+                   "tags": [{"name": "otl-push"}]},
+        })
+        with db.connect() as c:
+            c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                         old_value, new_value, ts, user, state)
+                         VALUES (?,?,?,?,?,?,?,'pushed')""",
+                      (r2, "CL", "item_create", "", "9 Anne Klein Loop",
+                       db.now_iso(), "qais"))
+        d9, err = leluxe.az2_organize(o9, dry_run=True)
+        check("nested originals visible at full depth → ZERO creations",
+              err is None and d9["creates_item"] == 0 and d9["creates_pkg"] == 0)
+        check("copy-linked row re-adopts the nested original; copy pruned",
+              d9["adopts"] >= 1 and d9["prunes"] == 1)
+        check("board-dup row warned, never mirrored",
+              any("duplicate line" in s["note"] or "already maps" in s["note"]
+                  for s in d9["skipped"]))
+        rep9, err = leluxe.az2_organize(o9, user="qais")
+        check("loop killed: copy deleted, originals lifted into the parcel",
+              err is None and "CL" not in AZO["tasks"]
+              and AZO["tasks"]["NL1"]["parent"] == "CONTL"
+              and AZO["tasks"]["NL2"]["parent"] == "CONTL"
+              and (leluxe.get_row(r2)["data"] or {}).get("source_task_id") == "NL1")
+        for _n in (2, 3):
+            dz, err = leluxe.az2_organize(o9, dry_run=True)
+            check(f"run {_n} plans zero creations and zero structure changes",
+                  err is None and dz["creates_item"] == 0 and dz["moves"] == 0
+                  and dz["prunes"] == 0 and dz["adopts"] == 0)
     finally:
         leluxe._http = real
 

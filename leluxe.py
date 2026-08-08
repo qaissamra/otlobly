@@ -2485,22 +2485,38 @@ def az2_organize(order_id, user="", dry_run=False):
 
     PKGISH = re.compile(r"📦|^\s*PACKAGE\b|GWD\d+", re.I)
     containers = {}                      # id → {"task", "kids": [entries]}
-    remote_products = []                 # [{"id","name","parent"}]
-    for ch in order_task.get("subtasks") or []:
-        looks_pkg = bool(PKGISH.search(str(ch.get("name") or "")))
-        if (ch.get("subtasks_count") or 0) > 0 or looks_pkg:
-            c_, full = _http(f"{CLICKUP_API}/task/{ch['id']}?include_subtasks=true")
-            if c_ != 200 or not isinstance(full, dict):
-                continue
-            task_cache[ch["id"]] = full
-            kids = full.get("subtasks") or []
-            containers[ch["id"]] = {"task": full, "kids": kids}
-            for k in kids:
-                remote_products.append({"id": k["id"], "name": k.get("name") or "",
-                                        "parent": ch["id"]})
-        else:
-            remote_products.append({"id": ch["id"], "name": ch.get("name") or "",
-                                    "parent": src_order})
+    remote_products = []                 # every descendant that isn't a container
+
+    def _walk(parent_id, entries, depth):
+        """FULL-depth subtree scan (cap 5). Products can hide products (the
+        July habit of nesting under a pseudo-package product) — a shallow scan
+        left nested originals invisible to adoption, so every run minted a
+        fresh copy of them ("it keeps adding"). Containers are only the
+        order's direct children that look like parcels — a product-named task
+        with children is a product holding mis-nested products, never a
+        parcel candidate."""
+        for ch in entries or []:
+            name_ = str(ch.get("name") or "")
+            looks_pkg = bool(PKGISH.search(name_))
+            has_kids = (ch.get("subtasks_count") or 0) > 0
+            product_name = bool(re.match(r"\s*\d+\b", name_))
+            kids = []
+            if (has_kids or looks_pkg) and depth < 5:
+                c_, full = _http(f"{CLICKUP_API}/task/{ch['id']}"
+                                 f"?include_subtasks=true")
+                if c_ == 200 and isinstance(full, dict):
+                    task_cache[ch["id"]] = full
+                    kids = full.get("subtasks") or []
+            if depth == 0 and (looks_pkg or (has_kids and not product_name)):
+                containers[ch["id"]] = {"task": task_cache.get(ch["id"]) or ch,
+                                        "kids": kids}
+            else:
+                remote_products.append({"id": ch["id"], "name": name_,
+                                        "parent": parent_id})
+            if kids:
+                _walk(ch["id"], kids, depth + 1)
+
+    _walk(src_order, order_task.get("subtasks") or [], 0)
 
     def _container_gwd(cid):
         full = containers[cid]["task"]
@@ -2582,6 +2598,7 @@ def az2_organize(order_id, user="", dry_run=False):
 
     # ---- one pass per GWD (duplicate local packages fold into one parcel) --
     groups = {}
+    canon_map = {}                        # GWD → canonical local package row id
     for p in pkgs:
         groups.setdefault(_row_tn(p, sfields).strip().upper(), []).append(p)
     for gwd, group in groups.items():
@@ -2615,6 +2632,7 @@ def az2_organize(order_id, user="", dry_run=False):
                        if (p.get("data") or {}).get("source_task_id") == pkg_src),
                       None) if pkg_src else None
         canon_row = holder or group[0]
+        canon_map[gwd] = canon_row["id"]
         if pkg_src and not holder:
             old_link = (canon_row.get("data") or {}).get("source_task_id")
             steps.append({"op": "adopt", "row_id": canon_row["id"],
@@ -2662,6 +2680,11 @@ def az2_organize(order_id, user="", dry_run=False):
                              and rp["id"] not in created
                              and _nkey(rp["name"]) == key), None)
 
+            def _name_exists(key, but=None):
+                return any(_nkey(rp["name"]) == key and rp["id"] != but
+                           and rp["id"] not in created
+                           for rp in remote_products)
+
             if it_src and it_src in created:
                 # linked to a duplicate organize itself created — the owner's
                 # hand-made product (real status!) wins; ours gets pruned
@@ -2673,6 +2696,18 @@ def az2_organize(order_id, user="", dry_run=False):
                     planned_links.discard(it_src)
                     planned_links.add(orig["id"])
                     it_src = orig["id"]
+                elif _name_exists(_nkey(want_name), but=it_src):
+                    # the original exists but another board row claims it —
+                    # this row + our copy ARE the duplicate pair
+                    steps.append({"op": "unlink", "row_id": it["id"],
+                                  "task_id": it_src})
+                    planned_links.discard(it_src)
+                    skipped.append({"row_id": it["id"], "name": want_name,
+                                    "note": "duplicate line on the board — "
+                                            "another row already maps to this "
+                                            "product; the extra ClickUp copy is "
+                                            "removed, delete the extra row too"})
+                    continue
             if not it_src:
                 # ADOPT the owner's existing product before ever creating one
                 cand = _original(_nkey(want_name))
@@ -2682,6 +2717,16 @@ def az2_organize(order_id, user="", dry_run=False):
                                   "task_id": it_src, "old": "",
                                   "what": want_name[:40]})
                     planned_links.add(it_src)
+                elif _name_exists(_nkey(want_name)):
+                    # creation is the LAST resort and never repeats: the
+                    # product already exists somewhere in this order's tree
+                    # (claimed by another row) — never mint another copy
+                    skipped.append({"row_id": it["id"], "name": want_name,
+                                    "note": "another board row already maps to "
+                                            "this product in ClickUp — likely a "
+                                            "duplicate line on the board; delete "
+                                            "one and re-run"})
+                    continue
             if not it_src:
                 steps.append({"op": "item_create", "row_id": it["id"],
                               "name": want_name, "pkg_row": canon_row["id"],
@@ -2766,6 +2811,34 @@ def az2_organize(order_id, user="", dry_run=False):
                               "old": str(pkg_task.get("due_date") or ""),
                               "new": pkg_due, "snapshot": pkg_task})
 
+    # ---- products that exist ONLY in ClickUp, nested under another product
+    # of this order: no board row can plan them, so their Tracking Number
+    # field (or their parent product's) decides which parcel they belong to --
+    for rp in remote_products:
+        if rp["id"] in planned_links or rp["id"] in created:
+            continue
+        parent = rp.get("parent") or ""
+        if not parent or parent == src_order or parent in containers:
+            continue                      # flat or already in a parcel: leave
+        t_ = _full(rp["id"])
+        if not t_:
+            continue
+        g = (_task_cf(t_, tn_fid) or "").strip().upper() if tn_fid else ""
+        if not g:
+            pt = _full(parent)
+            g = (_task_cf(pt, tn_fid) or "").strip().upper() \
+                if (pt and tn_fid) else ""
+        dest_row = canon_map.get(g)
+        if not dest_row:
+            skipped.append({"row_id": 0,
+                            "note": f"{rp['name'][:40]!r} is nested under "
+                                    "another product in ClickUp and no parcel "
+                                    "matches it — fix it by hand"})
+            continue
+        steps.append({"op": "move", "row_id": 0, "task_id": rp["id"],
+                      "old_parent": parent, "pkg_row": dest_row,
+                      "snapshot": t_})
+
     # ---- 💰 the money invariant: Total Amount(order) == Σ products, and the
     # amount never duplicated. Split families spread one priced line over its
     # quantity splits (Σ preserved); a lone product takes the order's total;
@@ -2801,6 +2874,23 @@ def az2_organize(order_id, user="", dry_run=False):
                               "name": (it.get("name") or "").strip(),
                               "tid": tid if t_ else None, "task": t_,
                               "cs": cs, "amt": amt_})
+        # remote-only products (no board row) are still IN the order — their
+        # amounts belong to the Σ, else the invariant would false-alarm
+        known_tids = {e["tid"] for e in recon if e["tid"]}
+        for rp in remote_products:
+            if rp["id"] in known_tids or rp["id"] in created:
+                continue
+            t_ = _full(rp["id"])
+            if not t_:
+                continue
+            try:
+                a_ = float(_task_cf(t_, amt_fid) or 0)
+            except ValueError:
+                a_ = 0.0
+            m_ = re.match(r"\s*(\d+)\b", rp["name"])
+            recon.append({"row_id": 0, "qty": int(m_.group(1)) if m_ else None,
+                          "name": rp["name"], "tid": rp["id"], "task": t_,
+                          "cs": None, "amt": a_})
 
         def _amount_step(e, want):
             want_s = "" if want in (None, "") else str(round(float(want), 2))
