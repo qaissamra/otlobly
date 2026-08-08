@@ -1366,7 +1366,7 @@ def az2_organize_flow():
               d["skipped_empty"] == 1 and d["prunes"] == 0)
         check("foreign move + bare-quantity name are skipped, not mirrored",
               len(d["skipped"]) == 2
-              and any("different task" in s["note"] for s in d["skipped"])
+              and any("OUTSIDE this order" in s["note"] for s in d["skipped"])
               and any("just a quantity" in s["note"] for s in d["skipped"]))
         check("dry-run wrote NOTHING",
               not [1 for m_, u, b in CALLS if m_ in ("PUT", "POST", "DELETE")])
@@ -1634,6 +1634,30 @@ def az2_organize_flow():
         d7, err = leluxe.az2_organize(o7, dry_run=True)
         check("cent-level rounding drift is left alone", err is None
               and not [s for s in d7["steps"] if s.get("fname") == "Total Amount"])
+
+        # ---- hand-nested under a sibling PRODUCT (the July habit of using a
+        # product as a pseudo-package): lifted into its parcel; a parent
+        # OUTSIDE the order is still respected ----
+        o8 = _money_order("NEST31", 0, [("1 Host", "P8"), ("5 Nested", "N8"),
+                                        ("7 Elsewhere", "N9")],
+                          [("P8", "1 Host", 0)])
+        AZO["tasks"]["N8"] = {"id": "N8", "name": "5 Nested", "parent": "P8",
+                              "status": {"status": "sent rd"}}
+        AZO["tasks"]["N9"] = {"id": "N9", "name": "7 Elsewhere",
+                              "parent": "OTHER", "status": {"status": "sent rd"}}
+        d8, err = leluxe.az2_organize(o8, dry_run=True)
+        check("a product nested under a sibling product is planned OUT of it",
+              err is None and d8["moves"] == 2
+              and len([s for s in d8["skipped"]
+                       if "OUTSIDE this order" in s["note"]]) == 1)
+        _, err = leluxe.az2_organize(o8, user="qais")
+        pkg8 = next((t for t in AZO["tasks"].values()
+                     if t.get("name") == "📦 GWD531"), None)
+        check("lifted under the parcel; the outside one untouched",
+              err is None and pkg8
+              and AZO["tasks"]["P8"]["parent"] == pkg8["id"]
+              and AZO["tasks"]["N8"]["parent"] == pkg8["id"]
+              and AZO["tasks"]["N9"]["parent"] == "OTHER")
     finally:
         leluxe._http = real
 
