@@ -1272,9 +1272,16 @@ def fake_azo_http(url, method="GET", body=None, _retried=False):
         if not t:
             return 404, {"_error": "not found"}
         if method == "GET":
-            out = {k: v for k, v in t.items() if k != "cf"}
-            out["custom_fields"] = [{"id": k, "value": v}
-                                    for k, v in (t.get("cf") or {}).items()]
+            out = {k: v for k, v in t.items() if k not in ("cf", "cf_defs")}
+            # like real ClickUp: every field entry ships its full type_config
+            namedef = {"type": "drop_down", "type_config": {"options": [
+                {"id": "opt-a", "name": "A", "orderindex": 0},
+                {"id": "opt-b5", "name": "B5", "orderindex": 37},
+                {"id": "opt-newly", "name": "NEWLY", "orderindex": 99}]}}
+            out["custom_fields"] = [
+                {"id": k, "value": v, **(namedef if k == "f-name" else {})}
+                for k, v in (t.get("cf") or {}).items()]
+            out["custom_fields"] += t.get("cf_defs") or []
             if "include_subtasks" in url:
                 out["subtasks"] = [dict(x) for x in AZO["tasks"].values()
                                    if x.get("parent") == tid]
@@ -1317,7 +1324,7 @@ def az2_organize_flow():
     p3 = leluxe._insert_row("package", "📦 GWD333", parent_local_id=oid,
                             extra={"tracking_number": "GWD333"})
     itA = leluxe._insert_row("item", "2 U.S. Polo", status="sent rd",
-                             parent_local_id=p1, fields={"NAME": "B5"},
+                             parent_local_id=p1, fields={"NAME": "NEWLY"},
                              due_date="1786000000000",
                              extra={"source_task_id": "A"})
     itD = leluxe._insert_row("item", "8", status="sent rd", parent_local_id=p1)
@@ -1326,8 +1333,16 @@ def az2_organize_flow():
     itC = leluxe._insert_row("item", "9 Accutime", status="sent rd",
                              parent_local_id=p2, extra={"source_task_id": "C"})
     AZO["tasks"] = {
+        # ORD carries the LIVE dropdown definition: it includes "NEWLY", a
+        # batch letter the cached SCHEMA does not know — organize must encode
+        # from these inline options, not the stale cache
         "ORD": {"id": "ORD", "name": "Order # 999-TEST", "parent": None,
-                "status": {"status": "order number"}},
+                "status": {"status": "order number"},
+                "cf_defs": [{"id": "f-name", "type": "drop_down", "type_config": {
+                    "options": [{"id": "opt-a", "name": "A", "orderindex": 0},
+                                {"id": "opt-b5", "name": "B5", "orderindex": 37},
+                                {"id": "opt-newly", "name": "NEWLY",
+                                 "orderindex": 99}]}}]},
         "A": {"id": "A", "name": "10 U.S. Polo", "parent": "ORD",
               "status": {"status": "sent rd"}, "cf": {"f-qty": "5"}},
         "C": {"id": "C", "name": "9 Accutime", "parent": "OTHER",
@@ -1379,9 +1394,12 @@ def az2_organize_flow():
         check("package totals = sum of contents (incl. skipped rows)",
               cf(pkg1_tid, "f-qty") == "10" and cf(pkg2_tid, "f-qty") == "17")
         check("profile NAME on products and packages (encoded option)",
-              cf("A", "f-name") == "opt-b5" and cf(itb_tid, "f-name") == "opt-b5"
-              and cf(pkg1_tid, "f-name") == "opt-b5"
+              cf(itb_tid, "f-name") == "opt-b5"
               and cf(pkg2_tid, "f-name") == "opt-b5")
+        check("a batch letter the cached schema doesn't know encodes from the "
+              "task's LIVE options",
+              cf("A", "f-name") == "opt-newly"
+              and cf(pkg1_tid, "f-name") == "opt-newly")
         check("due dates on products and packages",
               str(AZO["tasks"]["A"].get("due_date")) == "1786000000000"
               and str(AZO["tasks"][itb_tid].get("due_date")) == "1786100000000"
