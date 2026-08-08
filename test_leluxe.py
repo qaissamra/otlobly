@@ -1509,7 +1509,7 @@ def az2_organize_flow():
             "ORD2": {"id": "ORD2", "name": "Order # HAND", "parent": None,
                      "status": {"status": "order number"}},
             "HANDPKG": {"id": "HANDPKG", "name": "PACKAGE 1", "parent": "ORD2",
-                        "status": {"status": "package"}},
+                        "status": {"status": "order number"}},
             "REAL25": {"id": "REAL25", "name": "25 Steve Madden",
                        "parent": "HANDPKG", "status": {"status": "sent rd"},
                        "cf": {"f-trk": "GWD444", "f-qty": "25"}},
@@ -1532,17 +1532,30 @@ def az2_organize_flow():
                          VALUES (?,?,?,?,?,?,?,'pushed')""",
                       (hA, "DUPITEM", "item_create", "", "25 Steve Madden",
                        db.now_iso(), "qais"))
+        # the hand-made parcel must come out CONSISTENT with the rest:
+        # renamed "📦 <GWD>" + the 'package' status — products keep their own
+        config = cfg.load()
+        sts = cfg.get(config, "leluxe.schema.statuses", [])
+        cfg.set_path(config, "leluxe.schema.statuses",
+                     sts + [{"status": "package", "color": "#8d8d8d",
+                             "orderindex": 23, "type": "unstarted"}])
+        cfg.save(config)
         dh, err = leluxe.az2_organize(oid2, dry_run=True)
         check("hand-organized order: adopts the owner's package + product, "
               "creates NOTHING", err is None and dh["creates_pkg"] == 0
               and dh["creates_item"] == 0 and dh["moves"] == 0
               and dh["adopts"] == 2 and dh["prunes"] == 2)
+        check("...and normalizes the parcel: rename to 📦 GWD + package status",
+              dh["renames"] == 1 and dh["status_sets"] == 1)
         reph, err = leluxe.az2_organize(oid2, user="qais")
-        check("duplicates pruned, originals untouched", err is None
+        check("duplicates pruned, real product status untouched", err is None
               and reph["pruned"] == 2
               and "DUPPKG" not in AZO["tasks"] and "DUPITEM" not in AZO["tasks"]
               and AZO["tasks"]["REAL25"]["status"]["status"] == "sent rd"
               and AZO["tasks"]["REAL25"]["parent"] == "HANDPKG")
+        check("hand-made parcel looks like every other one now",
+              AZO["tasks"]["HANDPKG"]["name"] == "📦 GWD444"
+              and AZO["tasks"]["HANDPKG"]["status"]["status"] == "package")
         check("local rows now link the hand-made originals",
               (leluxe.get_row(h1)["data"] or {}).get("source_task_id") == "HANDPKG"
               and (leluxe.get_row(hA)["data"] or {}).get("source_task_id") == "REAL25")
@@ -1550,7 +1563,8 @@ def az2_organize_flow():
         check("hand-organized order settles to a no-op", err is None
               and dh2["adopts"] == 0 and dh2["prunes"] == 0
               and dh2["creates_pkg"] == 0 and dh2["creates_item"] == 0
-              and dh2["moves"] == 0)
+              and dh2["moves"] == 0 and dh2["renames"] == 0
+              and dh2["status_sets"] == 0)
     finally:
         leluxe._http = real
 
