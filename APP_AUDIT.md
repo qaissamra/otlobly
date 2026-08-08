@@ -28,6 +28,7 @@ audited · `n/a` doesn't apply. Tests column: suite name = dedicated coverage,
 | ⌚ Leluxe · orders/products | ✅ 2a | ✅ | ✅ | · | · | · | · | test_leluxe |
 | ⌚ Leluxe · packages | ✅ 2a header formula EXACT | ✅ | ✅ | · | · | ⚠ F-005 filter | · | — (render untested) |
 | ⌚ Leluxe · goal 🎯 | ✅ 2a render | ✅ | ✅ | · | · | · | · | test_leluxe_goal |
+| 🏆 Goals (`goals`) | ✅ built 2026-08-08 (render, inline edits persist, combine bar, no-token path, restoreView) | ✅ | ✅ lx-goal idiom | ✅ | ✅ admin-only + FEAT.leluxe | · | · | test_goals |
 | 💵 Deposits (`deposits`) | ✅ 2a Σ exact | ✅ | ✅ B3 | · | · | · | · | part (ledger math in test_money_and_auth; /api/payments endpoint —) |
 | 🏠 Orders (`orders`) | ✅ 2a | ✅ | ✅ B2 | ✅ | · | ⚠ F-014 batch Σ | ⚠ F-010 GWD col deferred | part (order code race, due chips) |
 | 🛒 In cart (`incart`) | ✅ 2b empty-state | ✅ | ✅ B3 | · | ✅ redacted | · | · | test_role_money part |
