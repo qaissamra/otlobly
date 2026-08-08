@@ -2439,6 +2439,7 @@ def az2_organize(order_id, user="", dry_run=False):
     statuses = set(status_names(None))
     tn_fid = _sch_field_id(sfields, "Tracking Number")
     qty_fid = _sch_field_id(sfields, "Quantity ordered")
+    amt_fid = _sch_field_id(sfields, "Total Amount")
     name_fdef = _sch_field_def(sfields, "NAME")
     name_fid = name_fdef.get("id")
 
@@ -2755,6 +2756,94 @@ def az2_organize(order_id, user="", dry_run=False):
                               "old": str(pkg_task.get("due_date") or ""),
                               "new": pkg_due, "snapshot": pkg_task})
 
+    # ---- 💰 the money invariant: Total Amount(order) == Σ products, and the
+    # amount never duplicated. Split families spread one priced line over its
+    # quantity splits (Σ preserved); a lone product takes the order's total;
+    # when one product already equals the total, stray amounts on the others
+    # are cleared; anything ambiguous is reported for a manual fix. ----
+    order_total = 0.0
+    if amt_fid:
+        try:
+            order_total = float(_task_cf(order_task, amt_fid) or 0)
+        except ValueError:
+            order_total = 0.0
+    if amt_fid and order_total > 0:
+        adopted_by_row = {s["row_id"]: s["task_id"] for s in steps
+                          if s["op"] == "adopt" and s.get("task_id")}
+        created_by_row = {s["row_id"]: s for s in steps
+                         if s["op"] == "item_create"}
+        recon = []
+        for gwd, group in groups.items():
+            for it in [x for p in group for x in items.get(p["id"], [])]:
+                cs = created_by_row.get(it["id"])
+                tid = adopted_by_row.get(it["id"]) or \
+                    (it.get("data") or {}).get("source_task_id")
+                t_ = _full(tid) if (tid and cs is None) else None
+                if t_ is None and cs is None:
+                    continue                       # dead link — nothing to set
+                amt_ = 0.0
+                if t_:
+                    try:
+                        amt_ = float(_task_cf(t_, amt_fid) or 0)
+                    except ValueError:
+                        amt_ = 0.0
+                recon.append({"row_id": it["id"], "qty": _az2_qty(it, sfields),
+                              "name": (it.get("name") or "").strip(),
+                              "tid": tid if t_ else None, "task": t_,
+                              "cs": cs, "amt": amt_})
+
+        def _amount_step(e, want):
+            want_s = "" if want in (None, "") else str(round(float(want), 2))
+            if e["cs"] is not None:
+                e["cs"]["amount"] = want_s or None
+            else:
+                stp = {"op": "cf_set", "row_id": e["row_id"], "task_id": e["tid"],
+                       "fname": "Total Amount", "fid": amt_fid,
+                       "old": str(e["amt"] if e["amt"] else ""), "new": want_s,
+                       "snapshot": e["task"]}
+                if want_s == "":
+                    stp["post_value"] = None
+                steps.append(stp)
+            e["amt"] = float(want or 0)
+
+        fams = {}
+        for e in recon:
+            key = re.sub(r"^\s*\d+\s*", "", e["name"]).casefold().strip()
+            if key and e["qty"]:
+                fams.setdefault(key, []).append(e)
+        for fam in fams.values():
+            priced = [e for e in fam if e["amt"] > 0]
+            if len(fam) < 2 or len(priced) != 1:
+                continue
+            src_e = priced[0]
+            m = re.match(r"\s*(\d+)\b", str((src_e["task"] or {}).get("name") or ""))
+            rq = int(m.group(1)) if m else (src_e["qty"] or 0)
+            if not rq or sum(e["qty"] for e in fam) != rq:
+                continue
+            per = src_e["amt"] / rq
+            for e in fam:
+                want = round(per * e["qty"], 2)
+                if not _num_eq(e["amt"], want):
+                    _amount_step(e, want)
+        s_ = sum(e["amt"] for e in recon)
+        tol = max(1.0, order_total * 0.005)
+        if recon and abs(s_ - order_total) > tol:
+            if len(recon) == 1:
+                _amount_step(recon[0], order_total)
+            else:
+                eq = [e for e in recon if abs(e["amt"] - order_total) <= tol]
+                if eq:
+                    for e in recon:
+                        if e is not eq[0] and e["amt"] > 0:
+                            _amount_step(e, "")
+                else:
+                    skipped.append({"row_id": 0,
+                                    "note": f"💰 order is {order_total:g} but its "
+                                            f"products sum to {round(s_, 2):g} — "
+                                            f"organize can't tell which product "
+                                            f"carries the difference; fix the "
+                                            f"amounts by hand"})
+
     # ---- organize-created tasks nothing links anymore (adoption found the
     # hand-made original): prune them, products before their packages ----
     pruned_ids = {s["task_id"] for s in steps if s["op"] == "pkg_prune"}
@@ -2883,9 +2972,10 @@ def az2_organize(order_id, user="", dry_run=False):
                              s["old"], s["new"], s.get("snapshot"), user)
             elif op == "cf_set":
                 time.sleep(_pace())
+                val = s["post_value"] if "post_value" in s else s["new"]
                 code, resp = _http(
                     f"{CLICKUP_API}/task/{s['task_id']}/field/{s['fid']}",
-                    "POST", {"value": s.get("post_value", s["new"])})
+                    "POST", {"value": val})
                 if code not in (200, 201):
                     return report, (f"AZ (2) refused the {s['fname']} field "
                                     f"({code}): {(resp or {}).get('_error') or resp}")
@@ -2938,6 +3028,9 @@ def az2_organize(order_id, user="", dry_run=False):
                 if qty_fid and s.get("qty") is not None:
                     _http(f"{CLICKUP_API}/task/{tid}/field/{qty_fid}",
                           "POST", {"value": s["qty"]})
+                if amt_fid and s.get("amount"):
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{amt_fid}",
+                          "POST", {"value": s["amount"]})
                 if name_fid and s.get("pname"):
                     okv, enc = encode_value(name_fdef, s["pname"])
                     if okv:

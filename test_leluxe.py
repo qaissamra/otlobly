@@ -1262,8 +1262,9 @@ def fake_azo_http(url, method="GET", body=None, _retried=False):
         return 200, {"id": nid}
     if sub and sub.startswith("/field/") and method == "POST" \
             and tid in AZO["tasks"]:
+        v = (body or {}).get("value")
         AZO["tasks"][tid].setdefault("cf", {})[sub.split("/")[2]] = \
-            (body or {}).get("value")
+            "" if v is None else v                 # null clears, like ClickUp
         return 200, {}
     if sub:                                    # /tag /comment
         return 200, {}
@@ -1467,7 +1468,7 @@ def az2_organize_flow():
         #    5 cf NAME · 6 due_date · 7 pkg_create p2 · 8 item_create B
         _, err = leluxe.az2_undo(j[5]["id"], user="qais")
         check("profile undo clears the dropdown (old was empty)", err is None
-              and (AZO["tasks"]["A"].get("cf") or {}).get("f-name") is None)
+              and (AZO["tasks"]["A"].get("cf") or {}).get("f-name") in (None, ""))
         _, err = leluxe.az2_undo(j[6]["id"], user="qais")
         check("due-date undo clears it back (old was empty)", err is None
               and AZO["tasks"]["A"].get("due_date") is None)
@@ -1565,6 +1566,74 @@ def az2_organize_flow():
               and dh2["creates_pkg"] == 0 and dh2["creates_item"] == 0
               and dh2["moves"] == 0 and dh2["renames"] == 0
               and dh2["status_sets"] == 0)
+
+        # ---- 💰 the money invariant: order total == Σ products ----
+        def _money_order(tag, total, locals_, remotes):
+            o_ = leluxe._insert_row("order", f"Order # {tag}",
+                                    status="order number",
+                                    extra={"source_task_id": tag})
+            p_ = leluxe._insert_row("package", f"📦 GWD5{tag[-2:]}",
+                                    parent_local_id=o_,
+                                    extra={"tracking_number": f"GWD5{tag[-2:]}"})
+            for nm, src in locals_:
+                leluxe._insert_row("item", nm, status="sent rd",
+                                   parent_local_id=p_,
+                                   extra={"source_task_id": src} if src else None)
+            AZO["tasks"][tag] = {"id": tag, "name": f"Order # {tag}",
+                                 "parent": None,
+                                 "status": {"status": "order number"},
+                                 "cf": {"f-amt": str(total)}}
+            for rid, nm, a in remotes:
+                AZO["tasks"][rid] = {"id": rid, "name": nm, "parent": tag,
+                                     "status": {"status": "sent rd"},
+                                     "cf": {"f-amt": str(a)} if a else {}}
+            return o_
+        amt_of = lambda t: str((AZO["tasks"].get(t, {}).get("cf") or {}).get("f-amt", ""))
+        o3 = _money_order("MONEY01", 400, [("1 Widget A", "M1")],
+                          [("M1", "1 Widget A", 380)])
+        d, err = leluxe.az2_organize(o3, dry_run=True)
+        amt_steps = [s for s in (d or {}).get("steps", [])
+                     if s.get("fname") == "Total Amount"]
+        check("lone product plans the order's own total", err is None
+              and len(amt_steps) == 1 and amt_steps[0]["new"] == "400.0")
+        _, err = leluxe.az2_organize(o3, user="qais")
+        check("lone product takes the order total", err is None
+              and float(amt_of("M1")) == 400.0)
+
+        o4 = _money_order("MONEY02", 200,
+                          [("3 Gadget", "M2a"), ("9 Gizmo", "M2b")],
+                          [("M2a", "3 Gadget", 200), ("M2b", "9 Gizmo", 826)])
+        _, err = leluxe.az2_organize(o4, user="qais")
+        check("stray duplicate amount cleared (total appears once + once)",
+              err is None and float(amt_of("M2a")) == 200.0
+              and amt_of("M2b") == "")
+
+        o5 = _money_order("MONEY03", 500, [("2 Widget B", "M3"),
+                                           ("8 Widget B", None)],
+                          [("M3", "10 Widget B", 500)])
+        _, err = leluxe.az2_organize(o5, user="qais")
+        new_split = next((t for t in AZO["tasks"].values()
+                          if t.get("name") == "8 Widget B"), None)
+        check("split family spreads the money by quantity (500 → 100 + 400)",
+              err is None and float(amt_of("M3")) == 100.0 and new_split
+              and float((new_split.get("cf") or {}).get("f-amt") or 0) == 400.0
+              and AZO["tasks"]["M3"]["name"] == "2 Widget B")
+
+        o6 = _money_order("MONEY04", 148.4,
+                          [("9 Anne", "M4a"), ("7 Polo", "M4b")],
+                          [("M4a", "9 Anne", 0), ("M4b", "7 Polo", 583.98)])
+        d6, err = leluxe.az2_organize(o6, dry_run=True)
+        check("ambiguous amounts are reported, never guessed", err is None
+              and not [s for s in d6["steps"] if s.get("fname") == "Total Amount"]
+              and any("fix the amounts by hand" in s["note"] for s in d6["skipped"]))
+
+        o7 = _money_order("MONEY05", 489.16,
+                          [("5 Nine West", "M5a"), ("12 Nine West Gold", "M5b")],
+                          [("M5a", "5 Nine West", 143.8),
+                           ("M5b", "12 Nine West Gold", 345.28)])
+        d7, err = leluxe.az2_organize(o7, dry_run=True)
+        check("cent-level rounding drift is left alone", err is None
+              and not [s for s in d7["steps"] if s.get("fname") == "Total Amount"])
     finally:
         leluxe._http = real
 
