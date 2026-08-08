@@ -2349,6 +2349,25 @@ def _cf_display(fdef, raw):
     return "" if v is None else str(v)
 
 
+def _inline_fdef(task, fid, fallback):
+    """A dropdown's definition from the task's OWN inline option set — ClickUp
+    ships the full, CURRENT options with every task, while the cached schema
+    goes stale as new batch letters are added (the _decode_task lesson; the
+    live cache was 140 options vs ClickUp's 154, so S-B6/E-B47 profiles were
+    silently unencodable until the next ⟳ Discover schema)."""
+    for f in (task or {}).get("custom_fields") or []:
+        if f.get("id") == fid:
+            opts = [{"id": o.get("id"),
+                     "name": o.get("name") if o.get("name") is not None else o.get("label"),
+                     "orderindex": o.get("orderindex")}
+                    for o in (f.get("type_config") or {}).get("options") or []]
+            if opts:
+                return {"id": fid,
+                        "type": f.get("type") or (fallback or {}).get("type"),
+                        "options": opts}
+    return fallback
+
+
 def _task_cf(task, fid):
     """A ClickUp task's current custom-field value as a string ('' = unset)."""
     for f in (task or {}).get("custom_fields") or []:
@@ -2435,9 +2454,11 @@ def az2_organize(order_id, user="", dry_run=False):
     pkgs = [p for p in pkgs if _row_tn(p, sfields)]
     if not pkgs:
         return None, "no tracked packages to organize — assign GWDs first"
-    code, _order_task = _http(f"{CLICKUP_API}/task/{src_order}")
+    code, order_task = _http(f"{CLICKUP_API}/task/{src_order}")
     if code != 200:
         return None, f"couldn't read the AZ (2) order ({code})"
+    # profile options come from the live task, not the (stale-able) cache
+    name_fdef = _inline_fdef(order_task, name_fid, name_fdef)
 
     steps, skipped = [], []
     skipped_empty = 0
@@ -2791,6 +2812,7 @@ def az2_undo(push_id, user=""):
         fid = fdef.get("id")
         if not fid:
             return None, f"the {field[3:]!r} field is gone from the schema"
+        fdef = _inline_fdef(task, fid, fdef)     # live options beat the cache
         raw = _task_cf(task, fid)
         dropdown = fdef.get("type") in ("drop_down", "labels")
         cur = _cf_display(fdef, raw) if dropdown else raw
