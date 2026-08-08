@@ -11265,7 +11265,7 @@ function gmRenderChat(){
   const KIND={sent:T("مُرسل · sent"),resent:T("أُعيد إرساله · resent"),reply:T("رد · reply"),
     auto_ack:T("رد آلي · auto-reply"),closed:T("المكتب مغلق · office closed"),
     task:T("📋 مهمة · task"),task_done:T("✓ مهمة منجزة · task done"),
-    bounce:T("⚠ لم يصل · bounced")};
+    bounce:T("⚠ لم يصل · bounced"),gmail:T("✍️ من جيميل · from Gmail")};
   const acct=gmAcctOf(th), inbox=(acct||{}).email||"", toAddr=gmToAddr(th,msgs);
   const bubbles=msgs.map(m=>{
     const auto=(m.kind==="auto_ack"||m.kind==="closed"||m.kind==="task_done"||m.kind==="bounce");
@@ -11505,7 +11505,7 @@ async function gmCheck(btn){
   btn.disabled=true; btn.textContent="…";
   const r=await post("/api/gaash/check",{});
   btn.disabled=false; localizeStatic();
-  toast(r&&r.ok?`${T("ردود جديدة · new replies")}: ${r.new||0}`:(r&&r.errors?JSON.stringify(r.errors).slice(0,120):"failed"));
+  toast(r&&r.ok?`${T("ردود جديدة · new replies")}: ${r.new||0}${r.gmail?` · ✍️ ${T("من جيميل · from Gmail")}: ${r.gmail}`:""}`:(r&&r.errors?JSON.stringify(r.errors).slice(0,120):"failed"));
   gmLoad();
 }
 // ── ＋ New sequence: pick packages → ID → account → start ──
