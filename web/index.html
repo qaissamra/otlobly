@@ -5275,7 +5275,7 @@ function lxPkgHtml(o,pk,items){
       })}
     </div></div>`;
   const body=collapsed?"":`<div class="pkg-body">
-    ${items.map(it=>lxItemRow(it)).join("")||`<div class="muted2" style="padding:6px 10px;font-size:12px">no products yet</div>`}
+    ${items.map(it=>lxItemRow(it,null,{pkgTn:tn})).join("")||`<div class="muted2" style="padding:6px 10px;font-size:12px">no products yet</div>`}
     <div style="padding:6px 10px 2px"><button class="po-btn" onclick="lxOpenEditor('item',null,${pk.id})">＋ Add product</button></div>
   </div>`;
   return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
@@ -5293,7 +5293,7 @@ function lxItemRow(it,parentO,opts){
   const itMenu=popMenu([
     [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
     [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
-    [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(tn)}','${poEsc(ordTn)}')`],
+    [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(tn)}','${poEsc(ordTn||opts.pkgTn||"")}')`],
     tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
     [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
   ]);
@@ -5345,7 +5345,12 @@ function lxItemRow(it,parentO,opts){
     ${lxtCells("",{
       profile: lxProfileCell(lxAcctChain(it,parentO)),
       status: `${lxDot(it)}${lxStatusSelect(it)}`,
-      tracking: opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`:`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`),
+      // a package child whose GWD lives on the package row (the usual ClickUp
+      // shape) inherits it MUTED — never "no tracking" under a tracked header;
+      // an item's own tn (same or divergent) stays normal weight
+      tracking: opts.inPkg?"":(tn?`${poTn4(tn,'10px')}${lxCopyRawBtn(tn)}`
+        :opts.pkgTn?`<span style="opacity:.7" title="من الطرد · from the package">${poTn4(opts.pkgTn,'10px')}</span>${lxCopyRawBtn(opts.pkgTn)}`
+        :`<span class="muted2" style="font-size:10px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`),
       gash: opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status")),
       due: lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it)),
       menu: itMenu,
