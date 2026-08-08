@@ -2324,6 +2324,47 @@ def _az2_journal(row_id, task_id, field, old, new, snapshot, user):
              json.dumps(snapshot or {}, ensure_ascii=False), now, user)).lastrowid
 
 
+def _sch_field_id(sfields, name):
+    """A schema field's id by case/whitespace-insensitive name (the live
+    'Quantity ordered ' key carries a trailing space)."""
+    want = " ".join(str(name).casefold().split())
+    for k, v in (sfields or {}).items():
+        if " ".join(str(k).casefold().split()) == want:
+            return (v or {}).get("id")
+    return None
+
+
+def _task_cf(task, fid):
+    """A ClickUp task's current custom-field value as a string ('' = unset)."""
+    for f in (task or {}).get("custom_fields") or []:
+        if f.get("id") == fid:
+            v = f.get("value")
+            return "" if v is None else str(v)
+    return ""
+
+
+def _num_eq(a, b):
+    sa, sb = str(a if a is not None else "").strip(), str(b if b is not None else "").strip()
+    try:
+        return float(sa) == float(sb)
+    except ValueError:
+        return sa == sb
+
+
+def _az2_qty(it, sfields):
+    """A product's per-package amount: the leading number of its (split) name —
+    the board's naming convention — else its own Quantity field, else None."""
+    m = re.match(r"\s*(\d+)\b", str(it.get("name") or ""))
+    if m:
+        return int(m.group(1))
+    f = (it.get("data") or {}).get("fields") or {}
+    v = f.get(_field_key(f, "Quantity ordered", sfields))
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
 def az2_organize(order_id, user="", dry_run=False):
     """Mirror the app's order → 📦 GWD → products tree into the REAL AZ (2)
     list — the same nesting the board shows ("just like Otlobly, in ClickUp").
@@ -2353,7 +2394,8 @@ def az2_organize(order_id, user="", dry_run=False):
     sch = schema(None)
     sfields = sch.get("fields") or {}
     statuses = set(status_names(None))
-    tn_fid = (sfields.get("Tracking Number") or {}).get("id")
+    tn_fid = _sch_field_id(sfields, "Tracking Number")
+    qty_fid = _sch_field_id(sfields, "Quantity ordered")
     with db.connect() as c:
         pkgs = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND "
@@ -2378,16 +2420,24 @@ def az2_organize(order_id, user="", dry_run=False):
             code, pkg_task = _http(f"{CLICKUP_API}/task/{pkg_src}")
             if code != 200 or not isinstance(pkg_task, dict):
                 pkg_src, pkg_task = None, None          # deleted remotely → recreate
+        pkg_create = None
         if not pkg_src:
-            steps.append({"op": "pkg_create", "row_id": p["id"], "gwd": gwd,
-                          "name": f"📦 {gwd}"})
+            pkg_create = {"op": "pkg_create", "row_id": p["id"], "gwd": gwd,
+                          "name": f"📦 {gwd}"}
+            steps.append(pkg_create)
+        # the parcel's true total = every product the board puts inside it
+        # (foreign-moved ones included — they are still physically in the box)
+        qty_total = sum(q for q in (_az2_qty(it, sfields)
+                                    for it in items.get(p["id"], [])) if q)
         for it in items.get(p["id"], []):
             it_src = (it.get("data") or {}).get("source_task_id")
             want_name = (it.get("name") or "").strip()
+            qty = _az2_qty(it, sfields)
             if not it_src:
                 steps.append({"op": "item_create", "row_id": it["id"],
                               "name": want_name, "pkg_row": p["id"],
-                              "status": (it.get("status") or "").strip()})
+                              "status": (it.get("status") or "").strip(),
+                              "gwd": gwd, "qty": qty})
                 continue
             code, task = _http(f"{CLICKUP_API}/task/{it_src}")
             if code != 200 or not isinstance(task, dict):
@@ -2411,11 +2461,39 @@ def az2_organize(order_id, user="", dry_run=False):
                 steps.append({"op": "rename", "row_id": it["id"],
                               "task_id": it_src, "old": cur_name,
                               "new": want_name, "snapshot": task})
+            # each product carries its parcel number + its split amount
+            if tn_fid and (_task_cf(task, tn_fid) or "").strip() != gwd:
+                steps.append({"op": "cf_set", "row_id": it["id"],
+                              "task_id": it_src, "fname": "Tracking Number",
+                              "fid": tn_fid, "old": _task_cf(task, tn_fid),
+                              "new": gwd, "snapshot": task})
+            if qty_fid and qty is not None and \
+                    not _num_eq(_task_cf(task, qty_fid), qty):
+                steps.append({"op": "cf_set", "row_id": it["id"],
+                              "task_id": it_src, "fname": "Quantity ordered",
+                              "fid": qty_fid, "old": _task_cf(task, qty_fid),
+                              "new": str(qty), "snapshot": task})
+        # the package's own fields: total amount of products + its GWD
+        if pkg_create is not None:
+            pkg_create["qty_total"] = qty_total or None
+        elif pkg_task is not None:
+            if qty_fid and qty_total and \
+                    not _num_eq(_task_cf(pkg_task, qty_fid), qty_total):
+                steps.append({"op": "cf_set", "row_id": p["id"],
+                              "task_id": pkg_src, "fname": "Quantity ordered",
+                              "fid": qty_fid, "old": _task_cf(pkg_task, qty_fid),
+                              "new": str(qty_total), "snapshot": pkg_task})
+            if tn_fid and (_task_cf(pkg_task, tn_fid) or "").strip() != gwd:
+                steps.append({"op": "cf_set", "row_id": p["id"],
+                              "task_id": pkg_src, "fname": "Tracking Number",
+                              "fid": tn_fid, "old": _task_cf(pkg_task, tn_fid),
+                              "new": gwd, "snapshot": pkg_task})
     report = {"order": order.get("name"), "packages": len(pkgs),
               "creates_pkg": sum(1 for s in steps if s["op"] == "pkg_create"),
               "moves": sum(1 for s in steps if s["op"] == "move"),
               "renames": sum(1 for s in steps if s["op"] == "rename"),
               "creates_item": sum(1 for s in steps if s["op"] == "item_create"),
+              "field_sets": sum(1 for s in steps if s["op"] == "cf_set"),
               "skipped": skipped, "steps": [], "dry_run": bool(dry_run)}
     if dry_run:
         report["steps"] = [{k: v for k, v in s.items() if k != "snapshot"}
@@ -2450,6 +2528,9 @@ def az2_organize(order_id, user="", dry_run=False):
                 if tn_fid:
                     _http(f"{CLICKUP_API}/task/{tid}/field/{tn_fid}",
                           "POST", {"value": s["gwd"]})
+                if qty_fid and s.get("qty_total"):
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{qty_fid}",
+                          "POST", {"value": s["qty_total"]})
                 time.sleep(_pace())
                 _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
                       "POST", {})
@@ -2479,6 +2560,16 @@ def az2_organize(order_id, user="", dry_run=False):
                                     f"{(resp or {}).get('_error') or resp}")
                 _az2_journal(s["row_id"], s["task_id"], "name",
                              s["old"], s["new"], s.get("snapshot"), user)
+            elif op == "cf_set":
+                time.sleep(_pace())
+                code, resp = _http(
+                    f"{CLICKUP_API}/task/{s['task_id']}/field/{s['fid']}",
+                    "POST", {"value": s["new"]})
+                if code not in (200, 201):
+                    return report, (f"AZ (2) refused the {s['fname']} field "
+                                    f"({code}): {(resp or {}).get('_error') or resp}")
+                _az2_journal(s["row_id"], s["task_id"], f"cf:{s['fname']}",
+                             s["old"], s["new"], s.get("snapshot"), user)
             elif op == "item_create":
                 dest = pkg_tid.get(s["pkg_row"])
                 if not dest:
@@ -2496,6 +2587,12 @@ def az2_organize(order_id, user="", dry_run=False):
                     return report, (f"AZ (2) refused the product ({code}): "
                                     f"{(resp or {}).get('_error') or resp}")
                 _az2_link_source(s["row_id"], tid)
+                if tn_fid and s.get("gwd"):
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{tn_fid}",
+                          "POST", {"value": s["gwd"]})
+                if qty_fid and s.get("qty") is not None:
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{qty_fid}",
+                          "POST", {"value": s["qty"]})
                 time.sleep(_pace())
                 _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
                       "POST", {})
@@ -2528,7 +2625,8 @@ def az2_undo(push_id, user=""):
     p = dict(p)
     field = p["field"]
     if p["state"] != "pushed" or \
-            field not in ("status", "name", "parent", "pkg_create", "item_create"):
+            (field not in ("status", "name", "parent", "pkg_create", "item_create")
+             and not field.startswith("cf:")):
         return None, "this entry can't be undone"
     sub = "?include_subtasks=true" if field == "pkg_create" else ""
     code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}{sub}")
@@ -2549,6 +2647,23 @@ def az2_undo(push_id, user=""):
                               f"{(resp or {}).get('_error') or resp}")
         _az2_link_source(p["row_id"], None)      # the local row forgets the task
         restored = "(deleted)"
+    elif field.startswith("cf:"):
+        if code != 200 or not isinstance(task, dict):
+            return None, f"couldn't read the AZ (2) task ({code})"
+        fid = _sch_field_id(schema(None).get("fields") or {}, field[3:])
+        if not fid:
+            return None, f"the {field[3:]!r} field is gone from the schema"
+        cur = _task_cf(task, fid)
+        if not _num_eq(cur, p["new_value"]):
+            return None, (f"AZ (2) changed after this push — it now says {cur!r}, "
+                          f"so the undo was aborted. Review it in ClickUp.")
+        time.sleep(_pace())
+        code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}/field/{fid}",
+                           "POST", {"value": p["old_value"] or ""})
+        if code not in (200, 201):
+            return None, (f"AZ (2) refused the revert ({code}): "
+                          f"{(resp or {}).get('_error') or resp}")
+        restored = p["old_value"] or "(empty)"
     else:
         if code != 200 or not isinstance(task, dict):
             return None, f"couldn't read the AZ (2) task ({code})"
