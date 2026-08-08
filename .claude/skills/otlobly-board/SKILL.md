@@ -38,7 +38,7 @@ picker, and Σ totals footers (`.bt-total`). There is NO responsive fallback and
 NO container queries anymore.
 
 Registries (web/index.html): `LX_TABLES` (grid var + header selector + width
-storage key + statussel mins) and `LXT_COLS` (per table: `{key,label,w,
+storage key) and `LXT_COLS` (per table: `{key,label,w,min?,
 sortable|sort,locked}`) for ids `""` Leluxe orders · `"p"` products ·
 `"k"` packages · `"po"` Purchases. Per-table localStorage: widths
 (`lx_colw`/`lx_pcolw`/`lx_kcolw`/`po_colw`), hidden set `lxt_hidden_<id>`,
@@ -65,7 +65,17 @@ Pitfalls (all hit us once):
   state (open `#fff4ee`, pkg strip `bg2`, hovers, `.lx-tied` stripe) — see the
   `.bt-pin` background rules;
 - header vs rows width can differ 1-2px per nested border level — the header's
-  `border-inline:1px solid transparent` + `lxtSync`'s end-snap absorb it;
+  `border-inline:1px solid transparent` absorbs it, and `lxtSync` mirrors
+  scrollLeft 1:1, snapping to the header's own end ONLY when the mirror
+  measurably clamped. Never snap unconditionally: the header is ~40px WIDER
+  than the rows (the ⊕ `.fld-anchor`, now position:sticky at the clip's right
+  edge), so an unconditional end-snap desyncs every column at full-right
+  scroll (fixed 2026-08-08);
+- column width floors are KEY-keyed: `min` on the LXT_COLS entry (status
+  columns carry min:84 = the .statussel width), default `min(48, default w)`
+  via `lxtColMin` — used by the drag clamp AND both apply paths so poisoned
+  saved widths self-heal. Never floor by header index (hide/reorder shifts
+  indices) and never bypass `lxtColMin` with a flat constant;
 - dropdowns never need ancestor-overflow escapes: every open path places the
   menu `position:fixed` z-99 (`popToggle`→`popPlace`/`fldPlace`; `lxtColMenu` +
   `poCfPickOpen` inline). The old `:has(.pop-menu.open){overflow:visible}`
