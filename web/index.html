@@ -1628,6 +1628,7 @@
           <button class="pop-item" id="lxDiagBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiagOpen()" title="لماذا لم تصل تغييرات كليك أب؟ — يقارن كل صف مع AZ (2) الحيّة ويشرح سبب التخطي · why hasn't a ClickUp change landed? compares every row against live AZ (2) and says what is blocking it (read-only)">🩺 Diagnose sync</button>
           <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
           <button class="pop-item" id="lxAz2HistBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2HistoryOpen()" title="كل دفعة رفعتها إلى AZ (2) — مع تراجع · every push you made INTO AZ (2), with undo">⤴ AZ (2) push history</button>
+          <button class="pop-item" id="lxAz2OrgAllBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxAz2OrganizeAll(this)" title="أنشئ نفس شجرة الطرود (طلب ← 📦 GWD ← منتجات) داخل قائمة AZ (2) الحقيقية لكل الطلبات — كل خطوة مسجّلة وقابلة للتراجع · mirror the order → 📦 GWD → products tree into the REAL AZ (2) list for every order — each step journalled + undoable">📦⤴ Organize ALL in ClickUp</button>
           <button class="pop-item" id="lxConfBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxConflictsOpen()" title="القيم المعلّقة بانتظار موافقتك — أوتلوبلي مقابل AZ (2) · values waiting for your approval — Otlobly vs AZ (2)">⚖ التعارضات · Review conflicts</button>
           <button class="pop-item" id="lxDedupeBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDedupe(this)" title="أزل الطلبات المكررة الناتجة عن الترحيل — يُبقي الأصل، AZ (2) لا تُمسّ أبداً · remove duplicate orders created by Migrate (keeps the original; AZ (2) is never touched)">🧹 Remove duplicates</button>
           <button class="pop-item" id="lxDiscoverBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiscover(this)" title="re-read the list's statuses / fields / dropdown options from ClickUp">⟳ Discover schema</button>
@@ -5044,6 +5045,7 @@ function lxCardHtml(o){
     [`🚚 رقم التتبع للطلب · Set tracking number`,`lxOrderSetTracking(${o.id})`],
     uTn.length===1?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(uTn[0])}')`]:null,
     uTn.length?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('order',${o.id})`]:null,
+    pkgs.length?[`📦⤴ نظّم الطرود في ClickUp · Organize in ClickUp`,`lxAz2Organize(${o.id})`]:null,
     [`＋ إضافة طرد · Add package`,`lxOpenEditor('package',null,${o.id})`],
     [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${o.id})`],
     [`🗑 إخفاء · hide`,`lxDelete(${o.id})`,true],
@@ -6033,6 +6035,36 @@ async function lxAz2Push(rowId,remoteNow,mine){
   if(!r.ok){ if(b){ b.disabled=false; b.textContent="⤴ Push to AZ (2)"; } toast(r.error||"Push failed"); return; }
   if(b){ b.textContent=r.noop?"✅ already matched":"✅ Pushed to AZ (2)"; b.disabled=true; }
   toast(r.noop?"AZ (2) already has this value":"✅ Pushed to AZ (2) — undo available in push history");
+}
+// ── 📦⤴ Organize in ClickUp: mirror the app's order → 📦 GWD → products tree
+//    into the REAL AZ (2) list. Same guardrails as az2 push: dry-run preview
+//    first, every step journalled, per-step undo in push history. ──
+function lxAz2Sum(r){ return `${r.creates_pkg||0} new 📦 · ${r.moves||0} moved · ${r.renames||0} renamed · ${r.creates_item||0} new products`+((r.skipped||[]).length?` · ${(r.skipped||[]).length} skipped`:""); }
+async function lxAz2Organize(orderId,quiet){
+  let d; try{ d=await post("/api/leluxe/az2_organize",{order_id:orderId,dry_run:true}); }catch(e){ d={}; }
+  if(!d.ok){ if(!quiet) toast(d.error||"Couldn't plan the organize"); return {ok:false,error:d.error}; }
+  const total=(d.creates_pkg||0)+(d.moves||0)+(d.renames||0)+(d.creates_item||0);
+  if(!total){ if(!quiet) toast("AZ (2) already matches the board ✓"); return {ok:true,noop:true}; }
+  if(!quiet&&!confirm(`نظّم الطرود في ClickUp؟ · Organize "${d.order||""}" in AZ (2)?\n\n${lxAz2Sum(d)}\n\nكل خطوة مسجّلة وقابلة للتراجع · every step is journalled — undo from Tools → ⤴ AZ (2) push history.`)) return {ok:false};
+  let r; try{ r=await post("/api/leluxe/az2_organize",{order_id:orderId}); }catch(e){ r={}; }
+  if(!r.ok){ toast((r.error||"Organize failed")+((r.steps||[]).length?` — ${(r.steps||[]).length} step(s) already landed (see push history)`:"")); return {ok:false,error:r.error}; }
+  if(!quiet){ toast(`✅ ${lxAz2Sum(r)}`); loadLeluxe(); }
+  return {ok:true,rep:r};
+}
+async function lxAz2OrganizeAll(btn){
+  const tn=pk=>String((pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"").trim();
+  const orders=((LX&&LX.orders)||[]).filter(o=>(o.packages||[]).some(pk=>tn(pk)));
+  if(!orders.length){ toast("لا يوجد طلبات بطرود متتبَّعة · no orders with tracked 📦 packages"); return; }
+  if(!confirm(`Organize ${orders.length} order(s) in AZ (2)?\n\nلكل طلب: تُنشأ مهام 📦 لكل GWD وتنتقل المنتجات تحتها وتُعدَّل كميات التقسيم · package tasks are created, products move under them, split quantities renamed.\n\nEverything is journalled + undoable (Tools → push history).`)) return;
+  let done=0,changed=0,fails=0;
+  for(const o of orders){
+    toast(`📦⤴ ${++done}/${orders.length} — ${o.name||("#"+o.id)}`);
+    const res=await lxAz2Organize(o.id,true);
+    if(res.ok&&!res.noop) changed++;
+    else if(!res.ok&&res.error) fails++;
+  }
+  toast(`📦⤴ تم · done: ${changed} organized · ${orders.length-changed-fails} already matched${fails?` · ${fails} failed`:""}`);
+  loadLeluxe();
 }
 function lxAz2HistoryClose(){ $("lxAz2HistModal").classList.add("hidden"); }
 async function lxAz2HistoryOpen(){
