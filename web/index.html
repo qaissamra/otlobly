@@ -156,6 +156,25 @@
   .pkg-title-row:hover{background:#efede8}
   .pkg.open .pkg-title-row:hover{background:#ffeadf}
   .pkg-head .pkg-title{font-weight:800;font-size:15px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  /* Parcel rows line up as a COLUMN, not as free-flowing text: the GWD is
+     monospace (every parcel number the same width) and reserves one number's
+     worth of space even when it says "no tracking", so the thumbnails start at
+     the same x on every row of the card. Nothing here may shrink — a squeezed
+     caret or an ellipsised GWD was what knocked the images out of line. */
+  .bt-pin>.caret{flex:0 0 auto}
+  .pkg-title.gwd,.pkg-head .pkg-title.gwd{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+    flex:0 0 auto;min-width:136px}
+  /* the 📋 copy button rides INSIDE that block — parked outside it, its 24px
+     pushed every tracked row's thumbnails out of line with the untracked ones */
+  .pkg-title.gwd .lx-copy{margin-inline-start:2px}
+  /* the phone pin is 200px: there is nothing to align there, so the number goes
+     back to yielding rather than eating the whole row */
+  @media(max-width:560px){.pkg-title.gwd,.pkg-head .pkg-title.gwd{min-width:0;flex:0 1 auto;
+    overflow:hidden;text-overflow:ellipsis}}
+  /* …and the count is parked at the pinned column's end, so the counts line up
+     as their own right-hand column. It is the one part allowed to give way. */
+  .pkg-title-row .pkgn,.poc-row .pkgn{margin-inline-start:auto;flex:0 1 auto;min-width:0;
+    padding-inline-start:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 👤 Customers view: a long name ellipsizes inside the fixed-width pin instead
      of being sliced mid-word (full name in the title attribute) */
   .pkg-head .pkg-title.cust{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -3206,6 +3225,9 @@ function lxCfPill(nameLower,val,tip){
     const o=(fields[k].options||[]).find(o=>o.name===val); if(o&&o.color) c=o.color; break; } }
   return `<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55;font-size:10px" title="${poEsc([nameLower,tip].filter(Boolean).join(" · "))}">${poEsc(val)}</span>`;
 }
+// a row with no sync dot of its own (a synthetic parcel row) still holds the
+// slot open, so its GWD + photos line up with the rows that have one
+function lxDotSlot(){ return `<span style="display:inline-block;width:8px;flex:0 0 auto"></span>`; }
 function lxDot(r){
   const m={synced:["#16a34a","synced to ClickUp"],dirty:["#d97706","waiting to sync"],
     pushing:["#d97706","syncing to ClickUp…"],error:["#dc2626",r.sync_error||"sync failed"]};
@@ -4007,7 +4029,8 @@ const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "cu":["cu-colhead","cu-cols"],"dp":["dp-colhead","dp-cols"],
                "ct":["ct-colhead","ct-cols"],"ic":["ic-colhead","ic-cols"],
                "tr":["tr-colhead","tr-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","ic":"","tr":" pin-md"};
+// "k" is pin-md because its pinned column IS the parcel: GWD + photos + count
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":" pin-md","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","ic":"","tr":" pin-md"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
 ["","p","k","po","pok","pop","bs","wf","en","od","cu","dp","ct","ic","tr"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
@@ -4429,10 +4452,10 @@ function lxKRow(r){
   return `<div class="poc-row lx-krow" title="${pk?"انقر لعرض كل التفاصيل · click for full package details":"انقر للانتقال إلى الطلب · click to jump to the order"}"
     ${click?`onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${click}"`:""} style="cursor:pointer">
     <div class="bt-pin">
-      ${pk?lxDot(pk):""}
-      <b class="pkg-title" style="font-size:12.5px">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
-      ${lxThumbs(its)}
-      <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxCountLbl(its)}</span>
+      ${pk?lxDot(pk):lxDotSlot()}
+      <b class="pkg-title gwd">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}${tn?lxCopyRawBtn(tn):""}</b>
+      ${lxThumbs(its,3)}
+      ${lxCountChip(its)}
     </div>
     ${lxtCells("k",cells)}
   </div>`;
@@ -5038,11 +5061,19 @@ async function lxGoalBackfill(btn){
 // adds information: ≥1 real qty entered AND the unit total ≠ the row count.
 // (Deliberately NOT the Products-view Σ semantics, which is a strict column
 // sum of entered quantities — ||0.)
-function lxCountLbl(items){
+function lxUnits(items){
   items=items||[]; let any=false;
-  const s=items.reduce((a,it)=>{ const q=Number(lxF(it,"quantity ordered")); if(q>0){ any=true; return a+q; } return a+1; },0);
-  return `${items.length} product${items.length===1?"":"s"}${any&&s!==items.length?` · ×${s}`:""}`;
+  const u=items.reduce((a,it)=>{ const q=Number(lxF(it,"quantity ordered")); if(q>0){ any=true; return a+q; } return a+1; },0);
+  return {n:items.length,u,any};
 }
+function lxCountLbl(items){ const {n,u,any}=lxUnits(items);
+  return `${n} product${n===1?"":"s"}${any&&u!==n?` · ×${u}`:""}`; }
+// The same count as a parcel-row chip: it lives at the pinned column's end,
+// where a 3-photo row has ~40px to spare, so it shows the two numbers compactly
+// ("3 · ×28") and spells them out in the tooltip.
+function lxCountChip(items){ const {n,u,any}=lxUnits(items);
+  const tip=`${n} product${n===1?"":"s"} · ${u} unit${u===1?"":"s"}`;
+  return `<span class="muted2 pkgn" style="font-size:11px" title="${tip}">${any&&u!==n?`${n} · `:""}×${u}</span>`; }
 function lxCardHtml(o){
   const open=LX_OPEN.isOpen(o.id), pkgs=o.packages||[], loose=o.items||[];
   const amt=lxF(o,"total amount");
@@ -5082,7 +5113,7 @@ function lxCardHtml(o){
       <div class="bt-pin">
         <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
         ${lxDot(o)}
-        <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
+        <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 0 auto;white-space:nowrap" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
         ${lxCopyBtn(o.name)}
         ${lxThumbs(lxItemsOf(o))}
         ${gzRollup(lxOrderGwds(o))}
@@ -5107,9 +5138,9 @@ function lxCardHtml(o){
   // "no tracking" group only exists once at least one product is tracked)
   const looseBar=loose.length?`<div class="pkg-head"><div class="pkg-title-row" style="cursor:default">
       <span class="bt-pin">
-        <span class="muted2" style="font-size:11px;opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>
-        <span class="muted2" style="font-size:11px">${lxCountLbl(loose)}</span>
+        <b class="pkg-title gwd" style="opacity:.7" title="no GAASH tracking number yet">📦 no tracking</b>
         <button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${loose.map(it=>it.id).join(",")}],'','${poEsc(ordTn)}')">🚚 set tracking</button>
+        ${lxCountChip(loose)}
       </span>
     </div></div>`:"";
   const body=`<div class="po-body">
@@ -5222,9 +5253,10 @@ function lxVPkgHtml(o,g){
   const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;lxVPkgToggle('${poEsc(key)}')" style="cursor:pointer">
       <div class="bt-pin">
         <span class="caret">${collapsed?"▸":"▾"}</span>
-        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${g.tn?poEsc(g.tn):"no tracking"}</b>${g.tn?lxCopyRawBtn(g.tn):""}
-        <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxCountLbl(g.items)}</span>
-        ${lxThumbs(g.items)}
+        ${lxDotSlot()}
+        <b class="pkg-title gwd">📦 ${g.tn?poEsc(g.tn):"no tracking"}${g.tn?lxCopyRawBtn(g.tn):""}</b>
+        ${lxThumbs(g.items,3)}
+        ${lxCountChip(g.items)}
         ${g.tn?"":`<button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
       </div>
       ${lxtCells("",{
@@ -5257,9 +5289,9 @@ function lxPkgHtml(o,pk,items){
       <div class="bt-pin">
         <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
         ${lxDot(pk)}
-        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
-        <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxCountLbl(items)}</span>
-        ${lxThumbs(items)}
+        <b class="pkg-title gwd">📦 ${tn?poEsc(tn):"no tracking"}${tn?lxCopyRawBtn(tn):""}</b>
+        ${lxThumbs(items,3)}
+        ${lxCountChip(items)}
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(items,pk,o)),
