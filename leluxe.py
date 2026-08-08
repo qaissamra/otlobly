@@ -2811,18 +2811,47 @@ def az2_organize(order_id, user="", dry_run=False):
                               "old": str(pkg_task.get("due_date") or ""),
                               "new": pkg_due, "snapshot": pkg_task})
 
-    # ---- products that exist ONLY in ClickUp, nested under another product
-    # of this order: no board row can plan them, so their Tracking Number
-    # field (or their parent product's) decides which parcel they belong to --
+    # ---- remote-only leftovers vs the order's own quantity. The order's
+    # "Quantity ordered" is the owner's ground truth: when the BOARD's
+    # products already sum exactly to it, anything else in the ClickUp order
+    # is a provable extra (an old copy / abandoned duplicate) → deleted, with
+    # a full snapshot journalled so undo can recreate it. When the numbers
+    # do NOT agree, nothing is deleted: mis-nested remote-only products are
+    # moved to the parcel their Tracking Number names, and the mismatch is
+    # reported for a manual fix. ----
+    order_q = 0
+    if qty_fid:
+        try:
+            order_q = int(float(_task_cf(order_task, qty_fid) or 0))
+        except ValueError:
+            order_q = 0
+    board_q = sum(q for q in (
+        _az2_qty(it, sfields)
+        for gwd, group in groups.items()
+        for p in group for it in items.get(p["id"], [])) if q)
+    extras_proven = order_q > 0 and board_q == order_q
+    remote_only = False
     for rp in remote_products:
         if rp["id"] in planned_links or rp["id"] in created:
             continue
-        parent = rp.get("parent") or ""
-        if not parent or parent == src_order or parent in containers:
-            continue                      # flat or already in a parcel: leave
         t_ = _full(rp["id"])
         if not t_:
             continue
+        remote_only = True
+        parent = rp.get("parent") or ""
+        if extras_proven:
+            if (t_.get("subtasks") or []) or \
+                    any(x.get("parent") == rp["id"] for x in remote_products):
+                skipped.append({"row_id": 0,
+                                "note": f"{rp['name'][:40]!r} is an extra but "
+                                        "still holds subtasks — fix it by hand"})
+                continue
+            steps.append({"op": "extra_delete", "row_id": 0,
+                          "task_id": rp["id"], "name": rp["name"],
+                          "snapshot": t_})
+            continue
+        if not parent or parent == src_order or parent in containers:
+            continue                      # flat or already in a parcel: leave
         g = (_task_cf(t_, tn_fid) or "").strip().upper() if tn_fid else ""
         if not g:
             pt = _full(parent)
@@ -2838,6 +2867,12 @@ def az2_organize(order_id, user="", dry_run=False):
         steps.append({"op": "move", "row_id": 0, "task_id": rp["id"],
                       "old_parent": parent, "pkg_row": dest_row,
                       "snapshot": t_})
+    if order_q > 0 and board_q != order_q and remote_only:
+        skipped.append({"row_id": 0,
+                        "note": f"quantities don't add up: the order says "
+                                f"{order_q} but the board's products sum to "
+                                f"{board_q} — extras were NOT deleted; fix the "
+                                f"quantities by hand and re-run"})
 
     # ---- 💰 the money invariant: Total Amount(order) == Σ products, and the
     # amount never duplicated. Split families spread one priced line over its
@@ -2877,8 +2912,10 @@ def az2_organize(order_id, user="", dry_run=False):
         # remote-only products (no board row) are still IN the order — their
         # amounts belong to the Σ, else the invariant would false-alarm
         known_tids = {e["tid"] for e in recon if e["tid"]}
+        planned_extra = {s["task_id"] for s in steps if s["op"] == "extra_delete"}
         for rp in remote_products:
-            if rp["id"] in known_tids or rp["id"] in created:
+            if rp["id"] in known_tids or rp["id"] in created \
+                    or rp["id"] in planned_extra:
                 continue
             t_ = _full(rp["id"])
             if not t_:
@@ -2964,6 +3001,7 @@ def az2_organize(order_id, user="", dry_run=False):
               "field_sets": sum(1 for s in steps if s["op"] == "cf_set"),
               "due_sets": sum(1 for s in steps if s["op"] == "due_set"),
               "status_sets": sum(1 for s in steps if s["op"] == "status_set"),
+              "extra_deletes": sum(1 for s in steps if s["op"] == "extra_delete"),
               "adopts": sum(1 for s in steps if s["op"] in ("adopt", "unlink")),
               "prunes": sum(1 for s in steps if s["op"] in ("pkg_prune",
                                                             "item_prune")),
@@ -3043,6 +3081,14 @@ def az2_organize(order_id, user="", dry_run=False):
                                     "note": f"{s.get('gwd') or s['task_id']}: {perr}"})
                     continue
                 report["pruned"] += 1
+            elif op == "extra_delete":
+                time.sleep(_pace())
+                code, resp = _http(f"{CLICKUP_API}/task/{s['task_id']}", "DELETE")
+                if code not in (200, 204):
+                    return report, (f"AZ (2) refused the extra delete ({code}): "
+                                    f"{(resp or {}).get('_error') or resp}")
+                _az2_journal(0, s["task_id"], "extra_delete", s["name"], "",
+                             s.get("snapshot"), user)
             elif op == "move":
                 dest = pkg_tid.get(s["pkg_row"])
                 if not dest:
@@ -3171,9 +3217,54 @@ def az2_undo(push_id, user=""):
     field = p["field"]
     if p["state"] != "pushed" or \
             (field not in ("status", "name", "parent", "due_date",
-                           "pkg_create", "item_create", "adopt")
+                           "pkg_create", "item_create", "adopt", "extra_delete")
              and not field.startswith("cf:")):
         return None, "this entry can't be undone"
+    if field == "extra_delete":
+        # recreate the deleted extra from its journalled snapshot (new id —
+        # comments/history don't come back; the undo restores the DATA)
+        code, _t = _http(f"{CLICKUP_API}/task/{p['task_id']}")
+        if code == 200:
+            return None, "the task still exists — nothing to restore"
+        try:
+            snap = json.loads(p["snapshot_json"] or "{}")
+        except ValueError:
+            snap = {}
+        nm = (snap.get("name") or p["old_value"] or "").strip()
+        if not nm:
+            return None, "no snapshot to restore from"
+        body = {"name": nm}
+        if snap.get("parent"):
+            body["parent"] = snap["parent"]
+        stn = ((snap.get("status") or {}).get("status") or "").strip()
+        if stn and stn in set(status_names(None)):
+            body["status"] = stn
+        if str(snap.get("due_date") or "").isdigit():
+            body["due_date"] = int(snap["due_date"])
+        time.sleep(_pace())
+        code, resp = _http(f"{CLICKUP_API}/list/{source_list_id(None)}/task",
+                           "POST", body)
+        if code != 200 and body.pop("parent", None):
+            time.sleep(_pace())              # parent gone → recreate flat
+            code, resp = _http(f"{CLICKUP_API}/list/{source_list_id(None)}/task",
+                               "POST", body)
+        tid = (resp or {}).get("id") if code == 200 else None
+        if not tid:
+            return None, (f"AZ (2) refused the recreate ({code}): "
+                          f"{(resp or {}).get('_error') or resp}")
+        for f_ in snap.get("custom_fields") or []:
+            if f_.get("value") not in (None, "", []):
+                _http(f"{CLICKUP_API}/task/{tid}/field/{f_['id']}",
+                      "POST", {"value": f_["value"]})
+        now = db.now_iso()
+        with db.connect() as c:
+            c.execute("UPDATE az2_pushes SET state='undone' WHERE id=?",
+                      (push_id,))
+            c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                         old_value, new_value, ts, user, state, undo_of)
+                         VALUES (?,?,?,?,?,?,?,'undo',?)""",
+                      (0, tid, "extra_delete", "", nm, now, user, push_id))
+        return {"id": push_id, "task_id": tid, "restored": nm}, None
     if field == "adopt":
         # local-only: forget (or restore) the link — AZ (2) itself untouched
         _az2_link_source(p["row_id"], (p["old_value"] or "").strip() or None,

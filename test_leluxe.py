@@ -1725,6 +1725,45 @@ def az2_organize_flow():
             check(f"run {_n} plans zero creations and zero structure changes",
                   err is None and dz["creates_item"] == 0 and dz["moves"] == 0
                   and dz["prunes"] == 0 and dz["adopts"] == 0)
+
+        # ---- qty-proven extras: the order's own Quantity is the ground
+        # truth — when the board's products already sum to it exactly, a
+        # remote-only leftover is a provable extra and gets deleted ----
+        oq = _money_order("QTY41", 0, [("9 Real Watch", "RW")],
+                          [("RW", "9 Real Watch", 0)])
+        AZO["tasks"]["QTY41"]["cf"]["f-qty"] = "9"
+        AZO["tasks"]["EX1"] = {"id": "EX1", "name": "9 Old Copy",
+                               "parent": "QTY41",
+                               "status": {"status": "oredered"}}
+        dq, err = leluxe.az2_organize(oq, dry_run=True)
+        check("board Σ == order qty → the leftover is planned for deletion",
+              err is None and dq["extra_deletes"] == 1
+              and not any("quantities don't add up" in s["note"]
+                          for s in dq["skipped"]))
+        _, err = leluxe.az2_organize(oq, user="qais")
+        check("qty-proven extra deleted", err is None
+              and "EX1" not in AZO["tasks"])
+        with db.connect() as c:
+            jx = dict(c.execute("SELECT * FROM az2_pushes WHERE "
+                                "field='extra_delete' AND state='pushed' "
+                                "ORDER BY id DESC LIMIT 1").fetchone())
+        _, err = leluxe.az2_undo(jx["id"], user="qais")
+        check("extra-delete undo recreates the task from its snapshot",
+              err is None and any(t.get("name") == "9 Old Copy"
+                                  for t in AZO["tasks"].values()))
+
+        oq2 = _money_order("QTY42", 0, [("9 Real W2", "RW2")],
+                           [("RW2", "9 Real W2", 0)])
+        AZO["tasks"]["QTY42"]["cf"]["f-qty"] = "20"
+        AZO["tasks"]["EX2"] = {"id": "EX2", "name": "5 Mystery",
+                               "parent": "QTY42",
+                               "status": {"status": "oredered"}}
+        dq2, err = leluxe.az2_organize(oq2, dry_run=True)
+        check("board Σ ≠ order qty → NOTHING deleted, mismatch reported",
+              err is None and dq2["extra_deletes"] == 0
+              and any("quantities don't add up" in s["note"]
+                      for s in dq2["skipped"])
+              and "EX2" in AZO["tasks"])
     finally:
         leluxe._http = real
 
