@@ -1259,14 +1259,21 @@ def fake_azo_http(url, method="GET", body=None, _retried=False):
                              "status": {"status": (body or {}).get("status") or "order number"},
                              "parent": (body or {}).get("parent")}
         return 200, {"id": nid}
-    if sub:                                    # /tag /field /comment
+    if sub and sub.startswith("/field/") and method == "POST" \
+            and tid in AZO["tasks"]:
+        AZO["tasks"][tid].setdefault("cf", {})[sub.split("/")[2]] = \
+            (body or {}).get("value")
+        return 200, {}
+    if sub:                                    # /tag /comment
         return 200, {}
     if tid:
         t = AZO["tasks"].get(tid)
         if not t:
             return 404, {"_error": "not found"}
         if method == "GET":
-            out = dict(t)
+            out = {k: v for k, v in t.items() if k != "cf"}
+            out["custom_fields"] = [{"id": k, "value": v}
+                                    for k, v in (t.get("cf") or {}).items()]
             if "include_subtasks" in url:
                 out["subtasks"] = [dict(x) for x in AZO["tasks"].values()
                                    if x.get("parent") == tid]
@@ -1312,7 +1319,7 @@ def az2_organize_flow():
         "ORD": {"id": "ORD", "name": "Order # 999-TEST", "parent": None,
                 "status": {"status": "order number"}},
         "A": {"id": "A", "name": "10 U.S. Polo", "parent": "ORD",
-              "status": {"status": "sent rd"}},
+              "status": {"status": "sent rd"}, "cf": {"f-qty": "5"}},
         "C": {"id": "C", "name": "9 Accutime", "parent": "OTHER",
               "status": {"status": "sent rd"}},
         "OTHER": {"id": "OTHER", "name": "someone else's box", "parent": None,
@@ -1326,6 +1333,8 @@ def az2_organize_flow():
         d, err = leluxe.az2_organize(oid, dry_run=True)
         check("dry-run plans the tree", err is None and d["creates_pkg"] == 2
               and d["moves"] == 1 and d["renames"] == 1 and d["creates_item"] == 1)
+        check("dry-run plans the product fields (GWD + split qty)",
+              d["field_sets"] == 2)
         check("untracked package is not planned", d["packages"] == 2)
         check("foreign move is skipped, not fought",
               len(d["skipped"]) == 1 and "different task" in d["skipped"][0]["note"])
@@ -1333,7 +1342,7 @@ def az2_organize_flow():
               not [1 for m_, u, b in CALLS if m_ in ("PUT", "POST", "DELETE")])
 
         rep, err = leluxe.az2_organize(oid, user="qais")
-        check("organize ok", err is None and len(rep["steps"]) == 5)
+        check("organize ok", err is None and len(rep["steps"]) == 7)
         pkg1_tid = (leluxe.get_row(p1)["data"] or {}).get("source_task_id")
         pkg2_tid = (leluxe.get_row(p2)["data"] or {}).get("source_task_id")
         itb_tid = (leluxe.get_row(itB)["data"] or {}).get("source_task_id")
@@ -1348,6 +1357,14 @@ def az2_organize_flow():
         check("split remainder created + linked back",
               itb_tid and AZO["tasks"][itb_tid]["parent"] == pkg2_tid
               and AZO["tasks"][itb_tid]["name"] == "8 U.S. Polo")
+        cf = lambda t, f: str((AZO["tasks"].get(t, {}).get("cf") or {}).get(f, ""))
+        check("every product carries its parcel number",
+              cf("A", "f-trk") == "GWD111" and cf(itb_tid, "f-trk") == "GWD222")
+        check("split quantities written (10-line → 2 here, remainder 8)",
+              cf("A", "f-qty") == "2" and cf(itb_tid, "f-qty") == "8")
+        check("package totals = sum of contents (incl. the skipped one's 9)",
+              cf(pkg1_tid, "f-qty") == "2" and cf(pkg2_tid, "f-qty") == "17"
+              and cf(pkg1_tid, "f-trk") == "GWD111")
         check("no 'package' status in schema → created without status",
               not any((b or {}).get("status") == "package"
                       for m_, u, b in CALLS if m_ == "POST" and "/list/" in u))
@@ -1359,18 +1376,41 @@ def az2_organize_flow():
                 "SELECT * FROM az2_pushes ORDER BY id")]
         check("journal carries every step in order",
               [x["field"] for x in j] ==
-              ["pkg_create", "parent", "name", "pkg_create", "item_create"]
+              ["pkg_create", "parent", "name", "cf:Tracking Number",
+               "cf:Quantity ordered", "pkg_create", "item_create"]
               and all(x["state"] == "pushed" for x in j))
         d2, err = leluxe.az2_organize(oid, dry_run=True)
-        check("second run is a no-op", err is None and d2["creates_pkg"] == 0
-              and d2["moves"] == 0 and d2["renames"] == 0
-              and d2["creates_item"] == 0)
+        check("second run is a no-op (structure AND fields)", err is None
+              and d2["creates_pkg"] == 0 and d2["moves"] == 0
+              and d2["renames"] == 0 and d2["creates_item"] == 0
+              and d2["field_sets"] == 0)
 
-        # j: [0] pkg_create p1 · [1] parent A · [2] name A · [3] pkg_create p2 · [4] item_create B
+        AZO["tasks"]["A"]["cf"]["f-qty"] = "5"       # Faisal reset the qty
+        d3, err = leluxe.az2_organize(oid, dry_run=True)
+        check("a drifted field re-plans exactly one fix",
+              err is None and d3["field_sets"] == 1 and d3["moves"] == 0)
+        rep3, err = leluxe.az2_organize(oid, user="qais")
+        check("field re-fix lands + journals", err is None
+              and cf("A", "f-qty") == "2")
+        with db.connect() as c:
+            jq = dict(c.execute("SELECT * FROM az2_pushes WHERE "
+                                "field='cf:Quantity ordered' ORDER BY id DESC "
+                                "LIMIT 1").fetchone())
+        AZO["tasks"]["A"]["cf"]["f-qty"] = "7"
+        _, err = leluxe.az2_undo(jq["id"])
+        check("field undo aborts when AZ (2) drifted",
+              err is not None and "changed after" in err)
+        AZO["tasks"]["A"]["cf"]["f-qty"] = "2"
+        _, err = leluxe.az2_undo(jq["id"], user="qais")
+        check("field undo restores the old value", err is None
+              and cf("A", "f-qty") == "5")
+
+        # j: 0 pkg_create p1 · 1 parent A · 2 name A · 3 cf trk · 4 cf qty ·
+        #    5 pkg_create p2 · 6 item_create B
         _, err = leluxe.az2_undo(j[0]["id"])
         check("package undo refused while it still holds products",
               err is not None and "still holds products" in err)
-        _, err = leluxe.az2_undo(j[4]["id"], user="qais")
+        _, err = leluxe.az2_undo(j[6]["id"], user="qais")
         check("created product undone (deleted + unlinked)", err is None
               and itb_tid not in AZO["tasks"]
               and not (leluxe.get_row(itB)["data"] or {}).get("source_task_id"))
