@@ -1493,6 +1493,64 @@ def az2_organize_flow():
         _, err = leluxe.az2_undo(j[2]["id"], user="qais")
         check("rename undone", err is None
               and AZO["tasks"]["A"]["name"] == "10 U.S. Polo")
+
+        # ---- the live regression: the owner had ALREADY hand-organized this
+        # order in ClickUp (PACKAGE 1 with the real SENT RD product); a prior
+        # organize run created duplicates with the stale local status ----
+        oid2 = leluxe._insert_row("order", "Order # HAND", status="order number",
+                                  extra={"source_task_id": "ORD2"})
+        h1 = leluxe._insert_row("package", "📦 GWD444", parent_local_id=oid2,
+                                extra={"tracking_number": "GWD444",
+                                       "source_task_id": "DUPPKG"})
+        hA = leluxe._insert_row("item", "25 Steve Madden", status="oredered",
+                                parent_local_id=h1,
+                                extra={"source_task_id": "DUPITEM"})
+        AZO["tasks"].update({
+            "ORD2": {"id": "ORD2", "name": "Order # HAND", "parent": None,
+                     "status": {"status": "order number"}},
+            "HANDPKG": {"id": "HANDPKG", "name": "PACKAGE 1", "parent": "ORD2",
+                        "status": {"status": "package"}},
+            "REAL25": {"id": "REAL25", "name": "25 Steve Madden",
+                       "parent": "HANDPKG", "status": {"status": "sent rd"},
+                       "cf": {"f-trk": "GWD444", "f-qty": "25"}},
+            "DUPPKG": {"id": "DUPPKG", "name": "📦 GWD444", "parent": "ORD2",
+                       "status": {"status": "package"},
+                       "tags": [{"name": "otl-push"}],
+                       "cf": {"f-trk": "GWD444"}},
+            "DUPITEM": {"id": "DUPITEM", "name": "25 Steve Madden",
+                        "parent": "DUPPKG", "status": {"status": "oredered"},
+                        "tags": [{"name": "otl-push"}]},
+        })
+        with db.connect() as c:
+            c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                         old_value, new_value, ts, user, state)
+                         VALUES (?,?,?,?,?,?,?,'pushed')""",
+                      (h1, "DUPPKG", "pkg_create", "", "📦 GWD444",
+                       db.now_iso(), "qais"))
+            c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                         old_value, new_value, ts, user, state)
+                         VALUES (?,?,?,?,?,?,?,'pushed')""",
+                      (hA, "DUPITEM", "item_create", "", "25 Steve Madden",
+                       db.now_iso(), "qais"))
+        dh, err = leluxe.az2_organize(oid2, dry_run=True)
+        check("hand-organized order: adopts the owner's package + product, "
+              "creates NOTHING", err is None and dh["creates_pkg"] == 0
+              and dh["creates_item"] == 0 and dh["moves"] == 0
+              and dh["adopts"] == 2 and dh["prunes"] == 2)
+        reph, err = leluxe.az2_organize(oid2, user="qais")
+        check("duplicates pruned, originals untouched", err is None
+              and reph["pruned"] == 2
+              and "DUPPKG" not in AZO["tasks"] and "DUPITEM" not in AZO["tasks"]
+              and AZO["tasks"]["REAL25"]["status"]["status"] == "sent rd"
+              and AZO["tasks"]["REAL25"]["parent"] == "HANDPKG")
+        check("local rows now link the hand-made originals",
+              (leluxe.get_row(h1)["data"] or {}).get("source_task_id") == "HANDPKG"
+              and (leluxe.get_row(hA)["data"] or {}).get("source_task_id") == "REAL25")
+        dh2, err = leluxe.az2_organize(oid2, dry_run=True)
+        check("hand-organized order settles to a no-op", err is None
+              and dh2["adopts"] == 0 and dh2["prunes"] == 0
+              and dh2["creates_pkg"] == 0 and dh2["creates_item"] == 0
+              and dh2["moves"] == 0)
     finally:
         leluxe._http = real
 

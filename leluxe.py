@@ -2292,10 +2292,11 @@ def az2_push_status(row_id, expected_remote=None, user=""):
             "tagged": stcode in (200, 201)}, None
 
 
-def _az2_link_source(row_id, src_task_id):
-    """Link (or, with None, unlink) a local row to the AZ (2) task organize
-    created for it — unlike _adopt_source this may clear, because undoing a
-    created package/product deletes the remote task and the row must forget it."""
+def _az2_link_source(row_id, src_task_id, expect=None):
+    """Link (or, with None, unlink) a local row to an AZ (2) task. `expect`
+    guards the unlink: a row that meanwhile ADOPTED a different task (the
+    hand-organized original) must not be blanked by the undo of the duplicate
+    organize once created."""
     with db.connect() as c:
         r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
                       (row_id,)).fetchone()
@@ -2308,6 +2309,8 @@ def _az2_link_source(row_id, src_task_id):
         if src_task_id:
             d["source_task_id"] = src_task_id
         else:
+            if expect and d.get("source_task_id") != expect:
+                return
             d.pop("source_task_id", None)
         c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                   (json.dumps(d, ensure_ascii=False), row_id))
@@ -2405,15 +2408,21 @@ def az2_organize(order_id, user="", dry_run=False):
     Guarded like az2_push_status: manual only, per-write journal (undoable),
     otl-push tag on created tasks, comment trail on the order, paced.
 
-    Per tracked package: create a "📦 <GWD>" task under the order (status
-    'package' when the list has it, Tracking Number field set) unless the local
-    package already links to a live AZ (2) task; re-parent each product task
-    under its package; rename products whose split quantity changed the name;
-    CREATE products that exist only locally (quantity-split remainders have no
-    source task). Products someone already re-parented differently in ClickUp
-    are skipped, never fought. Created/linked ids are written back to the local
-    rows (source_task_id) so the next Sync sees an identical tree and stays
-    quiet. dry_run returns the same report without writing.
+    ADOPTION FIRST, creation last: a package the owner already made by hand in
+    ClickUp (any container whose products carry the GWD) IS the parcel — the
+    local package links to it; a product that already exists remotely (same
+    normalized name) is linked, never duplicated — its real status stays the
+    truth and flows back on the next Sync. Only what truly does not exist is
+    created: "📦 <GWD>" tasks (status 'package' when the list has it) and
+    quantity-split remainder products. Ensures ride every run: per-product
+    Tracking Number + split quantity + profile NAME (encoded from the LIVE
+    option set) + due date, and per-package totals/GWD/profile/ETA. Empty
+    local packages are never created remotely (previously-created shells are
+    pruned), and organize-created tasks that no local row links anymore
+    (because adoption found the hand-made original) are pruned too — via the
+    journal's own undo, so only our tasks ever get deleted. Products someone
+    moved under an unrelated task are skipped, never fought. dry_run returns
+    the same report without writing.
 
     Returns (report, error); report.steps lists every action taken/planned."""
     st = _az2_settings()
@@ -2441,6 +2450,9 @@ def az2_organize(order_id, user="", dry_run=False):
         d = str(r.get("due_date") or "").strip()
         return d if d.isdigit() else ""
 
+    def _nkey(s):
+        return " ".join(str(s or "").casefold().split())
+
     ord_pname = _row_pname(order)
     ord_due = _row_due(order)
     with db.connect() as c:
@@ -2454,14 +2466,86 @@ def az2_organize(order_id, user="", dry_run=False):
     pkgs = [p for p in pkgs if _row_tn(p, sfields)]
     if not pkgs:
         return None, "no tracked packages to organize — assign GWDs first"
-    code, order_task = _http(f"{CLICKUP_API}/task/{src_order}")
+    code, order_task = _http(f"{CLICKUP_API}/task/{src_order}?include_subtasks=true")
     if code != 200:
         return None, f"couldn't read the AZ (2) order ({code})"
     # profile options come from the live task, not the (stale-able) cache
     name_fdef = _inline_fdef(order_task, name_fid, name_fdef)
 
+    # ---- the remote subtree: containers (any child with children of its own,
+    # or a package-looking name) and the flat/nested product tasks ----
+    task_cache = {}                      # task id → full GET json
+
+    def _full(tid):
+        if tid not in task_cache:
+            c_, t_ = _http(f"{CLICKUP_API}/task/{tid}")
+            task_cache[tid] = t_ if c_ == 200 and isinstance(t_, dict) else None
+        return task_cache[tid]
+
+    PKGISH = re.compile(r"📦|^\s*PACKAGE\b|GWD\d+", re.I)
+    containers = {}                      # id → {"task", "kids": [entries]}
+    remote_products = []                 # [{"id","name","parent"}]
+    for ch in order_task.get("subtasks") or []:
+        looks_pkg = bool(PKGISH.search(str(ch.get("name") or "")))
+        if (ch.get("subtasks_count") or 0) > 0 or looks_pkg:
+            c_, full = _http(f"{CLICKUP_API}/task/{ch['id']}?include_subtasks=true")
+            if c_ != 200 or not isinstance(full, dict):
+                continue
+            task_cache[ch["id"]] = full
+            kids = full.get("subtasks") or []
+            containers[ch["id"]] = {"task": full, "kids": kids}
+            for k in kids:
+                remote_products.append({"id": k["id"], "name": k.get("name") or "",
+                                        "parent": ch["id"]})
+        else:
+            remote_products.append({"id": ch["id"], "name": ch.get("name") or "",
+                                    "parent": src_order})
+
+    def _container_gwd(cid):
+        full = containers[cid]["task"]
+        g = (_task_cf(full, tn_fid) or "").strip().upper() if tn_fid else ""
+        if not g:
+            m = re.search(r"GWD\d+", str(full.get("name") or ""), re.I)
+            g = m.group(0).upper() if m else ""
+        if not g and containers[cid]["kids"] and tn_fid:
+            k0 = _full(containers[cid]["kids"][0]["id"])
+            if k0:
+                g = (_task_cf(k0, tn_fid) or "").strip().upper()
+        return g
+
+    by_gwd = {}                          # GWD → [container ids]
+    for cid in containers:
+        g = _container_gwd(cid)
+        if g:
+            by_gwd.setdefault(g, []).append(cid)
+
+    def _tagged(tid):
+        t_ = containers.get(tid, {}).get("task") or {}
+        return any((x or {}).get("name") == st["tag"] for x in t_.get("tags") or [])
+
+    # every AZ (2) task some local row already points at (adoption must not
+    # steal them), and every task organize itself created (prune candidates)
+    with db.connect() as c:
+        sub_rows = [r["id"] for r in c.execute(
+            "SELECT id FROM leluxe_orders WHERE parent_local_id=? OR "
+            "parent_local_id IN (SELECT id FROM leluxe_orders WHERE "
+            "parent_local_id=?)", (order_id, order_id))]
+        qmarks = ",".join("?" * len(sub_rows)) or "0"
+        created = {r["task_id"]: r["field"] for r in c.execute(
+            f"SELECT task_id, field FROM az2_pushes WHERE state='pushed' AND "
+            f"field IN ('pkg_create','item_create') AND row_id IN ({qmarks})",
+            sub_rows)}
+    linked = set()
+    for p in pkgs:
+        if (p.get("data") or {}).get("source_task_id"):
+            linked.add(p["data"]["source_task_id"])
+        for it in items.get(p["id"], []):
+            if (it.get("data") or {}).get("source_task_id"):
+                linked.add(it["data"]["source_task_id"])
+
     steps, skipped = [], []
     skipped_empty = 0
+    planned_links = set(linked)          # what will be linked AFTER this run
 
     def _plan_cf(row_id, task_id, task, fname, fid, want, fdef=None):
         """Ensure one custom field on an EXISTING task (dropdowns compare and
@@ -2488,39 +2572,68 @@ def az2_organize(order_id, user="", dry_run=False):
                           "fname": fname, "fid": fid, "old": raw,
                           "new": str(want), "snapshot": task})
 
+    # ---- one pass per GWD (duplicate local packages fold into one parcel) --
+    groups = {}
     for p in pkgs:
-        gwd = _row_tn(p, sfields)
-        p_items = items.get(p["id"], [])
-        pkg_src = (p.get("data") or {}).get("source_task_id")
-        pkg_task = None
-        if pkg_src:
-            code, pkg_task = _http(f"{CLICKUP_API}/task/{pkg_src}")
-            if code != 200 or not isinstance(pkg_task, dict):
-                pkg_src, pkg_task = None, None          # deleted remotely → recreate
-        if not p_items:
+        groups.setdefault(_row_tn(p, sfields).strip().upper(), []).append(p)
+    for gwd, group in groups.items():
+        g_items = [it for p in group for it in items.get(p["id"], [])]
+        if not g_items:
             # a GWD with nothing assigned on the board: never create an empty
             # shell — and prune the shell an earlier run already created
-            if pkg_src:
-                steps.append({"op": "pkg_prune", "row_id": p["id"],
-                              "task_id": pkg_src, "gwd": gwd})
-            else:
-                skipped_empty += 1
+            for p in group:
+                p_src = (p.get("data") or {}).get("source_task_id")
+                if p_src:
+                    steps.append({"op": "pkg_prune", "row_id": p["id"],
+                                  "task_id": p_src, "gwd": gwd})
+                    planned_links.discard(p_src)
+                else:
+                    skipped_empty += 1
             continue
-        # package identity comes from its contents: profile NAME when the
-        # products agree (else the order's), latest product ETA as due date
-        it_pnames = {n for n in (_row_pname(i) for i in p_items) if n}
+        # the canonical REMOTE parcel: a hand-made container wins over one we
+        # created; a linked one that still matches keeps its place
+        cands = by_gwd.get(gwd, [])
+        cands.sort(key=lambda cid: (_tagged(cid),
+                                    -(len(containers[cid]["kids"]) or 0)))
+        pkg_src = cands[0] if cands else None
+        pkg_task = task_cache.get(pkg_src) if pkg_src else None
+        if not pkg_src:
+            for p in group:                       # fall back to a live link
+                p_src = (p.get("data") or {}).get("source_task_id")
+                if p_src and _full(p_src):
+                    pkg_src, pkg_task = p_src, _full(p_src)
+                    break
+        holder = next((p for p in group
+                       if (p.get("data") or {}).get("source_task_id") == pkg_src),
+                      None) if pkg_src else None
+        canon_row = holder or group[0]
+        if pkg_src and not holder:
+            old_link = (canon_row.get("data") or {}).get("source_task_id")
+            steps.append({"op": "adopt", "row_id": canon_row["id"],
+                          "task_id": pkg_src, "old": old_link or "",
+                          "what": f"📦 {gwd}"})
+            if old_link:
+                planned_links.discard(old_link)
+            planned_links.add(pkg_src)
+        for p in group:                           # duplicates drop their links
+            p_src = (p.get("data") or {}).get("source_task_id")
+            if p_src and p is not canon_row and p_src != pkg_src:
+                steps.append({"op": "unlink", "row_id": p["id"],
+                              "task_id": p_src})
+                planned_links.discard(p_src)
+        # package identity comes from its contents
+        it_pnames = {n for n in (_row_pname(i) for i in g_items) if n}
         pkg_pname = it_pnames.pop() if len(it_pnames) == 1 else ord_pname
-        it_dues = [d for d in (_row_due(i) for i in p_items) if d]
+        it_dues = [d for d in (_row_due(i) for i in g_items) if d]
         pkg_due = max(it_dues) if it_dues else ord_due
         pkg_create = None
         if not pkg_src:
-            pkg_create = {"op": "pkg_create", "row_id": p["id"], "gwd": gwd,
-                          "name": f"📦 {gwd}", "due": pkg_due, "pname": pkg_pname}
+            pkg_create = {"op": "pkg_create", "row_id": canon_row["id"],
+                          "gwd": gwd, "name": f"📦 {gwd}", "due": pkg_due,
+                          "pname": pkg_pname}
             steps.append(pkg_create)
-        # the parcel's true total = every product the board puts inside it
-        # (foreign-moved ones included — they are still physically in the box)
-        qty_total = sum(q for q in (_az2_qty(it, sfields) for it in p_items) if q)
-        for it in p_items:
+        qty_total = sum(q for q in (_az2_qty(it, sfields) for it in g_items) if q)
+        for it in g_items:
             it_src = (it.get("data") or {}).get("source_task_id")
             want_name = (it.get("name") or "").strip()
             qty = _az2_qty(it, sfields)
@@ -2532,22 +2645,47 @@ def az2_organize(order_id, user="", dry_run=False):
                                         "give it a title on the board, then "
                                         "re-run organize"})
                 continue
+            if it_src and not _full(it_src):
+                it_src = None                     # link points at a dead task
+
+            def _original(key):
+                return next((rp for rp in remote_products
+                             if rp["id"] not in planned_links
+                             and rp["id"] not in created
+                             and _nkey(rp["name"]) == key), None)
+
+            if it_src and it_src in created:
+                # linked to a duplicate organize itself created — the owner's
+                # hand-made product (real status!) wins; ours gets pruned
+                orig = _original(_nkey(want_name))
+                if orig and _full(orig["id"]):
+                    steps.append({"op": "adopt", "row_id": it["id"],
+                                  "task_id": orig["id"], "old": it_src,
+                                  "what": want_name[:40]})
+                    planned_links.discard(it_src)
+                    planned_links.add(orig["id"])
+                    it_src = orig["id"]
+            if not it_src:
+                # ADOPT the owner's existing product before ever creating one
+                cand = _original(_nkey(want_name))
+                if cand and _full(cand["id"]):
+                    it_src = cand["id"]
+                    steps.append({"op": "adopt", "row_id": it["id"],
+                                  "task_id": it_src, "old": "",
+                                  "what": want_name[:40]})
+                    planned_links.add(it_src)
             if not it_src:
                 steps.append({"op": "item_create", "row_id": it["id"],
-                              "name": want_name, "pkg_row": p["id"],
+                              "name": want_name, "pkg_row": canon_row["id"],
                               "status": (it.get("status") or "").strip(),
                               "gwd": gwd, "qty": qty, "due": it_due,
                               "pname": it_pname})
                 continue
-            code, task = _http(f"{CLICKUP_API}/task/{it_src}")
-            if code != 200 or not isinstance(task, dict):
-                skipped.append({"row_id": it["id"], "name": want_name,
-                                "note": "source task is gone from AZ (2)"})
-                continue
+            task = _full(it_src)
             cur_parent = task.get("parent") or ""
             cur_name = (task.get("name") or "").strip()
             if cur_parent == (pkg_src or ""):
-                pass                                     # already under its package
+                pass                                 # already under its parcel
             elif cur_parent and cur_parent not in (src_order, pkg_src or ""):
                 skipped.append({"row_id": it["id"], "name": want_name,
                                 "note": "already moved under a different task "
@@ -2556,7 +2694,7 @@ def az2_organize(order_id, user="", dry_run=False):
             else:
                 steps.append({"op": "move", "row_id": it["id"],
                               "task_id": it_src, "old_parent": cur_parent,
-                              "pkg_row": p["id"], "snapshot": task})
+                              "pkg_row": canon_row["id"], "snapshot": task})
             if want_name and cur_name and want_name != cur_name:
                 steps.append({"op": "rename", "row_id": it["id"],
                               "task_id": it_src, "old": cur_name,
@@ -2580,36 +2718,52 @@ def az2_organize(order_id, user="", dry_run=False):
                               "task_id": it_src,
                               "old": str(task.get("due_date") or ""),
                               "new": it_due, "snapshot": task})
-        # the package's own identity: total, GWD, profile, ETA
+        # the parcel's own identity: total, GWD, profile, ETA
         if pkg_create is not None:
             pkg_create["qty_total"] = qty_total or None
         elif pkg_task is not None:
             if qty_fid and qty_total and \
                     not _num_eq(_task_cf(pkg_task, qty_fid), qty_total):
-                steps.append({"op": "cf_set", "row_id": p["id"],
+                steps.append({"op": "cf_set", "row_id": canon_row["id"],
                               "task_id": pkg_src, "fname": "Quantity ordered",
                               "fid": qty_fid, "old": _task_cf(pkg_task, qty_fid),
                               "new": str(qty_total), "snapshot": pkg_task})
             if tn_fid and (_task_cf(pkg_task, tn_fid) or "").strip() != gwd:
-                steps.append({"op": "cf_set", "row_id": p["id"],
+                steps.append({"op": "cf_set", "row_id": canon_row["id"],
                               "task_id": pkg_src, "fname": "Tracking Number",
                               "fid": tn_fid, "old": _task_cf(pkg_task, tn_fid),
                               "new": gwd, "snapshot": pkg_task})
-            _plan_cf(p["id"], pkg_src, pkg_task, "NAME", name_fid, pkg_pname,
-                     fdef=name_fdef)
-            if pkg_due and not _num_eq(str(pkg_task.get("due_date") or ""), pkg_due):
-                steps.append({"op": "due_set", "row_id": p["id"],
+            _plan_cf(canon_row["id"], pkg_src, pkg_task, "NAME", name_fid,
+                     pkg_pname, fdef=name_fdef)
+            if pkg_due and not _num_eq(str(pkg_task.get("due_date") or ""),
+                                       pkg_due):
+                steps.append({"op": "due_set", "row_id": canon_row["id"],
                               "task_id": pkg_src,
                               "old": str(pkg_task.get("due_date") or ""),
                               "new": pkg_due, "snapshot": pkg_task})
-    report = {"order": order.get("name"), "packages": len(pkgs),
+
+    # ---- organize-created tasks nothing links anymore (adoption found the
+    # hand-made original): prune them, products before their packages ----
+    pruned_ids = {s["task_id"] for s in steps if s["op"] == "pkg_prune"}
+    for tid, fld in created.items():
+        if tid in planned_links or tid in pruned_ids or not _full(tid):
+            continue
+        steps.append({"op": "item_prune" if fld == "item_create" else "pkg_prune",
+                      "row_id": 0, "task_id": tid, "gwd": ""})
+
+    steps.sort(key=lambda s: 1 if s["op"] in ("item_prune",) else
+               (2 if s["op"] == "pkg_prune" else 0))
+
+    report = {"order": order.get("name"), "packages": len(groups),
               "creates_pkg": sum(1 for s in steps if s["op"] == "pkg_create"),
               "moves": sum(1 for s in steps if s["op"] == "move"),
               "renames": sum(1 for s in steps if s["op"] == "rename"),
               "creates_item": sum(1 for s in steps if s["op"] == "item_create"),
               "field_sets": sum(1 for s in steps if s["op"] == "cf_set"),
               "due_sets": sum(1 for s in steps if s["op"] == "due_set"),
-              "prunes": sum(1 for s in steps if s["op"] == "pkg_prune"),
+              "adopts": sum(1 for s in steps if s["op"] in ("adopt", "unlink")),
+              "prunes": sum(1 for s in steps if s["op"] in ("pkg_prune",
+                                                            "item_prune")),
               "pruned": 0, "skipped_empty": skipped_empty,
               "skipped": skipped, "steps": [], "dry_run": bool(dry_run)}
     if dry_run:
@@ -2618,13 +2772,20 @@ def az2_organize(order_id, user="", dry_run=False):
         return report, None
 
     src_lid = source_list_id(None)
-    pkg_tid = {p["id"]: (p.get("data") or {}).get("source_task_id")
-               for p in pkgs}
+    pkg_tid = {}                 # canon row id → task id created this run
     done = 0
     for s in steps:
         op = s["op"]
         try:
-            if op == "pkg_create":
+            if op == "adopt":
+                _az2_link_source(s["row_id"], s["task_id"])
+                _az2_journal(s["row_id"], s["task_id"], "adopt",
+                             s.get("old") or "", s["task_id"], {}, user)
+            elif op == "unlink":
+                _az2_link_source(s["row_id"], None, expect=s["task_id"])
+                _az2_journal(s["row_id"], s["task_id"], "adopt",
+                             s["task_id"], "", {}, user)
+            elif op == "pkg_create":
                 body = {"name": s["name"], "parent": src_order}
                 if "package" in statuses:
                     body["status"] = "package"
@@ -2661,25 +2822,30 @@ def az2_organize(order_id, user="", dry_run=False):
                 _az2_journal(s["row_id"], tid, "pkg_create", "", s["name"],
                              {}, user)
                 s = {**s, "task_id": tid}
-            elif op == "pkg_prune":
+            elif op in ("pkg_prune", "item_prune"):
                 with db.connect() as c:
                     jrow = c.execute(
                         "SELECT id FROM az2_pushes WHERE task_id=? AND "
-                        "field='pkg_create' AND state='pushed' "
-                        "ORDER BY id DESC LIMIT 1", (s["task_id"],)).fetchone()
+                        "field IN ('pkg_create','item_create') AND "
+                        "state='pushed' ORDER BY id DESC LIMIT 1",
+                        (s["task_id"],)).fetchone()
                 if not jrow:
                     skipped.append({"row_id": s["row_id"],
-                                    "note": f"📦 {s['gwd']} is empty but wasn't "
-                                            "created by organize — left alone"})
+                                    "note": f"{s.get('gwd') or s['task_id']} was "
+                                            "not created by organize — left alone"})
                     continue
                 _entry, perr = az2_undo(jrow["id"], user=user)
                 if perr:
                     skipped.append({"row_id": s["row_id"],
-                                    "note": f"📦 {s['gwd']}: {perr}"})
+                                    "note": f"{s.get('gwd') or s['task_id']}: {perr}"})
                     continue
                 report["pruned"] += 1
             elif op == "move":
                 dest = pkg_tid.get(s["pkg_row"])
+                if not dest:
+                    row_ = get_row(s["pkg_row"])
+                    dest = (row_.get("data") or {}).get("source_task_id") \
+                        if row_ else None
                 if not dest:
                     skipped.append({"row_id": s["row_id"],
                                     "note": "its package wasn't created"})
@@ -2723,6 +2889,10 @@ def az2_organize(order_id, user="", dry_run=False):
             elif op == "item_create":
                 dest = pkg_tid.get(s["pkg_row"])
                 if not dest:
+                    row_ = get_row(s["pkg_row"])
+                    dest = (row_.get("data") or {}).get("source_task_id") \
+                        if row_ else None
+                if not dest:
                     skipped.append({"row_id": s["row_id"],
                                     "note": "its package wasn't created"})
                     continue
@@ -2764,7 +2934,9 @@ def az2_organize(order_id, user="", dry_run=False):
     _az2_comment(src_order,
                  f"📦 Otlobly organized this order: {report['packages']} package(s)"
                  f" · {report['moves']} moved · {report['creates_item']} added"
-                 f" · by {user or 'admin'} · {db.now_iso()[:16].replace('T', ' ')}"
+                 f" · {report['adopts']} adopted · {report['pruned']} duplicate(s)"
+                 f" removed · by {user or 'admin'} · "
+                 f"{db.now_iso()[:16].replace('T', ' ')}"
                  f" (every step undoable in Otlobly)")
     return report, None
 
@@ -2783,9 +2955,24 @@ def az2_undo(push_id, user=""):
     field = p["field"]
     if p["state"] != "pushed" or \
             (field not in ("status", "name", "parent", "due_date",
-                           "pkg_create", "item_create")
+                           "pkg_create", "item_create", "adopt")
              and not field.startswith("cf:")):
         return None, "this entry can't be undone"
+    if field == "adopt":
+        # local-only: forget (or restore) the link — AZ (2) itself untouched
+        _az2_link_source(p["row_id"], (p["old_value"] or "").strip() or None,
+                         expect=(p["new_value"] or "").strip() or None)
+        now = db.now_iso()
+        with db.connect() as c:
+            c.execute("UPDATE az2_pushes SET state='undone' WHERE id=?",
+                      (push_id,))
+            c.execute("""INSERT INTO az2_pushes (row_id, task_id, field,
+                         old_value, new_value, ts, user, state, undo_of)
+                         VALUES (?,?,?,?,?,?,?,'undo',?)""",
+                      (p["row_id"], p["task_id"], "adopt", p["new_value"],
+                       p["old_value"], now, user, push_id))
+        return {"id": push_id, "task_id": p["task_id"],
+                "restored": p["old_value"] or "(unlinked)"}, None
     sub = "?include_subtasks=true" if field == "pkg_create" else ""
     code, task = _http(f"{CLICKUP_API}/task/{p['task_id']}{sub}")
     deleted_task = False
@@ -2803,7 +2990,8 @@ def az2_undo(push_id, user=""):
             if code not in (200, 204):
                 return None, (f"AZ (2) refused the delete ({code}): "
                               f"{(resp or {}).get('_error') or resp}")
-        _az2_link_source(p["row_id"], None)      # the local row forgets the task
+        # the local row forgets the task — unless it already adopted another
+        _az2_link_source(p["row_id"], None, expect=p["task_id"])
         restored = "(deleted)"
     elif field.startswith("cf:"):
         if code != 200 or not isinstance(task, dict):
