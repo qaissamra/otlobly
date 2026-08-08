@@ -2415,8 +2415,10 @@ def az2_organize(order_id, user="", dry_run=False):
     truth and flows back on the next Sync. Only what truly does not exist is
     created: "📦 <GWD>" tasks (status 'package' when the list has it) and
     quantity-split remainder products. Ensures ride every run: per-product
-    Tracking Number + split quantity + profile NAME (encoded from the LIVE
-    option set) + due date, and per-package totals/GWD/profile/ETA. Empty
+    Tracking Number + split quantity + profile NAME + Brand + NAME ON PACKAGEE
+    (dropdowns encoded from the LIVE option set) + due date, and per-package
+    totals/GWD/profile/ETA plus the Brand/ASIN its products roll up to — one
+    shared value, or MIX; the order task carries that same roll-up. Empty
     local packages are never created remotely (previously-created shells are
     pruned), and organize-created tasks that no local row links anymore
     (because adoption found the hand-made original) are pruned too — via the
@@ -2442,10 +2444,29 @@ def az2_organize(order_id, user="", dry_run=False):
     amt_fid = _sch_field_id(sfields, "Total Amount")
     name_fdef = _sch_field_def(sfields, "NAME")
     name_fid = name_fdef.get("id")
+    brand_fdef = _sch_field_def(sfields, "Brand")
+    brand_fid = brand_fdef.get("id")
+    ship_fdef = _sch_field_def(sfields, "NAME ON PACKAGEE")
+    ship_fid = ship_fdef.get("id")
+    asin_fid = _sch_field_id(sfields, "ASIN")
+    MIX = "MIX"                    # the list's own "more than one brand" option
+
+    def _row_field(r, fname):
+        f = (r.get("data") or {}).get("fields") or {}
+        return str(f.get(_field_key(f, fname, sfields)) or "").strip()
 
     def _row_pname(r):
-        f = (r.get("data") or {}).get("fields") or {}
-        return str(f.get(_field_key(f, "NAME", sfields)) or "").strip()
+        return _row_field(r, "NAME")
+
+    def _one_or_mix(vals):
+        """One shared value, or MIX — how a parent summarises its children."""
+        s = {str(v).strip() for v in vals if v and str(v).strip()}
+        if not s:
+            return ""
+        return s.pop() if len(s) == 1 else MIX
+
+    def _fam_key(nm):
+        return re.sub(r"^\s*\d+\s*", "", str(nm or "")).casefold().strip()
 
     def _row_due(r):
         d = str(r.get("due_date") or "").strip()
@@ -2494,11 +2515,19 @@ def az2_organize(order_id, user="", dry_run=False):
         fresh copy of them ("it keeps adding"). Containers are only the
         order's direct children that look like parcels — a product-named task
         with children is a product holding mis-nested products, never a
-        parcel candidate."""
+        parcel candidate.
+
+        "Has children?" is read from the entry's own NESTED `subtasks` list —
+        ClickUp ships the whole tree inline and has no `subtasks_count` key at
+        all (v4.4 keyed the descent on that invented field, so it was always
+        False: only 📦/GWD-named tasks were ever opened and every product's
+        children stayed invisible — order 114-1928954-5920239 kept its three
+        products nested under "2 U.S. Polo" through run after run)."""
         for ch in entries or []:
             name_ = str(ch.get("name") or "")
             looks_pkg = bool(PKGISH.search(name_))
-            has_kids = (ch.get("subtasks_count") or 0) > 0
+            inline_kids = ch.get("subtasks") or []
+            has_kids = bool(inline_kids) or (ch.get("subtasks_count") or 0) > 0
             product_name = bool(re.match(r"\s*\d+\b", name_))
             kids = []
             if (has_kids or looks_pkg) and depth < 5:
@@ -2507,6 +2536,7 @@ def az2_organize(order_id, user="", dry_run=False):
                 if c_ == 200 and isinstance(full, dict):
                     task_cache[ch["id"]] = full
                     kids = full.get("subtasks") or []
+                kids = kids or inline_kids
             if depth == 0 and (looks_pkg or (has_kids and not product_name)):
                 containers[ch["id"]] = {"task": task_cache.get(ch["id"]) or ch,
                                         "kids": kids}
@@ -2517,6 +2547,49 @@ def az2_organize(order_id, user="", dry_run=False):
                 _walk(ch["id"], kids, depth + 1)
 
     _walk(src_order, order_task.get("subtasks") or [], 0)
+
+    # ---- Brand / ASIN / NAME ON PACKAGEE: one consistent set of values from
+    # the order down to every product. A product takes the board's Brand — or,
+    # when the board is silent, the single Brand its split family already
+    # agrees on; a product's own Brand is only ever FILLED IN, never argued
+    # with. Parents are DERIVED: a package and the order itself take the one
+    # Brand/ASIN their products share, or the list's own "MIX" option when the
+    # products disagree. The ship name is owner-managed — a wrong name is a
+    # wrong ID on a customs doc — so it only ever flows DOWN into a blank
+    # field: the order's own value, else the one its products already agree
+    # on, else the FAISAL default (products/packages only — the order's own
+    # blank is the owner's decision point and is left alone). ----
+    def _live(task, fid, fdef):
+        return _inline_fdef(task, fid, fdef) if fid else fdef
+
+    def _disp(task, fid, fdef):
+        return _cf_display(_live(task, fid, fdef), _task_cf(task, fid)) \
+            if (fid and task) else ""
+
+    brand_fdef = _live(order_task, brand_fid, brand_fdef)
+    ship_fdef = _live(order_task, ship_fid, ship_fdef)
+    fam_brand, ship_seen = {}, set()
+    for it_ in [x for p in pkgs for x in items.get(p["id"], [])]:
+        b_ = _row_field(it_, "Brand")
+        src_ = (it_.get("data") or {}).get("source_task_id")
+        t0 = _full(src_) if src_ else None
+        if t0:
+            b_ = b_ or _disp(t0, brand_fid, brand_fdef)
+            s_ = _disp(t0, ship_fid, ship_fdef)
+            if s_:
+                ship_seen.add(s_)
+        if b_ and b_.strip().upper() != MIX:
+            fam_brand.setdefault(_fam_key(it_.get("name")), set()).add(b_)
+    ord_ship = _disp(order_task, ship_fid, ship_fdef) or \
+        (next(iter(ship_seen)) if len(ship_seen) == 1 else "")
+    ship_dflt = ord_ship or (
+        str((_option(ship_fdef, "FAISAL") or {}).get("name") or "").strip()
+        if ship_fid else "")
+    ord_brands, ord_asins = [], []
+
+    def _fam_one(nm):
+        s = fam_brand.get(_fam_key(nm)) or set()
+        return next(iter(s)) if len(s) == 1 else ""
 
     def _container_gwd(cid):
         full = containers[cid]["task"]
@@ -2659,6 +2732,7 @@ def az2_organize(order_id, user="", dry_run=False):
                           "pname": pkg_pname}
             steps.append(pkg_create)
         qty_total = sum(q for q in (_az2_qty(it, sfields) for it in g_items) if q)
+        g_brands, g_asins = [], []       # what this parcel's products end up with
         for it in g_items:
             it_src = (it.get("data") or {}).get("source_task_id")
             want_name = (it.get("name") or "").strip()
@@ -2728,11 +2802,16 @@ def az2_organize(order_id, user="", dry_run=False):
                                             "one and re-run"})
                     continue
             if not it_src:
+                it_brand = _row_field(it, "Brand") or _fam_one(want_name)
+                it_asin = _row_field(it, "ASIN")
                 steps.append({"op": "item_create", "row_id": it["id"],
                               "name": want_name, "pkg_row": canon_row["id"],
                               "status": (it.get("status") or "").strip(),
                               "gwd": gwd, "qty": qty, "due": it_due,
-                              "pname": it_pname})
+                              "pname": it_pname, "brand": it_brand,
+                              "asin": it_asin, "ship": ship_dflt})
+                g_brands.append(it_brand)
+                g_asins.append(it_asin)
                 continue
             task = _full(it_src)
             cur_parent = task.get("parent") or ""
@@ -2769,6 +2848,17 @@ def az2_organize(order_id, user="", dry_run=False):
                               "new": str(qty), "snapshot": task})
             _plan_cf(it["id"], it_src, task, "NAME", name_fid, it_pname,
                      fdef=name_fdef)
+            # Brand + ship name are FILLED IN when blank, never overwritten
+            b_cur = _disp(task, brand_fid, brand_fdef)
+            b_want = _row_field(it, "Brand") or _fam_one(want_name)
+            if brand_fid and b_want and not b_cur:
+                _plan_cf(it["id"], it_src, task, "Brand", brand_fid, b_want,
+                         fdef=_live(task, brand_fid, brand_fdef))
+            if ship_fid and ship_dflt and not _disp(task, ship_fid, ship_fdef):
+                _plan_cf(it["id"], it_src, task, "NAME ON PACKAGEE", ship_fid,
+                         ship_dflt, fdef=_live(task, ship_fid, ship_fdef))
+            g_brands.append(b_cur or b_want)
+            g_asins.append(_task_cf(task, asin_fid) if asin_fid else "")
             if it_due and not _num_eq(str(task.get("due_date") or ""), it_due):
                 steps.append({"op": "due_set", "row_id": it["id"],
                               "task_id": it_src,
@@ -2778,8 +2868,14 @@ def az2_organize(order_id, user="", dry_run=False):
         # hand-made container is NORMALIZED to look like every other parcel:
         # renamed to "📦 <GWD>" and given the 'package' status (the products
         # keep their own, real statuses — those are the truth)
+        pkg_brand, pkg_asin = _one_or_mix(g_brands), _one_or_mix(g_asins)
+        ord_brands += g_brands
+        ord_asins += g_asins
         if pkg_create is not None:
             pkg_create["qty_total"] = qty_total or None
+            pkg_create["brand"] = pkg_brand
+            pkg_create["asin"] = pkg_asin
+            pkg_create["ship"] = ship_dflt
         elif pkg_task is not None:
             cur_pname_ = (pkg_task.get("name") or "").strip()
             if cur_pname_ != f"📦 {gwd}":
@@ -2804,12 +2900,39 @@ def az2_organize(order_id, user="", dry_run=False):
                               "new": gwd, "snapshot": pkg_task})
             _plan_cf(canon_row["id"], pkg_src, pkg_task, "NAME", name_fid,
                      pkg_pname, fdef=name_fdef)
+            # a parcel SUMMARISES its products: their one Brand/ASIN, or MIX
+            if brand_fid and pkg_brand:
+                _plan_cf(canon_row["id"], pkg_src, pkg_task, "Brand", brand_fid,
+                         pkg_brand, fdef=_live(pkg_task, brand_fid, brand_fdef))
+            if asin_fid and pkg_asin:
+                _plan_cf(canon_row["id"], pkg_src, pkg_task, "ASIN", asin_fid,
+                         pkg_asin)
+            if ship_fid and ship_dflt and \
+                    not _disp(pkg_task, ship_fid, ship_fdef):
+                _plan_cf(canon_row["id"], pkg_src, pkg_task, "NAME ON PACKAGEE",
+                         ship_fid, ship_dflt,
+                         fdef=_live(pkg_task, ship_fid, ship_fdef))
             if pkg_due and not _num_eq(str(pkg_task.get("due_date") or ""),
                                        pkg_due):
                 steps.append({"op": "due_set", "row_id": canon_row["id"],
                               "task_id": pkg_src,
                               "old": str(pkg_task.get("due_date") or ""),
                               "new": pkg_due, "snapshot": pkg_task})
+
+    # ---- the order task itself summarises the WHOLE order the same way a
+    # parcel summarises its contents: one shared Brand/ASIN, or MIX. Its ship
+    # name is only filled from what its own products already agree on — the
+    # owner picks that value, organize never invents it at order level. ----
+    ord_brand, ord_asin = _one_or_mix(ord_brands), _one_or_mix(ord_asins)
+    if brand_fid and ord_brand:
+        _plan_cf(order_id, src_order, order_task, "Brand", brand_fid,
+                 ord_brand, fdef=brand_fdef)
+    if asin_fid and ord_asin:
+        _plan_cf(order_id, src_order, order_task, "ASIN", asin_fid, ord_asin)
+    # NOTE: the order's own NAME ON PACKAGEE is never written. It is the SOURCE
+    # of the ship name, not a derived value — the owner picks it there and it
+    # only ever flows DOWN. (Writing it back up from the products it had just
+    # filled also made run 2 a write instead of a no-op.)
 
     # ---- remote-only leftovers vs the order's own quantity. The order's
     # "Quantity ordered" is the owner's ground truth: when the BOARD's
@@ -3015,6 +3138,20 @@ def az2_organize(order_id, user="", dry_run=False):
     src_lid = source_list_id(None)
     pkg_tid = {}                 # canon row id → task id created this run
     done = 0
+
+    def _set_extras(tid, s):
+        """Brand / ASIN / ship name on a task organize just created — the same
+        ensure-set an existing task gets, so a new row is never the odd one."""
+        for fid_, fdef_, val_ in ((brand_fid, brand_fdef, s.get("brand")),
+                                  (ship_fid, ship_fdef, s.get("ship"))):
+            if fid_ and val_:
+                okv_, enc_ = encode_value(fdef_, val_)
+                if okv_:
+                    _http(f"{CLICKUP_API}/task/{tid}/field/{fid_}",
+                          "POST", {"value": enc_})
+        if asin_fid and s.get("asin"):
+            _http(f"{CLICKUP_API}/task/{tid}/field/{asin_fid}",
+                  "POST", {"value": s["asin"]})
     for s in steps:
         op = s["op"]
         try:
@@ -3057,6 +3194,7 @@ def az2_organize(order_id, user="", dry_run=False):
                     if okv:
                         _http(f"{CLICKUP_API}/task/{tid}/field/{name_fid}",
                               "POST", {"value": enc})
+                _set_extras(tid, s)
                 time.sleep(_pace())
                 _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
                       "POST", {})
@@ -3182,6 +3320,7 @@ def az2_organize(order_id, user="", dry_run=False):
                     if okv:
                         _http(f"{CLICKUP_API}/task/{tid}/field/{name_fid}",
                               "POST", {"value": enc})
+                _set_extras(tid, s)
                 time.sleep(_pace())
                 _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}",
                       "POST", {})
