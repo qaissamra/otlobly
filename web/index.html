@@ -12774,6 +12774,15 @@ function gmWizReview(){
       <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span>
         <span class="spacer"></span>
         <span class="muted2" style="font-size:11px">${T("المرفقات تتكرر مع كل إيميل · attachments repeat on every email")}</span></div>
+      ${(()=>{ // A re-arm re-emails a conversation GAASH ALREADY has. This is
+               // the last screen before that happens, so it must not read like
+               // a fresh enrollment — name them, and say what is kept.
+        const ra=gwds.filter(g=>gmSeqRearm((byGwd[g]||{}).thread));
+        return ra.length?`<div class="en-warn" style="background:#fef3c7;border-color:#fcd34d;color:#92400e">
+          <b>🔁 ${ra.length} ${T("مسجَّل مسبقاً — سيُعاد تسليحه · already corresponding — will be re-armed")}</b>
+          <div style="font-size:11.5px;margin-top:3px">${T("تُضبط مستنداته ثم يخرج الإيميل الأول من جديد على محادثة يعرفها غاش — المحادثة وتاريخها يبقيان · its documents are set, then email #1 goes out again on a conversation GAASH already has — the thread and its history are kept")}</div>
+          <div class="mono" style="font-size:11px;margin-top:4px">${ra.slice(0,6).map(poEsc).join(" · ")}${ra.length>6?` … +${ra.length-6}`:""}</div></div>`:"";
+      })()}
       <div id="wizPrev"></div>
     </div>`;
   GM.wiz=GM.wiz||{}; GM.wiz.at=0;
@@ -12781,7 +12790,10 @@ function gmWizReview(){
   $("bulkFoot").innerHTML=`<div style="display:flex;justify-content:flex-end;gap:8px;width:100%;align-items:center">
     <button class="minibtn" style="margin-inline-end:auto" onclick="gmWizGo(3)">← ${T("رجوع · Back")}</button>
     <button class="minibtn" onclick="bulkClose()">${T("إلغاء · Cancel")}</button>
-    <button class="accent" onclick="gmNewStart(this)">📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}</button></div>`;
+    <button class="accent" onclick="gmNewStart(this)">${
+      gwds.every(g=>gmSeqRearm((byGwd[g]||{}).thread))
+        ? `🔁 ${T("أعد التسليح وأرسل · Re-arm and send")} ${gwds.length}`
+        : `📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}`}</button></div>`;
 }
 // The real email #1, rendered for this package by the SAME _fill the sender
 // uses — so what you approve is what arrives, not an approximation of it.
