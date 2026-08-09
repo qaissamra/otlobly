@@ -11557,14 +11557,16 @@ async function gmSendFilePick(){
 async function gmSendDeclMake(btn){
   if(!GM.cur) return;
   if(btn) btn.disabled=true;
-  GM.declMsg={ok:true,text:T("جارِ الإنشاء… · generating…")};
+  GM.declMsg={ok:true,text:T("جارِ التحقق… · checking…")};
   gmIdsRender();
-  // note the ids going out BEFORE the call: the server replaces this parcel's
-  // declaration rather than adding a second one, so an id left behind here
-  // resolves to nothing on send and the email leaves un-papered, silently
+  // any older FILED copy of this parcel's declaration is dropped from the
+  // outgoing set — the fresh one supersedes it, and two declarations on one
+  // email is how the wrong one gets read
   const stale=(((GM.ov||{}).ids)||[])
     .filter(x=>x.name===GM.cur+" - declaration").map(x=>x.id);
-  const r=await post("/api/gaash/declaration",{gwd:GM.cur});
+  let r=null;
+  try{ r=await post("/api/gaash/declaration",{gwd:GM.cur}); }
+  catch(e){ r={ok:false,error:T("تعذّر الاتصال بالخادم · could not reach the server")}; }
   if(btn) btn.disabled=false;
   if(!r||!r.ok){
     // name the refusal — it is nearly always a fixable one (an Arabic name that
@@ -11572,16 +11574,20 @@ async function gmSendDeclMake(btn){
     GM.declMsg={ok:false,text:(r&&r.error)||T("تعذّر الإنشاء · could not generate")};
     gmIdsRender(); return;
   }
-  GM.sendDocs=(GM.sendDocs||[]).filter(id=>!stale.includes(id)).concat([r.id]);
-  GM.declMsg={ok:true,text:"✓ "+(r.name||"")+" — "+T("مرفق · attached")};
-  await gmLoad();                       // so the new tile is in GM.ov.ids
-  GM.idFolder="declaration";
+  // r.id is the DECL_AUTO marker, not a library row: the PDF is written when
+  // the message actually goes, off whatever the boards say at that moment
+  GM.sendDocs=(GM.sendDocs||[]).filter(id=>!stale.includes(id)&&id!==r.id)
+    .concat([r.id]);
+  GM.declMsg={ok:true,text:"✓ "+(r.name||"")+" — "+T("سيُرفق عند الإرسال · attached on send")};
   gmIdsRender(); gmSendChips();
 }
 function gmSendChips(){
   const box=$("gmSendChips"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
-  const docs=(GM.sendDocs||[]).map(id=>ids.find(x=>x.id===id)).filter(Boolean);
+  // "decl:auto" has no library row — it is written when the message is sent
+  const docs=(GM.sendDocs||[]).map(id=>id==="decl:auto"
+    ?{id, name:(GM.cur||"")+" - declaration"}
+    :ids.find(x=>x.id===id)).filter(Boolean);
   const files=GM.sendFiles||[];
   box.classList.toggle("hidden",!docs.length&&!files.length);
   box.innerHTML=[
@@ -11815,21 +11821,31 @@ function gmWizDeclToggle(on){
 }
 async function gmWizDeclMake(){
   const out=$("wizDeclOut"), gwds=gmNewGwds(); if(!out) return;
-  out.innerHTML=`<div class="muted2" style="font-size:11.5px;padding:6px 2px">${T("جارِ الإنشاء… · generating…")}</div>`;
-  const r=await post("/api/gaash/declaration",{gwds});
-  if(!r||!r.ok){ out.innerHTML=`<div class="en-warn live" style="margin-top:8px">${poEsc((r&&r.error)||T("تعذّر الإنشاء · could not generate"))}</div>`; return; }
+  out.innerHTML=`<div class="muted2" style="font-size:11.5px;padding:6px 2px">${T("جارِ التحقق… · checking…")}</div>`;
+  // post() throws on anything that is not JSON — a 502 mid-deploy, a dropped
+  // connection. Uncaught, that left this box reading "generating…" for ever
+  // with nothing to click and no reason shown. Name it, and offer the retry.
+  let r=null, err="";
+  try{ r=await post("/api/gaash/declaration",{gwds}); }
+  catch(e){ err=T("تعذّر الاتصال بالخادم · could not reach the server"); }
+  if(!r||!r.ok){ out.innerHTML=`<div class="en-warn live" style="margin-top:8px">
+      ${poEsc(err||(r&&r.error)||T("تعذّر التحقق · could not check"))}
+      <button class="minibtn" style="margin-inline-start:8px" onclick="gmWizDeclMake()">${T("أعد المحاولة · retry")}</button></div>`;
+    return; }
   GM.pickState.docs=GM.pickState.docs||{};
   const ok=[], bad=[];
   (r.results||[]).forEach(x=>{
-    if(x.ok){ GM.pickState.docs[x.gwd]={id:x.id,name:x.name,filename:x.filename}; ok.push(x); }
+    // nothing is filed: the parcel is marked "paper me" and the PDF is written
+    // fresh onto every email it rides
+    if(x.ok){ GM.pickState.docs[x.gwd]={id:x.id,name:x.name}; ok.push(x); }
     else { delete GM.pickState.docs[x.gwd]; bad.push(x); }
   });
   // a refusal is named with its reason — a parcel silently missing its
   // declaration is how a batch goes out half-papered
   out.innerHTML=`<div style="margin-top:8px">
-    <div class="muted2" style="font-size:11.5px">✓ ${ok.length} ${T("تصريح جاهز · declarations ready")}</div>
+    <div class="muted2" style="font-size:11.5px">✓ ${ok.length} ${T("تصريح جاهز — يُكتب مع كل إيميل، ولا يُحفظ · declarations ready — written onto every email, never stored")}</div>
     ${bad.length?`<div class="en-warn live" style="margin-top:6px">
-      <b>${bad.length} ${T("لم يُنشأ · not generated")}</b>
+      <b>${bad.length} ${T("لا يمكن إصدار تصريح · cannot be papered")}</b>
       ${bad.map(x=>`<div style="font-size:11.5px;margin-top:3px"><b class="mono">${poEsc(x.gwd)}</b> — ${poEsc(x.error||"")}</div>`).join("")}</div>`:""}</div>`;
   await gmLoad(); gmIdsRender(); gmWizSummary();
 }

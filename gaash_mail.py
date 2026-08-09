@@ -421,37 +421,105 @@ def ids_add(name, filename, data, folder=None):
     return {"ok": True, "id": iid, "filename": fn}
 
 
-def declaration_make(gwd):
-    """Generate this package's customs declaration and file it in the library's
-    📄 Declarations folder, replacing any previous one for the same GWD — a
-    parcel has ONE current declaration, and keeping supersededates invites
-    attaching the wrong one.
+# A declaration is WRITTEN FRESH every time it is attached, and never filed.
+# Owner: "i do not need [them kept] — they just make me able to generate them
+# on the fly not keep the document i generate." It is a pure function of the
+# boards (name, ID, contents), so a stored copy is only a copy that can go
+# stale plus a folder that fills up. This sentinel stands in for the file
+# wherever a document id is expected — a thread's docs_json, the wizard's
+# per-package pick, a manual send — and resolves to fresh bytes at send time.
+DECL_AUTO = "decl:auto"
 
-    Everything on it is read here, not typed by hand: the name the parcel ships
-    under, the ID that name resolves to, and the package's real contents."""
+
+def declaration_build(gwd):
+    """One package's customs declaration as (filename, bytes), or ValueError
+    with a printable reason. Everything on it is READ, never typed: the name
+    the parcel ships under, the ID that name resolves to, its real contents."""
     import declaration
+    _declaration_fill_titles(gwd)               # blank PO titles → real names
+    return declaration.build(
+        gwd=gwd, name=parcel_name(gwd), id_number=id_number_for_email(gwd),
+        contents=package_contents(gwd),
+        purpose=(_setts().get("declaration_purpose") or "").strip() or None)
+
+
+def declaration_attachment(gwd):
+    """(filename, bytes, ctype) built right now — what DECL_AUTO resolves to at
+    send time. None when the parcel cannot be papered: the email still goes out
+    (the thread carries its own missing-docs warning), because a build failure
+    must never silently swallow the message itself."""
     g = (gwd or "").strip().upper()
     if not re.match(r"GWD\d+$", g):
-        return {"ok": False, "error": "not a tracking number"}
-    filled = _declaration_fill_titles(g)        # blank PO titles → real names
+        return None
     try:
-        fn, data = declaration.build(
-            gwd=g, name=parcel_name(g), id_number=id_number_for_email(g),
-            contents=package_contents(g),
-            purpose=(_setts().get("declaration_purpose") or "").strip() or None)
+        fn, data = declaration_build(g)
+    except Exception:  # noqa — unprintable name, or no name on the parcel
+        return None
+    ext = ("." + fn.rsplit(".", 1)[1]) if "." in str(fn or "") else ".pdf"
+    return (f"{g} - declaration{ext}", data, "application/pdf")
+
+
+def migrate_decl_auto():
+    """Point threads that still reference a FILED declaration at DECL_AUTO.
+
+    Without this, removing the old filed copies would silently strip the
+    paperwork off the follow-ups of every thread still running: the email goes
+    out looking perfectly normal and lands at GAASH with nothing attached.
+    Idempotent — a thread already on the marker is left alone."""
+    with db.connect() as c:
+        filed = {r["id"] for r in c.execute(
+            "SELECT id FROM gaash_ids WHERE name LIKE '% - declaration'")}
+        if not filed:
+            return 0
+        moved = 0
+        for th in [dict(r) for r in c.execute(
+                "SELECT gwd, docs_json, id_doc_id FROM gaash_threads")]:
+            try:
+                ids = [i for i in json.loads(th.get("docs_json") or "[]") if i]
+            except ValueError:
+                ids = []
+            seen, new = set(), []
+            for i in (DECL_AUTO if x in filed else x for x in ids):
+                if i not in seen:        # the old id_doc_id + docs_json pair
+                    seen.add(i)          # left the same declaration in twice
+                    new.append(i)
+            doc1 = th.get("id_doc_id")
+            new1 = DECL_AUTO if doc1 in filed else doc1
+            if new == ids and new1 == doc1:
+                continue
+            c.execute("UPDATE gaash_threads SET docs_json=?, id_doc_id=? "
+                      "WHERE gwd=?", (json.dumps(new), new1, th["gwd"]))
+            moved += 1
+    return moved
+
+
+def declaration_make(gwd, save=False):
+    """Can this package be papered? Builds it and throws the bytes away —
+    that is what the wizard asks before enrolling, so a parcel that cannot be
+    papered is named BEFORE the batch goes out rather than after.
+
+    save=True also files it in the library's 📄 Declarations folder (replacing
+    any previous one for the same GWD). Only the hand-filed copy uses that; the
+    sequence attaches DECL_AUTO and stores nothing."""
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a tracking number", "gwd": g}
+    try:
+        fn, data = declaration_build(g)
     except ValueError as e:                     # a field that cannot be printed
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": str(e), "gwd": g}
     except Exception as e:  # noqa
-        return {"ok": False, "error": f"could not build it: {str(e)[:120]}"}
+        return {"ok": False, "error": f"could not build it: {str(e)[:120]}",
+                "gwd": g}
     name = f"{g} - declaration"
+    if not save:
+        return {"ok": True, "gwd": g, "name": name, "id": DECL_AUTO}
     with db.connect() as c:
         old = [dict(r) for r in c.execute(
             "SELECT id, filename FROM gaash_ids WHERE name=?", (name,))]
     for o in old:
         ids_remove(o["id"])
     res = ids_add(name, fn, data, folder="declaration")
-    if filled.get("fetched"):                   # metered lookups are never silent
-        res["titles_fetched"] = filled["fetched"]
     return {**res, "name": name, "gwd": g}
 
 
@@ -2847,7 +2915,11 @@ def _step_attachments(th):
     if not ids and int(th.get("step") or 0) == 0 and th.get("id_doc_id"):
         ids = [th["id_doc_id"]]
     for doc_id in ids:
-        got = _library_doc(doc_id)
+        # the declaration is rebuilt from the boards for THIS email — so a name
+        # or an ID corrected after enrollment is on the follow-up, and nothing
+        # is kept on disk between sends
+        got = (declaration_attachment(th.get("gwd")) if doc_id == DECL_AUTO
+               else _library_doc(doc_id))
         if got:
             out.append(got)
     for a in json.loads(th.get("pending_files_json") or "[]"):

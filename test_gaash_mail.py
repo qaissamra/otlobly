@@ -388,8 +388,11 @@ def main():
 
     res = gm.declaration_make("GWD009100001")
     check("declaration builds for the package", res.get("ok") is True)
-    if res.get("ok"):
-        pdf = gm.id_file_path(res["filename"]).read_bytes()
+    # read the bytes the EMAIL would carry, not a filed copy — that is the
+    # artefact that has to be right, and nothing is filed any more
+    att = gm.declaration_attachment("GWD009100001")
+    if att:
+        pdf = att[1]
         check("the PDF lists the real products, not (not itemised)",
               b"Kindle Paperwhite" in pdf and b"Fetched Widget" in pdf
               and b"not itemised" not in pdf)
@@ -1200,6 +1203,70 @@ def main():
     check("sent cursor persisted on the account",
           acur["sent_last_uid"] == 11 and acur["sent_uidvalidity"] == 3)
     _del_thread("GWD800")
+
+    print("— declarations are written on the fly, never filed —")
+    # Owner: "i do not need [them kept] — they just make me able to generate
+    # them on the fly not keep the document i generate." A declaration is a
+    # pure function of the boards, so a stored copy is only one that can go
+    # stale, plus a folder that fills up.
+    import purchases
+    pdb = purchases.load()
+    pdb["purchase_orders"].append({
+        "po_id": "PO-DECL", "amazon_order_number": "111-D", "ship_to": "Decl",
+        "profile_box": "A", "packages": [{
+            "package_no": 1, "tracking_number": "GWD900900900",
+            "main_name": "SAMPLE NAME",
+            "items": [{"item_id": "i1", "title": "Watch", "qty": 2}]}]})
+    purchases.save(pdb)
+
+    def _lib_rows():
+        with db.connect() as c:
+            return c.execute("SELECT COUNT(*) n FROM gaash_ids").fetchone()["n"]
+
+    before = _lib_rows()
+    res = gm.declaration_make("GWD900900900")
+    check("the wizard's check says yes and files NOTHING",
+          res.get("ok") and res.get("id") == gm.DECL_AUTO
+          and _lib_rows() == before)
+    att = gm.declaration_attachment("GWD900900900")
+    check("send time builds a real PDF from the boards",
+          att and att[0] == "GWD900900900 - declaration.pdf"
+          and att[1][:5] == b"%PDF-" and att[2] == "application/pdf")
+    _mk_thread("GWD900900900")
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET docs_json=? WHERE gwd=?",
+                  ('["decl:auto"]', "GWD900900900"))
+    th = gm.thread_get("GWD900900900")
+    atts = gm._step_attachments(th)
+    check("the marker resolves to fresh bytes on EVERY email of the sequence",
+          len(atts) == 1 and atts[0][1][:5] == b"%PDF-"
+          and _lib_rows() == before)
+    check("a parcel that cannot be papered refuses by name, never crashes",
+          gm.declaration_make("NOT-A-GWD").get("error") == "not a tracking number"
+          and gm.declaration_attachment("NOT-A-GWD") is None)
+    check("...and an unpaperable parcel never blocks the email itself",
+          gm._step_attachments(dict(th, gwd="NOT-A-GWD")) == [])
+    filed = gm.declaration_make("GWD900900900", save=True)
+    check("save=True still files one, for the hand-kept copy",
+          filed.get("ok") and _lib_rows() == before + 1)
+
+    # a thread enrolled BEFORE this change still points at the filed copy.
+    # Removing those files without moving the pointer would strip the
+    # paperwork off its follow-ups — the email goes out looking normal and
+    # arrives at GAASH with nothing attached.
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET docs_json=?, id_doc_id=? WHERE gwd=?",
+                  (json.dumps([filed["id"], filed["id"]]), filed["id"],
+                   "GWD900900900"))
+    moved = gm.migrate_decl_auto()
+    th2 = gm.thread_get("GWD900900900")
+    check("an old thread's filed declaration is repointed at the marker",
+          moved == 1 and json.loads(th2["docs_json"]) == [gm.DECL_AUTO]
+          and th2["id_doc_id"] == gm.DECL_AUTO)
+    check("...and it still gets a real PDF on its next email",
+          gm._step_attachments(th2)[0][1][:5] == b"%PDF-")
+    check("the migration is idempotent", gm.migrate_decl_auto() == 0)
+    _del_thread("GWD900900900")
 
     print()
     if fails:
