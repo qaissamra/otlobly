@@ -460,12 +460,16 @@ def declaration_attachment(gwd):
 
 
 def migrate_decl_auto():
-    """Point threads that still reference a FILED declaration at DECL_AUTO.
+    """Point threads that still reference a FILED declaration at DECL_AUTO,
+    then clear out the filed copies nothing points at any more.
 
-    Without this, removing the old filed copies would silently strip the
+    Order matters. Removing the old files first would silently strip the
     paperwork off the follow-ups of every thread still running: the email goes
     out looking perfectly normal and lands at GAASH with nothing attached.
-    Idempotent — a thread already on the marker is left alone."""
+    Repoint, THEN delete only what is genuinely unreferenced.
+
+    Idempotent — a thread already on the marker is left alone, and a second run
+    finds nothing to move or drop. Returns how many things it changed."""
     with db.connect() as c:
         filed = {r["id"] for r in c.execute(
             "SELECT id FROM gaash_ids WHERE name LIKE '% - declaration'")}
@@ -490,7 +494,29 @@ def migrate_decl_auto():
             c.execute("UPDATE gaash_threads SET docs_json=?, id_doc_id=? "
                       "WHERE gwd=?", (json.dumps(new), new1, th["gwd"]))
             moved += 1
-    return moved
+        # Clear out the filed copies the owner never wanted kept. ONLY ones
+        # named exactly "<GWD> - declaration" — what this app generated. His
+        # own papers sit in that same folder ("GWD… - sultan declaration", a
+        # scan he dropped in) and are never ours to delete.
+        #
+        # The `- still` guard below is belt and braces: the repoint above
+        # should already have emptied that set, so nothing normally reaches
+        # it. It stays because the failure it prevents is a silent one — a
+        # thread whose paperwork vanished still sends a perfectly ordinary
+        # looking email, with nothing attached.
+        still = set()
+        for r in c.execute("SELECT docs_json, id_doc_id FROM gaash_threads"):
+            try:
+                still.update(i for i in json.loads(r["docs_json"] or "[]") if i)
+            except ValueError:
+                pass
+            if r["id_doc_id"]:
+                still.add(r["id_doc_id"])
+    dropped = 0
+    for doc_id in sorted(filed - still):      # ids_remove opens its own handle
+        if ids_remove(doc_id):
+            dropped += 1
+    return moved + dropped
 
 
 def declaration_make(gwd, save=False):
