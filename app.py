@@ -112,6 +112,7 @@ import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
+gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
 gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
@@ -2914,27 +2915,28 @@ def api_gaash_ids():
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
 def api_gaash_declaration():
-    """Build ONE package's customs declaration from what the boards already say
-    — the name it ships under, that name's ID, and its real contents. Files it
-    in the 📄 Declarations folder and returns the library row so the caller can
-    preview it and attach it to that package's first email."""
+    """Check that a package can be papered — the name it ships under, that
+    name's ID, its real contents. Nothing is stored: the declaration is written
+    fresh onto every email it rides (gaash_mail.DECL_AUTO), so this only has to
+    say yes or name the reason. Pass save=true for the rare hand-filed copy."""
     b = request.get_json(force=True, silent=True) or {}
+    save = bool(b.get("save"))
     many = b.get("gwds")
     if isinstance(many, list):
         # one refusal must not sink the batch: a parcel with no name is reported
-        # by name with its reason, the rest are still generated
-        results = [{**gaash_mail.declaration_make(g), "gwd": str(g or "").strip().upper()}
-                   for g in many[:200]]
+        # by name with its reason, the rest still come back ready
+        results = [{**gaash_mail.declaration_make(g, save=save),
+                    "gwd": str(g or "").strip().upper()} for g in many[:200]]
         done = [r["gwd"] for r in results if r.get("ok")]
-        if done:
+        if done and save:
             activity.log("create", "gaash", 0, ",".join(done[:10]),
-                         detail=f"generated {len(done)} customs declaration(s)",
+                         detail=f"filed {len(done)} customs declaration(s)",
                          user=_user())
         return jsonify({"ok": True, "results": results})
-    res = gaash_mail.declaration_make(b.get("gwd"))
-    if res.get("ok"):
+    res = gaash_mail.declaration_make(b.get("gwd"), save=save)
+    if res.get("ok") and save:
         activity.log("create", "gaash", 0, res.get("gwd") or "",
-                     detail="generated a customs declaration", user=_user())
+                     detail="filed a customs declaration", user=_user())
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
@@ -3051,7 +3053,10 @@ def api_gaash_send():
     # through the browser just to come back again
     files = _gm_files(b.get("files"))
     for did in (b.get("doc_ids") or [])[:6]:
-        got = gaash_mail._library_doc(did)
+        # DECL_AUTO = "write this parcel's declaration now" — never a stored file
+        got = (gaash_mail.declaration_attachment(gwd)
+               if did == gaash_mail.DECL_AUTO
+               else gaash_mail._library_doc(did))
         if got:
             files.append(got)
     res = gaash_mail.send_manual(gwd, b.get("body"), files)
