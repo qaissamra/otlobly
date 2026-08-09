@@ -1258,13 +1258,32 @@ def main():
         c.execute("UPDATE gaash_threads SET docs_json=?, id_doc_id=? WHERE gwd=?",
                   (json.dumps([filed["id"], filed["id"]]), filed["id"],
                    "GWD900900900"))
+    # a filed declaration NOTHING references — the clutter to be rid of — and
+    # a filed NON-declaration, which must survive untouched
+    orphan = gm.ids_add("GWD009109999 - declaration", "d.pdf", b"%PDF-1.4 x",
+                        folder="declaration")
+    keep = gm.ids_add("AMIN passport", "id.jpg", b"\xff\xd8jpeg", folder="id")
+    # the owner's OWN papers live in that folder too ("GWD… - sultan
+    # declaration", a scan he dropped in). Only what the app generated —
+    # named exactly "<GWD> - declaration" — is ours to remove.
+    mine = gm.ids_add("GWD009109999 - sultan declaration", "s.pdf",
+                      b"%PDF-1.4 y", folder="declaration")
+    rows_before = _lib_rows()
     moved = gm.migrate_decl_auto()
     th2 = gm.thread_get("GWD900900900")
     check("an old thread's filed declaration is repointed at the marker",
-          moved == 1 and json.loads(th2["docs_json"]) == [gm.DECL_AUTO]
+          json.loads(th2["docs_json"]) == [gm.DECL_AUTO]
           and th2["id_doc_id"] == gm.DECL_AUTO)
     check("...and it still gets a real PDF on its next email",
           gm._step_attachments(th2)[0][1][:5] == b"%PDF-")
+    check("the filed copies nothing points at are cleared out",
+          moved == 3 and _lib_rows() == rows_before - 2
+          and gm._id_doc(orphan["id"]) is None
+          and gm._id_doc(filed["id"]) is None)
+    check("the owner's own papers are NEVER deleted — an ID scan, and a "
+          "hand-named declaration sitting in the same folder",
+          gm._id_doc(keep["id"]) is not None
+          and gm._id_doc(mine["id"]) is not None)
     check("the migration is idempotent", gm.migrate_decl_auto() == 0)
     _del_thread("GWD900900900")
 
