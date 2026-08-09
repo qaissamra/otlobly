@@ -3125,6 +3125,15 @@ def api_gaash_thread():
         res = gaash_mail.thread_restart(gwd, fresh=bool(b.get("fresh")),
                                         at=b.get("at"))
         return jsonify(res), (200 if res.get("ok") else 400)
+    elif action == "rearm":         # attach the paperwork FIRST, then email #1
+        res = gaash_mail.thread_rearm(gwd, doc_ids=b.get("doc_ids"),
+                                      seq_id=(b.get("seq_id") or "").strip(),
+                                      at=b.get("at"))
+        if res.get("ok"):
+            activity.log("send", "gaash", 0, gwd,
+                         detail=f"re-armed with {res.get('docs') or 0} document(s)",
+                         user=_user())
+        return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "switch_seq":    # move this package to a different workflow
         res = gaash_mail.thread_switch_seq(gwd, (b.get("seq_id") or "").strip(),
                                            at=b.get("at"))

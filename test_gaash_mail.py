@@ -1204,6 +1204,75 @@ def main():
           acur["sent_last_uid"] == 11 and acur["sent_uidvalidity"] == 3)
     _del_thread("GWD800")
 
+    print("— filing several documents at once —")
+    # The id is a millisecond timestamp. Picking several files at once uploads
+    # them in a tight loop, so two land in the same millisecond and the second
+    # used to fail the PRIMARY KEY and 500 the request. (This bit a test run
+    # before it ever bit the owner.)
+    burst = [gm.ids_add(f"burst {i}", f"b{i}.pdf", b"%PDF-1.4 z", folder="id")
+             for i in range(6)]
+    check("six files filed in one burst all land, with distinct ids",
+          all(b.get("ok") for b in burst)
+          and len({b["id"] for b in burst}) == 6
+          and all(gm._id_doc(b["id"]) for b in burst))
+    for b in burst:
+        gm.ids_remove(b["id"])
+
+    print("— re-arm: attach the paperwork, THEN email #1 again —")
+    # Owner: "i can not reselect a running number … i do not want [it to] send
+    # immediately because i want to attach maybe ids and declaration — if you
+    # can re open the steps so i can attach them it could work." Re-enrolling
+    # would have to DELETE the conversation; re-arming keeps every word of it.
+    _mk_thread("GWD770770770", step=2, state="waiting_reply")
+    _mk_out("GWD770770770", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    with db.connect() as c:
+        msgs_before = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=?",
+                                ("GWD770770770",)).fetchone()["n"]
+    doc = gm.ids_add("AMIN id", "a.jpg", b"\xff\xd8x", folder="id")
+    rr = gm.thread_rearm("GWD770770770", doc_ids=[doc["id"], gm.DECL_AUTO])
+    th_r = gm.thread_get("GWD770770770")
+    with db.connect() as c:
+        msgs_after = c.execute("SELECT COUNT(*) n FROM gaash_msgs WHERE gwd=?",
+                               ("GWD770770770",)).fetchone()["n"]
+    check("re-arm sets the documents the thread was missing",
+          rr.get("ok") and json.loads(th_r["docs_json"]) == [doc["id"], gm.DECL_AUTO]
+          and th_r["id_doc_id"] == doc["id"])
+    check("...and the ID scan rides the next email",
+          "AMIN id.jpg" in [a[0] for a in gm._step_attachments(th_r)])
+    check("...and it is back at email #1", int(th_r["step"] or 0) == 0)
+    check("the GAASH conversation is KEPT — a re-enrollment would erase it",
+          msgs_before > 0 and msgs_after >= msgs_before)
+    # ONE press must put email #1 in front of GAASH ONCE. thread_switch_seq
+    # already resets to step 0 and sends, so restarting on top of it would
+    # double-send — the kind of bug the recipient sees and we never would.
+    sends = []
+    real_send = gm.send_step
+    gm.send_step = lambda g, **k: (sends.append(g) or {"ok": True})
+    try:
+        other = [s for s in gm.sequences_list() if not s.get("paused")]
+        _mk_thread("GWD772772772", step=2, state="waiting_reply")
+        gm.thread_rearm("GWD772772772", doc_ids=[doc["id"]])
+        n_same = len(sends)
+        if len(other) > 1:
+            _mk_thread("GWD773773773", step=2, state="waiting_reply",
+                       seq_id=other[0]["id"])
+            sends.clear()
+            gm.thread_rearm("GWD773773773", doc_ids=[doc["id"]],
+                            seq_id=other[1]["id"])
+    finally:
+        gm.send_step = real_send
+    check("one press sends email #1 exactly once",
+          n_same == 1 and (len(other) < 2 or len(sends) == 1))
+    _del_thread("GWD772772772")
+    _del_thread("GWD773773773")
+    _mk_thread("GWD771771771", state="proposed")
+    check("a suggestion is approved, never re-armed",
+          not gm.thread_rearm("GWD771771771").get("ok"))
+    check("an unknown parcel refuses cleanly",
+          not gm.thread_rearm("GWD000000000").get("ok"))
+    _del_thread("GWD770770770")
+    _del_thread("GWD771771771")
+
     print("— declarations are written on the fly, never filed —")
     # Owner: "i do not need [them kept] — they just make me able to generate
     # them on the fly not keep the document i generate." A declaration is a

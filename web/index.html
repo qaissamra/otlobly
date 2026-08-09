@@ -11692,8 +11692,10 @@ function gmNewOpen(preGwds){
   GM.enrollCands=cands;
   // survives re-render (sort / column change); parcels already RUNNING in a
   // workflow can't be pre-checked — their box is disabled, re-enroll is a lie
+  // a parcel already corresponding is never PRE-checked — re-arming it resends
+  // email #1, so that has to be a deliberate tick, not a default
   GM.enrollSel=new Set(pre.filter(g=>{
-    const c=cands.find(x=>x.gwd===g); return !gmSeqBlock(c&&c.thread); }));
+    const c=cands.find(x=>x.gwd===g); return !gmSeqRearm(c&&c.thread); }));
   // what step 2 has to remember: rendering the confirmation destroys step 1's
   // controls, so Back rebuilds them from here rather than from the DOM
   GM.pickState={paste:"", q:"", names:{}, docIds:[], makeDecl:false, docs:{}};
@@ -11919,7 +11921,13 @@ function gmWizPickSeq(id){
 // converts it cleanly, and so does an enrollment that never sent — a dry-run
 // block or a dead app password leaves a thread sitting at step 0 that nobody at
 // GAASH ever saw, and refusing to enrol that again just strands the parcel.
-function gmSeqBlock(t){ return !!(t&&t.state!=="proposed"&&!t.can_reenroll); }
+// A parcel GAASH already has mail about cannot be RE-ENROLLED — that would
+// mean deleting the conversation. It CAN be RE-ARMED: given the paperwork it
+// should have had, then sent email #1 again with its history intact. Owner:
+// "i do not want [it to] send immediately because i want to attach maybe ids
+// and declaration — if you can re open the steps so i can attach them".
+function gmSeqRearm(t){ return !!(t&&t.state!=="proposed"&&!t.can_reenroll); }
+function gmSeqBlock(){ return false; }   // nothing is un-pickable any more
 // the row is enrolled, but the enrollment never left the building
 function gmSeqRedo(t){ return !!(t&&t.state!=="proposed"&&t.can_reenroll); }
 function gmSeqPill(t,gwd){
@@ -11961,7 +11969,9 @@ function gmCandMode(m){
 }
 function gmEnrollSelectShown(on){
   gmEnrollFiltered().forEach(c=>{
-    if(on&&gmSeqBlock(c.thread)) return;   // rows already corresponding with GAASH
+    // "select shown" never sweeps up a live conversation — re-arming resends
+    // email #1, which has to be picked one by one on purpose
+    if(on&&gmSeqRearm(c.thread)) return;
     on?GM.enrollSel.add(c.gwd):GM.enrollSel.delete(c.gwd);
   });
   gmEnrollRender();
@@ -12004,19 +12014,21 @@ function gmEnrollRender(){
     return "";
   });
   const rows=list.map(c=>{
-    const nm=c.pname||"", blocked=gmSeqBlock(c.thread), on=GM.enrollSel.has(c.gwd)&&!blocked;
-    // name WHO already has mail about this parcel — "already enrolled" alone
-    // reads as a bug when the enrollment is the one that silently failed
-    const why=blocked
+    const nm=c.pname||"", rearm=gmSeqRearm(c.thread), on=GM.enrollSel.has(c.gwd);
+    // name WHO already has mail about this parcel, and say what ticking it
+    // will actually do — it re-arms, it does not re-enrol
+    const why=rearm
       ? T("مسجل مسبقاً وقد وصلت رسائل فعلاً إلى")+" "+(c.thread.sent_to||"GAASH")
-        +" — "+T("افتح محادثته واستخدم 🔁 بدل إعادة التسجيل · already corresponding — open it and use 🔁 restart instead")
+        +" — "+T("اختياره يرفق المستندات ثم يعيد إرسال الإيميل الأول، والمحادثة تبقى كما هي · ticking it attaches the documents then sends email #1 again — the conversation is kept")
       : "";
     const pin=`<div class="bt-pin">
-      <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""} ${blocked?"disabled":""}
+      <input type="checkbox" class="gmEnCb" value="${poEsc(c.gwd)}" ${on?"checked":""}
         onclick="event.stopPropagation()" onchange="gmRowCb(this,'${poEsc(c.gwd)}')"
-        style="flex:0 0 auto;margin-inline-end:4px${blocked?";opacity:.35":""}"
-        ${blocked?` title="${poEsc(why)}"`:""}>
-      <span class="mono" style="font-size:12px">${poEsc(c.gwd)}</span></div>`;
+        style="flex:0 0 auto;margin-inline-end:4px"
+        ${rearm?` title="${poEsc(why)}"`:""}>
+      <span class="mono" style="font-size:12px">${poEsc(c.gwd)}</span>
+      ${rearm?`<span class="pill" style="background:#fef3c7;color:#92400e;font-size:9.5px;margin-inline-start:5px"
+        title="${poEsc(why)}">🔁 ${T("إعادة تسليح · re-arm")}</span>`:""}</div>`;
     return `<div class="poc-row${on?" en-on":""}" onclick="gmRowPick(this,'${poEsc(c.gwd)}')">${pin}${lxtCells("en",{
       pname:`<select class="gmCandName" data-gwd="${poEsc(c.gwd)}" data-auto="${poEsc(nm)}" data-autoid="${poEsc(c.pname_id||"")}"
           onchange="gmCandName(this)" onclick="event.stopPropagation()"
@@ -12855,21 +12867,39 @@ async function gmNewStart(btn){
   // documents are shared by the whole batch. The thread gets both.
   const docs={};
   Object.entries(st.docs||{}).forEach(([g,d])=>{ if(gwds.includes(g)&&d&&d.id) docs[g]=[d.id]; });
+  // Two different jobs. A parcel GAASH already has mail about is RE-ARMED —
+  // the documents picked in step 2 are set on its thread and email #1 goes
+  // again, conversation kept. Everything else is a fresh enrollment.
+  const cand=g=>(GM.enrollCands||[]).find(x=>x.gwd===g);
+  const rearm=gwds.filter(g=>gmSeqRearm((cand(g)||{}).thread));
+  const fresh=gwds.filter(g=>!rearm.includes(g));
+  let res=[];
+  for(const g of rearm){
+    const ids=[...(docs[g]||[]),...(st.docIds||[])];
+    let rr; try{ rr=await post("/api/gaash/thread",
+      {gwd:g, action:"rearm", doc_ids:ids, seq_id:st.seqId||null}); }
+    catch(e){ rr={ok:false,error:T("تعذّر الاتصال بالخادم · could not reach the server")}; }
+    res.push({gwd:g, ok:!!(rr&&rr.ok), send_error:(rr&&rr.ok)?null:((rr&&rr.error)||"failed")});
+  }
   // replace:true lets a dead enrollment be re-enrolled — the server still
   // refuses any parcel GAASH has actually been written to, so this cannot
   // restart a live conversation even from a pasted GWD
-  const r=await post("/api/gaash/start",{gwds, id_doc_id:(st.docIds||[]), account_id:(st.acctIds||[]),
-    seq_id:st.seqId||null, names:st.names||{}, docs, replace:true});
+  const r=fresh.length?await post("/api/gaash/start",
+    {gwds:fresh, id_doc_id:(st.docIds||[]), account_id:(st.acctIds||[]),
+     seq_id:st.seqId||null, names:st.names||{}, docs, replace:true}):null;
   btn.disabled=false;
   bulkClose();
-  const res=(r&&r.results)||[];
+  res = res.concat((r&&r.results)||[]);
   const ok=res.filter(x=>x.ok).length;
   const sent=res.filter(x=>x.ok&&!x.dry_run&&!x.send_error&&x.state!=="goal_met").length;
   const bad=res.filter(x=>x.send_error&&!x.dry_run);
+  const armed=rearm.filter(g=>(res.find(x=>x.gwd===g)||{}).ok).length;
   // honest toast: "prepared, nothing sent" is a different world from "emails out"
-  toast(sent
-    ?`✉ ${sent} ${T("إيميل أول خرج فعلاً · first email(s) actually went out")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`
-    :`🧪 ${ok} ${T("جُهّزت — لم يُرسَل أي إيميل · prepared — no email was sent")}${bad.length?` · ⚠ ${bad[0].send_error}`:""}`);
+  toast((sent
+    ?`✉ ${sent} ${T("إيميل أول خرج فعلاً · first email(s) actually went out")}`
+    :`🧪 ${ok} ${T("جُهّزت — لم يُرسَل أي إيميل · prepared — no email was sent")}`)
+    +(armed?` · 🔁 ${armed} ${T("أُعيد تسليحها بالمستندات · re-armed with the documents")}`:"")
+    +(bad.length?` · ⚠ ${bad[0].send_error}`:""));
   gmLoad();
 }
 // ── 🩺 Readiness tab: name / ID / tag / conversation per parcel, BEFORE sending ──

@@ -41,6 +41,7 @@ import json
 import os
 import re
 import smtplib
+import sqlite3
 import threading
 import time
 import urllib.request
@@ -409,16 +410,28 @@ def _folder(v):
 
 
 def ids_add(name, filename, data, folder=None):
+    """File one document. The id keeps its millisecond-timestamp shape (it is
+    what orders the library) but is no longer ASSUMED unique: picking several
+    files at once uploads them in a tight loop, and two landing in the same
+    millisecond used to fail the PRIMARY KEY and 500 the request. Suffix and
+    retry instead — the first one still gets the plain timestamp."""
     IDS_DIR.mkdir(parents=True, exist_ok=True)
-    iid = f"id_{int(time.time() * 1000)}"
-    fn = f"{iid}_{_safe_name(filename)}"
-    (IDS_DIR / fn).write_bytes(data)
-    with db.connect() as c:
-        c.execute("INSERT INTO gaash_ids (id,name,filename,uploaded_at,folder) "
-                  "VALUES (?,?,?,?,?)",
-                  (iid, (name or "").strip() or _safe_name(filename), fn,
-                   now_iso(), _folder(folder)))
-    return {"ok": True, "id": iid, "filename": fn}
+    stem = f"id_{int(time.time() * 1000)}"
+    for n in range(50):
+        iid = stem if n == 0 else f"{stem}_{n}"
+        fn = f"{iid}_{_safe_name(filename)}"
+        try:
+            with db.connect() as c:
+                c.execute("INSERT INTO gaash_ids "
+                          "(id,name,filename,uploaded_at,folder) "
+                          "VALUES (?,?,?,?,?)",
+                          (iid, (name or "").strip() or _safe_name(filename),
+                           fn, now_iso(), _folder(folder)))
+        except sqlite3.IntegrityError:
+            continue                    # same millisecond — take the next id
+        (IDS_DIR / fn).write_bytes(data)   # only once the id is really ours
+        return {"ok": True, "id": iid, "filename": fn}
+    return {"ok": False, "error": "could not allocate a document id"}
 
 
 # A declaration is WRITTEN FRESH every time it is attached, and never filed.
@@ -1552,6 +1565,44 @@ def thread_delete(gwd):
     except Exception:  # noqa
         pass
     return {"ok": True, "gwd": g}
+
+
+def thread_rearm(gwd, doc_ids=None, seq_id=None, at=None):
+    """Re-arm a parcel that is ALREADY corresponding: give it the paperwork it
+    should have had, then send email #1 again.
+
+    The plain 🔁 restart fires the moment it is pressed, which is no use when
+    the reason for restarting is that the ID scan or the declaration was never
+    attached — owner: "i do not want [it] send immediately because i want to
+    attach maybe ids and declaration … re open the steps so i can attach them".
+    So the enrollment wizard now accepts a running parcel and lands here: the
+    documents are set FIRST, and only then does step 1 go out carrying them.
+
+    Nothing is erased. The thread, its message history and the GAASH
+    conversation stay exactly where they are — this is the honest alternative
+    to a re-enrollment, which would have to delete all of that."""
+    g = (gwd or "").strip().upper()
+    th = thread_get(g)
+    if not th:
+        return {"ok": False, "error": "thread not found"}
+    if th.get("state") == "proposed":
+        return {"ok": False, "error":
+                "اقتراح لم يبدأ — وافق عليه بدلاً من ذلك · "
+                "still a suggestion — approve it instead"}
+    docs = [d for d in (doc_ids or []) if d]
+    if docs:
+        _thread_set(g, docs_json=json.dumps(docs), id_doc_id=docs[0],
+                    missing_docs=0, missing_note=None)
+    # EXACTLY ONE send. thread_switch_seq already resets to step 0 and sends
+    # (that is its whole job), so restarting on top of it would put email #1 in
+    # front of GAASH twice — from one press of one button.
+    if seq_id and seq_id != (th.get("seq_id") or ""):
+        res = thread_switch_seq(g, seq_id, at=at)
+    else:
+        res = thread_restart(g, at=at)
+    if res.get("ok"):
+        res["docs"] = len(docs)
+    return res
 
 
 def thread_restart(gwd, fresh=False, at=None):
