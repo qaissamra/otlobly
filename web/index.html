@@ -1180,7 +1180,7 @@
       <span class="pop">
         <button class="minibtn" onclick="popToggle(this)" title="أدوات المزامنة والصيانة · sync + maintenance tools">⚙ أدوات · Tools ▾</button>
         <div class="pop-menu" style="min-width:230px">
-          <button class="pop-item" onclick="this.closest('.pop-menu').classList.remove('open');poCheckAllShipping(this)" title="re-check every GWD number against GAASH — skips delivered packages and anything checked in the last 30 min">🔎 Check all shipping</button>
+          <button class="pop-item" onclick="this.closest('.pop-menu').classList.remove('open');poCheckAllShipping(this)" title="re-check every GWD number against GAASH — skips anything you already received or sent, delivered packages, and anything checked in the last 30 min">🔎 Check all shipping</button>
           <button class="pop-item" onclick="this.closest('.pop-menu').classList.remove('open');poEstimateAll(this)" title="estimate Amazon cost for every product that has no estimate yet — already-priced products are skipped (free)">💰 Estimate all costs</button>
           <button class="pop-item" id="impCuBtn" onclick="this.closest('.pop-menu').classList.remove('open');importClickup(this)" title="pull existing Amazon orders from the ClickUp Otloble space">↙ Import from ClickUp</button>
         </div>
@@ -8200,6 +8200,11 @@ async function poRunShippingCheck(btn,onlyGwd,force){
     let r; try{ r=await post("/api/purchases/refresh_tracking",{tracking:g,force:!!force}); }catch(e){ r=null; }
     if(!r||!r.ok){ failed++; bulkRow(g,g,where(g),'<span style="color:var(--warn)">check failed</span>'); continue; }
     lastResp=r;
+    // the owner already received/sent it — say so, don't call it "no update"
+    const stp=(r.stopped||[]).find(x=>x.tracking===g);
+    if(stp){ same++; bulkRow(g,g,where(g),
+      `<span class="muted2" title="otlobly status: ${poEsc(stp.status)} — finished, no carrier check needed">✔ ${poEsc(stp.status)} · not checked</span>`);
+      continue; }
     const c=(r.changes||[]).find(x=>x.tracking===g);
     if(!c){ same++; bulkRow(g,g,where(g),'<span class="muted2">no update</span>'); continue; }
     const gaSame=(c.old&&c.old.text)===(c.new&&c.new.text);

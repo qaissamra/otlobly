@@ -31,6 +31,17 @@ GAASH_DAYS_DEFAULT = [7, 3, 1]
 ARRIVAL_DAYS_DEFAULT = [5, 7, 8]
 
 
+def stop_statuses(config=None):
+    """The ONE vocabulary for "this parcel's journey is over" — the owner has
+    it, sent it, or closed the job. Settings-editable at alerts.stop_statuses,
+    and editing it there now moves all three consumers together: alert
+    silencing, the Leluxe sweep's skips, and the Purchases sweep's skips.
+    Lives here because alerts owns STOP_DEFAULT; callers import it locally
+    (alerts imports purchases, so purchases cannot import alerts up top)."""
+    lst = cfg.get(config or cfg.load(), "alerts.stop_statuses", STOP_DEFAULT)
+    return {str(s).strip().lower() for s in lst if str(s).strip()}
+
+
 def _d(s):
     try:
         return date.fromisoformat(str(s or "")[:10])
@@ -56,8 +67,7 @@ def run_once(send=telegram.send):
     if not telegram.configured():
         return []
     c = cfg.load()
-    stop = {str(s).strip().lower() for s in cfg.get(c, "alerts.stop_statuses", STOP_DEFAULT)
-            if str(s).strip()}
+    stop = stop_statuses(c)
     gd_days = sorted({int(x) for x in cfg.get(c, "alerts.gaash_days", GAASH_DAYS_DEFAULT)})
     al_days = sorted({int(x) for x in cfg.get(c, "alerts.arrival_days", ARRIVAL_DAYS_DEFAULT)})
     today = date.today()
