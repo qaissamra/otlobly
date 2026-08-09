@@ -453,10 +453,16 @@ def refresh_tracking(only=None, force=False, batch=5):
     that isn't delivered and wasn't checked within the TTL gets one live lookup.
     Unique numbers are fetched once (a GWD can sit on several packages); a
     package is only rewritten on a successful fetch with real statuses.
-    `only` refreshes just that number; `force` bypasses the TTL (never the
-    terminal skips). Each GWD is checked against BOTH carriers: GAASH (skipped
-    once its own bucket is delivered) and Gerizim last-mile (until GERIZIM says
-    delivered — GAASH "Delivered" only means handed to the last-mile shelf).
+    A package whose otlobly_status says the owner RECEIVED or SENT it is
+    finished and is never checked again (alerts.stop_statuses — the same list
+    Leluxe and the Telegram alerts read, one editor in Settings).
+
+    `only` refreshes just that number; `force` bypasses the TTL and the
+    received/sent rule (the per-package ⋯ 🔎 must always be able to ask), never
+    the carrier-terminal skips. Each GWD is checked against BOTH carriers:
+    GAASH (skipped once its own bucket is delivered) and Gerizim last-mile
+    (until GERIZIM says delivered — GAASH "Delivered" only means handed to the
+    last-mile shelf).
 
     Returns {updated, remaining, changes} — `changes` carries old→new per
     package, which is what the change log and the popup are built from."""
@@ -464,10 +470,18 @@ def refresh_tracking(only=None, force=False, batch=5):
     from datetime import timedelta
 
     import activity
+    import alerts              # local: alerts imports purchases (circular up top)
     import db
     import gerizim
     import tracking
     ttl_min = 30
+    # Owner's rule: a parcel he has RECEIVED or already SENT is finished — the
+    # carriers have nothing left to say about it. Same Settings-editable
+    # vocabulary the Leluxe sweep and the Telegram alerts use, read off the
+    # package's own otlobly_status — the field HE sets; carriers never write it.
+    # Bulk only: `force` (the per-package ⋯ 🔎) still checks anything on purpose.
+    stop = alerts.stop_statuses()
+    stopped = {}
     only = tracking.clean_tracking(only or "") or None
     pdb = load()
     now = datetime.now().astimezone()
@@ -481,6 +495,10 @@ def refresh_tracking(only=None, force=False, batch=5):
         for pk in po.get("packages") or []:
             tn = tracking.clean_tracking(pk.get("tracking_number") or "")
             if not tn or (only and tn != only):
+                continue
+            own = str(pk.get("otlobly_status") or "").strip().lower()
+            if own in stop and not force:
+                stopped[tn] = own         # received / sent — the owner has it
                 continue
             gz = pk.get("gerizim_status") or {}
             if isinstance(gz, dict) and gz.get("bucket") == "delivered":
@@ -617,6 +635,10 @@ def refresh_tracking(only=None, force=False, batch=5):
     # the route serializes `db` back as the board state — return a fresh read
     # so concurrent creates/edits survive on the client too, not just on disk
     return {"updated": updated, "remaining": remaining, "changes": changes,
+            # what the owner already has/sent, so the 🔎 popup can say so
+            # instead of the misleading "no update"
+            "stopped": [{"tracking": t, "status": s}
+                        for t, s in sorted(stopped.items())],
             "db": load() if picked else pdb}
 
 

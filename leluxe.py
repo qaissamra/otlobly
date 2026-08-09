@@ -3910,8 +3910,7 @@ def _stop_statuses(config=None):
     list — one vocabulary, one editor — plus "picked up by ger" (Gerizim has
     it), added HERE only so the alerts rules keep their own semantics."""
     import alerts
-    lst = cfg.get(config or cfg.load(), "alerts.stop_statuses", alerts.STOP_DEFAULT)
-    return {str(s).strip().lower() for s in lst if str(s).strip()} | {"picked up by ger"}
+    return alerts.stop_statuses(config) | {"picked up by ger"}
 
 
 def _structural_statuses(config=None):
