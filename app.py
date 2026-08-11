@@ -16,6 +16,7 @@ First run with no users redirects to /setup to create the first admin.
 import base64
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -2940,6 +2941,33 @@ def api_gaash_declaration():
         activity.log("create", "gaash", 0, res.get("gwd") or "",
                      detail="filed a customs declaration", user=_user())
     return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/gaash/declaration_preview")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_declaration_preview():
+    """The bytes GAASH is about to receive — built HERE, the same call the send
+    makes, so what you read is what goes out.
+
+    Every other attachment is a file on disk with a URL; the declaration is
+    written fresh onto each email and never stored, so it had no URL and was the
+    one document that could not be checked before sending. That is how a wrong
+    ID number reached customs on four parcels: it was regenerated correctly from
+    a wrong source every time, and nobody could open it to see.
+
+    Inline, not a download — the point is to glance at it and go back."""
+    gwd = (request.args.get("gwd") or "").strip().upper()
+    got = gaash_mail.declaration_attachment(gwd)
+    if not got:
+        # declaration_make names the reason (no name on the parcel, an Arabic
+        # name the document cannot print); the UI shows it instead of a dead link
+        res = gaash_mail.declaration_make(gwd)
+        return jsonify({"ok": False,
+                        "error": res.get("error") or "no declaration"}), 400
+    name, data, ctype = got
+    return send_file(io.BytesIO(data), mimetype=ctype,
+                     as_attachment=False, download_name=name)
 
 
 @app.route("/api/gaash/idfile")

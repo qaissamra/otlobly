@@ -694,6 +694,12 @@
   .gm-msg.auto{opacity:.55}
   .gm-msg .gm-meta{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
   .gm-att{display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:11px;margin-top:5px;margin-inline-end:4px;text-decoration:none;color:var(--ink)}
+  /* a chip in the compose box OPENS its document — the name is the link, ✕ still
+     removes. Underlining only on hover: a row of underlined chips reads as noise,
+     but nothing here may look inert, least of all the declaration. */
+  .gm-att a{color:inherit;text-decoration:none;cursor:pointer}
+  .gm-att a:hover{color:#f76808;text-decoration:underline}
+  .gm-att .gm-cap{font-size:10px;color:var(--muted)}
   /* the meta line is uppercase — addresses and Message-ID buttons opt out of that */
   .gm-meta .gm-who{text-transform:none;letter-spacing:0;font-weight:600;max-width:190px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -11581,19 +11587,62 @@ async function gmSendDeclMake(btn){
   GM.declMsg={ok:true,text:"✓ "+(r.name||"")+" — "+T("سيُرفق عند الإرسال · attached on send")};
   gmIdsRender(); gmSendChips();
 }
+// Every chip OPENS. A declaration that cannot be read before it is sent is how
+// a wrong ID number reached customs on four parcels — it was rebuilt correctly
+// from a wrong source onto every email, and the one document nobody could click
+// was the one carrying the mistake. The name is the link; ✕ still removes.
+function gmChipUrl(d){
+  // decl:auto is written at send time, so its "file" is a route that builds it
+  if(d.id==="decl:auto") return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(GM.cur||"")}`;
+  return d.filename?`/api/gaash/idfile?file=${encodeURIComponent(d.filename)}`:"";
+}
+// ✕ on a chip must drop it from THIS message, always. gmIdPick routes through
+// gmDocSel, which only points at sendDocs while the picker modal is open
+// (GM.docTarget==="send") — and the Done button clears docTarget. So from the
+// chip strip, the normal place to remove one, ✕ was writing to pickState and the
+// document stayed on the email. An ✕ that does nothing is worse than no ✕ when
+// the attachment is a customs paper.
+function gmSendDocDrop(id){
+  GM.sendDocs=(GM.sendDocs||[]).filter(x=>x!==id);
+  if(GM.docTarget==="send") gmIdsRender();   // keep an open picker's ticks honest
+  gmSendChips();
+}
+// a just-picked file never reached the server — open the bytes already in hand
+function gmChipLocal(i){
+  const f=(GM.sendFiles||[])[i]; if(!f||!f.data_base64) return;
+  try{
+    const bin=atob(f.data_base64), buf=new Uint8Array(bin.length);
+    for(let j=0;j<bin.length;j++) buf[j]=bin.charCodeAt(j);
+    const url=URL.createObjectURL(new Blob([buf],{type:f.ctype||"application/octet-stream"}));
+    window.open(url,"_blank");
+    // the tab has the blob by now; holding the object URL leaks the whole file
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){ toast(T("تعذّر فتح الملف · could not open that file")); }
+}
 function gmSendChips(){
   const box=$("gmSendChips"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
   // "decl:auto" has no library row — it is written when the message is sent
   const docs=(GM.sendDocs||[]).map(id=>id==="decl:auto"
-    ?{id, name:(GM.cur||"")+" - declaration"}
+    ?{id, name:(GM.cur||"")+" - declaration", auto:true}
     :ids.find(x=>x.id===id)).filter(Boolean);
   const files=GM.sendFiles||[];
   box.classList.toggle("hidden",!docs.length&&!files.length);
+  const open=T("افتح للمراجعة قبل الإرسال · open it to check before you send");
   box.innerHTML=[
-    ...docs.map(d=>`<span class="gm-att">📎 ${poEsc(d.name)}
-      <button class="minibtn" style="padding:0 5px" onclick="gmIdPick('${poEsc(d.id)}')">✕</button></span>`),
-    ...files.map((f,i)=>`<span class="gm-att">📎 ${poEsc(f.name)}
+    ...docs.map(d=>{
+      const u=gmChipUrl(d);
+      // the auto declaration is marked: it is rebuilt at send time, so what you
+      // are reading is current, not a copy filed earlier
+      const tag=d.auto?`<span class="gm-cap" style="margin-inline-start:4px">· ${T("يُبنى عند الإرسال · built on send")}</span>`:"";
+      const label=u
+        ?`<a href="${u}" target="_blank" title="${open}: ${poEsc(d.name)}">📎 ${poEsc(d.name)}</a>`
+        :`📎 ${poEsc(d.name)}`;
+      return `<span class="gm-att">${label}${tag}
+        <button class="minibtn" style="padding:0 5px" onclick="gmSendDocDrop('${poEsc(d.id)}')">✕</button></span>`;
+    }),
+    ...files.map((f,i)=>`<span class="gm-att">
+      <a href="#" onclick="gmChipLocal(${i});return false" title="${open}: ${poEsc(f.name)}">📎 ${poEsc(f.name)}</a>
       <button class="minibtn" style="padding:0 5px" onclick="GM.sendFiles.splice(${i},1);gmSendChips()">✕</button></span>`),
   ].join("");
 }
