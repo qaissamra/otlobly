@@ -114,6 +114,8 @@ import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
 gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
 gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
+gaash_mail.seed_wrong_decl_template()  # "Wrong declaration" correction note, same deal
+gaash_mail.repair_name_ids()     # one-time: on-package names filed against a wrong ID
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
                            #  local app has a stale copy and must never send)

@@ -1426,6 +1426,72 @@ def seed_followup_template():
         pass
 
 
+def seed_wrong_decl_template():
+    """The correction note for a parcel whose declaration went out carrying the
+    wrong ID number: say what was wrong, attach the rebuilt declaration, move on.
+
+    Seeded by id with INSERT OR IGNORE, exactly like seed_followup_template — it
+    appears once and any wording the owner changes survives every restart.
+
+    Attach `decl:auto` when sending it, never a filed declaration: the whole
+    point is that the PDF is rebuilt from the CURRENT name/ID at send time, and
+    a stored copy is what carried the stale number in the first place."""
+    body = (
+        "Hello,\n\n"
+        "I added the wrong ID number to the last declaration. The correct one "
+        "is attached.\n\n"
+        "Tracking Number: {gwd}\n"
+        "ID number: {id_number}\n\n"
+        "Please update your records and proceed with the clearance.\n"
+        "Apologies for the confusion, and thank you for your assistance.\n\n"
+        "Thank you,\n"
+        "Kind regards,")
+    try:
+        with db.connect() as c:
+            c.execute("""INSERT OR IGNORE INTO gaash_templates
+                (id,name,subject_tpl,body_tpl,updated_at) VALUES (?,?,?,?,?)""",
+                      ("tpl_wrong_decl", "Wrong declaration",
+                       "Correction to declaration – {gwd}", body, now_iso()))
+    except Exception:  # noqa - a missing template must never block boot
+        pass
+
+
+# One-time data repair. The on-package name "Amin Nagih" (and the earlier
+# misspelling "AMIN NAGH") was mapped to an ID number belonging to nobody: the
+# ID scan on file for those parcels — id_1786013526810_amin.pdf — reads
+# 907932156, so every declaration built under that name went to customs with a
+# number that matched neither the scan beside it nor any real document.
+#
+# Keyed on the WRONG value, so it corrects the bad number once and then never
+# touches the map again — if the owner later edits either name to something
+# else, this leaves it alone.
+_ID_REPAIRS = {"Amin Nagih": ("994466043", "907932156"),
+               "AMIN NAGH": ("994466043", "907932156")}
+
+
+def repair_name_ids():
+    """Fix on-package name → ID entries that were filed against the wrong number.
+
+    Read-modify-write through settings.apply, never a wholesale replace: that
+    dict is shared by every parcel, and set_name_id documents why a caller that
+    knows one pair must not POST the whole map back."""
+    try:
+        ids = dict(_setts().get("name_ids") or {})
+        changed = {}
+        for nm, (bad, good) in _ID_REPAIRS.items():
+            for k in list(ids):
+                if _fold(k) == _fold(nm) and str(ids[k]).strip() == bad:
+                    ids[k] = good
+                    changed[k] = good
+        if changed:
+            settings_mod.apply({"gaash_mail": {"name_ids": ids}})
+            print(f"gaash_mail: repaired name_ids {changed}")
+        return changed
+    except Exception as e:  # noqa - a data repair must never block boot
+        print(f"gaash_mail: name_id repair skipped ({e})")
+        return {}
+
+
 # ── one-time v2 seed: the legacy settings 4-step chain → real data ──
 def migrate_v2():
     """Create the default 'GAASH clearance' sequence + its 4 templates from the
