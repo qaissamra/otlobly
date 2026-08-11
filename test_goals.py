@@ -55,7 +55,7 @@ BRD = goals.DEFAULTS["brand_field_id"]
 LID_IT = "901524960550"
 LID_W = "901520351506"
 BRAND_OPTS = [{"id": "opt-gc", "name": "Graphic card", "orderindex": 0},
-              {"id": "opt-pc", "name": "PC", "orderindex": 1},
+              {"id": "opt-pc", "name": "Other IT", "orderindex": 1},
               {"id": "opt-au", "name": "GOLD", "orderindex": 2}]
 
 
@@ -139,13 +139,13 @@ check("item-level cancel drops just the item",
       "t6a" not in by_id and by_id["t6b"]["usd"] == 200 and "t6" not in by_id)
 check("no double count anywhere",
       round(sum(u["usd"] for u in units), 2) == 900 + 500 + 300 + 250 + 200 + 111 + 77 + 600)
-check("brand options collected", opts == ["GOLD", "Graphic card", "PC"])
+check("brand options collected", opts == ["GOLD", "Graphic card", "Other IT"])
 
 # ── 2 · brand decode + classification ─────────────────────────────────────── #
 print("brands")
 check("brand by orderindex", by_id["t1a"]["brand"] == "Graphic card")
-check("brand by uuid", by_id["t3"]["brand"] == "PC")
-check("child inherits top brand", by_id["t9a"]["brand"] == "PC")
+check("brand by uuid", by_id["t3"]["brand"] == "Other IT")
+check("child inherits top brand", by_id["t9a"]["brand"] == "Other IT")
 cats = [c for c in goals.DEFAULTS["categories"] if c.get("list_id") == LID_IT]
 split = goals._classify(units, cats)
 check("pc claims case-blind", {u["task_id"] for u in split["pc"]} == {"t3", "t9a"})
@@ -180,7 +180,7 @@ check("by_day edge slot", snap["by_day"][0]["d"] == "2026-08-05"
 check("no clickup error", snap["clickup_error"] is None)
 check("warnings surfaced", any(w["kind"] == "no_amount" for w in cat["it"]["warnings"])
       and any(w["kind"] == "parent_fallback" for w in cat["it"]["warnings"]))
-check("no brand_missing when PC exists",
+check("no brand_missing when the claimed brand exists",
       not any(w["kind"] == "brand_missing" for w in cat["pc"]["warnings"]))
 
 # ── 4 · missing brand option warns ────────────────────────────────────────── #
@@ -193,7 +193,7 @@ cat2 = {c["key"]: c for c in snap2["categories"]}
 check("brand_missing warning", any(w["kind"] == "brand_missing" and w["name"] == "NoSuchBrand"
                                    for w in cat2["pc"]["warnings"]))
 check("unmatched brand units fall to rest", cat2["it"]["actual"] == 1961.0 + 900.0)
-goals.save_settings({"categories": [{"key": "pc", "brands": ["pc"]}]})   # case-blind on purpose
+goals.save_settings({"categories": [{"key": "pc", "brands": ["other it"]}]})  # case-blind on purpose
 goals.bump_stamp("test")
 snap3 = goals.compute(now=NOW, fetch=fake_fetch)
 check("brand match is case-blind",

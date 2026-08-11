@@ -4905,9 +4905,12 @@ function glSettingsRender(){
       <label class="fld"><span data-en="From" data-ar="من">من</span><input type="date" id="glWs" value="${poEsc(st.window_start||"")}"></label>
       <label class="fld"><span data-en="To" data-ar="إلى">إلى</span><input type="date" id="glWe" value="${poEsc(st.window_end||"")}"></label>
       ${(st.categories||[]).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
-      <label class="fld"><span>PC brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هدف الـPC — مفصولة بفواصل، غير حساسة لحالة الأحرف">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="PC"></label>
+      <label class="fld"><span>${poEsc(pc.label||"")} brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هذه الفئة — مفصولة بفواصل، غير حساسة لحالة الأحرف · the ClickUp Brand options this category claims">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="Other IT"></label>
       <label class="fld"><span>حالات مستثناة · excluded statuses <span class="gm-q" title="مهام بهذه الحالات لا تُحسب أبدًا (على مستوى الطلب أو المنتج)">?</span></span><input id="glExcl" value="${poEsc((st.excluded||[]).join(", "))}" placeholder="cancelled"></label>
-      <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>دمج IT + PC في شريط واحد ($${((st.categories||[]).filter(c=>["it","pc"].includes(c.key)).reduce((a,c)=>a+(+c.target||0),0)).toLocaleString()}) · combine IT + PC into one bar</span></label>
+      <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>${(()=>{const two=(st.categories||[]).filter(c=>["it","pc"].includes(c.key));
+        // named from the cards themselves — these two get renamed from the page
+        const nm=two.map(c=>poEsc(c.label)).join(" + ")||"IT + PC";
+        return `دمج · combine ${nm} ($${two.reduce((a,c)=>a+(+c.target||0),0).toLocaleString()}) في شريط واحد · into one bar`;})()}</span></label>
       <div class="full" style="display:flex;justify-content:flex-end;gap:8px">
         <button class="accent" onclick="glSettingsSave(this)" data-en="Save" data-ar="حفظ">حفظ · Save</button>
       </div>

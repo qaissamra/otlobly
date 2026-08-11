@@ -62,10 +62,14 @@ DEFAULTS = {
     "amount_field_id": "c7243d42-56b6-4a85-8634-e2f948f72be5",   # Total Amount
     "brand_field_id": "839ed479-bea9-4447-87d6-963dfe23843a",    # Brand
     "categories": [
-        {"key": "it", "label": "IT products", "target": 20000.0,
+        # `it` is the catch-all: untagged tasks plus every brand no other card
+        # claims (Graphic card, GOLD, Silver, sandisk…). `pc` claims ONE brand —
+        # "Other IT", the tag actually in use. It used to claim "PC", which was
+        # never an option on the ClickUp list, so that card could only read $0.
+        {"key": "it", "label": "Grafic cards", "target": 20000.0,
          "mode": "rest", "list_id": "901524960550"},
-        {"key": "pc", "label": "Mini & normal PC", "target": 5000.0,
-         "mode": "brand", "list_id": "901524960550", "brands": ["PC"]},
+        {"key": "pc", "label": "Other IT products", "target": 5000.0,
+         "mode": "brand", "list_id": "901524960550", "brands": ["Other IT"]},
         {"key": "watches", "label": "Watches (Le Luxe)", "target": 10000.0,
          "mode": "all", "list_id": "901520351506"},
         {"key": "otlobly", "label": "Otlobly", "target": 10000.0,
@@ -179,6 +183,54 @@ def bump_stamp(src="manual"):
 
 def _stamp_token():
     return json.dumps(db.get_setting(STAMP_KEY), sort_keys=True, default=str)
+
+
+# One-time data repair. The `pc` card claimed Brand "PC", which was never an
+# option on the ClickUp list — so it could only ever read $0, while every product
+# tagged "Other IT" fell through to the catch-all. The two cards are renamed to
+# what they actually hold: `it` catches graphics cards (and everything else
+# unclaimed), `pc` claims the "Other IT" tag.
+#
+# label/brands are RUNTIME fields, so changing DEFAULTS alone is not enough — a
+# saved blob overlays them on read. Keyed on the OLD values so this corrects a
+# stale row once and never fights a later rename by the owner, who can edit both
+# from the card itself.
+_CAT_REPAIRS = {                    # key: (old_label, new_label, old_brands, new_brands)
+    "it": ("IT products", "Grafic cards", None, None),
+    "pc": ("Mini & normal PC", "Other IT products", ["PC"], ["Other IT"]),
+}
+
+
+def repair_categories():
+    """Rename the two IT cards and point the brand card at the tag actually used."""
+    try:
+        blob = db.get_setting(SETTINGS_KEY)
+        # no saved row → DEFAULTS already carry the new naming, nothing to repair
+        if not isinstance(blob, dict) or not isinstance(blob.get("categories"), list):
+            return {}
+        changed = {}
+        for cat in blob["categories"]:
+            if not isinstance(cat, dict):
+                continue
+            rep = _CAT_REPAIRS.get(cat.get("key"))
+            if not rep:
+                continue
+            old_label, new_label, old_brands, new_brands = rep
+            if _norm(cat.get("label")) == _norm(old_label):
+                cat["label"] = new_label
+                changed[cat["key"] + ".label"] = new_label
+            if new_brands and [_norm(b) for b in (cat.get("brands") or [])] \
+                    == [_norm(b) for b in old_brands]:
+                cat["brands"] = list(new_brands)
+                changed[cat["key"] + ".brands"] = list(new_brands)
+        if changed:
+            db.set_setting(SETTINGS_KEY, blob)
+            bump_stamp("repair")       # other workers must drop their cached reduction
+            print(f"goals: repaired categories {changed}")
+        return changed
+    except Exception as e:  # noqa - a data repair must never block boot
+        print(f"goals: category repair skipped ({e})")
+        return {}
 
 
 # --------------------------------------------------------------------------- #
