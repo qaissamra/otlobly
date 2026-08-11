@@ -311,11 +311,25 @@ def _units_from_tasks(tasks, excluded, amount_fid, brand_fid):
     for top in tops:
         if _status_of(top) in excluded:         # order-level excluded → whole order out
             continue
-        live = [d for d in descend(top) if _status_of(d) not in excluded]
+        seen = descend(top)
+        live = [d for d in seen if _status_of(d) not in excluded]
         if any(_amount_of(d, amount_fid) > 0 for d in live):
             for d in live:
                 usd = _amount_of(d, amount_fid)
                 units.append(unit(d, top, usd, warn=None if usd > 0 else "no_amount"))
+        elif any(_status_of(d) in excluded and _amount_of(d, amount_fid) > 0
+                 for d in seen):
+            # The order's money was on products that are now cancelled, and the
+            # Order # parent mirrors their total. Falling back to the parent here
+            # RESURRECTS exactly what was just cancelled — the owner cancels a
+            # product, the card keeps counting it, and nothing on screen explains
+            # why. An order whose only priced products are excluded contributed
+            # nothing; it drops out, like a cancelled order-level task.
+            #
+            # Only reached when NO live product carries an amount, so this never
+            # touches a partially-cancelled order: those still count their
+            # surviving products through the branch above.
+            continue
         else:
             usd = _amount_of(top, amount_fid)
             warn = None
