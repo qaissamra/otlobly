@@ -936,7 +936,16 @@
   .ne-subtask .qcard{background:var(--card)}
   .ne-detail .subhead{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:2px 0 7px;font-weight:700}
   /* customer info as a labelled meta strip — same pattern as the card's .po-meta / .pkg-meta */
-  .ne-meta{display:flex;align-items:baseline;gap:8px 18px;flex-wrap:wrap;margin-bottom:11px;padding-bottom:11px;border-bottom:1px solid var(--line)}
+  .ne-meta{display:flex;align-items:baseline;gap:8px 18px;flex-wrap:wrap}
+  /* The meta strip is ALWAYS visible: its own full-width row directly under the summary
+     row, so staff read phone/ID/city/address without expanding anything. The summary row
+     drops its bottom border so the two read as ONE card, and the meta row mirrors the
+     summary's hover + open states through sibling selectors — no class toggling needed in
+     neRowToggle. `open` must stay AFTER `hover` (equal specificity), mirroring .ne-row. */
+  .ne-row>td{border-bottom:none}
+  .ne-metarow>td{padding:0 12px 11px;padding-inline-start:58px;overflow:visible}
+  .ne-row:hover+.ne-metarow{background:var(--bg2)}
+  .ne-row.open+.ne-metarow{background:var(--tint-accent)}
   .ne-meta .field{display:inline-flex;align-items:baseline;gap:6px;min-width:0}
   .ne-meta .field>.lbl{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
   .ne-meta .field>.v{color:var(--ink);font-size:12.5px}
@@ -7068,19 +7077,22 @@ function neSection(key,title,n,extra,body){
     ${closed?'':`<div>${body||'<div class="empty">لا يوجد · nothing here.</div>'}</div>`}
   </div>`;
 }
-// One product sub-row (reused verbatim from the old card markup — keeps 🔒 SERP
-// chip + 💲 neGetPrice + 📷 neImg + 🔗 handlers). interactive=false for placed/deleted.
-function neItemRow(oid,it,ix,interactive){
-  const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
-  const url=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+// The ONE place an order item's Amazon URL is derived: explicit link, else /dp/<ASIN>.
+function neItemUrl(it){
+  const a=((it&&it.asin)||extractAsinClient(it&&it.link)||"").toUpperCase();
+  return (it&&it.link)||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+}
+// One product sub-row: photo + title + 🔒 SERP chip + 🔗 Amazon. The 💲/📷 fetch
+// actions moved to the row's ⋯ menu — they work WITHOUT expanding, and act on every
+// item still missing that data, so nothing here depends on the row being open.
+function neItemRow(oid,it,ix){
+  const url=neItemUrl(it);
   const name=poEsc(it.title||it.asin||'—');
   return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(oid)}_${ix}">
     ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
     <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
       <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div>
       ${it.serp_price_usd!=null?`<div class="serp-cost" style="display:inline-block;margin-top:3px" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يظهر للعميل · internal only, never shown to the customer">🔒 SERP $${(+it.serp_price_usd).toFixed(2)}${it.serp_price_at?` · ${poEsc((it.serp_price_at||'').slice(0,10))}`:''}</div>`:''}</div>
-    ${(interactive&&it.serp_price_usd==null&&url)?`<button class="po-btn" title="سعر المنتج وقت الإدخال — من الأرشيف إن وُجد (داخلي فقط، لا يظهر للعميل) · the product's price from when it was first imported — stored/cached first (internal only)" onclick="neGetPrice('${poEsc(oid)}',${ix},'${poEsc(url)}',this)">💲</button>`:''}
-    ${(interactive&&!it.image&&url)?`<button class="po-btn" title="جلب صورة المنتج · get product photo" onclick="neImg('${poEsc(oid)}',${ix},'${poEsc(url)}',this)">📷</button>`:''}
     ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون · open on Amazon" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
 }
 // Wrap a section's rows in the expandable table.
@@ -7162,12 +7174,20 @@ function neRowHtml(o,kind){
   const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
   const rem=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd-(o.deposit_usd||0)):'—';
   const nm=poEsc((o.customer||'').replace(/'/g,''));
+  // ⋯ offers a fetch only when something is actually missing AND reachable — an item
+  // with no ASIN and no link can never be fetched, so it must not raise the menu item
+  const needPrice=items.some(it=>it.serp_price_usd==null&&neItemUrl(it));
+  const needImg  =items.some(it=>!it.image&&neItemUrl(it));
   let acts='';
   if(kind==="pending") acts=`${o.amount_to_collect_usd==null?`<button class="po-btn" title="سعّر الطلب (إجمالي أمازون → السعر النهائي) · price the order" onclick="event.stopPropagation();neQuotePrice('${poEsc(oid)}')">💲</button>`:''}
     <button class="po-btn" title="أرسل عرض السعر برابط على واتساب · send the quotation link on WhatsApp" onclick="event.stopPropagation();neQuoteLink('${poEsc(oid)}')">🔗</button>
     <button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
     <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>
-    <span onclick="event.stopPropagation()">${popMenu([[`🪪 ${T("طلب الهوية · Request ID")}`, `neRequestId('${poEsc(oid)}')`]])}</span>`;
+    <span onclick="event.stopPropagation()">${popMenu([
+      needPrice?[`💲 ${T("جلب الأسعار الناقصة · Get missing prices")}`, `neGetPricesAll('${poEsc(oid)}')`]:null,
+      needImg  ?[`📷 ${T("جلب الصور الناقصة · Get missing photos")}`,  `neImgsAll('${poEsc(oid)}')`]:null,
+      [`🪪 ${T("طلب الهوية · Request ID")}`, `neRequestId('${poEsc(oid)}')`],
+    ])}</span>`;
   else if(kind==="incart") acts=`<button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="event.stopPropagation();neUncart('${poEsc(oid)}')">↩</button>`;
   else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
     ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا · remove permanently" onclick="event.stopPropagation();nePurge('${poEsc(o.trash_id)}','${nm}')">✕</button>`:''}`;
@@ -7184,21 +7204,23 @@ function neRowHtml(o,kind){
   if(kind==="deleted"&&o.deleted_at) bits.push(fld('Deleted',`${poEsc(o.deleted_at)}${o.deleted_by?` · ${poEsc(o.deleted_by)}`:''}`));
   if(o.notes) bits.push(fld('Notes',poEsc(o.notes)));
   const info=`<div class="ne-meta">${bits.join('')}</div>`;
-  const interactive=kind==="pending";
-  const subrows=items.length?items.map((it,ix)=>neItemRow(oid,it,ix,interactive)).join(""):'<div class="empty">لا منتجات · no products</div>';
+  const subrows=items.length?items.map((it,ix)=>neItemRow(oid,it,ix)).join(""):'<div class="empty">لا منتجات · no products</div>';
   return `<tr class="ne-row${isOpen?' open':''}" id="nerow_${poEsc(oid)}" onclick="neRowToggle('${poEsc(oid)}')">
       <td class="cc">${kind==="pending"?`<input type="checkbox" class="ne-cartsel" ${NE_CART_SEL.has(oid)?'checked':''} onclick="event.stopPropagation();neCartToggle('${poEsc(oid)}',this.checked)" title="حدّد للنقل إلى السلة · tick to move to cart" style="margin-inline-end:5px;vertical-align:middle">`:''}<span class="caret">▸</span></td>
       <td class="ne-cust"><div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:10.5px">${poEsc(oid)}</span></div>
-        <div style="font-size:11px" class="muted2">${poEsc(o.phone||'')} ${badges}</div></td>
+        <div style="font-size:11px" class="muted2">${badges}</div></td>
       <td>${prodCell}</td>
       <td class="amt hide-sm" style="color:var(--accent)">${amt}</td>
       <td class="amt hide-sm"><b>${rem}</b></td>
       <td>${statusCell}${o.est_delivery_customer?` ${dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))}`:''}</td>
       <td><div class="ne-acts">${acts}</div></td>
     </tr>
+    <tr class="ne-metarow" id="nemeta_${poEsc(oid)}">
+      <td colspan="7">${info}</td>
+    </tr>
     <tr class="ne-detail" id="nedet_${poEsc(oid)}" style="display:${isOpen?'':'none'}">
       <td colspan="7">
-        <div class="ne-subtask">${info}
+        <div class="ne-subtask">
         <div class="subhead">📦 المنتجات · Products (${items.length})</div>
         <div style="display:flex;flex-direction:column;gap:6px">${subrows}</div>
         </div>
@@ -7312,8 +7334,7 @@ function neToggleInfo(id){ const el=$("neinfo_"+id); if(el) el.style.display=el.
 function neOpenAllProducts(){
   const urls=[]; const seen={};
   (NEED_ORDERS||[]).forEach(o=>(o.items||[]).forEach(it=>{
-    const a=(it.asin||extractAsinClient(it.link)||"").toUpperCase();
-    const u=it.link||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
+    const u=neItemUrl(it);
     if(u && !seen[u]){ seen[u]=1; urls.push(u); }
   }));
   if(!urls.length){ toast(QLANG==="ar"?"لا توجد روابط منتجات":"No product links to open"); return; }
@@ -7367,26 +7388,54 @@ async function neRequestId(id){
 }
 // Capture the internal Amazon (SERP) price onto a To-order item — the card's 💲 button.
 // Works for any product however the order was added; stored staff-only, never sent to the customer.
-async function neGetPrice(orderId,index,link,btn){
-  if(btn){ btn.disabled=true; btn.textContent="…"; }
-  toast(QLANG==="ar"?"جاري جلب السعر من أمازون…":"Fetching Amazon price…");
+// Capture the internal Amazon (SERP) price onto ONE item. Staff-only, never shown to
+// the customer. Returns {ok, error} — the caller decides what to say.
+async function neFetchPrice(orderId,index,link){
   let r; try{ r=await post("/api/order/item_price",{order_id:orderId,index,url:link}); }catch(e){ r={}; }
-  if(r&&r.ok){ toast((QLANG==="ar"?"تم حفظ السعر ✓ ":"Price saved ✓ ")+money(r.price_usd)); loadNeedOrder(); }
-  else { if(btn){ btn.disabled=false; btn.textContent="💲"; } toast((r&&r.error)||(QLANG==="ar"?"تعذّر جلب السعر":"Couldn't fetch price")); }
+  return {ok:!!(r&&r.ok), error:(r&&r.error)||""};
 }
-async function neImg(orderId,index,link,btn){
-  if(btn){ btn.disabled=true; btn.textContent="…"; }
-  toast(QLANG==="ar"?"جاري جلب الصورة…":"Fetching image…");
+// Grab a product photo and persist it onto ONE item. No DOM patching: the row this
+// belongs to is usually COLLAPSED now, so #ne_<oid>_<ix> does not exist — the caller's
+// single loadNeedOrder() at the end is what puts the picture on screen.
+async function neFetchImg(orderId,index,link){
   let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(link))).json(); }catch(e){ d={}; }
-  if(d&&d.image){
-    await post("/api/order/item_image",{order_id:orderId,index,image:d.image});   // persist
-    const card=$("ne_"+orderId+"_"+index);
-    if(card){ const old=card.querySelector(".noimg, img");
-      if(old){ const img=document.createElement("img"); img.src=d.image; img.style.cssText="width:44px;height:44px"; old.replaceWith(img); } }
-    if(btn) btn.remove();
-    toast(QLANG==="ar"?"تمت إضافة الصورة ✓":"Image added ✓");
-  } else { if(btn){ btn.disabled=false; btn.textContent="📷"; } toast(d&&d.error?d.error:(QLANG==="ar"?"تعذّر جلب الصورة":"Couldn't fetch image")); }
+  if(!(d&&d.image)) return {ok:false, error:(d&&d.error)||""};
+  let r; try{ r=await post("/api/order/item_image",{order_id:orderId,index,image:d.image}); }catch(e){ r={}; }
+  return {ok:!!(r&&r.ok), error:(r&&r.error)||""};
 }
+// One batch at a time per order. Both endpoints read the order, mutate one item and
+// write the WHOLE document back, so two overlapping loops on the same order would
+// silently drop each other's items.
+let NE_BUSY=null;
+// The ⋯ menu's two fetch actions. ONE AT A TIME for the same reason as NE_BUSY — never
+// rewrite this as Promise.all. `what` differs only in wording and which field is missing.
+async function neFetchAll(oid,kindKey){
+  if(NE_BUSY===oid){ toast(T("جارٍ العمل على هذا الطلب — انتظر · already running on this order")); return; }
+  const o=(NEED_ORDERS||[]).find(x=>x.order_id===oid);
+  if(!o){ toast(T("لم يُعثر على الطلب — حدّث الصفحة · order not found — refresh")); return; }
+  const isPrice=kindKey==="price", icon=isPrice?"💲":"📷";
+  const todo=(o.items||[]).map((it,ix)=>({ix, url:neItemUrl(it),
+                                          has:isPrice?(it.serp_price_usd!=null):!!it.image}))
+                          .filter(x=>!x.has&&x.url);
+  if(!todo.length){ toast(isPrice?T("لا شيء ينقصه سعر · nothing is missing a price")
+                                 :T("لا شيء ينقصه صورة · nothing is missing a photo")); return; }
+  NE_BUSY=oid;
+  let ok=0, firstErr="";
+  try{
+    for(let i=0;i<todo.length;i++){
+      toast(`${icon} ${isPrice?T("جاري جلب الأسعار · fetching prices"):T("جاري جلب الصور · fetching photos")} ${i+1}/${todo.length}…`);
+      const r=isPrice?await neFetchPrice(oid,todo[i].ix,todo[i].url)
+                     :await neFetchImg(oid,todo[i].ix,todo[i].url);
+      if(r.ok) ok++; else if(!firstErr&&r.error) firstErr=r.error;
+    }
+  } finally { NE_BUSY=null; }
+  // the first real reason is worth keeping — a missing SERPAPI key fails every item and
+  // a bare "3 failed" sends you hunting for a per-product problem that isn't there
+  toast(`${icon} ${ok}/${todo.length} ✓${ok<todo.length?` · ${firstErr||T("فشل · failed")}`:''}`);
+  loadNeedOrder();
+}
+function neGetPricesAll(oid){ return neFetchAll(oid,"price"); }
+function neImgsAll(oid){ return neFetchAll(oid,"img"); }
 // ---- Edit order (products / amount / customer) on the To-order page ---------- //
 let OE=null;
 function closeOrderEdit(){ $("orderEditModal").classList.add("hidden"); OE=null; }
