@@ -329,6 +329,8 @@ def _norm_packages(packages):
             "gaash_cd_at": p.get("gaash_cd_at"),             # GAASH's latest "docs required" event
             "gaash_deadline": p.get("gaash_deadline"),       # GAASH link expiry — lost past this date
             "gaash_deadline_checked": p.get("gaash_deadline_checked"),  # own cadence (~2-week re-check)
+            "docs_state": p.get("docs_state"),               # GAASH docs banner (action/info/…) — see tracking.docs_status
+            "docs_checked": p.get("docs_checked"),           # last docs-banner check (~daily cadence)
             "due_date": (p.get("due_date") or "").strip() or None,  # owner-set package due date
             "alerts_sent": p.get("alerts_sent") or {},       # Telegram threshold stamps {key: iso}
             "track_notified": p.get("track_notified") or {},   # {order_id: iso} — customer-notify stamps
@@ -487,9 +489,11 @@ def refresh_tracking(only=None, force=False, batch=5):
     now = datetime.now().astimezone()
     cutoff = now - timedelta(minutes=ttl_min)
     dl_cutoff = now - timedelta(days=14)          # the GAASH deadline is near-fixed: fetch
+    docs_cutoff = now - timedelta(days=1)         # docs banner flips fast once docs land
     old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
     dl_cap = 10                                   # bound the first-load deadline backfill
-    # work[gwd] = list of (po, pk, need_track, need_dl)
+    docs_cap = 3                                  # docs page is SLOW (~10-25s) — keep the batch inside gunicorn's 120s
+    # work[gwd] = list of (po, pk, need_track, need_dl, need_docs)
     work = {}
     for po in pdb["purchase_orders"]:
         for pk in po.get("packages") or []:
@@ -518,15 +522,20 @@ def refresh_tracking(only=None, force=False, batch=5):
             # `gz` is `... or {}`, so test truthiness — an empty {} means "no Gerizim".
             eligible = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
                 and not gz
-            need_dl = False
+            need_dl = need_docs = False
             if eligible:
                 try:
                     need_dl = force or not pk.get("gaash_deadline") \
                         or datetime.fromisoformat(pk.get("gaash_deadline_checked") or "") <= dl_cutoff
                 except (ValueError, TypeError):
                     need_dl = True        # never scraped → fetch once
-            if need_track or need_dl:
-                work.setdefault(tn, []).append((po, pk, need_track, need_dl))
+                try:
+                    need_docs = force or \
+                        datetime.fromisoformat(pk.get("docs_checked") or "") <= docs_cutoff
+                except (ValueError, TypeError):
+                    need_docs = True      # never checked → fetch once
+            if need_track or need_dl or need_docs:
+                work.setdefault(tn, []).append((po, pk, need_track, need_dl, need_docs))
     # Each GWD costs ~10s of live scraping; doing all ~13 in one request blows past
     # gunicorn's 120s timeout, which kills the request before the final save so
     # NOTHING persists. Process a bounded batch, save after each, and report how
@@ -534,14 +543,15 @@ def refresh_tracking(only=None, force=False, batch=5):
     all_gwds = list(work.items())
     picked = all_gwds[:max(1, int(batch or 5))]
     remaining = len(all_gwds) - len(picked)
-    updated, changes, dl_done = 0, [], 0
+    updated, changes, dl_done, docs_done = 0, [], 0, 0
     if picked:
         session = None                    # scraped lazily: gerizim-only rounds skip it
         for i, (tn, rows) in enumerate(picked):
             if i:
                 time.sleep(tracking.REQUEST_GAP)
-            want_track = any(nt for _, _, nt, _ in rows)      # a tracking refresh is due
-            want_dl = any(nd for _, _, _, nd in rows) and dl_done < dl_cap
+            want_track = any(nt for _, _, nt, _, _ in rows)   # a tracking refresh is due
+            want_dl = any(nd for _, _, _, nd, _ in rows) and dl_done < dl_cap
+            want_docs = any(nc for _, _, _, _, nc in rows) and docs_done < docs_cap
             st, cd_at = None, None
             if want_track:
                 if session is None:
@@ -572,7 +582,16 @@ def refresh_tracking(only=None, force=False, batch=5):
                 dl_done += 1
                 dl_stamp = db.now_iso()   # stamp the attempt even if it returns None
                 deadline = tracking.ops_deadline(tn)
-            if not st and not gz_new and not deadline and not dl_stamp:
+            # GAASH docs banner (upload asked vs in-customs) — daily cadence, capped
+            docs, docs_stamp = None, None
+            if want_docs:
+                docs_done += 1
+                docs_stamp = db.now_iso()
+                try:
+                    docs = tracking.docs_status(tn)
+                except Exception:  # noqa: BLE001 — status page down ≠ refresh broken
+                    docs = None
+            if not st and not gz_new and not deadline and not dl_stamp and not docs_stamp:
                 continue                  # every lookup failed / nothing new → no writes
             stamp = db.now_iso()
             # Write into a FRESH load, not this request's snapshot: each GWD
@@ -586,7 +605,7 @@ def refresh_tracking(only=None, force=False, batch=5):
                     for fpo in fresh["purchase_orders"]
                     for fpk in fpo.get("packages") or []
                     if fpk.get("package_no") is not None}
-            for po, pk, nt, nd in rows:
+            for po, pk, nt, nd, nc in rows:
                 old = pk.get("tracking_status") if isinstance(pk.get("tracking_status"), dict) else None
                 gz_old = pk.get("gerizim_status") if isinstance(pk.get("gerizim_status"), dict) else None
                 # snapshot pk too: `changes`, the activity trail and later
@@ -603,6 +622,10 @@ def refresh_tracking(only=None, force=False, batch=5):
                         t["gaash_deadline_checked"] = dl_stamp
                         if deadline:
                             t["gaash_deadline"] = deadline
+                    if nc and docs_stamp:
+                        t["docs_checked"] = docs_stamp
+                        if docs:
+                            t["docs_state"] = docs
                     if nt:
                         t["tracking_checked"] = stamp
                 updated += 1
@@ -640,6 +663,29 @@ def refresh_tracking(only=None, force=False, batch=5):
             "stopped": [{"tracking": t, "status": s}
                         for t, s in sorted(stopped.items())],
             "db": load() if picked else pdb}
+
+
+def store_docs_state(tn, docs):
+    """Persist one parcel's GAASH docs banner onto every package carrying the
+    GWD (a number can sit on several packages). Fresh load-merge-save — this
+    writer owns only the two docs keys (see refresh_tracking's clobber note).
+    No-op 0 when no package carries the number."""
+    import tracking
+    tn = tracking.clean_tracking(tn or "")
+    if not tn or not isinstance(docs, dict):
+        return 0
+    fresh = load()
+    hit = 0
+    for po in fresh["purchase_orders"]:
+        for pk in po.get("packages") or []:
+            if tracking.clean_tracking(pk.get("tracking_number") or "") != tn:
+                continue
+            pk["docs_state"] = docs
+            pk["docs_checked"] = docs.get("checked") or datetime.now().astimezone().isoformat()
+            hit += 1
+    if hit:
+        save(fresh)
+    return hit
 
 
 def _pkg_label(po, pk):

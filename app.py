@@ -2176,13 +2176,64 @@ def api_notifications():
                                "view": "leluxe"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass
+    # 📄 parcels whose GAASH page is asking for documents (or shows clearance
+    # stopped) — one standing item, ts = the newest docs check so a state flip
+    # re-surfaces it without re-pinging on every poll. Data = the docs_state
+    # both sweeps store; scanning the two stores costs one query + one file read.
+    try:
+        import features
+        if current_user.has("edit_fulfillment") and features.has(db.current_business(), "leluxe"):
+            n_docs, ts_docs, seen_g = 0, "", set()
+            with db.connect() as _c:
+                for _r in _c.execute(
+                        "SELECT data_json FROM leluxe_orders WHERE deleted=0 "
+                        "AND data_json LIKE '%docs_state%'"):
+                    try:
+                        _d = json.loads(_r["data_json"] or "{}")
+                    except ValueError:
+                        continue
+                    _ds = _d.get("docs_state") or {}
+                    _g = str(_d.get("tracking_number") or "").strip().upper()
+                    if not _g:   # rows often carry the GWD only in the ClickUp field
+                        _g = next((str(v or "").strip().upper()
+                                   for k, v in (_d.get("fields") or {}).items()
+                                   if k.strip().lower() == "tracking number"), "")
+                    _b = ((_d.get("tracking_status") or {}).get("bucket")
+                          if isinstance(_d.get("tracking_status"), dict) else None)
+                    if _ds.get("state") in ("action", "stopped") and _g and _g not in seen_g \
+                            and _b not in ("delivered", "cleared") \
+                            and not isinstance(_d.get("gerizim_status"), dict):
+                        seen_g.add(_g)
+                        n_docs += 1
+                        ts_docs = max(ts_docs, _d.get("docs_checked") or "")
+            import purchases as _pmod
+            for _po in (_pmod.load() or {}).get("purchase_orders") or []:
+                for _pk in _po.get("packages") or []:
+                    _ds = _pk.get("docs_state") or {}
+                    _g = str(_pk.get("tracking_number") or "").strip().upper()
+                    _b = ((_pk.get("tracking_status") or {}).get("bucket")
+                          if isinstance(_pk.get("tracking_status"), dict) else None)
+                    if _ds.get("state") in ("action", "stopped") and _g and _g not in seen_g \
+                            and _b not in ("delivered", "cleared") \
+                            and not isinstance(_pk.get("gerizim_status"), dict):
+                        seen_g.add(_g)
+                        n_docs += 1
+                        ts_docs = max(ts_docs, _pk.get("docs_checked") or "")
+            if n_docs:
+                events.append({"ts": ts_docs, "type": "gaash_docs", "icon": "📄",
+                               "title": f"{n_docs} طرود تحتاج مستندات · parcels need documents",
+                               "sub": "غاش يطلب رفع مستندات — افتح قائمة المستندات · GAASH asks for uploads — open the Docs tab",
+                               "view": "gaashmail"})
+    except Exception:  # noqa - same rule: the bell never breaks
+        pass
     events.sort(key=lambda e: e["ts"], reverse=True)
     out = events[:30]
     # standing alerts survive the recency cap: parked sync conflicts can be DAYS
     # old (that is the whole problem) — sorting by ts pushed them off the list
-    stand = next((e for e in events if e["type"] == "lx_conflict"), None)
-    if stand and stand not in out:
-        out.insert(0, stand)
+    for _typ in ("lx_conflict", "gaash_docs"):
+        stand = next((e for e in events if e["type"] == _typ), None)
+        if stand and stand not in out:
+            out.insert(0, stand)
     needs_quote = sum(1 for o in db.list_orders()
                       if o.get("status") == "REQUESTED" and not o.get("quoted_at"))
     return jsonify({"ok": True, "needs_quote": needs_quote, "events": out})
@@ -2584,6 +2635,49 @@ def api_leluxe_refresh_tracking():
     res = leluxe_mod.refresh_tracking(batch=min(int(b.get("batch") or 5), 10),
                                       only=b.get("tracking"), force=bool(b.get("force")))
     return jsonify({"ok": True, **res})
+
+
+def _docs_check_one(tn):
+    """Fresh GAASH docs-banner check for one parcel, persisted to WHICHEVER
+    board(s) carry the number (each store call is a no-op elsewhere)."""
+    import tracking
+    docs = tracking.docs_status(tn)
+    if docs:
+        leluxe_mod.store_docs_state(tn, docs)
+        try:
+            import purchases as purchases_mod
+            purchases_mod.store_docs_state(tn, docs)
+        except Exception:  # noqa: BLE001 — purchases store hiccup must not lose the answer
+            pass
+    return docs
+
+
+@app.route("/api/leluxe/docs_status")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_docs_status():
+    """Live GAASH docs-banner check for ONE parcel (the ⋯ menu's on-demand
+    re-check) — yellow "upload asked" vs teal "docs in". The bulk sweep stores
+    the same shape on data.docs_state; this bypasses it for a fresh answer."""
+    import tracking
+    tn = tracking.clean_tracking(request.args.get("tracking") or "")
+    if not tn:
+        return jsonify({"ok": False, "error": "tracking required"}), 400
+    return jsonify({"ok": True, "tracking": tn, "docs": _docs_check_one(tn)})
+
+
+@app.route("/api/gaash/docs_check", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_docs_check():
+    """The 📄 Docs queue's per-row Re-check — same check as
+    /api/leluxe/docs_status but reachable by fulfillment (the queue's gate)."""
+    import tracking
+    b = request.get_json(force=True, silent=True) or {}
+    tn = tracking.clean_tracking(b.get("tracking") or "")
+    if not tn:
+        return jsonify({"ok": False, "error": "tracking required"}), 400
+    return jsonify({"ok": True, "tracking": tn, "docs": _docs_check_one(tn)})
 
 
 @app.route("/api/leluxe/item_image", methods=["POST"])
@@ -3072,6 +3166,15 @@ def api_gaash_autoclear():
 def api_gaash_readiness():
     """🩺 the pre-flight table: name / ID / tag / conversation per parcel."""
     return jsonify(gaash_mail.readiness())
+
+
+@app.route("/api/gaash/docs_queue")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_docs_queue():
+    """📄 the docs-upload queue: every open parcel (both boards) with its GAASH
+    docs banner — yellow upload-asked first, with GAASH's own upload links."""
+    return jsonify(gaash_mail.docs_queue())
 
 
 @app.route("/api/gaash/send", methods=["POST"])

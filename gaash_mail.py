@@ -45,7 +45,7 @@ import sqlite3
 import threading
 import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parseaddr, parsedate_to_datetime
@@ -4185,6 +4185,121 @@ def readiness():
     # blocked-and-untouched first — that's the pile the owner came to fix
     rows.sort(key=lambda r: (bool(r["state"]), bool(r["pname_id"]), r["gwd"]))
     return {"ok": True, "rows": rows}
+
+
+_DOCS_ORDER = {"action": 0, "stopped": 1, "unchecked": 2, "info": 3, "plain": 3}
+
+
+def docs_queue():
+    """📄 the docs-upload queue: every open parcel from BOTH boards with its
+    GAASH docs banner (tracking.docs_status shape stored by the sweeps as
+    docs_state) — 'action' = GAASH is asking for documents (yellow, carries
+    the upload links), 'stopped' = clearance halted, 'info'/'plain' = blue
+    in-customs, 'unchecked' = the sweep hasn't reached it yet. Same open-parcel
+    predicate as candidates(); one row per GWD, package rows preferred."""
+    today = datetime.now().astimezone().date()
+
+    def _days_left(dl):
+        try:
+            return (date.fromisoformat(str(dl)[:10]) - today).days
+        except (ValueError, TypeError):
+            return None
+
+    def _stale(checked):
+        if not checked:
+            return True
+        try:
+            return (datetime.now().astimezone()
+                    - datetime.fromisoformat(checked)) > timedelta(days=3)
+        except (ValueError, TypeError):
+            return True
+
+    best = {}   # gwd → row; a docs_state-carrying row beats an unchecked twin
+
+    def _add(gwd, source, name, d):
+        ds = d.get("docs_state") if isinstance(d.get("docs_state"), dict) else None
+        old = best.get(gwd)
+        if old and old["_has_ds"] and not ds:
+            return
+        ts = d.get("tracking_status")
+        best[gwd] = {
+            "_has_ds": bool(ds), "gwd": gwd, "source": source, "name": (name or "")[:70],
+            "state": (ds or {}).get("state") or "unchecked",
+            "links": (ds or {}).get("links") or [],
+            "codes": (ds or {}).get("codes") or [],
+            "arrived": bool((ds or {}).get("arrived")),
+            "docs_checked": d.get("docs_checked") or "",
+            "stale": _stale(d.get("docs_checked")),
+            "bucket": _bucket(ts) or None,
+            "label": (ts.get("label") if isinstance(ts, dict)
+                      else (str(ts)[:40] if ts else None)),
+            "gaash_deadline": d.get("gaash_deadline") or "",
+            "days_left": _days_left(d.get("gaash_deadline")),
+        }
+
+    # ── Leluxe mirror ──
+    with db.connect() as c:
+        rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
+                         "data_json FROM leluxe_orders WHERE deleted=0").fetchall()
+    names = {r["id"]: r["name"] for r in rows}
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:  # noqa
+            continue
+        f = d.get("fields") or {}
+        tn = str(d.get("tracking_number") or "").strip().upper()
+        if not tn:
+            for k, v in f.items():
+                if k.strip().lower() == "tracking number":
+                    tn = str(v or "").strip().upper()
+                    break
+        if not re.match(r"GWD\d+$", tn):
+            continue
+        if _bucket(d.get("tracking_status")) in _TERMINAL or \
+                _bucket(d.get("gerizim_status")) == "delivered":
+            continue
+        gash = next((v for k, v in f.items()
+                     if k.strip().lower() == "gash status"), None)
+        if re.search(r"DELIVERED", str(gash or ""), re.I):
+            continue
+        _add(tn, "leluxe", names.get(r["parent_local_id"]) or r["name"], d)
+    # ── Purchases packages ──
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        pos = []
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            tn = str(pk.get("tracking_number") or "").strip().upper()
+            if not re.match(r"GWD\d+$", tn):
+                continue
+            if _bucket(pk.get("tracking_status")) in _TERMINAL or \
+                    _bucket(pk.get("gerizim_status")) == "delivered":
+                continue
+            if re.search(r"deliver|complete|collect", str(pk.get("otlobly_status") or ""), re.I):
+                continue
+            _add(tn, "purchases", p.get("ship_to"), pk)
+
+    out = list(best.values())
+    pmap = parcel_name_map()
+    thmap = {t["gwd"]: (t.get("state") or "") for t in threads_all()}
+    for r in out:
+        r.pop("_has_ds", None)
+        r["pname"] = pmap.get(r["gwd"], "")
+        r["thread_state"] = thmap.get(r["gwd"], "")
+    # yellow first (stalest check first — the pile most likely to have moved),
+    # then stopped, then never-checked, then the blue watchlist
+    out.sort(key=lambda r: (_DOCS_ORDER.get(r["state"], 3),
+                            r["docs_checked"] or "", r["gwd"]))
+    counts = {"action": 0, "stopped": 0, "unchecked": 0, "watching": 0}
+    for r in out:
+        k = r["state"]
+        counts["action" if k == "action" else
+               "stopped" if k == "stopped" else
+               "unchecked" if k == "unchecked" else "watching"] += 1
+    return {"ok": True, "rows": out, "counts": counts}
 
 
 _GASH_FK = None

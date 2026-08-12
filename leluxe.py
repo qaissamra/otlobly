@@ -3958,6 +3958,32 @@ def _skip_gwds(rows, config=None):
     return skip
 
 
+def store_docs_state(tn, docs):
+    """Persist one parcel's GAASH docs banner onto every row that rides the
+    GWD (same effective-number fan-out as refresh_tracking), so a manual ⋯
+    re-check survives the next board reload."""
+    import tracking
+    tn = tracking.clean_tracking(tn or "")
+    if not tn or not isinstance(docs, dict):
+        return 0
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    eff = _eff_tn_map(rows)
+    hit = 0
+    with db.connect() as c:
+        for row in rows:
+            if tracking.clean_tracking(eff.get(row["id"]) or "") != tn:
+                continue
+            d = row["data"]
+            d["docs_state"] = docs
+            d["docs_checked"] = docs.get("checked") or datetime.now().astimezone().isoformat()
+            c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), row["id"]))
+            hit += 1
+    return hit
+
+
 def refresh_tracking(batch=5, only=None, force=False, config=None):
     """One bounded batch of live GAASH + Gerizim checks. Skips parcels that
     need no more carrier calls (_skip_gwds) UNLESS only/force is set: `only`
@@ -3975,6 +4001,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     now = datetime.now().astimezone()
     cutoff = now - timedelta(minutes=30)
     dl_cutoff = now - timedelta(days=14)
+    docs_cutoff = now - timedelta(days=1)   # yellow→blue flips fast once docs land
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
@@ -4007,22 +4034,29 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
         # from ever being fetched again, even with force)
         eligible = (ts.get("bucket") if isinstance(ts, dict) else None) \
             not in ("cleared", "delivered") and not (isinstance(gz, dict) and gz)
-        need_dl = False
+        need_dl = need_docs = False
         if eligible:
             try:
                 need_dl = force or not d.get("gaash_deadline") or \
                     datetime.fromisoformat(d.get("gaash_deadline_checked") or "") <= dl_cutoff
             except (ValueError, TypeError):
                 need_dl = True
-        if need or need_dl:
-            work.setdefault(tn, []).append((row["id"], need, need_dl))
+            try:
+                need_docs = force or \
+                    datetime.fromisoformat(d.get("docs_checked") or "") <= docs_cutoff
+            except (ValueError, TypeError):
+                need_docs = True
+        if need or need_dl or need_docs:
+            work.setdefault(tn, []).append((row["id"], need, need_dl, need_docs))
     todo = list(work.items())[:batch]
     session = None
     results = []
+    docs_done, docs_cap = 0, 3   # docs page is SLOW (~10-25s) — keep the batch inside gunicorn's 120s
     for tn, targets in todo:
         want_track = any(t[1] for t in targets)
         want_dl = any(t[2] for t in targets)
-        st = gz_new = deadline = gaash_err = None
+        want_docs = any(t[3] for t in targets) and docs_done < docs_cap
+        st = gz_new = deadline = docs = gaash_err = None
         if want_track:
             data = None
             try:
@@ -4053,6 +4087,12 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                 deadline = tracking.ops_deadline(tn)
             except Exception:  # noqa: BLE001
                 deadline = None
+        if want_docs:
+            docs_done += 1
+            try:
+                docs = tracking.docs_status(tn)
+            except Exception:  # noqa: BLE001
+                docs = None
         results.append({
             "tracking": tn,
             "found": bool(st),
@@ -4061,12 +4101,13 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
             "error": gaash_err,
             "gz": gz_new.get("bucket") if isinstance(gz_new, dict) else gz_new,
             "deadline": deadline,
+            "docs": (docs or {}).get("state"),
             "warn": ("unusual GWD length — usually GWD + 9 digits"
                      if tn.upper().startswith("GWD")
                      and not GWD_CANON.match(tn.upper()) else None),
         })
         stamp = now.isoformat()
-        for row_id, _n, _d in targets:
+        for row_id, *_flags in targets:
             with db.connect() as c:
                 r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
                               (row_id,)).fetchone()
@@ -4093,6 +4134,10 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                     d["gaash_deadline_checked"] = stamp
                     if deadline:
                         d["gaash_deadline"] = deadline
+                if want_docs:
+                    d["docs_checked"] = stamp
+                    if docs:
+                        d["docs_state"] = docs
                 c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                           (json.dumps(d, ensure_ascii=False), row_id))
         time.sleep(_pace())
