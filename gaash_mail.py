@@ -4187,16 +4187,42 @@ def readiness():
     return {"ok": True, "rows": rows}
 
 
-_DOCS_ORDER = {"action": 0, "stopped": 1, "unchecked": 2, "info": 3, "plain": 3}
+_DOCS_ORDER = {"action": 0, "stopped": 1, "unchecked": 2, "info": 3, "plain": 3,
+               "error": 3, "noanswer": 4}
 
 
-def docs_queue():
-    """📄 the docs-upload queue: every open parcel from BOTH boards with its
-    GAASH docs banner (tracking.docs_status shape stored by the sweeps as
-    docs_state) — 'action' = GAASH is asking for documents (yellow, carries
+def _past_customs(ts, gz, stage):
+    """The parcel is past the customs-documents stage, so the docs queue must
+    not list it. One union of the EXISTING vocabularies — no new rules:
+      · Gerizim physically has it (any bucket: office/sms/pickup/out/delivered
+        — leluxe.GZ_ARRIVED; a parcel only reaches Gerizim after GAASH hands
+        it off, and gerizim.NOT_FOUND is a bare string so it can't match)
+      · the live GAASH bucket is cleared/delivered (_TERMINAL)
+      · the owner's stage label ranks at/after "CLEARED GASH" in
+        leluxe.GASH_STAGE_RANK (4 = cleared … 6 = picked up by Gerizim … 8 =
+        GERZIM DELIVERED)"""
+    import leluxe
+    if isinstance(gz, dict) and gz.get("bucket") in leluxe.GZ_ARRIVED:
+        return True
+    if _bucket(ts) in _TERMINAL:
+        return True
+    rank = leluxe._gash_rank(stage)   # None = a label outside the vocabulary
+    return rank is not None and rank >= 4
+
+
+def docs_queue(names=True):
+    """📄 the docs-upload queue: every parcel from BOTH boards still IN customs,
+    with its GAASH docs banner (tracking.docs_status shape stored by the sweeps
+    as docs_state) — 'action' = GAASH is asking for documents (yellow, carries
     the upload links), 'stopped' = clearance halted, 'info'/'plain' = blue
-    in-customs, 'unchecked' = the sweep hasn't reached it yet. Same open-parcel
-    predicate as candidates(); one row per GWD, package rows preferred."""
+    in-customs, 'unchecked' = the sweep hasn't reached it yet, 'noanswer' =
+    GAASH has no such number. Parcels past customs (Gerizim has them, or
+    cleared/delivered — see _past_customs) are NOT listed: their docs question
+    is settled. One row per GWD, and if ANY row of a parcel says past-customs
+    the whole parcel drops out.
+
+    names=False skips the name/thread enrichment — the notifications bell only
+    needs the counts, and it polls every 60s."""
     today = datetime.now().astimezone().date()
 
     def _days_left(dl):
@@ -4215,6 +4241,7 @@ def docs_queue():
             return True
 
     best = {}   # gwd → row; a docs_state-carrying row beats an unchecked twin
+    gone = set()  # any row saying past-customs drops the whole parcel
 
     def _add(gwd, source, name, d):
         ds = d.get("docs_state") if isinstance(d.get("docs_state"), dict) else None
@@ -4241,7 +4268,7 @@ def docs_queue():
     with db.connect() as c:
         rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
                          "data_json FROM leluxe_orders WHERE deleted=0").fetchall()
-    names = {r["id"]: r["name"] for r in rows}
+    onames = {r["id"]: r["name"] for r in rows}   # NOT `names` — that's the parameter
     for r in rows:
         try:
             d = json.loads(r["data_json"] or "{}")
@@ -4256,14 +4283,12 @@ def docs_queue():
                     break
         if not re.match(r"GWD\d+$", tn):
             continue
-        if _bucket(d.get("tracking_status")) in _TERMINAL or \
-                _bucket(d.get("gerizim_status")) == "delivered":
-            continue
         gash = next((v for k, v in f.items()
                      if k.strip().lower() == "gash status"), None)
-        if re.search(r"DELIVERED", str(gash or ""), re.I):
+        if _past_customs(d.get("tracking_status"), d.get("gerizim_status"), gash):
+            gone.add(tn)
             continue
-        _add(tn, "leluxe", names.get(r["parent_local_id"]) or r["name"], d)
+        _add(tn, "leluxe", onames.get(r["parent_local_id"]) or r["name"], d)
     # ── Purchases packages ──
     try:
         import purchases
@@ -4275,16 +4300,20 @@ def docs_queue():
             tn = str(pk.get("tracking_number") or "").strip().upper()
             if not re.match(r"GWD\d+$", tn):
                 continue
-            if _bucket(pk.get("tracking_status")) in _TERMINAL or \
-                    _bucket(pk.get("gerizim_status")) == "delivered":
-                continue
-            if re.search(r"deliver|complete|collect", str(pk.get("otlobly_status") or ""), re.I):
+            own = str(pk.get("otlobly_status") or "")
+            if _past_customs(pk.get("tracking_status"), pk.get("gerizim_status"), own) or \
+                    re.search(r"deliver|complete|collect", own, re.I):
+                gone.add(tn)
                 continue
             _add(tn, "purchases", p.get("ship_to"), pk)
 
-    out = list(best.values())
-    pmap = parcel_name_map()
-    thmap = {t["gwd"]: (t.get("state") or "") for t in threads_all()}
+    # a docs banner of its own saying "cleared" settles the question too — the
+    # boards' pills already hide those, and the queue must not list them either
+    out = [r for g, r in best.items()
+           if g not in gone and r["state"] != "cleared"]
+    pmap = parcel_name_map() if names else {}
+    thmap = ({t["gwd"]: (t.get("state") or "") for t in threads_all()}
+             if names else {})
     for r in out:
         r.pop("_has_ds", None)
         r["pname"] = pmap.get(r["gwd"], "")
@@ -4293,12 +4322,13 @@ def docs_queue():
     # then stopped, then never-checked, then the blue watchlist
     out.sort(key=lambda r: (_DOCS_ORDER.get(r["state"], 3),
                             r["docs_checked"] or "", r["gwd"]))
-    counts = {"action": 0, "stopped": 0, "unchecked": 0, "watching": 0}
+    counts = {"action": 0, "stopped": 0, "unchecked": 0, "watching": 0, "noanswer": 0}
     for r in out:
         k = r["state"]
         counts["action" if k == "action" else
                "stopped" if k == "stopped" else
-               "unchecked" if k == "unchecked" else "watching"] += 1
+               "unchecked" if k in ("unchecked", "error") else
+               "noanswer" if k == "noanswer" else "watching"] += 1
     return {"ok": True, "rows": out, "counts": counts}
 
 

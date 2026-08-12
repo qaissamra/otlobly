@@ -669,19 +669,24 @@ def store_docs_state(tn, docs):
     """Persist one parcel's GAASH docs banner onto every package carrying the
     GWD (a number can sit on several packages). Fresh load-merge-save — this
     writer owns only the two docs keys (see refresh_tracking's clobber note).
-    No-op 0 when no package carries the number."""
+    No-op 0 when no package carries the number.
+
+    docs=None means the lookup failed: stamp the attempt, keep the last known
+    state (a hiccup must not erase a real 'upload asked')."""
     import tracking
     tn = tracking.clean_tracking(tn or "")
-    if not tn or not isinstance(docs, dict):
+    if not tn:
         return 0
+    stamp = (docs or {}).get("checked") or datetime.now().astimezone().isoformat()
     fresh = load()
     hit = 0
     for po in fresh["purchase_orders"]:
         for pk in po.get("packages") or []:
             if tracking.clean_tracking(pk.get("tracking_number") or "") != tn:
                 continue
-            pk["docs_state"] = docs
-            pk["docs_checked"] = docs.get("checked") or datetime.now().astimezone().isoformat()
+            if isinstance(docs, dict):
+                pk["docs_state"] = docs
+            pk["docs_checked"] = stamp
             hit += 1
     if hit:
         save(fresh)
