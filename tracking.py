@@ -197,6 +197,87 @@ def ops_deadline(tn, timeout=8):
     return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else None
 
 
+# ── GAASH docs state (the parcel-status page's yellow/blue banner) ──────────
+# The public status page fires a SECOND call, /parcel-status-data, and renders:
+# any AdditionalStatuses entry WITH Links → the yellow "Missing Documents" card
+# (GAASH is asking us to act); entries with Links:null → the teal "Customs
+# Status" info card (docs are in, parcel just processing). Same nonce pattern
+# as get_session, but this is a WP REST nonce scraped from the status page.
+
+STATUS_PAGE = "https://gaashwd.com/he/parcel-status/?TrackingNumber=x"
+_STATUS_SESSION_CACHE = {"at": 0.0, "val": None}
+_DOCS_LINK_LABEL = {0: "Upload Document", 1: "Upload Permit",
+                    2: "Pay now", 3: "Update Info"}
+
+
+def status_session(retries=3, timeout=12):
+    """apiUrl + X-WP-Nonce for the parcel-status REST API, scraped from the
+    embedded parcelStatusTrackerData JSON and cached like get_session."""
+    if _STATUS_SESSION_CACHE["val"] and time.time() - _STATUS_SESSION_CACHE["at"] < _SESSION_TTL:
+        return _STATUS_SESSION_CACHE["val"]
+    html, last = None, None
+    for attempt in range(retries):
+        try:
+            req = request.Request(STATUS_PAGE, headers={"User-Agent": UA})
+            with request.urlopen(req, timeout=timeout) as r:
+                html = r.read().decode("utf-8", "replace")
+            break
+        except Exception as e:  # noqa
+            last = e
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+    if html is None:
+        raise RuntimeError(f"Could not reach GAASH status page after {retries} tries: {last}")
+    m = re.search(r"var parcelStatusTrackerData = (\{.*?\});?\s*</script>", html, re.S)
+    if not m:
+        raise RuntimeError("Could not find parcelStatusTrackerData (site layout may have changed).")
+    cfg = json.loads(m.group(1))
+    val = cfg["apiUrl"], cfg["nonce"]
+    _STATUS_SESSION_CACHE.update(at=time.time(), val=val)
+    return val
+
+
+def docs_status(tn, timeout=25):
+    """The status page's docs banner for one parcel, classified:
+    action  — a status row carries Links (yellow card: upload/update/pay asked)
+    info    — status rows without links (teal card: docs in, customs working)
+    cleared / stopped / plain — IsClearance / FinalStatuses / nothing shown.
+    Returns None on any failure (same fail-quiet contract as ops_deadline)."""
+    tn = clean_tracking(tn)
+    if not tn:
+        return None
+    try:
+        api, nonce = status_session()
+        url = f"{api}/parcel-status-data?parcel_id={quote(tn)}&lang=he"
+        req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})
+        with request.urlopen(req, timeout=timeout) as r:
+            d = json.loads(r.read().decode() or "null")
+    except Exception:  # noqa: BLE001 - status page down ≠ tracking broken
+        return None
+    if not isinstance(d, dict) or d.get("code"):
+        return None
+    extra = [s for s in (d.get("AdditionalStatuses") or []) if isinstance(s, dict)]
+    linked = [s for s in extra if s.get("Links")]
+    if d.get("IsClearance"):
+        state = "cleared"
+    elif d.get("FinalStatuses"):
+        state = "stopped"
+    elif linked:
+        state = "action"
+    elif extra:
+        state = "info"
+    else:
+        state = "plain"
+    links = [{"url": lk.get("LinkUrl") or "", "type": lk.get("Type"),
+              "label": _DOCS_LINK_LABEL.get(lk.get("Type"), "Upload Document")}
+             for s in linked for lk in (s.get("Links") or []) if isinstance(lk, dict)]
+    return {"state": state,
+            "codes": [s.get("StatusCode") for s in extra],
+            "links": links,
+            "arrived": bool(d.get("IsArrived")),
+            "checked": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")}
+
+
 def fetch_one(tn, api_url, nonce, lang="en"):
     url = f"{api_url}/parcel-tracking-data?parcel_id={quote(clean_tracking(tn))}&lang={lang}"
     req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})

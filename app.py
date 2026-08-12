@@ -2586,6 +2586,23 @@ def api_leluxe_refresh_tracking():
     return jsonify({"ok": True, **res})
 
 
+@app.route("/api/leluxe/docs_status")
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_docs_status():
+    """Live GAASH docs-banner check for ONE parcel (the ⋯ menu's on-demand
+    re-check) — yellow "upload asked" vs teal "docs in". The bulk sweep stores
+    the same shape on data.docs_state; this bypasses it for a fresh answer."""
+    import tracking
+    tn = tracking.clean_tracking(request.args.get("tracking") or "")
+    if not tn:
+        return jsonify({"ok": False, "error": "tracking required"}), 400
+    docs = tracking.docs_status(tn)
+    if docs:
+        leluxe_mod.store_docs_state(tn, docs)
+    return jsonify({"ok": True, "tracking": tn, "docs": docs})
+
+
 @app.route("/api/leluxe/item_image", methods=["POST"])
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")

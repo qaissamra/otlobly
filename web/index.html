@@ -3304,6 +3304,21 @@ function lxDeadlinePill(pk,short){
   const label=n<0?(short?"passed!":"GAASH passed!"):(n===0?(short?"⏳ today":"GAASH today"):(short?`⏳ ${n}d`:`⏳ GAASH ${n}d`));
   return `<span class="pill" style="background:${c}1a;color:${c};border:1px solid ${c}55;font-size:10px" title="GAASH doc deadline ${poEsc(dl)}">${label}</span>`;
 }
+// GAASH docs banner (the status page's yellow/blue): action = GAASH asks us to
+// upload (clickable → their own upload link), info = docs in, customs working.
+function lxDocsPill(pk){
+  const ds=(pk.data&&pk.data.docs_state)||null; if(!ds||!ds.state) return "";
+  const b=((pk.data.tracking_status||{}).bucket)||""; if(b==="delivered"||b==="cleared") return "";
+  if(ds.state==="action"){
+    const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
+    const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
+    const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
+    return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
+  }
+  if(ds.state==="info")
+    return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="docs received — parcel in customs processing">📄 المستندات وصلت · docs in</span>`;
+  return "";
+}
 function lxThumb(url,size){ size=size||44;
   return url?`<img src="${poEsc(url)}" loading="lazy" style="width:${size}px;height:${size}px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff;flex:0 0 auto">`
     :`<span style="width:${size}px;height:${size}px;border-radius:6px;border:1px dashed var(--line);background:var(--bg2);display:inline-block;flex:0 0 auto"></span>`;
@@ -4418,7 +4433,7 @@ function lxKRow(r){
       [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
       tn?[`📧 بريد التخليص · Clearance email`,`lxMailCompose('${poEsc(tn)}',${o?o.id:0})`]:null,
       tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
+      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
       tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
       [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
       [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
@@ -4426,7 +4441,7 @@ function lxKRow(r){
       its.length?[`🚚 تعيين رقم التتبع للكل (${its.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(tn||"")}','${poEsc(ordTn)}')`]:null,
       tn?[`📧 بريد التخليص · Clearance email`,`lxMailCompose('${poEsc(tn)}',${o?o.id:0})`]:null,
       tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
+      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
     ]);
   const click=pk?`lxInfoOpen('package',${pk.id})`:(o?`lxJumpOrder(${o.id})`:"");
   const cells={
@@ -4437,7 +4452,7 @@ function lxKRow(r){
     status: statusBit,
     gash: lxGashCell(en,gashStatus,tn),
     mail: lxMailPill(tn),
-    deadline: `${en?lxDeadlinePill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
+    deadline: `${en?lxDeadlinePill(en)+lxDocsPill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
     due: done?"":lxDueChip(due,doneSt),
     menu,
   };
@@ -5111,7 +5126,7 @@ function lxCardHtml(o){
         total: amt!=null?`<b style="font-size:12.5px" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:"",
         tracking: headTn,
         gash: lxMergedStatusPill(tr)||lxNoDataPill(tr),
-        deadline: `${tr?lxDeadlinePill(tr,true):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}`,
+        deadline: `${tr?lxDeadlinePill(tr,true)+lxDocsPill(tr):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}`,
         created: o.date_created?`<span class="muted2" style="font-size:10.5px" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:"",
         due: delivered?"":lxDueChip(o.due_date,lxIsDone(o)),
         menu: oMenu,
@@ -5224,14 +5239,14 @@ function lxVPkgHtml(o,g){
         profile: lxProfileCell(lxAcctChain(it,o)),
         status: `${lxDot(it)}${lxStatusSelect(it)}`,
         gash: lxGashCell(en,gashStatus,g.tn),
-        deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
+        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
         due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
         menu: popMenu([
           [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
           [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
           g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
+          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null, g.tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(g.tn)}')`]:null,
           [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
         ]),
       })}
@@ -5248,11 +5263,11 @@ function lxVPkgHtml(o,g){
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(g.items,o)),
         gash: lxGashCell(en,gashStatus,g.tn),
-        deadline: `${lxDeadlinePill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
+        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
         menu: popMenu([
           [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
           g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null,
+          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null, g.tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(g.tn)}')`]:null,
         ]),
       })}
     </div></div>`;
@@ -5282,12 +5297,12 @@ function lxPkgHtml(o,pk,items){
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(items,pk,o)),
         gash: lxGashCell(en,gashStatus,tn),
-        deadline: `${lxDeadlinePill(en)}${lxDueChip(gashDate,false)}`,
+        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${lxDueChip(gashDate,false)}`,
         menu: popMenu([
           [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
           [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
           tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-          tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null,
+          tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
           tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
           [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
           [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
@@ -5542,6 +5557,36 @@ async function lxCheckShipping(gwd){
   }
   loadLeluxe();
 }
+// on-demand GAASH docs check (the status page's yellow/blue banner) — fresh
+// answer for ONE parcel, persisted server-side so the pill survives reload
+async function lxCheckDocs(gwd){
+  const pr=$("lxProgress"); pr.style.display="block";
+  pr.innerHTML=`<span class="spin"></span> 📄 <b>${poEsc(gwd)}</b> — فحص مستندات غاش · checking GAASH docs page…`;
+  let r=null;
+  try{
+    const res=await fetch(`/api/leluxe/docs_status?tracking=${encodeURIComponent(gwd)}`);
+    try{ r=await res.json(); }catch(_){ r=null; }
+    if(!res.ok) r={ok:false,error:(r&&r.error)||`HTTP ${res.status}`};
+    else if(!r) r={ok:false,error:"استجابة غير مفهومة · unreadable server response"};
+  }catch(e){ r={ok:false,error:"لا اتصال بالخادم · network error"}; }
+  const ds=r&&r.ok?r.docs:null;
+  if(!r.ok){
+    pr.innerHTML=`⚠ <b>${poEsc(gwd)}</b> — فشل الفحص · check failed: ${poEsc(r.error||"?")}`;
+  }else if(!ds){
+    pr.innerHTML=`❔ <b>${poEsc(gwd)}</b> — صفحة غاش لا تجيب لهذا الرقم · GAASH's status page has no answer for this number`;
+  }else if(ds.state==="action"){
+    const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
+    pr.innerHTML=`🟡 <b>${poEsc(gwd)}</b> — غاش يطلب مستندات · GAASH is asking for documents`
+      +(lk?` — <a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer"><b>رفع الآن · upload now</b></a>`:"");
+    toast(`🟡 ${gwd} — upload requested`);
+  }else if(ds.state==="info"){
+    pr.innerHTML=`🔵 <b>${poEsc(gwd)}</b> — المستندات وصلت، الطرد قيد المعالجة في الجمارك · docs in, customs processing`;
+    toast(`🔵 ${gwd} — docs in`);
+  }else{
+    pr.innerHTML=`✅ <b>${poEsc(gwd)}</b> — لا طلبات مستندات على صفحة غاش · no document requests on GAASH's page (${poEsc(ds.state)})`;
+  }
+  loadLeluxe();
+}
 function lxInfoOpen(kind,id){
   const path=lxFindPath(id); if(!path) return;
   const {row,pkg,order}=path, d=row.data||{};
@@ -5648,7 +5693,7 @@ function lxInfoOpen(kind,id){
     :k==="package"?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`:"";
   $("lxInfoBody").innerHTML=`
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      ${thumbs}${statusBit}${lxMergedStatusPill(tr)||lxNoDataPill(tr)}${lxMailPill(tn)}${tr&&!dlMoot?lxDeadlinePill(tr):""}
+      ${thumbs}${statusBit}${lxMergedStatusPill(tr)||lxNoDataPill(tr)}${lxMailPill(tn)}${tr&&!dlMoot?lxDeadlinePill(tr):""}${tr?lxDocsPill(tr):""}
     </div>
     ${dl&&!dlMoot?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div><div style="font-weight:800">⏳ موعد غاش النهائي · GAASH deadline</div>
@@ -5663,6 +5708,7 @@ function lxInfoOpen(kind,id){
       ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckShipping('${poEsc(tn)}')">🔎 تتبع الشحنة · Check shipping</button>`:""}
       ${tn?`<button class="po-btn" onclick="lxInfoClose();lxMailCompose('${poEsc(tn)}',${order?order.id:(k==="order"?row.id:0)})">📧 بريد التخليص · Clearance email</button>`:""}
       ${tn?`<button class="po-btn" onclick="lxInfoClose();gaashUploadOpenGwd('${poEsc(tn)}')">🪪 رفع مستندات · Upload docs</button>`:""}
+      ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckDocs('${poEsc(tn)}')">📄 فحص المستندات · Check docs</button>`:""}
       ${gzGwds.length?`<button class="po-btn" onclick="lxGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:""}
       <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>
       ${addBtns}
