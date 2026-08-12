@@ -237,12 +237,23 @@ def status_session(retries=3, timeout=12):
     return val
 
 
+def _docs_result(state, **extra):
+    out = {"state": state, "codes": [], "links": [], "arrived": False,
+           "checked": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")}
+    out.update(extra)
+    return out
+
+
 def docs_status(tn, timeout=25):
     """The status page's docs banner for one parcel, classified:
-    action  — a status row carries Links (yellow card: upload/update/pay asked)
-    info    — status rows without links (teal card: docs in, customs working)
-    cleared / stopped / plain — IsClearance / FinalStatuses / nothing shown.
-    Returns None on any failure (same fail-quiet contract as ops_deadline)."""
+    action   — a status row carries Links (yellow card: upload/update/pay asked)
+    info     — status rows without links (teal card: docs in, customs working)
+    cleared / stopped / plain — IsClearance / FinalStatuses / nothing shown
+    noanswer — GAASH has NO RECORD of the number (their 404 + code=no_data);
+               almost always a wrong/typo'd tracking number, and a real answer
+               the UI must show rather than leaving the row 'unchecked'.
+    Returns None only when the lookup itself failed (network / their site down),
+    so a caller can tell 'no such parcel' from 'ask again later'."""
     tn = clean_tracking(tn)
     if not tn:
         return None
@@ -252,10 +263,22 @@ def docs_status(tn, timeout=25):
         req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})
         with request.urlopen(req, timeout=timeout) as r:
             d = json.loads(r.read().decode() or "null")
+    except error.HTTPError as e:
+        # 404 + {"code":"no_data"} is GAASH ANSWERING "we don't have this
+        # number" — not a failure. Any other HTTP status is a real failure.
+        try:
+            body = json.loads(e.read().decode() or "null")
+        except Exception:  # noqa: BLE001
+            body = None
+        if e.code == 404 and isinstance(body, dict) and body.get("code") == "no_data":
+            return _docs_result("noanswer")
+        return None
     except Exception:  # noqa: BLE001 - status page down ≠ tracking broken
         return None
-    if not isinstance(d, dict) or d.get("code"):
+    if not isinstance(d, dict):
         return None
+    if d.get("code"):
+        return _docs_result("noanswer") if d.get("code") == "no_data" else None
     extra = [s for s in (d.get("AdditionalStatuses") or []) if isinstance(s, dict)]
     linked = [s for s in extra if s.get("Links")]
     if d.get("IsClearance"):

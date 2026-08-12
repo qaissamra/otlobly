@@ -3313,6 +3313,9 @@ function lxDeadlinePill(pk,short){
 function lxDocsPill(pk){
   const ds=(pk.data&&pk.data.docs_state)||null; if(!ds||!ds.state) return "";
   const b=((pk.data.tracking_status||{}).bucket)||""; if(b==="delivered"||b==="cleared") return "";
+  // Gerizim has it ⇒ past customs (they only get it after GAASH hands it off,
+  // and "notfound" is stored as a bare STRING so it can't match) — docs moot
+  const gz=pk.data&&pk.data.gerizim_status; if(gz&&typeof gz==="object") return "";
   if(ds.state==="action"){
     const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
     const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
@@ -9345,6 +9348,17 @@ function solidPill(hex,txt,tip,opts){ const o=opts||{};
   return `<span class="pill${o.cls?" "+o.cls:""}" style="color:${inkFor(hex)};background:${hex};border-color:${hex};font-weight:700${o.style?";"+o.style:""}"${tip?` title="${poEsc(tip)}"`:''}${o.attrs?" "+o.attrs:""}>${poEsc(txt)}</span>`; }
 // GAASH bucket → hex fallback for statuses the GASH_STATUS map doesn't know yet.
 const GAASH_HEX={transit:"#4466ff",arrived:"#e5484d",customs:"#f76808",cleared:"#0f9d9f"};
+// The bucket→pill rule, for callers that hold only a bucket + label string (the
+// 📄 Docs queue rows) rather than a whole package. pkgGaashPill's tail delegates
+// here so there is ONE bucket→colour truth. Note GAASH_HEX has no `delivered`
+// key on purpose — that case short-circuits to the green tone pill.
+function gaashBucketPill(bucket,label,tip,opts){
+  if(!bucket&&!label) return "";
+  if(bucket==="delivered") return tonePill("green",label||"Delivered",tip,opts);
+  const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
+  const txt=SHORT[bucket]||label||bucket;
+  return GAASH_HEX[bucket]?hexPill(GAASH_HEX[bucket],txt,tip,opts):tonePill("amber",txt,tip,opts);
+}
 // GAASH status text/code → the owner's ClickUp "GASH STATUS" values + colours
 // (custom field 25d6446b on list "AZ (2)" 901523...506, copied 2026-07-13 —
 // names kept verbatim, typos included; TEXT matches first, codes are ambiguous).
@@ -9772,7 +9786,8 @@ function pkgDocsPill(p,pk,pi){
   // packages the sweep hasn't checked yet.
   const ds=pk&&pk.docs_state;
   const bucket=((pk&&pk.tracking_status)||{}).bucket||"";
-  if(ds&&ds.state&&bucket!=="delivered"&&bucket!=="cleared"){
+  const pgz=pk&&pk.gerizim_status;   // dict ⇒ Gerizim has it ⇒ past customs
+  if(ds&&ds.state&&bucket!=="delivered"&&bucket!=="cleared"&&!(pgz&&typeof pgz==="object")){
     if(ds.state==="action"){
       const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
       const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
@@ -9840,9 +9855,7 @@ function pkgGaashPill(pk){
   const cu=gashLookup(b.text,b.code);              // the owner's ClickUp "GASH STATUS" value + colour
   if(cu) return solidPill(cu.hex,cu.label,tip);
   // unknown status → coarse bucket word in the bucket colour (raw text stays in the tooltip)
-  const SHORT={transit:"In transit",arrived:"At destination",customs:"Customs",cleared:"Cleared customs"};
-  const txt=SHORT[b.bucket]||b.text||b.label||"In transit";
-  return GAASH_HEX[b.bucket]?hexPill(GAASH_HEX[b.bucket],txt,tip):tonePill("amber",txt,tip);
+  return gaashBucketPill(b.bucket,b.text||b.label||"In transit",tip);
 }
 // Pill 4: Gerizim last-mile (postgerizim.com). GAASH "Delivered" only means the
 // box reached the last-mile shelf — this pill says whether the CUSTOMER has it.
@@ -13167,12 +13180,15 @@ async function gmReadyTag(gwd,on){
   gmReadyDraw();
 }
 // ── 📄 Docs queue: every open parcel's GAASH docs banner, both boards ──
-let GM_DOCS={mode:"action"};
+let GM_DOCS={mode:"action", busy:false, stop:false, done:0, total:0};
 async function gmDocsRender(){
   const p=$("gmDocsPane"); if(!p) return;
   p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/docs_queue")).json(); }catch(e){ d=null; }
   if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  // product photos come from the boards themselves (same source as Bulk search /
+  // the Workflows expansion) — a role without Leluxe access just gets no ⌚ thumbs
+  try{ await bsEnsureData(); }catch(e){}
   GM.docs=d.rows||[];
   if(GM_DOCS.mode==="action"&&!GM.docs.some(r=>r.state==="action"||r.state==="stopped")) GM_DOCS.mode="all";
   gmDocsDraw();
@@ -13184,20 +13200,42 @@ function gmDocsStatePill(r){
   }
   if(r.state==="stopped")
     return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10.5px">⛔ ${T("توقف التخليص · stopped")}</span>`;
-  if(r.state==="unchecked")
-    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10.5px" title="${T("لم يُفحص بعد — اضغط فحص · not checked yet — press Check")}">❔ ${T("غير مفحوص · unchecked")}</span>`;
+  if(r.state==="noanswer"){
+    const odd=!/^GWD\d{9}$/.test(r.gwd||"");
+    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px dashed var(--line);font-size:10.5px" title="${T("غاش لا سجل لهذا الرقم — تأكد من رقم التتبع · GAASH has no record of this number — check the Tracking Number")}">🚫 ${T("لا جواب · no answer")}</span>`
+      +(odd?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px" title="${T("الأرقام عادةً GWD + ٩ أرقام · a GWD is normally GWD + 9 digits")}">⚠ ${T("رقم غير معتاد · unusual number")}</span>`:"");
+  }
+  if(r.state==="unchecked"||r.state==="error")
+    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10.5px" title="${T(r.state==="error"?"تعذّر الفحص آخر مرة — أعد المحاولة · last check failed — try again":"لم يُفحص بعد — اضغط فحص · not checked yet — press Check")}">❔ ${T("غير مفحوص · unchecked")}</span>`;
+  // GAASH's docs clock only starts at arrival — say so instead of claiming customs
+  if(!r.arrived)
+    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10.5px" title="${T("لم يصل إسرائيل بعد — لا مستندات مطلوبة حتى الوصول · not in Israel yet — nothing is asked before arrival")}">🚚 ${T("لم يصل بعد · not arrived")}</span>`;
   return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10.5px" title="${T("لا طلب مستندات، قيد المعالجة · no request, customs processing")}">🔵 ${T("بالجمارك · in customs")}</span>`;
 }
 function gmDocsDraw(){
   const p=$("gmDocsPane"); if(!p) return;
   const rows=GM.docs||[];
   const M={action:r=>r.state==="action"||r.state==="stopped",
-           unchecked:r=>r.state==="unchecked",
+           unchecked:r=>r.state==="unchecked"||r.state==="error",
            watching:r=>r.state==="info"||r.state==="plain",
+           noanswer:r=>r.state==="noanswer",
            all:()=>true};
   const list=rows.filter(M[GM_DOCS.mode]||M.all);
   const chip=(k,lab,n)=>`<button class="minibtn${GM_DOCS.mode===k?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="GM_DOCS.mode='${k}';gmDocsDraw()">${lab} <b>${n}</b></button>`;
   const badge=s=>s==="leluxe"?"⌚":"📦";
+  // product photos: the same cross-board lookup the Workflows expansion uses
+  // (bsEnsureData ran in gmDocsRender) — flattened ONCE, never per row
+  const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  const thumbs=r=>{
+    try{
+      if(r.source==="purchases"){
+        const hit=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]:null;
+        return hit?poThumbStrip(hit.pk.items,3):"";
+      }
+      const lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+      return lx?lxThumbs(lx.items,3):"";
+    }catch(e){ return ""; }
+  };
   const row=r=>{
     const lk=(r.links&&r.links[0]&&r.links[0].url)||"";
     const dl=r.gaash_deadline?`<span class="muted2 mono" style="font-size:10.5px;flex:none" title="GAASH deadline ${poEsc(r.gaash_deadline)}">⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${T("فات · passed")} ${-r.days_left}d</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}</span>`:"";
@@ -13206,8 +13244,10 @@ function gmDocsDraw(){
     return `<div id="gmdr_${poEsc(r.gwd)}" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
       <span style="flex:none" title="${r.source==="leluxe"?"Leluxe":"Purchases"}">${badge(r.source)}</span>
       <b class="mono" style="font-size:11.5px;flex:none;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
-      <span style="width:150px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.pname||r.name||"")}</span>
+      <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
+      <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.pname||r.name||"")}</span>
       <span style="width:130px;flex:none">${gmDocsStatePill(r)}</span>
+      <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:10px"})}</span>
       ${dl}${chk}${stale}
       <span class="spacer"></span>
       ${lk?`<a class="minibtn" style="text-decoration:none" href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" title="${T("افتح صفحة الرفع عند غاش · open GAASH's upload page")}">⬆ ${T("رفع · Upload")}</a>`:""}
@@ -13225,26 +13265,90 @@ function gmDocsDraw(){
       ${chip("action","🟡 "+T("مطلوب رفع · upload asked"),n("action"))}
       ${chip("unchecked","❔ "+T("غير مفحوصة · unchecked"),n("unchecked"))}
       ${chip("watching","🔵 "+T("بالجمارك · in customs"),n("watching"))}
+      ${n("noanswer")?chip("noanswer","🚫 "+T("لا جواب · no answer"),n("noanswer")):""}
       ${chip("all",T("الكل · All"),rows.length)}
     </div>
-    ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      ${GM_DOCS.busy
+        ? `<span class="muted2" style="font-size:11.5px"><span class="spin"></span> ${T("جارِ الفحص · checking")} <b>${GM_DOCS.done}/${GM_DOCS.total}</b></span>
+           <button class="minibtn" onclick="GM_DOCS.stop=true" data-en="■ Stop" data-ar="■ إيقاف">■ ${T("إيقاف · Stop")}</button>`
+        : (list.length?`<button class="minibtn" onclick="gmDocsCheckAll()" title="${T("افحص كل الصفوف المعروضة، واحداً بعد الآخر · check every row shown, one after another")}">📄 ${T("فحص الكل · Check all")} (${list.length})</button>`:"")}
+      ${GM_DOCS.busy?"":`<span class="muted2" style="font-size:10.5px">${T("كل فحص ١٠-٢٥ ثانية — صفحة غاش بطيئة · each check takes 10-25s — GAASH's page is slow")}</span>`}
+    </div>
+    <div style="overflow-x:auto">
+      <div style="min-width:940px">
+        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+          <span style="flex:none;width:14px"></span>
+          <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
+          <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
+          <span style="flex:none;width:132px">${T("الاسم · name")}</span>
+          <span style="flex:none;width:130px">${T("المستندات · docs")}</span>
+          <span style="flex:none;width:124px">${T("حالة الطرد · parcel status")}</span>
+          <span class="spacer"></span>
+        </div>
+        ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
+      </div>
+    </div>
   </div>`;
 }
-async function gmDocsCheck(gwd,btn){
+// Walk the CURRENTLY FILTERED rows, 2 live checks at a time (GAASH's page is
+// slow; 2 keeps a 35-parcel pile inside a few minutes without hammering them).
+// Results land per row as they arrive, so a Stop keeps everything fetched.
+async function gmDocsCheckAll(){
+  if(GM_DOCS.busy) return;
+  const M={action:r=>r.state==="action"||r.state==="stopped",
+           unchecked:r=>r.state==="unchecked"||r.state==="error",
+           watching:r=>r.state==="info"||r.state==="plain",
+           noanswer:r=>r.state==="noanswer", all:()=>true};
+  const gwds=(GM.docs||[]).filter(M[GM_DOCS.mode]||M.all).map(r=>r.gwd);
+  if(!gwds.length) return;
+  GM_DOCS.busy=true; GM_DOCS.stop=false; GM_DOCS.done=0; GM_DOCS.total=gwds.length;
+  gmDocsDraw();
+  let i=0;
+  const worker=async()=>{
+    while(!GM_DOCS.stop&&i<gwds.length){
+      const g=gwds[i++];
+      await gmDocsCheck(g,null,true);
+      GM_DOCS.done++;
+      gmDocsDraw();
+    }
+  };
+  await Promise.all([worker(),worker()]);
+  const stopped=GM_DOCS.stop;
+  GM_DOCS.busy=false; GM_DOCS.stop=false;
+  gmDocsDraw();
+  toast(stopped?`■ ${T("أُوقف · stopped")} — ${GM_DOCS.done}/${GM_DOCS.total}`
+               :`✓ ${T("انتهى الفحص · checked")} ${GM_DOCS.done}/${GM_DOCS.total}`);
+}
+async function gmDocsCheck(gwd,btn,quiet){
   if(btn){ btn.disabled=true; btn.textContent="⏳"; }
   let r=null;
   try{ r=await post("/api/gaash/docs_check",{tracking:gwd}); }catch(e){ r=null; }
-  if(!r||!r.ok){ toast("⚠ "+T("فشل الفحص · check failed")); gmDocsDraw(); return; }
-  const ds=r.docs;
   const row=(GM.docs||[]).find(x=>x.gwd===gwd);
+  if(!r||!r.ok){
+    // the lookup itself failed — mark the attempt so the row stops reading
+    // "never checked", but keep whatever state we already knew
+    if(row){ row.docs_checked=new Date().toISOString(); row.stale=false;
+             if(row.state==="unchecked") row.state="error"; }
+    if(!quiet) toast("⚠ "+T("فشل الفحص · check failed"));
+    if(!quiet) gmDocsDraw();
+    return;
+  }
+  const ds=r.docs;
   if(row){
     if(ds){ row.state=ds.state; row.links=ds.links||[]; row.codes=ds.codes||[];
             row.arrived=!!ds.arrived; row.docs_checked=ds.checked||new Date().toISOString(); row.stale=false; }
-    else{ row.docs_checked=new Date().toISOString(); }
+    else{ row.docs_checked=new Date().toISOString(); row.stale=false;
+          if(row.state==="unchecked") row.state="error"; }
   }
-  toast(ds?(ds.state==="action"?"🟡 "+gwd:ds.state==="stopped"?"⛔ "+gwd:"🔵 "+gwd)
-          :"❔ "+T("صفحة غاش لا تجيب · GAASH page has no answer"));
-  gmDocsDraw();
+  if(!quiet){
+    toast(!ds?"⚠ "+T("تعذّر الوصول لغاش · couldn't reach GAASH")
+      :ds.state==="action"?"🟡 "+gwd+" — "+T("مطلوب رفع · upload asked")
+      :ds.state==="stopped"?"⛔ "+gwd+" — "+T("توقف التخليص · stopped")
+      :ds.state==="noanswer"?"🚫 "+gwd+" — "+T("غاش لا سجل لهذا الرقم · GAASH has no record")
+      :"🔵 "+gwd+" — "+T("بالجمارك · in customs"));
+    gmDocsDraw();
+  }
 }
 // ── ⚙ Accounts + templates + behavior ──
 function gmSettingsOpen(){

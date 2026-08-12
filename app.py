@@ -2178,47 +2178,16 @@ def api_notifications():
         pass
     # 📄 parcels whose GAASH page is asking for documents (or shows clearance
     # stopped) — one standing item, ts = the newest docs check so a state flip
-    # re-surfaces it without re-pinging on every poll. Data = the docs_state
-    # both sweeps store; scanning the two stores costs one query + one file read.
+    # re-surfaces it without re-pinging on every poll. Counted by the SAME
+    # function the 📄 Docs tab renders (names=False skips its name/thread
+    # enrichment), so the bell number and the tab can never disagree.
     try:
         import features
         if current_user.has("edit_fulfillment") and features.has(db.current_business(), "leluxe"):
-            n_docs, ts_docs, seen_g = 0, "", set()
-            with db.connect() as _c:
-                for _r in _c.execute(
-                        "SELECT data_json FROM leluxe_orders WHERE deleted=0 "
-                        "AND data_json LIKE '%docs_state%'"):
-                    try:
-                        _d = json.loads(_r["data_json"] or "{}")
-                    except ValueError:
-                        continue
-                    _ds = _d.get("docs_state") or {}
-                    _g = str(_d.get("tracking_number") or "").strip().upper()
-                    if not _g:   # rows often carry the GWD only in the ClickUp field
-                        _g = next((str(v or "").strip().upper()
-                                   for k, v in (_d.get("fields") or {}).items()
-                                   if k.strip().lower() == "tracking number"), "")
-                    _b = ((_d.get("tracking_status") or {}).get("bucket")
-                          if isinstance(_d.get("tracking_status"), dict) else None)
-                    if _ds.get("state") in ("action", "stopped") and _g and _g not in seen_g \
-                            and _b not in ("delivered", "cleared") \
-                            and not isinstance(_d.get("gerizim_status"), dict):
-                        seen_g.add(_g)
-                        n_docs += 1
-                        ts_docs = max(ts_docs, _d.get("docs_checked") or "")
-            import purchases as _pmod
-            for _po in (_pmod.load() or {}).get("purchase_orders") or []:
-                for _pk in _po.get("packages") or []:
-                    _ds = _pk.get("docs_state") or {}
-                    _g = str(_pk.get("tracking_number") or "").strip().upper()
-                    _b = ((_pk.get("tracking_status") or {}).get("bucket")
-                          if isinstance(_pk.get("tracking_status"), dict) else None)
-                    if _ds.get("state") in ("action", "stopped") and _g and _g not in seen_g \
-                            and _b not in ("delivered", "cleared") \
-                            and not isinstance(_pk.get("gerizim_status"), dict):
-                        seen_g.add(_g)
-                        n_docs += 1
-                        ts_docs = max(ts_docs, _pk.get("docs_checked") or "")
+            _q = gaash_mail.docs_queue(names=False)
+            _hot = [r for r in _q["rows"] if r["state"] in ("action", "stopped")]
+            n_docs = len(_hot)
+            ts_docs = max((r.get("docs_checked") or "" for r in _hot), default="")
             if n_docs:
                 events.append({"ts": ts_docs, "type": "gaash_docs", "icon": "📄",
                                "title": f"{n_docs} طرود تحتاج مستندات · parcels need documents",
@@ -2639,16 +2608,22 @@ def api_leluxe_refresh_tracking():
 
 def _docs_check_one(tn):
     """Fresh GAASH docs-banner check for one parcel, persisted to WHICHEVER
-    board(s) carry the number (each store call is a no-op elsewhere)."""
+    board(s) carry the number (each store call is a no-op elsewhere).
+
+    A None result means the LOOKUP failed (their site down / network) — we still
+    stamp the attempt, because leaving the row looking never-checked is what made
+    a pressed button read as "nothing happened". A 'noanswer' state (GAASH has no
+    such number) is a real verdict and is stored like any other."""
     import tracking
     docs = tracking.docs_status(tn)
-    if docs:
-        leluxe_mod.store_docs_state(tn, docs)
-        try:
-            import purchases as purchases_mod
-            purchases_mod.store_docs_state(tn, docs)
-        except Exception:  # noqa: BLE001 — purchases store hiccup must not lose the answer
-            pass
+    # docs=None → the store stamps the ATTEMPT only, keeping the last known
+    # state: a transient failure must never erase a real yellow.
+    leluxe_mod.store_docs_state(tn, docs)
+    try:
+        import purchases as purchases_mod
+        purchases_mod.store_docs_state(tn, docs)
+    except Exception:  # noqa: BLE001 — purchases store hiccup must not lose the answer
+        pass
     return docs
 
 
@@ -4059,6 +4034,43 @@ def worker_packages():
                         "arrival": pk.get("arrival"),
                         "customers": custs})
     return jsonify({"packages": out})
+
+
+@app.route("/api/worker/docs_sweep", methods=["POST"])
+def worker_docs_sweep():
+    """Fill the 📄 docs queue headlessly — the CLI twin of the tab's "Check all".
+
+    Every other sweep route is session-authenticated, so nothing could populate
+    docs_state without a human clicking; this one takes the worker bearer token
+    (same as the other /api/worker/* routes) so a script or cron can do it.
+
+    Bounded on purpose: GAASH's status page runs 10-25s per parcel, so a batch
+    of >3 would blow gunicorn's 120s timeout and lose the whole request. Returns
+    `remaining` so the caller loops until it is 0 — the same contract
+    purchases.refresh_tracking and the board's auto-sweep already use.
+
+    Body: {batch: 1-3, refresh: bool (also re-check stale rows), gwds: [...]}"""
+    if not _worker_ok():
+        abort(401)
+    b = request.get_json(force=True, silent=True) or {}
+    want = [str(g).strip().upper() for g in (b.get("gwds") or []) if str(g).strip()]
+    q = gaash_mail.docs_queue(names=False)
+    if want:
+        todo = [r for r in q["rows"] if r["gwd"] in want]
+    else:
+        todo = [r for r in q["rows"]
+                if r["state"] in ("unchecked", "error")
+                or (b.get("refresh") and r["stale"])]
+    batch = max(1, min(int(b.get("batch") or 3), 3))
+    picked, results = todo[:batch], []
+    for r in picked:
+        docs = _docs_check_one(r["gwd"])
+        results.append({"gwd": r["gwd"], "source": r["source"],
+                        "state": (docs or {}).get("state") or "error",
+                        "links": [lk.get("url") for lk in (docs or {}).get("links") or []]})
+    return jsonify({"ok": True, "checked": len(picked),
+                    "remaining": max(0, len(todo) - len(picked)),
+                    "counts": q["counts"], "results": results})
 
 
 @app.route("/api/worker/tracking", methods=["POST"])

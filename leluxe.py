@@ -3961,11 +3961,17 @@ def _skip_gwds(rows, config=None):
 def store_docs_state(tn, docs):
     """Persist one parcel's GAASH docs banner onto every row that rides the
     GWD (same effective-number fan-out as refresh_tracking), so a manual ⋯
-    re-check survives the next board reload."""
+    re-check survives the next board reload.
+
+    docs=None means the LOOKUP FAILED: stamp the attempt only and keep the last
+    known state — a network hiccup must never erase a real 'upload asked'. The
+    stamp still matters: an unstamped attempt made a pressed button look like
+    nothing happened."""
     import tracking
     tn = tracking.clean_tracking(tn or "")
-    if not tn or not isinstance(docs, dict):
+    if not tn:
         return 0
+    stamp = (docs or {}).get("checked") or datetime.now().astimezone().isoformat()
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
@@ -3976,8 +3982,9 @@ def store_docs_state(tn, docs):
             if tracking.clean_tracking(eff.get(row["id"]) or "") != tn:
                 continue
             d = row["data"]
-            d["docs_state"] = docs
-            d["docs_checked"] = docs.get("checked") or datetime.now().astimezone().isoformat()
+            if isinstance(docs, dict):
+                d["docs_state"] = docs
+            d["docs_checked"] = stamp
             c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                       (json.dumps(d, ensure_ascii=False), row["id"]))
             hit += 1
