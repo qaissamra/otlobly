@@ -4036,6 +4036,43 @@ def worker_packages():
     return jsonify({"packages": out})
 
 
+@app.route("/api/worker/docs_sweep", methods=["POST"])
+def worker_docs_sweep():
+    """Fill the 📄 docs queue headlessly — the CLI twin of the tab's "Check all".
+
+    Every other sweep route is session-authenticated, so nothing could populate
+    docs_state without a human clicking; this one takes the worker bearer token
+    (same as the other /api/worker/* routes) so a script or cron can do it.
+
+    Bounded on purpose: GAASH's status page runs 10-25s per parcel, so a batch
+    of >3 would blow gunicorn's 120s timeout and lose the whole request. Returns
+    `remaining` so the caller loops until it is 0 — the same contract
+    purchases.refresh_tracking and the board's auto-sweep already use.
+
+    Body: {batch: 1-3, refresh: bool (also re-check stale rows), gwds: [...]}"""
+    if not _worker_ok():
+        abort(401)
+    b = request.get_json(force=True, silent=True) or {}
+    want = [str(g).strip().upper() for g in (b.get("gwds") or []) if str(g).strip()]
+    q = gaash_mail.docs_queue(names=False)
+    if want:
+        todo = [r for r in q["rows"] if r["gwd"] in want]
+    else:
+        todo = [r for r in q["rows"]
+                if r["state"] in ("unchecked", "error")
+                or (b.get("refresh") and r["stale"])]
+    batch = max(1, min(int(b.get("batch") or 3), 3))
+    picked, results = todo[:batch], []
+    for r in picked:
+        docs = _docs_check_one(r["gwd"])
+        results.append({"gwd": r["gwd"], "source": r["source"],
+                        "state": (docs or {}).get("state") or "error",
+                        "links": [lk.get("url") for lk in (docs or {}).get("links") or []]})
+    return jsonify({"ok": True, "checked": len(picked),
+                    "remaining": max(0, len(todo) - len(picked)),
+                    "counts": q["counts"], "results": results})
+
+
 @app.route("/api/worker/tracking", methods=["POST"])
 def worker_tracking():
     """The Mac's tracking sync writes live GAASH statuses back onto PO
