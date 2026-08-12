@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Nightly refresh of the LIVE app's 📄 GAASH docs queue (docs_sweep.py):
+     asks GAASH, per open parcel, whether documents are being requested, so the
+     📄 Docs tab and the 🔔 bell are true when the owner opens them in the morning.
+     Runs at 04:15 — after the 03:30 backup, never overlapping it.
+     Install:  cp com.otlobly.docssweep.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.otlobly.docssweep.plist
+     Remove:   launchctl unload ~/Library/LaunchAgents/com.otlobly.docssweep.plist
+     Run now:  python3 docs_sweep.py          (or launchctl start com.otlobly.docssweep) -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.otlobly.docssweep</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/leluxegroup2/projects/otlobly-orders/docs_sweep.py</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+  <!-- RunAtLoad is deliberately FALSE: unlike the backup, a missed night costs
+       nothing (the sweep is idempotent and the next night catches up), and the
+       Mac rebooting mid-day should not fire ~30 live GAASH lookups. -->
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/docs_sweep.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/docs_sweep.log</string>
+</dict>
+</plist>
