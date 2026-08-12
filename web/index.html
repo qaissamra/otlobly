@@ -3305,7 +3305,9 @@ function lxDeadlinePill(pk,short){
   return `<span class="pill" style="background:${c}1a;color:${c};border:1px solid ${c}55;font-size:10px" title="GAASH doc deadline ${poEsc(dl)}">${label}</span>`;
 }
 // GAASH docs banner (the status page's yellow/blue): action = GAASH asks us to
-// upload (clickable → their own upload link), info = docs in, customs working.
+// upload (clickable → their own upload link); info AND plain+arrived both render
+// blue — a parcel with no status cards still gets the page's DEFAULT teal
+// "in the customs process, expected release soon" card, so "plain" ≠ nothing.
 function lxDocsPill(pk){
   const ds=(pk.data&&pk.data.docs_state)||null; if(!ds||!ds.state) return "";
   const b=((pk.data.tracking_status||{}).bucket)||""; if(b==="delivered"||b==="cleared") return "";
@@ -3315,9 +3317,11 @@ function lxDocsPill(pk){
     const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
     return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
   }
-  if(ds.state==="info")
-    return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="docs received — parcel in customs processing">📄 المستندات وصلت · docs in</span>`;
-  return "";
+  if(ds.state==="stopped")
+    return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`;
+  if(ds.state==="info"||(ds.state==="plain"&&ds.arrived))
+    return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="GAASH's page shows no document request — customs processing · لا طلب مستندات، قيد المعالجة">📄 بالجمارك · in customs</span>`;
+  return "";   // cleared → the gash pill already says it; plain pre-arrival → docs machinery not started
 }
 function lxThumb(url,size){ size=size||44;
   return url?`<img src="${poEsc(url)}" loading="lazy" style="width:${size}px;height:${size}px;object-fit:contain;border-radius:6px;border:1px solid var(--line);background:#fff;flex:0 0 auto">`
@@ -5579,11 +5583,17 @@ async function lxCheckDocs(gwd){
     pr.innerHTML=`🟡 <b>${poEsc(gwd)}</b> — غاش يطلب مستندات · GAASH is asking for documents`
       +(lk?` — <a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer"><b>رفع الآن · upload now</b></a>`:"");
     toast(`🟡 ${gwd} — upload requested`);
-  }else if(ds.state==="info"){
-    pr.innerHTML=`🔵 <b>${poEsc(gwd)}</b> — المستندات وصلت، الطرد قيد المعالجة في الجمارك · docs in, customs processing`;
-    toast(`🔵 ${gwd} — docs in`);
+  }else if(ds.state==="info"||(ds.state==="plain"&&ds.arrived)){
+    pr.innerHTML=`🔵 <b>${poEsc(gwd)}</b> — قيد المعالجة في الجمارك، لا طلب مستندات · in customs process, nothing asked (GAASH's blue card)`;
+    toast(`🔵 ${gwd} — in customs, nothing asked`);
+  }else if(ds.state==="stopped"){
+    pr.innerHTML=`⛔ <b>${poEsc(gwd)}</b> — صفحة غاش تظهر توقف التخليص · GAASH's page shows CLEARANCE STOPPED — contact GAASH`;
+    toast(`⛔ ${gwd} — clearance stopped`);
+  }else if(ds.state==="cleared"){
+    pr.innerHTML=`✅ <b>${poEsc(gwd)}</b> — تم التخليص الجمركي · cleared customs`;
+    toast(`✅ ${gwd} — cleared`);
   }else{
-    pr.innerHTML=`✅ <b>${poEsc(gwd)}</b> — لا طلبات مستندات على صفحة غاش · no document requests on GAASH's page (${poEsc(ds.state)})`;
+    pr.innerHTML=`🚚 <b>${poEsc(gwd)}</b> — لم يصل بعد، لا طلبات مستندات · not arrived yet, no document requests on GAASH's page`;
   }
   loadLeluxe();
 }
