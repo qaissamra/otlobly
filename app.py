@@ -4049,7 +4049,11 @@ def worker_docs_sweep():
     `remaining` so the caller loops until it is 0 — the same contract
     purchases.refresh_tracking and the board's auto-sweep already use.
 
-    Body: {batch: 1-3, refresh: bool (also re-check stale rows), gwds: [...]}"""
+    Body: {batch: 1-3, gwds: [...],
+           refresh: bool — also re-check parcels already checked, when their
+             last check is older than max_age_hours (default 20, so a NIGHTLY
+             run re-checks yesterday's answers: a yellow whose docs got
+             uploaded, or a blue that turned yellow, must not sit stale)}"""
     if not _worker_ok():
         abort(401)
     b = request.get_json(force=True, silent=True) or {}
@@ -4058,9 +4062,14 @@ def worker_docs_sweep():
     if want:
         todo = [r for r in q["rows"] if r["gwd"] in want]
     else:
+        cutoff = ""
+        if b.get("refresh"):
+            hours = max(1, min(int(b.get("max_age_hours") or 20), 24 * 30))
+            cutoff = (datetime.now().astimezone()
+                      - timedelta(hours=hours)).isoformat()
         todo = [r for r in q["rows"]
                 if r["state"] in ("unchecked", "error")
-                or (b.get("refresh") and r["stale"])]
+                or (cutoff and (r["docs_checked"] or "") < cutoff)]
     batch = max(1, min(int(b.get("batch") or 3), 3))
     picked, results = todo[:batch], []
     for r in picked:

@@ -33,6 +33,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
 - backup_pull.py / com.otlobly.backup.plist — nightly off-site backup: pulls the
   live app's /api/backup zip (DB snapshot + JSON stores + ID/PO images) into
   ~/OtloblyBackups (worker-token auth, 30-day retention, logs to backup.log)
+- docs_sweep.py / com.otlobly.docssweep.plist — 04:15 daily: asks GAASH per open
+  parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
+  each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,
+  loops until done, logs to docs_sweep.log)
 
 ## Deploy
 Render Blueprint (render.yaml): pushing to GitHub main auto-deploys
