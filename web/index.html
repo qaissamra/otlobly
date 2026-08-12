@@ -13236,6 +13236,25 @@ function gmDocsDraw(){
       return lx?lxThumbs(lx.items,3):"";
     }catch(e){ return ""; }
   };
+  // the owner's OWN board status (oredered / rd / …), read off the same boards.
+  // Leluxe reads the PRODUCT rows (bsFindLx.sts): a 📦 package row's own status
+  // is empty or ClickUp's entry stamp on most parcels, so trusting it would show
+  // "—" everywhere. Several products disagreeing → the board's "mixed" pill.
+  const boardStatus=r=>{
+    try{
+      if(r.source==="purchases"){
+        const hit=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]:null;
+        return hit?gmOrderPill({source:"purchases",status:hit.pk.otlobly_status}):'<span class="muted2">—</span>';
+      }
+      const lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+      if(!lx) return '<span class="muted2">—</span>';
+      const u=lx.sts||[];
+      if(u.length===1) return gmOrderPill({source:"leluxe",status:u[0]});
+      if(u.length>1) return tonePill("gray",T("متعدد · mixed"),u.join(" · "),{style:"font-size:10.5px"});
+      const eff=(typeof lxKEffStatus==="function")?lxKEffStatus(lx.items,lx.pkgRow):"";
+      return eff?gmOrderPill({source:"leluxe",status:eff}):'<span class="muted2">—</span>';
+    }catch(e){ return '<span class="muted2">—</span>'; }
+  };
   const row=r=>{
     const lk=(r.links&&r.links[0]&&r.links[0].url)||"";
     const dl=r.gaash_deadline?`<span class="muted2 mono" style="font-size:10.5px;flex:none" title="GAASH deadline ${poEsc(r.gaash_deadline)}">⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${T("فات · passed")} ${-r.days_left}d</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}</span>`:"";
@@ -13247,6 +13266,7 @@ function gmDocsDraw(){
       <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
       <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.pname||r.name||"")}</span>
       <span style="width:130px;flex:none">${gmDocsStatePill(r)}</span>
+      <span style="width:120px;flex:none;overflow:hidden" title="${T("حالتك على اللوحة · your own board status")}">${boardStatus(r)}</span>
       <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:10px"})}</span>
       ${dl}${chk}${stale}
       <span class="spacer"></span>
@@ -13276,14 +13296,15 @@ function gmDocsDraw(){
       ${GM_DOCS.busy?"":`<span class="muted2" style="font-size:10.5px">${T("كل فحص ١٠-٢٥ ثانية — صفحة غاش بطيئة · each check takes 10-25s — GAASH's page is slow")}</span>`}
     </div>
     <div style="overflow-x:auto">
-      <div style="min-width:940px">
+      <div style="min-width:1064px">
         <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
           <span style="flex:none;width:14px"></span>
           <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
           <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
           <span style="flex:none;width:132px">${T("الاسم · name")}</span>
           <span style="flex:none;width:130px">${T("المستندات · docs")}</span>
-          <span style="flex:none;width:124px">${T("حالة الطرد · parcel status")}</span>
+          <span style="flex:none;width:120px">${T("حالة الطلب · order status")}</span>
+          <span style="flex:none;width:124px">${T("حالة الجمارك · GAASH status")}</span>
           <span class="spacer"></span>
         </div>
         ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
