@@ -4051,10 +4051,11 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     todo = list(work.items())[:batch]
     session = None
     results = []
+    docs_done, docs_cap = 0, 3   # docs page is SLOW (~10-25s) — keep the batch inside gunicorn's 120s
     for tn, targets in todo:
         want_track = any(t[1] for t in targets)
         want_dl = any(t[2] for t in targets)
-        want_docs = any(t[3] for t in targets)
+        want_docs = any(t[3] for t in targets) and docs_done < docs_cap
         st = gz_new = deadline = docs = gaash_err = None
         if want_track:
             data = None
@@ -4087,6 +4088,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
             except Exception:  # noqa: BLE001
                 deadline = None
         if want_docs:
+            docs_done += 1
             try:
                 docs = tracking.docs_status(tn)
             except Exception:  # noqa: BLE001
