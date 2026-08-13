@@ -3788,7 +3788,10 @@ def _queue_gash_status(row, fkey, target):
     with db.connect() as c:
         r = c.execute("SELECT sync_state, data_json FROM leluxe_orders "
                       "WHERE id=? AND deleted=0", (row["id"],)).fetchone()
-        if not r:
+        # A parked row is the owner's pending decision — writing a field here
+        # would flip it to 'dirty' while data.conflicts lingers (the malformed
+        # state heal_conflicts exists to repair) and silently lose the park.
+        if not r or r["sync_state"] == "conflict":
             return None
         try:
             d = json.loads(r["data_json"] or "{}")
@@ -3797,7 +3800,10 @@ def _queue_gash_status(row, fkey, target):
         fields = d.setdefault("fields", {})
         key = next((k for k in fields if k.strip().lower() == GASH_FIELD), fkey)
         old = str(fields.get(key) or "").strip()
-        if old == target:
+        # strip BOTH sides: options like " customer ID" carry a leading space
+        # in ClickUp's exact spelling — comparing stripped old to the raw
+        # target re-queued (and re-dirtied) every such row on every sweep
+        if old == str(target or "").strip():
             return None
         fields[key] = target
         # Only a clean row gets the field-only marker; a real edit in flight
@@ -3825,12 +3831,24 @@ def _queue_gash_status(row, fkey, target):
             "new": target, "status": row.get("status") or "", "store": "leluxe"}
 
 
+def _gash_cur(row):
+    """The row's stored GASH STATUS field value, case-blind key, stripped."""
+    return next((str(v or "").strip()
+                 for k, v in (row["data"].get("fields") or {}).items()
+                 if k.strip().lower() == GASH_FIELD), "")
+
+
 def apply_gash_status(only=None, config=None):
     """Mirror each tracked row's live stage (Gerizim, else GAASH) into the
-    GASH STATUS dropdown. Idempotent (writes only differences), FORWARD-ONLY
-    (never downgrades a manual entry that's ahead of a lagging feed); `only`
-    scopes to one GWD. Runs over ALL stored enrichment, so already-delivered
-    parcels (which the network loop skips) still catch up.
+    GASH STATUS dropdown. Idempotent (writes only differences), and FORWARD-
+    ONLY while a parcel's rows AGREE (never downgrades a manual entry that's
+    ahead of a lagging feed). One tracking number = one physical parcel = one
+    customs status, so when a parcel's rows DISAGREE the live feed's
+    per-parcel stage is applied to ALL of them — downgrades allowed there,
+    a mixed parcel is evidence one row is wrong (owner's 2026-08-13 rule).
+    Mixed with no derivable feed target is left untouched (the board flags
+    it). `only` scopes to one GWD. Runs over ALL stored enrichment, so
+    already-delivered parcels (which the network loop skips) still catch up.
 
     Returns the LIST of transitions queued (each `{row_id, tracking, name,
     code, old, new, status, store}`) — `len()` is the old count."""
@@ -3842,25 +3860,54 @@ def apply_gash_status(only=None, config=None):
     only = tracking.clean_tracking(only or "") or None
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
-            "SELECT * FROM leluxe_orders WHERE deleted=0")]
+            "SELECT * FROM leluxe_orders WHERE deleted=0 ORDER BY id")]
     eff = _eff_tn_map(rows)          # same parcel grouping the sweep uses
-    queued = []
+    parcels = {}                     # eff tn ("" = untracked) → member rows
     for row in rows:
-        if only and tracking.clean_tracking(eff.get(row["id"]) or "") != only:
-            continue
+        parcels.setdefault(eff.get(row["id"]) or "", []).append(row)
+    queued = []
+
+    def _row_pass(row):
+        """Legacy per-row rule: feed target, forward-only rank guard."""
         target = _gash_target(row, fdef)
         if not target:
-            continue
-        cur = next((v for k, v in (row["data"].get("fields") or {}).items()
-                    if k.strip().lower() == GASH_FIELD), None)
-        cur_rank, tgt_rank = _gash_rank(cur), _gash_rank(target)
+            return None
+        cur_rank, tgt_rank = _gash_rank(_gash_cur(row) or None), _gash_rank(target)
         # >= (not >) so a same-stage upgrade (GERZIM DELIVERED → تم التسليم)
         # still applies; equal VALUES are dropped inside _queue_gash_status.
         if cur_rank is not None and (tgt_rank is None or tgt_rank < cur_rank):
+            return None
+        return _queue_gash_status(row, fkey, target)
+
+    for tn, members in parcels.items():
+        if only and tracking.clean_tracking(tn) != only:
+            continue                 # the "" group never matches an only=
+        distinct = {_gash_cur(m) for m in members if _gash_cur(m)}
+        if not tn or len(distinct) <= 1:
+            # untracked rows + agreeing parcels: the classic per-row pass
+            for m in members:
+                moved = _row_pass(m)
+                if moved:
+                    queued.append(moved)
             continue
-        moved = _queue_gash_status(row, fkey, target)
-        if moved:
-            queued.append(moved)
+        # MIXED parcel — the freshest feed stage (max rank across members;
+        # enrichment is fanned per parcel, so a lower/None target just means
+        # that member missed the last sweep) breaks the tie for everyone.
+        target, best = None, -1
+        for m in members:            # id order → deterministic tie-break
+            t = _gash_target(m, fdef)
+            if not t:
+                continue
+            r = _gash_rank(t)
+            score = r if r is not None else -0.5   # ranked beats unranked
+            if score > best:
+                target, best = t, score
+        if not target:
+            continue                 # no feed to arbitrate — board flags it
+        for m in members:
+            moved = _queue_gash_status(m, fkey, target)
+            if moved:
+                queued.append(moved)
     if queued:
         kick()
     return queued

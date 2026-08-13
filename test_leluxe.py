@@ -996,6 +996,97 @@ def gash_status_sync():
         os.environ["LELUXE_PUSH_DISABLED"] = "1"
 
 
+def gash_parcel_tiebreak():
+    """One tracking number = one parcel = one customs status. While a parcel's
+    rows AGREE apply_gash_status keeps the classic per-row forward-only rule;
+    when they DISAGREE the live feed's per-parcel stage is applied to ALL of
+    them (downgrades allowed — mixed = one row is wrong), a mixed parcel with
+    no feed target is left alone, only= still scopes, and a parked-conflict
+    row never takes a gash write (the owner's pending decision survives)."""
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+
+    def make(name, tn, gash):
+        r, err = leluxe.save_row({"kind": "order", "name": name,
+                                  "status": "order number",
+                                  "fields": {"Tracking Number": tn,
+                                             "GASH STATUS": gash}})
+        check(f"fixture {name} saved", not err)
+        return r["id"]
+
+    def plant(rid, **kv):                     # enrichment / raw data tweaks
+        with db.connect() as c:
+            r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                          (rid,)).fetchone()
+            d = json.loads(r["data_json"])
+            for k, v in kv.items():
+                if v is None:
+                    d.pop(k, None)
+                else:
+                    d[k] = v
+            c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                      (json.dumps(d, ensure_ascii=False), rid))
+
+    def gash_of(rid):
+        return (leluxe.get_row(rid)["data"]["fields"] or {}).get("GASH STATUS")
+
+    # parcel 1 mixed: a says customer-ID (matches the live feed), b jumped
+    # ahead to CLEARED — the exact GWD004778091 shape from the live board
+    a = make("9 Watch A", "GWD100000001", " customer ID")
+    b = make("2 Watch B", "GWD100000001", "CLEARED GASH")
+    plant(a, tracking_status={"bucket": "customs", "text": "Required customer ID"})
+    moved = leluxe.apply_gash_status()
+    check("mixed parcel: feed breaks the tie (downgrade allowed)",
+          len(moved) == 1 and moved[0]["row_id"] == b
+          and moved[0]["old"] == "CLEARED GASH" and moved[0]["new"] == " customer ID"
+          and gash_of(a) == " customer ID" and gash_of(b) == " customer ID")
+    check("unify is idempotent", leluxe.apply_gash_status() == [])
+
+    # parcel 2 mixed + enriched — but an only= for parcel 1 must not touch it
+    c1 = make("5 Watch C", "GWD100000002", " customer ID")
+    d1 = make("3 Watch D", "GWD100000002", "ARIIVED Destination")
+    plant(c1, tracking_status={"bucket": "cleared", "text": "Cleared customs"})
+    check("only= scopes: the other parcel stays mixed",
+          leluxe.apply_gash_status(only="GWD100000001") == []
+          and gash_of(d1) == "ARIIVED Destination")
+    moved = leluxe.apply_gash_status()
+    check("bare run unifies the second parcel to its feed stage",
+          all(m["tracking"] == "GWD100000002" for m in moved)
+          and gash_of(c1) == "CLEARED GASH" and gash_of(d1) == "CLEARED GASH")
+
+    # consensus parcel ahead of a lagging feed → forward-only still protects it
+    plant(c1, tracking_status={"bucket": "arrived", "text": "Arrived"})
+    plant(d1, tracking_status={"bucket": "arrived", "text": "Arrived"})
+    check("consensus parcel: lagging feed never downgrades",
+          leluxe.apply_gash_status() == []
+          and gash_of(c1) == "CLEARED GASH" and gash_of(d1) == "CLEARED GASH")
+
+    # mixed but NO derivable feed target → data left untouched (UI flags it)
+    plant(a, tracking_status=None)
+    with db.connect() as c:
+        r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
+                      (b,)).fetchone()
+        d = json.loads(r["data_json"]); d["fields"]["GASH STATUS"] = "CLEARED GASH"
+        c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
+                  (json.dumps(d, ensure_ascii=False), b))
+    check("mixed with no feed target is left untouched",
+          leluxe.apply_gash_status() == []
+          and gash_of(a) == " customer ID" and gash_of(b) == "CLEARED GASH")
+
+    # a parked conflict is the owner's pending decision — the unify must not
+    # flip it to dirty (and the transitions list must not claim it moved)
+    with db.connect() as c:
+        c.execute("UPDATE leluxe_orders SET sync_state='conflict' WHERE id=?", (b,))
+    plant(b, conflicts=[{"field": "status", "label": "x",
+                         "local": "oredered", "remote": "rd"}])
+    plant(a, tracking_status={"bucket": "customs", "text": "Required customer ID"})
+    moved = leluxe.apply_gash_status(only="GWD100000001")
+    rb = leluxe.get_row(b)
+    check("parked-conflict row survives the unify untouched",
+          moved == [] and gash_of(b) == "CLEARED GASH"
+          and rb["sync_state"] == "conflict" and rb["data"].get("conflicts"))
+
+
 def sync_kept_report():
     """Sync from AZ (2) must SHOW the comparison even when it changes nothing:
     app-side edits that win land in report['kept'] (with the ClickUp value),
@@ -2450,6 +2541,7 @@ def main():
     print("notfound deadline unblock:"); tracking_notfound_still_checks_deadline()
     print("gz dict vs notfound:"); tracking_gz_dict_survives_notfound()
     print("gash status sync:");  gash_status_sync()
+    print("gash parcel tie-break:"); gash_parcel_tiebreak()
     print("migrate grouping:");  migrate_grouping()
     print("image cache:");       image_cache()
     print("move packages:");     move_between_packages()
