@@ -122,6 +122,7 @@ gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequence
 gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
 gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
 gaash_mail.seed_wrong_decl_template()  # "Wrong declaration" correction note, same deal
+gaash_mail.seed_group_template()      # one email for a whole order's parcels, same deal
 gaash_mail.repair_name_ids()     # one-time: on-package names filed against a wrong ID
 goals.repair_categories()        # one-time: 🏆 card names + the brand that card claims
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
@@ -3193,7 +3194,10 @@ def api_gaash_start():
                                    names=b.get("names") if isinstance(b.get("names"), dict) else None,
                                    schedule=b.get("schedule") if isinstance(b.get("schedule"), dict) else None,
                                    docs=b.get("docs") if isinstance(b.get("docs"), dict) else None,
-                                   replace=bool(b.get("replace")))
+                                   replace=bool(b.get("replace")),
+                                   # [[GWD,GWD,…],…] — each list = ONE order's
+                                   # parcels cleared with ONE email thread
+                                   groups=b.get("groups") if isinstance(b.get("groups"), list) else None)
     started = [r["gwd"] for r in res if r.get("ok")]
     if started:
         activity.log("send", "gaash", 0, ",".join(started[:10]),
@@ -3263,10 +3267,17 @@ def api_gaash_send():
     # through the browser just to come back again
     files = _gm_files(b.get("files"))
     for did in (b.get("doc_ids") or [])[:6]:
-        # DECL_AUTO = "write this parcel's declaration now" — never a stored file
-        got = (gaash_mail.declaration_attachment(gwd)
-               if did == gaash_mail.DECL_AUTO
-               else gaash_mail._library_doc(did))
+        # DECL_AUTO = "write this parcel's declaration now" — never a stored
+        # file. On a grouped conversation that means one PER member parcel.
+        if did == gaash_mail.DECL_AUTO:
+            mem = gaash_mail.thread_members(
+                gaash_mail.thread_get(gwd) or {"gwd": gwd})
+            for m in mem:
+                got = gaash_mail.declaration_attachment(m)
+                if got:
+                    files.append(got)
+            continue
+        got = gaash_mail._library_doc(did)
         if got:
             files.append(got)
     res = gaash_mail.send_manual(gwd, b.get("body"), files)
@@ -3309,7 +3320,7 @@ def api_gaash_thread():
             queued.append({"name": name, "file": stored, "ctype": ctype})
         gaash_mail._thread_set(gwd, pending_files_json=json.dumps(queued))
     elif action == "send_next_now":
-        if gaash_mail.package_terminal(gwd):
+        if gaash_mail.group_terminal(th):
             gaash_mail._thread_set(gwd, state="goal_met")
             return jsonify({"ok": False, "error": "package already cleared/delivered"})
         res = gaash_mail.send_step(gwd)
@@ -3468,11 +3479,19 @@ def api_gaash_template_render():
     if not tpl:
         return jsonify({"ok": False, "error": "template not found"}), 404
     th = gaash_mail.thread_get(gwd)
+    # gwds=[…] previews a PLANNED group (no thread exists yet): the group
+    # tokens render the whole member list exactly as enrollment would send it
+    members = None
+    if isinstance(b.get("gwds"), list):
+        members = [g for g in (str(x or "").strip().upper()
+                               for x in b["gwds"])
+                   if re.match(r"GWD\d+$", g)]
+        members = list(dict.fromkeys(members)) or None
     body_tpl = tpl.get("body_tpl") or ""
     subj_tpl = tpl.get("subject_tpl") or ""
     unresolved, blank = [], []
     for tok in sorted(set(re.findall(r"\{([^{}]+)\}", body_tpl + " " + subj_tpl))):
-        one = gaash_mail._fill("{" + tok + "}", gwd, th)
+        one = gaash_mail._fill("{" + tok + "}", gwd, th, members=members)
         if one == "{" + tok + "}":
             unresolved.append(tok)
         elif not one.strip():
@@ -3486,7 +3505,7 @@ def api_gaash_template_render():
         # "{id_name}" and can fix it. _fill itself is untouched.
         for i, t in enumerate(blank):
             text = text.replace("{" + t + "}", f"\x00{i}\x00")
-        text = gaash_mail._fill(text, gwd, th)
+        text = gaash_mail._fill(text, gwd, th, members=members)
         for i, t in enumerate(blank):
             text = text.replace(f"\x00{i}\x00", "{" + t + "}")
         return text

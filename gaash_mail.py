@@ -1426,6 +1426,36 @@ def seed_followup_template():
         pass
 
 
+def seed_group_template():
+    """One email that clears a WHOLE order shipped as several parcels. The
+    group tokens render 1..N tracking numbers from the same wording — a solo
+    parcel reads naturally too ("these 1 packages" never appears because
+    {package_count} sits inside a sentence that works either way).
+
+    Seeded by id with INSERT OR IGNORE, exactly like seed_followup_template —
+    it appears once and any wording the owner changes survives every restart."""
+    body = (
+        "Hello,\n\n"
+        "We kindly ask you to release the following {package_count} "
+        "package(s), all belonging to the same order:\n\n"
+        "{gwd_lines}\n\n"
+        "Name: {customer}\n"
+        "ID number: {id_number}\n\n"
+        "A customs declaration for each package is attached. If anything "
+        "further is needed from our side, please tell me exactly which "
+        "document and I will send it the same day.\n\n"
+        "Thank you for your help,\n"
+        "Otlobly")
+    try:
+        with db.connect() as c:
+            c.execute("""INSERT OR IGNORE INTO gaash_templates
+                (id,name,subject_tpl,body_tpl,updated_at) VALUES (?,?,?,?,?)""",
+                      ("tpl_group", "Group clearance — one order, several parcels",
+                       "Customs clearance — {gwd_list}", body, now_iso()))
+    except Exception:  # noqa - a missing template must never block boot
+        pass
+
+
 def seed_wrong_decl_template():
     """The correction note for a parcel whose declaration went out carrying the
     wrong ID number: say what was wrong, attach the rebuilt declaration, move on.
@@ -1545,6 +1575,48 @@ def threads_all():
     with db.connect() as c:
         return [dict(r) for r in c.execute(
             "SELECT * FROM gaash_threads ORDER BY last_activity DESC")]
+
+
+def thread_members(th):
+    """All member GWDs of a thread, primary first, deduped. Solo → [gwd].
+
+    A thread normally covers ONE parcel; group_gwds_json (an order shipped as
+    several parcels, cleared with one email) lists every member incl. the
+    primary. The thread stays keyed by the primary — members only widen what
+    the emails say and attach."""
+    if not th:
+        return []
+    primary = str(th.get("gwd") or "").strip().upper()
+    mem = [primary] if primary else []
+    raw = th.get("group_gwds_json")
+    if raw:
+        try:
+            extra = json.loads(raw) if isinstance(raw, str) else raw
+        except (ValueError, TypeError):
+            extra = []
+        for g in extra if isinstance(extra, list) else []:
+            g = str(g or "").strip().upper()
+            if re.match(r"GWD\d+$", g) and g not in mem:
+                mem.append(g)
+    return mem
+
+
+def member_primary_map():
+    """{member GWD → primary GWD} over all threads; solos map to themselves."""
+    out = {}
+    for th in threads_all():
+        for m in thread_members(th):
+            out.setdefault(m, th["gwd"])
+    return out
+
+
+def group_terminal(th):
+    """True when EVERY member parcel is past customs — the group's goal is met.
+    Solo threads short-circuit to the plain per-parcel check (identical cost)."""
+    mem = thread_members(th)
+    if len(mem) <= 1:
+        return package_terminal((th or {}).get("gwd") or "")
+    return all(package_terminal(m) for m in mem)
 
 
 def msgs_for(gwd):
@@ -2410,12 +2482,17 @@ def sweep_terminal(tm=None):
     per-thread LIKE scan, no network), so it is cheap enough to run on every
     check and every daemon pass. Returns the GWDs it stopped."""
     tm = tracking_map() if tm is None else tm
+
+    def _done(g):
+        v = tm.get(str(g or "").strip().upper()) or {}
+        return v.get("bucket") in _TERMINAL or v.get("gz") == "delivered"
     out = []
     for th in threads_all():
         if th.get("state") != "active":
             continue
-        v = tm.get(str(th.get("gwd") or "").strip().upper()) or {}
-        if v.get("bucket") in _TERMINAL or v.get("gz") == "delivered":
+        # a group thread's goal is met only when EVERY member cleared — a
+        # member with no tracking entry counts as not-cleared (keep chasing)
+        if all(_done(m) for m in thread_members(th)):
             _thread_set(th["gwd"], state="goal_met", next_send_at=None)
             out.append(th["gwd"])
     return out
@@ -2611,6 +2688,9 @@ TPL_CORE_TOKENS = [
     ("id_name", "اسم مستند الهوية · attached ID name"),
     ("days_waiting", "أيام الانتظار · days waiting"),
     ("step", "رقم الخطوة · step number"),
+    ("gwd_list", "كل طرود المجموعة بفواصل · all grouped parcels, comma-separated"),
+    ("gwd_lines", "كل طرود المجموعة سطراً سطراً · all grouped parcels, one per line"),
+    ("package_count", "عدد طرود المجموعة · number of grouped parcels"),
 ]
 
 
@@ -2849,7 +2929,7 @@ def _cf_for_gwd(gwd):
     return out
 
 
-def _fill(tpl, gwd, thread=None, step=None):
+def _fill(tpl, gwd, thread=None, step=None, members=None):
     id_name = ""
     if thread and thread.get("id_doc_id"):
         doc = _id_doc(thread["id_doc_id"])
@@ -2859,7 +2939,16 @@ def _fill(tpl, gwd, thread=None, step=None):
         ts = _parse_iso(thread["created_at"])
         if ts:
             days = str(max(0, (datetime.now(timezone.utc) - ts).days))
+    # Group tokens render 1..N parcels from ONE template — "{package_count}
+    # packages: {gwd_lines}" reads right whether the order shipped as one box
+    # or five. members= lets send time narrow the list to the still-open
+    # parcels; terminal-ness is NEVER computed here (template preview calls
+    # _fill in a loop and package_terminal can hit the network).
+    mem = members or (thread_members(thread) if thread else None) or [gwd]
     text = (str(tpl or "")
+            .replace("{gwd_list}", ", ".join(mem))
+            .replace("{gwd_lines}", "\n".join(mem))
+            .replace("{package_count}", str(len(mem)))
             .replace("{gwd}", gwd)
             .replace("{customer}", _customer_for(gwd))
             .replace("{upload_link}",
@@ -3038,7 +3127,7 @@ def _library_doc(id_doc_id):
             _DOC_CTYPE.get(ext, "application/octet-stream"))
 
 
-def _step_attachments(th):
+def _step_attachments(th, members=None):
     """Attachments for the NEXT sequence email.
 
     docs_json is the package's own document set — a generated declaration, a
@@ -3046,6 +3135,9 @@ def _step_attachments(th):
     different person at GAASH may pick up each follow-up and should never have
     to scroll back for the paperwork. Unlike pending_files_json it is not
     consumed by _schedule_next, so it survives to the next step.
+
+    On a group thread DECL_AUTO papers every member parcel — one declaration
+    per GWD, filenames already unique. members= narrows to the still-open ones.
 
     A thread created before docs_json existed keeps exactly its old behaviour:
     one document, on email #1 only."""
@@ -3061,8 +3153,13 @@ def _step_attachments(th):
         # the declaration is rebuilt from the boards for THIS email — so a name
         # or an ID corrected after enrollment is on the follow-up, and nothing
         # is kept on disk between sends
-        got = (declaration_attachment(th.get("gwd")) if doc_id == DECL_AUTO
-               else _library_doc(doc_id))
+        if doc_id == DECL_AUTO:
+            for m in (members or thread_members(th)):
+                got = declaration_attachment(m)
+                if got:
+                    out.append(got)
+            continue
+        got = _library_doc(doc_id)
         if got:
             out.append(got)
     for a in json.loads(th.get("pending_files_json") or "[]"):
@@ -3115,13 +3212,24 @@ def send_step(gwd):
         _thread_set(gwd, state="waiting_task", next_send_at=None)
         return {"ok": True, "task": True, "step": step + 1}
     tpl = _template(st.get("template_id") or "") or {}
+    # Group thread: list and paper only the STILL-OPEN members — a follow-up
+    # nagging about a parcel GAASH already released reads as noise. All
+    # released → the group's goal is met and no email goes out.
+    mem = thread_members(th)
+    open_m = None
+    if len(mem) > 1:
+        open_m = [m for m in mem if not package_terminal(m)]
+        if not open_m:
+            _thread_set(gwd, state="goal_met", next_send_at=None)
+            return {"ok": False, "error": "all packages already cleared"}
     subject = _fill(tpl.get("subject_tpl") or f"Customs clearance — {gwd}",
-                    gwd, th, step + 1)
-    body = _fill(tpl.get("body_tpl") or "", gwd, th, step + 1)
+                    gwd, th, step + 1, members=open_m)
+    body = _fill(tpl.get("body_tpl") or "", gwd, th, step + 1, members=open_m)
     if not th.get("subject"):
         _thread_set(gwd, subject=subject)          # the thread's base subject
         th["subject"] = subject
-    res = _thread_send(gwd, body, _step_attachments(th), kind="sent",
+    res = _thread_send(gwd, body, _step_attachments(th, members=open_m),
+                       kind="sent",
                        step=step + 1, subject=subject, step_id=st.get("id"))
     if not res.get("ok"):
         return res
@@ -3182,10 +3290,15 @@ def _fanout_step1(gwd, msg_row, account_id):
 
 
 def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
-                  schedule=None, docs=None, replace=False):
-    """Create one thread per GWD (one GWD per email — replies map 1:1) and try
-    to run step 1 immediately. `names` = {GWD: picked parcel name} pins the name
-    (and therefore the ID) before email 1 goes out.
+                  schedule=None, docs=None, replace=False, groups=None):
+    """Create one thread per UNIT and try to run step 1 immediately. A unit is
+    normally one GWD (one GWD per email — replies map 1:1); `groups` (a list
+    of GWD lists — an order shipped as several parcels) folds each list into
+    ONE thread keyed by its first member, whose emails list every member via
+    {gwd_list}/{gwd_lines} and carry a declaration per member. A 1-member
+    group is a plain solo; gwds not covered by a group enroll solo as before.
+    `names` = {GWD: picked parcel name} pins the name (and therefore the ID)
+    before email 1 goes out.
 
     `schedule` = {GWD: iso} holds step 1 back to that moment instead of sending
     now — the daemon picks it up when due. Spacing a batch out matters when the
@@ -3194,7 +3307,7 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
 
     `replace` re-enrols a GWD whose first enrollment never actually reached
     GAASH, wiping the dead thread first. It cannot touch a thread that really
-    corresponded — thread_delete refuses those. Returns per-GWD results."""
+    corresponded — thread_delete refuses those. Returns per-unit results."""
     seq_id = seq_id or default_sequence_id()
     names = {str(k or "").strip().upper(): v for k, v in (names or {}).items()}
     schedule = {str(k or "").strip().upper(): v
@@ -3217,33 +3330,76 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
              else ([account_id] if account_id else []))
     picked = 0
     out = []
+    # units: (raw echo, primary, members). Groups first — their members are
+    # then skipped in the plain gwds walk. Invalid group members are reported,
+    # not silently dropped.
+    units, in_group = [], set()
+    for grp in groups or []:
+        mem = []
+        for raw in grp if isinstance(grp, list) else []:
+            g = str(raw or "").strip().upper()
+            if not re.match(r"GWD\d+$", g):
+                out.append({"gwd": raw, "ok": False, "error": "not a GWD number"})
+                continue
+            if g not in mem and g not in in_group:
+                mem.append(g)
+        if not mem:
+            continue
+        in_group.update(mem)
+        units.append((mem[0], mem[0], mem))
     for raw in gwds or []:
         gwd = str(raw or "").strip().upper()
+        if gwd in in_group:
+            continue                       # already rides a group's email
+        units.append((raw, gwd, None))
+    # who's already covered as a NON-primary member of some group thread —
+    # thread_get only sees primaries
+    covered = {m: p for m, p in member_primary_map().items() if m != p}
+    for raw, gwd, members in units:
         if not re.match(r"GWD\d+$", gwd):
             out.append({"gwd": raw, "ok": False, "error": "not a GWD number"})
             continue
-        existing = thread_get(gwd)
-        if existing and existing.get("state") == "proposed":
-            with db.connect() as c:                # a trigger suggestion → real
-                c.execute("DELETE FROM gaash_threads WHERE gwd=?", (gwd,))
-            existing = None
-        if existing and replace:
-            # Re-enrolling an enrollment that never actually reached GAASH — a
-            # dry-run block, a dead app password, an SMTP refusal. thread_delete
-            # is the wipe AND the guard: it refuses the moment the thread has
-            # real correspondence, so a live conversation can never be restarted
-            # from behind the owner's back (that is 🔁 restart's job, inside it).
-            wiped = thread_delete(gwd)
-            if not wiped.get("ok"):
-                out.append({"gwd": gwd, "ok": False,
-                            "error": wiped.get("error") or "thread already exists"})
-                continue
-            existing = None
-        if existing:
-            out.append({"gwd": gwd, "ok": False, "error": "thread already exists"})
+        members = members or [gwd]
+        blocked = None
+        for m in members:
+            other = covered.get(m)
+            if other and other not in members:
+                blocked = {"gwd": gwd, "ok": False, "error":
+                           f"{m} already rides {other}'s grouped conversation"}
+                break
+            existing = thread_get(m)
+            if existing and existing.get("state") == "proposed":
+                with db.connect() as c:            # a trigger suggestion → real
+                    c.execute("DELETE FROM gaash_threads WHERE gwd=?", (m,))
+                existing = None
+            if existing and replace:
+                # Re-enrolling an enrollment that never actually reached GAASH —
+                # a dry-run block, a dead app password, an SMTP refusal.
+                # thread_delete is the wipe AND the guard: it refuses the moment
+                # the thread has real correspondence, so a live conversation can
+                # never be restarted from behind the owner's back (that is
+                # 🔁 restart's job, inside it).
+                wiped = thread_delete(m)
+                if not wiped.get("ok"):
+                    blocked = {"gwd": gwd, "ok": False, "error":
+                               wiped.get("error") or "thread already exists"}
+                    break
+                existing = None
+            if existing:
+                blocked = {"gwd": gwd, "ok": False, "error":
+                           ("thread already exists" if m == gwd
+                            else f"{m} already has a conversation")}
+                break
+        if blocked:
+            out.append(blocked)
             continue
-        mine = [d for d in (docs.get(gwd) or []) if d]
-        pack = mine + [d for d in shared if d not in mine]     # own first, deduped
+        # every member's own documents + the batch-wide ones, own-first deduped
+        mine = []
+        for m in members:
+            for d in (docs.get(m) or []):
+                if d and d not in mine:
+                    mine.append(d)
+        pack = mine + [d for d in shared if d not in mine]
         acct_for = fleet[picked % len(fleet)] if fleet else None
         picked += 1
         with db.connect() as c:
@@ -3251,23 +3407,29 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
             # the immediate send below is blocked (dry-run / no account yet)
             c.execute("""INSERT INTO gaash_threads
                 (gwd,account_id,state,step,id_doc_id,docs_json,unread,missing_docs,
-                 pending_files_json,next_send_at,created_at,last_activity,seq_id)
-                VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?)""",
+                 pending_files_json,next_send_at,created_at,last_activity,seq_id,
+                 group_gwds_json)
+                VALUES (?,?, 'active',0,?,?,0,0,'[]',?,?,?,?,?)""",
                       (gwd, acct_for, (pack[0] if pack else None),
                        json.dumps(pack),
                        schedule.get(gwd) or datetime.now(timezone.utc)
                        .isoformat(timespec="seconds"),
-                       now_iso(), now_iso(), seq_id))
-        if names.get(gwd):                 # pin it BEFORE step 1 renders
-            set_parcel_name(gwd, names[gwd])
-        if package_terminal(gwd):
+                       now_iso(), now_iso(), seq_id,
+                       json.dumps(members) if len(members) > 1 else None))
+        for m in members:
+            covered.setdefault(m, gwd)
+            if names.get(m):               # pin it BEFORE step 1 renders
+                set_parcel_name(m, names[m])
+        grp_note = {"members": members} if len(members) > 1 else {}
+        if all(package_terminal(m) for m in members):
             _thread_set(gwd, state="goal_met")
             out.append({"gwd": gwd, "ok": True, "state": "goal_met",
-                        "note": "already cleared/delivered — no email needed"})
+                        "note": "already cleared/delivered — no email needed",
+                        **grp_note})
             continue
         if schedule.get(gwd):              # queued — the daemon sends it
             out.append({"gwd": gwd, "ok": True, "state": "active",
-                        "scheduled_at": schedule[gwd]})
+                        "scheduled_at": schedule[gwd], **grp_note})
             continue
         res = send_step(gwd)
         copies, cerr = 0, []
@@ -3282,6 +3444,7 @@ def start_threads(gwds, id_doc_id, account_id, seq_id=None, names=None,
                                    else {"ok": True, "state": "active",
                                          "send_error": res.get("error"),
                                          "dry_run": res.get("dry_run", False)}),
+                    **grp_note,
                     **({"copies": copies} if copies else {}),
                     **({"copy_errors": cerr} if cerr else {})})
     return out
@@ -3397,14 +3560,17 @@ def match_thread(hdr_msg, to_domain, our_mids, thread_gwds):
                               (ref,)).fetchone()
                 if r:
                     return r["gwd"]
-    # fallback: sender is the support domain + a GWD token in the subject
+    # fallback: sender is the support domain + a GWD token in the subject.
+    # thread_gwds may be a {member → primary} dict — a subject naming any
+    # member of a grouped conversation resolves to the group's own thread.
     frm = parseaddr(str(hdr_msg.get("From") or ""))[1].lower()
     if to_domain and to_domain in frm:
         gwds = {g.upper() for g in re.findall(
             r"GWD\d+", str(hdr_msg.get("Subject") or ""), re.I)}
         hit = gwds & set(thread_gwds)
         if hit:
-            return sorted(hit)[0]
+            g = sorted(hit)[0]
+            return thread_gwds[g] if isinstance(thread_gwds, dict) else g
     return None
 
 
@@ -3432,7 +3598,8 @@ def match_sent_thread(hdr_msg, to_domain, our_mids, thread_gwds):
             r"GWD\d+", str(hdr_msg.get("Subject") or ""), re.I)}
         hit = gwds & set(thread_gwds)
         if hit:
-            return sorted(hit)[0]
+            g = sorted(hit)[0]
+            return thread_gwds[g] if isinstance(thread_gwds, dict) else g
     return None
 
 
@@ -3651,10 +3818,12 @@ def check_replies():
     """Poll every account's inbox. Never raises."""
     with db.connect() as c:
         accts = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
-        thread_gwds = [r["gwd"] for r in c.execute("SELECT gwd FROM gaash_threads")]
         our_mids = {r["message_id"] for r in c.execute(
             "SELECT message_id FROM gaash_msgs WHERE dir='out' "
             "AND message_id IS NOT NULL")}
+    # {member → primary}: a subject naming any parcel of a grouped
+    # conversation still lands on that group's one thread
+    thread_gwds = member_primary_map()
     setts = _setts()
     n_reply = n_ack = n_gmail = 0
     errors = {}
@@ -3864,7 +4033,8 @@ def run_once():
         if seq.get("paused"):
             continue
         # guard 1: already cleared/delivered → the goal is met, stop
-        if package_terminal(gwd):
+        # (a group thread stops only when EVERY member parcel cleared)
+        if group_terminal(th):
             _thread_set(gwd, state="goal_met")
             continue
         # guard 2: an unhandled real reply → pause (belt & braces; the poll
@@ -3976,6 +4146,8 @@ def overview():
         th["source"] = bmap.get(th["gwd"], "")
         # where customs has got to — the one thing the list could not tell you
         th["gash"] = tmap.get(th["gwd"]) or {}
+        # a grouped conversation lists every parcel it covers
+        th["members"] = thread_members(th)
     proposed = [t for t in threads if t.get("state") == "proposed"]
     return {"threads": [t for t in threads if t.get("state") != "proposed"],
             "proposed": proposed,
@@ -4029,7 +4201,13 @@ def candidates(include_enrolled=False):
     include_enrolled=True: parcels already in a workflow stay VISIBLE there,
     tagged with their thread state, so the owner can tell at a glance which
     tracking numbers are covered and which still need sending."""
-    thmap = {t["gwd"]: t for t in threads_all()}
+    # member-aware: a parcel riding a grouped conversation is covered by that
+    # group's thread — rules must not re-propose it, the picker shows the
+    # group thread's state on it
+    thmap = {}
+    for t in threads_all():
+        for m in thread_members(t):
+            thmap.setdefault(m, t)
     have = set() if include_enrolled else set(thmap)
     out, seen = [], set()
     # ── Leluxe mirror (carries the GASH STATUS field) ──
@@ -4037,6 +4215,22 @@ def candidates(include_enrolled=False):
         rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
                          "data_json FROM leluxe_orders WHERE deleted=0").fetchall()
     names = {r["id"]: r["name"] for r in rows}
+    parent = {r["id"]: r["parent_local_id"] for r in rows}
+
+    def _top(rid):
+        hops = set()
+        while parent.get(rid) and rid not in hops:
+            hops.add(rid)
+            rid = parent[rid]
+        return rid
+
+    # Which ORDER does a tracking number belong to? One parse per row, shared
+    # with the candidate loop below. The authority is the 📦 package/order row
+    # that CARRIES the number — an item row merely mentioning it in a field
+    # must not decide (one parcel can hold items of several orders, and the
+    # wizard's "one email per order" grouping keys on this).
+    _KPRI = {"package": 0, "parent": 1, "order": 1, "item": 2}
+    parsed, obest = [], {}                 # tn → (priority, top ancestor id)
     for r in rows:
         try:
             d = json.loads(r["data_json"] or "{}")
@@ -4044,11 +4238,19 @@ def candidates(include_enrolled=False):
             continue
         f = d.get("fields") or {}
         tn = str(d.get("tracking_number") or "").strip().upper()
+        pri = _KPRI.get(str(r["kind"] or ""), 3)
         if not tn:
             for k, v in f.items():
                 if k.strip().lower() == "tracking number":
                     tn = str(v or "").strip().upper()
+                    pri = max(pri, 3)      # a field mention never beats a carrier
                     break
+        parsed.append((r, d, f, tn))
+        if re.match(r"GWD\d+$", tn):
+            cur = obest.get(tn)
+            if cur is None or pri < cur[0]:
+                obest[tn] = (pri, _top(r["id"]))
+    for r, d, f, tn in parsed:
         if not re.match(r"GWD\d+$", tn) or tn in seen or tn in have:
             continue
         seen.add(tn)
@@ -4065,12 +4267,17 @@ def candidates(include_enrolled=False):
         # every ClickUp field becomes a filterable custom column (cf:<name>)
         cf = {str(k).strip(): _cf_stringify(v) for k, v in f.items()
               if str(k).strip() and _cf_stringify(v)}
+        oid = (obest.get(tn) or (None, _top(r["id"])))[1]
         out.append({"gwd": tn, "source": "leluxe",
                     "name": (names.get(r["parent_local_id"]) or r["name"] or "")[:70],
                     "status": r["status"], "gash_status": gash,
                     "bucket": _bucket(ts) or None,
                     "label": (ts.get("label") if isinstance(ts, dict)
                               else (str(ts)[:40] if ts else None)),
+                    # which ORDER this parcel belongs to — the wizard's
+                    # "one email per order" toggle groups by this key
+                    "order_key": f"lx:{oid}",
+                    "order_name": (names.get(oid) or r["name"] or "")[:70],
                     "cf": cf})
     # ── Purchases board packages (Otlobly customer POs — no ClickUp mirror) ──
     try:
@@ -4113,6 +4320,8 @@ def candidates(include_enrolled=False):
                         "bucket": _bucket(pts) or None,
                         "label": (pts.get("label") if isinstance(pts, dict)
                                   else str(pts)[:40] if pts else None),
+                        "order_key": f"po:{p.get('po_id')}",
+                        "order_name": (p.get("ship_to") or "").strip()[:70],
                         "po_id": p.get("po_id"), "cf": dict(pcf)})
     # the name each parcel ships under + the ID mapped to it — the picker shows
     # both so the owner can see, before sending, which ID each email will carry
@@ -4125,8 +4334,17 @@ def candidates(include_enrolled=False):
     # reached nobody, and that one is safe to enrol again. One connection for
     # the lot — this runs on every overview poll.
     with db.connect() as _c:
-        corr = {g: real_correspondence(g, _c) for g, t in thmap.items()
-                if t.get("state") != "proposed"}
+        # messages live under the PRIMARY gwd — a member row's correspondence
+        # is its group's, computed once per thread not once per member
+        _by_primary = {}
+        corr = {}
+        for g, t in thmap.items():
+            if t.get("state") == "proposed":
+                continue
+            p = t["gwd"]
+            if p not in _by_primary:
+                _by_primary[p] = real_correspondence(p, _c)
+            corr[g] = _by_primary[p]
     for cd in out:
         cd["pname"] = pmap.get(cd["gwd"], "")
         cd["pname_id"] = emap.get(cd["gwd"], "")
@@ -4138,6 +4356,10 @@ def candidates(include_enrolled=False):
                          "seq_id": th.get("seq_id"),
                          "sent_to": corr.get(cd["gwd"], ""),
                          "can_reenroll": not corr.get(cd["gwd"], ""),
+                         # a member of a grouped conversation points at the
+                         # thread that actually carries it
+                         **({"primary": th["gwd"]} if th["gwd"] != cd["gwd"]
+                            else {}),
                          "last_error": th.get("last_error") or ""})
 
     # what still NEEDS enrolling first, then the ones waiting on a tick
@@ -4175,13 +4397,15 @@ def readiness():
                      "app_tag": cd["gwd"] in ac, "cu_tag": cu,
                      "state": "", "who": cd.get("name") or cd.get("customers") or ""})
     for th in ths:
-        g = th["gwd"]
-        rows.append({"gwd": g, "source": bmap.get(g, ""),
-                     "status": "", "pname": pmap.get(g, ""),
-                     "pname_src": smap.get(g, ""),
-                     "pname_id": emap.get(g, ""),
-                     "app_tag": g in ac, "cu_tag": "",
-                     "state": th.get("state") or "", "who": ""})
+        # one row per MEMBER — a parcel riding a grouped conversation is no
+        # longer a candidate, so this is the only place it would appear
+        for g in thread_members(th):
+            rows.append({"gwd": g, "source": bmap.get(g, ""),
+                         "status": "", "pname": pmap.get(g, ""),
+                         "pname_src": smap.get(g, ""),
+                         "pname_id": emap.get(g, ""),
+                         "app_tag": g in ac, "cu_tag": "",
+                         "state": th.get("state") or "", "who": ""})
     # blocked-and-untouched first — that's the pile the owner came to fix
     rows.sort(key=lambda r: (bool(r["state"]), bool(r["pname_id"]), r["gwd"]))
     return {"ok": True, "rows": rows}
@@ -4312,8 +4536,15 @@ def docs_queue(names=True):
     out = [r for g, r in best.items()
            if g not in gone and r["state"] != "cleared"]
     pmap = parcel_name_map() if names else {}
-    thmap = ({t["gwd"]: (t.get("state") or "") for t in threads_all()}
-             if names else {})
+    # member-aware ONLY on the UI branch (names=True): a parcel riding a
+    # grouped conversation shows 💬 not a second 📧. The 🔔 bell's 60-second
+    # names=False poll skips this entirely — zero added cost on the hot path.
+    thmap = {}
+    if names:
+        for t in threads_all():
+            st = t.get("state") or ""
+            for m in thread_members(t):
+                thmap.setdefault(m, st)
     for r in out:
         r.pop("_has_ds", None)
         r["pname"] = pmap.get(r["gwd"], "")
@@ -4440,7 +4671,12 @@ def thread_detail(gwd):
     th["pname_id"] = id_number_for_email(gwd)
     th["pname_src"] = parcel_name_src(gwd)
     th["source"] = parcel_board_map().get(gwd, "")
-    th["gash"] = tracking_map().get(gwd) or {}
+    tmap = tracking_map()
+    th["gash"] = tmap.get(gwd) or {}
+    # every parcel this conversation covers + where customs has each one —
+    # the chat header chips them so a grouped thread reads at a glance
+    th["members"] = thread_members(th)
+    th["members_gash"] = {m: (tmap.get(m) or {}) for m in th["members"]}
     return {"thread": th, "messages": msgs}
 
 
