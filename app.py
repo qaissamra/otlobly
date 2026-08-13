@@ -2215,7 +2215,9 @@ def api_notifications():
                                "type": "flag_open", "icon": "🚩",
                                "title": f"{len(_fl)} إيميل يحتاج إجراء · "
                                         "action-required email(s)",
-                               "sub": (_fl[-1].get("subject") or "")[:80],
+                               "sub": ((f"{_fl[-1]['profile']} — "
+                                        if _fl[-1].get("profile") else "")
+                                       + (_fl[-1].get("subject") or ""))[:80],
                                "view": "flags"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass

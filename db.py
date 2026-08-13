@@ -387,6 +387,7 @@ CREATE TABLE IF NOT EXISTS flag_alerts (
   subject TEXT,                         -- RFC2047-decoded
   sender TEXT,
   matched_phrase TEXT,
+  sent_at TEXT,                         -- the email's own Date header (ISO)
   created_at TEXT,
   state TEXT NOT NULL DEFAULT 'open',   -- open | done
   done_at TEXT,
@@ -541,6 +542,10 @@ def migrate():
         # them so {id_name} and the chat pill keep resolving.
         if "docs_json" not in _columns(c, "gaash_threads"):
             c.execute("ALTER TABLE gaash_threads ADD COLUMN docs_json TEXT")
+        # 🚩 when the flagged email was SENT (its own Date header) — created_at
+        # only says when the poll first saw it
+        if "sent_at" not in _columns(c, "flag_alerts"):
+            c.execute("ALTER TABLE flag_alerts ADD COLUMN sent_at TEXT")
         # 📧 Owner replies written in Gmail itself land in [Gmail]/Sent Mail,
         # never INBOX — a second per-account UID cursor tracks that folder.
         if "sent_last_uid" not in _columns(c, "gaash_accounts"):

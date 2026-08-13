@@ -13397,6 +13397,13 @@ function flagAge(iso){
   const m=Math.max(0,Math.floor((Date.now()-t)/60000));
   return m<60?m+"m":(m<1440?Math.floor(m/60)+"h":Math.floor(m/1440)+"d");
 }
+function flagSent(iso){
+  // clock time if the email was sent within a day, else its age
+  const t=Date.parse(iso||""); if(!t) return "?";
+  if(Date.now()-t<86400000){ const d=new Date(t);
+    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+  return flagAge(iso);
+}
 function flagDraw(){
   const f=FLAGS||{}; const flags=f.flags||[], boxes=f.inboxes||[], s=f.settings||{};
   const ob=$("flagOpenBox"), ib=$("flagInboxBox"), sb=$("flagSettingsBox");
@@ -13410,12 +13417,13 @@ function flagDraw(){
     ${flags.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);margin-top:6px;font-size:12.5px">
       <span style="flex:none">🚩</span>
       <div style="flex:1;min-width:0"><b>${poEsc(x.subject||"(no subject)")}</b>
-        <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${poEsc(x.email||"")}</div></div>
-      <span class="muted2" style="flex:none;font-size:11.5px">${T("مفتوح منذ · open")} ${flagAge(x.created_at)}${x.sent_count?` · ${x.sent_count}×`:""}</span></div>`).join("")
+        <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${x.profile?`<b style="color:var(--ink)">${poEsc(x.profile)}</b> · `:""}${poEsc(x.email||"")}</div></div>
+      <span class="muted2" style="flex:none;font-size:11.5px;text-align:end" title="${poEsc(x.sent_at||"")}">${x.sent_at?`${T("أُرسل · sent")} ${flagSent(x.sent_at)}<br>`:""}${T("مفتوح منذ · open")} ${flagAge(x.created_at)}${x.sent_count?` · ${x.sent_count}×`:""}</span></div>`).join("")
       ||`<div class="muted2" style="font-size:12px;padding:6px 0">${T("لا أعلام مفتوحة · no open flags")}</div>`}`;
   ib.innerHTML=`
     <b style="font-size:13px">✉ ${T("الصناديق المراقبة · watched inboxes")}</b>
     ${boxes.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
+      ${a.label?`<span style="flex:none;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:1px 7px;font-weight:800;font-size:11.5px${a.active?"":";opacity:.45"}">${poEsc(a.label)}</span>`:""}
       <b${a.active?"":' style="opacity:.45"'}>${poEsc(a.email)}</b>
       ${a.last_error?`<span style="color:#b42318;font-size:11px" title="${poEsc(a.last_error)}">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
       ${a.active?"":`<span class="muted2" style="font-size:11px">${T("موقوف · paused")}</span>`}
@@ -13427,8 +13435,9 @@ function flagDraw(){
     ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
       <input id="flagAcEmail" placeholder="email@gmail.com" style="flex:1;min-width:150px">
       <input id="flagAcPw" type="password" autocomplete="new-password" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
+      <input id="flagAcName" placeholder="${T("اسم البروفايل (اختياري) · profile name (optional)")}" style="flex:1;min-width:130px">
       <button class="minibtn" onclick="flagInboxAdd(this)">＋ ${T("أضف · Add")}</button></div>
-    <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة مرور صندوق موجود أعد إدخال نفس البريد مع الكلمة الجديدة · to update an existing inbox's password, re-add the same email with the new one")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
+    <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة المرور أو اسم البروفايل أعد إدخال نفس البريد · to update an inbox's password or profile name, re-add the same email")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
   sb.innerHTML=`
     <b style="font-size:13px">⚙ ${T("إعدادات المراقبة · watch settings")}</b>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px;margin-top:6px">
@@ -13449,16 +13458,20 @@ async function flagInboxAdd(btn){
   btn.disabled=true; btn.textContent="…";
   // strip Gmail's group-of-4 spaces + NBSP/zero-width a paste can carry
   const pw=((($("flagAcPw")||{}).value)||"").replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff]+/g,"");
-  const r=await post("/api/flags/inbox/add",{email:((($("flagAcEmail")||{}).value)||"").trim(), app_password:pw});
+  const r=await post("/api/flags/inbox/add",{email:((($("flagAcEmail")||{}).value)||"").trim(), app_password:pw,
+    label:((($("flagAcName")||{}).value)||"").trim()});
   btn.disabled=false; btn.textContent="＋ "+T("أضف · Add");
   if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
-  toast(r.updated?("🔑 "+T("حُدِّثت كلمة المرور · password updated")+" — "+r.email):("✓ "+r.email));
+  if(r.saved_with_error) toast("⚠ "+T("حُفظ لكن Gmail رفض الدخول — انظر القائمة · saved, but Gmail refused the login — see the list")+" — "+r.email);
+  else toast(r.updated?("🔑 "+T("حُدِّث · updated")+" — "+r.email):("✓ "+r.email));
   flagLoad();
 }
 function flagInboxFix(email){
   // the 🔑 on a failing chip: prefill the form so the fix is one paste away
-  const e=$("flagAcEmail"), p=$("flagAcPw");
+  const e=$("flagAcEmail"), p=$("flagAcPw"), n=$("flagAcName");
+  const a=((FLAGS||{}).inboxes||[]).find(x=>x.email===email)||{};
   if(e) e.value=email;
+  if(n) n.value=a.label||"";
   if(p){ p.value=""; p.focus(); }
 }
 async function flagInboxActive(id,active){

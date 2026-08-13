@@ -94,6 +94,11 @@ def main():
     hm = message_from_bytes(bytes(m), policy=policy.default)
     check("rfc2047 round-trip", "=?utf-8?" in bytes(m).decode("ascii", "ignore")
           and fm.match_subject(str(hm.get("Subject")), P))
+    check("date header parses",
+          (fm._parse_date_hdr("Wed, 13 Aug 2026 09:15:00 +0300") or "")
+          .startswith("2026-08-13"))
+    check("garbage date → None", fm._parse_date_hdr("not a date") is None
+          and fm._parse_date_hdr(None) is None)
 
     print("— settings —")
     st = fm.settings()
@@ -137,12 +142,88 @@ def main():
     def _boom(e, p):
         raise RuntimeError("connection refused")
     r3 = fm.add_inbox("other@gmail.com", "pw pw pw pw", verify=_boom)
-    check("verify failure surfaces", not r3["ok"] and "IMAP" in r3["error"])
+    check("refused add is SAVED with its error", r3["ok"]
+          and "IMAP" in r3.get("saved_with_error", ""))
+    with db.connect() as c:
+        row3 = dict(c.execute("SELECT * FROM flag_inboxes WHERE email=?",
+                              ("other@gmail.com",)).fetchone())
+    check("refused row: ⚠ error + NULL cursor, still active",
+          row3["last_error"] and row3["imap_last_uid"] is None
+          and row3["active"] == 1)
+    r4 = fm.add_inbox("watch@gmail.com", "qrst uvwx yzab cdef",
+                      verify=lambda e, p: (7, 99), label="AZ Profile 7")
+    check("re-add sets the profile name in place", r4["ok"] and r4["updated"]
+          and "saved_with_error" not in r4)
+    with db.connect() as c:
+        row4 = dict(c.execute("SELECT label, imap_last_uid FROM flag_inboxes "
+                              "WHERE id=?", (fid,)).fetchone())
+    check("label saved, cursor untouched", row4["label"] == "AZ Profile 7"
+          and row4["imap_last_uid"] == 41)
 
     check("pause", fm.set_active(fid, False)["ok"])
     check("resume", fm.set_active(fid, True)["ok"])
     check("redact hides password", all("app_password" not in a
           and a.get("has_password") for a in fm.inboxes()))
+
+    print("— fake-IMAP poll (NULL-cursor seed + sent_at) —")
+    _hm = EmailMessage()
+    _hm["Subject"] = "Action Required: verify your payment method"
+    _hm["From"] = "Amazon <account-update@amazon.com>"
+    _hm["Date"] = "Wed, 13 Aug 2026 09:15:00 +0300"
+    _hm["Message-ID"] = "<fake-43@amazon.com>"
+    _hm.set_content("x")
+    _HDR = bytes(_hm)
+
+    class _FakeIMAP:
+        # mailbox: UIDVALIDITY 7, UIDNEXT 44, newest message uid 43
+        def __init__(self, host=None, port=None):
+            pass
+
+        def login(self, e, p):
+            return ("OK", [b"ok"])
+
+        def status(self, folder, what):
+            return ("OK", [b"INBOX (UIDVALIDITY 7 UIDNEXT 44)"])
+
+        def select(self, folder, readonly=True):
+            return ("OK", [b"1"])
+
+        def uid(self, cmd, *args):
+            if cmd == "search":
+                return ("OK", [b"43"])
+            if cmd == "FETCH":
+                return ("OK", [(b"43 (BODY[HEADER])", _HDR)])
+            return ("OK", [])
+
+        def logout(self):
+            return ("OK", [b"bye"])
+
+    import imaplib as _il
+    _real_imap = _il.IMAP4_SSL
+    _il.IMAP4_SSL = _FakeIMAP
+    try:
+        raised = fm.poll_once()
+    finally:
+        _il.IMAP4_SSL = _real_imap
+    # watch@ (cursor 41) sees uid 43 and flags it; other@ (NULL cursor) seeds
+    # at 43 and ingests NOTHING — the whole point of the seed
+    check("cursored inbox flags the new mail, seeded one doesn't", raised == 1)
+    fl = fm.open_flags()
+    check("flag carries sent_at + profile from the join", len(fl) == 1
+          and fl[0]["email"] == "watch@gmail.com"
+          and (fl[0]["sent_at"] or "").startswith("2026-08-13")
+          and fl[0]["profile"] == "AZ Profile 7")
+    with db.connect() as c:
+        row5 = dict(c.execute("SELECT imap_last_uid, last_error FROM "
+                              "flag_inboxes WHERE email=?",
+                              ("other@gmail.com",)).fetchone())
+    check("NULL cursor seeded at newest, error cleared by the clean poll",
+          row5["imap_last_uid"] == 43 and row5["last_error"] is None)
+    txt = fm._build_message(fl, datetime.now(timezone.utc))
+    check("nag line: profile · email + sent time + done hint",
+          "AZ Profile 7 · watch@gmail.com" in txt and "sent" in txt
+          and "done" in txt)
+    _clear_flags()
 
     print("— dedupe index —")
     _mk_flag("watch@gmail.com", "<m1@x>")
@@ -302,6 +383,18 @@ def main():
     finally:
         fm._verify_imap = _orig
     check("admin adds via route", d["ok"])
+
+    def _refuse(e, p):
+        raise RuntimeError("conn boom")
+    fm._verify_imap = _refuse
+    try:
+        resp = adm.post("/api/flags/inbox/add",
+                        json={"email": "routefail@gmail.com",
+                              "app_password": "aaaa bbbb cccc dddd"})
+    finally:
+        fm._verify_imap = _orig
+    check("route add keeps a refused inbox (200 + saved_with_error)",
+          resp.status_code == 200 and resp.get_json().get("saved_with_error"))
     d = adm.post("/api/flags/settings", json={"repeat_min": 3}).get_json()
     check("admin saves settings", d["ok"] and d["settings"]["repeat_min"] == 3)
     d = ful.post("/api/flags/done", json={}).get_json()
