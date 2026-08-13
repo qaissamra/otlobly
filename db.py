@@ -360,6 +360,41 @@ CREATE TABLE IF NOT EXISTS gaash_autoclear (
   gwd TEXT PRIMARY KEY,                 -- in-app ✅ AUTO CLEAR tag (📦 Purchases
   at TEXT                               -- parcels — Leluxe tags live in ClickUp)
 );
+-- 🚩 Flag machine (flag_machine.py): watch Gmail inboxes read-only; an
+-- "action required" subject raises a flag that nags the owner on Telegram
+-- every minute until they reply done. Owner-scoped like gaash_* — no
+-- business_id. Runs ONLY on the Mac's launchd app (env FLAG_MACHINE=1);
+-- app passwords live in this DB on the data disk, never the repo.
+CREATE TABLE IF NOT EXISTS flag_inboxes (
+  id TEXT PRIMARY KEY,                  -- fin_<ms>
+  email TEXT NOT NULL,
+  label TEXT,
+  app_password TEXT,                    -- Gmail app password (data disk only)
+  active INTEGER NOT NULL DEFAULT 1,    -- paused inboxes keep creds + cursor
+  added_at TEXT,
+  last_check TEXT,
+  last_error TEXT,                      -- the ⚠ chip (auth-help text)
+  imap_uidvalidity INTEGER,
+  imap_last_uid INTEGER,                -- cursor: only mail AFTER this is read
+  seen_ids_json TEXT                    -- Message-ID dedupe ring (cap 2000)
+);
+CREATE TABLE IF NOT EXISTS flag_alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inbox_id TEXT,
+  email TEXT,                           -- denormalized: survives inbox removal
+  msg_id TEXT,                          -- Message-ID
+  uid INTEGER,
+  subject TEXT,                         -- RFC2047-decoded
+  sender TEXT,
+  matched_phrase TEXT,
+  created_at TEXT,
+  state TEXT NOT NULL DEFAULT 'open',   -- open | done
+  done_at TEXT,
+  last_sent_at TEXT,                    -- stamped only AFTER an ok Telegram send
+  sent_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_flagalerts_msg ON flag_alerts(email, msg_id);
+CREATE INDEX IF NOT EXISTS ix_flagalerts_state ON flag_alerts(state);
 """
 
 

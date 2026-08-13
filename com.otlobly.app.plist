@@ -2,11 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Always-on LOCAL otlobly app on this Mac (port 8789) — like az-tool's
-     com.aztool.server. This is what keeps the Leluxe daily goal digest and the
-     owner Telegram command bot alive: LELUXE_DIGEST / LELUXE_TG_BOT live ONLY
-     here (not in .env), so a manual `python app.py` dev run and Render's
-     workers never double-send or double-poll. Secrets still come from .env
-     via the app's own load_env().
+     com.aztool.server. This is what keeps the Leluxe daily goal digest, the
+     owner Telegram command bot and the 🚩 flag machine alive: LELUXE_DIGEST /
+     LELUXE_TG_BOT / FLAG_MACHINE live ONLY here (not in .env), so a manual
+     `python app.py` dev run and Render's workers never double-send or
+     double-poll. Secrets still come from .env via the app's own load_env().
      Install:  cp com.otlobly.app.plist ~/Library/LaunchAgents/
                launchctl load ~/Library/LaunchAgents/com.otlobly.app.plist
      Restart:  launchctl kickstart -k gui/$(id -u)/com.otlobly.app
@@ -27,6 +27,8 @@
     <key>LELUXE_DIGEST</key>
     <string>1</string>
     <key>LELUXE_TG_BOT</key>
+    <string>1</string>
+    <key>FLAG_MACHINE</key>
     <string>1</string>
   </dict>
   <key>RunAtLoad</key>

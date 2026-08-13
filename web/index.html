@@ -1002,6 +1002,7 @@
     <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span><span data-en="Package prep" data-ar="تجهيز الطرود">Package prep</span></button>
     <button id="bulkSearchBtn" onclick="setView('bulksearch')" title="الصق مجموعة أرقام تتبع GWD ودفعة وحدة شوف وين كل طرد — مشتريات أو ليلوكس، الحالة والقيمة · paste many GWD tracking numbers, see where each package lives (Purchases or Leluxe), its status and value"><span class="ic">🔎</span><span data-en="Bulk search" data-ar="بحث جماعي">Bulk search</span></button>
     <button id="gaashMailBtn" onclick="setView('gaashmail')" title="سلاسل إيميلات التخليص الجمركي — محادثة لكل طرد، ٤ إيميلات تلقائية، تتبع الردود · automated GAASH clearance email sequences — one chat per package, 4 templated emails, reply tracking"><span class="ic">📧</span><span data-en="GAASH mail" data-ar="بريد جمارك">GAASH mail</span></button>
+    <button id="flagsBtn" onclick="setView('flags')" title="مراقبة صناديق بريد — أي إيميل جديد عنوانه فيه action required ينبّه على تيليجرام كل دقيقة حتى ترد done · watched Gmail inboxes — a new email whose subject says action required nags on Telegram every minute until you reply done"><span class="ic">🚩</span><span data-en="Flags" data-ar="الأعلام">Flags</span></button>
     <div class="nav-sec" data-en="Insights" data-ar="التحليلات">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span><span data-en="P&amp;L" data-ar="الأرباح والخسائر">P&amp;L</span></button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span><span data-en="Activity" data-ar="النشاط">Activity</span></button>
@@ -1303,6 +1304,15 @@
     </div>
     <div class="cards" id="cartCards" style="margin-bottom:14px"></div>
     <div class="panel"><div id="cartList"></div></div>
+  </div>
+
+  <!-- 🚩 Flag machine — watched inboxes, open flags, the every-minute Telegram nag -->
+  <div id="flagsView" class="hidden">
+    <div class="toolbar"><h2 style="margin:0;font-size:17px;font-weight:800">🚩 <span data-en="Flags" data-ar="الأعلام">Flags</span></h2>
+      <span class="muted2" style="font-size:12px" data-en="watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done" data-ar="يراقب صناديق Gmail للقراءة فقط — أي إيميل جديد عنوانه فيه “action required” ينبّه على تيليجرام كل دقيقة حتى ترد done">watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done</span></div>
+    <div class="panel" style="max-width:760px"><div id="flagOpenBox" class="muted2" style="font-size:12px">loading…</div></div>
+    <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagInboxBox"></div></div>
+    <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagSettingsBox"></div></div>
   </div>
 
   <!-- Admin Settings -->
@@ -2142,6 +2152,8 @@ async function applyRole(){
   hide("goalsBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
   // GAASH mail: clearance chasing is fulfillment work (edit_fulfillment), Otlobly-only.
   hide("gaashMailBtn", p.includes("edit_fulfillment") && FEAT.leluxe!==false);
+  // 🚩 Flags: owner's watched inboxes (flag_* tables are owner-scoped) — same gate.
+  hide("flagsBtn", p.includes("edit_fulfillment") && FEAT.leluxe!==false);
   hide("depositsBtn", p.includes("view_money"));
   // employees (fulfillment) work money-free: no cart profit page, no settings
   hide("cartBtn", p.includes("view_money"));
@@ -2631,7 +2643,7 @@ const REFRESH_VIEWS  =new Set(["orders","brain","picking"]);    // views load() 
 const VIEW_BTN={brain:"brainBtn",orders:"homeBtn",picking:"pickBtn",pnl:"pnlBtn",customers:"custBtn",purchases:"poBtn",
   activity:"activityBtn",trash:"trashBtn",settings:"settingsBtn",needorder:"needBtn",team:"teamBtn",
   brokers:"platBrokersBtn",brokerprofile:"platBrokersBtn",platoverview:"platOverviewBtn",plans:"plansBtn",
-  usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",goals:"goalsBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn"};
+  usage:"usageBtn",platactivity:"platActivityBtn",metaleads:"metaLeadsBtn",deposits:"depositsBtn",incart:"cartBtn",catalog:"catalogBtn",leluxe:"leluxeBtn",goals:"goalsBtn",pkgprep:"pkgprepBtn",bulksearch:"bulkSearchBtn",gaashmail:"gaashMailBtn",flags:"flagsBtn"};
 // A refresh used to always land back on the Brain — restore the page the user was on
 // instead. Platform views restore separately (tatabu_view); a view whose nav button is
 // role/feature-hidden falls back so nobody lands on a page they can't reach.
@@ -2656,7 +2668,7 @@ function setView(v){
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
   if(!PLAT_VIEWS.has(v)){ try{ localStorage.setItem("otl_view",v); }catch(e){} }   // survive a refresh
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="goals"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="goals"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail"||v==="flags");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -2688,11 +2700,12 @@ function setView(v){
   $("pkgprepView").classList.toggle("hidden",v!=="pkgprep");
   $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
   $("gmView").classList.toggle("hidden",v!=="gaashmail");
+  $("flagsView").classList.toggle("hidden",v!=="flags");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",goals:"Goals",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",goals:"Goals",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail",flags:"Flags"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -2727,6 +2740,7 @@ function setView(v){
   if(v==="pkgprep"){ loadPkgprep(); }
   if(v==="bulksearch"){ bsInit(); }
   if(v==="gaashmail"){ gmLoad().then(()=>{ if(GM.ov && GM.tab!=="conv") gmTab(GM.tab); }); }   // re-show the restored tab once data is in
+  if(v==="flags"){ flagLoad(); }
 }
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
@@ -13372,6 +13386,106 @@ async function gmDocsCheck(gwd,btn,quiet){
   }
 }
 // ── ⚙ Accounts + templates + behavior ──
+// ── 🚩 Flag machine — watched inboxes → Telegram nag until «done» ─────────────
+let FLAGS=null;
+async function flagLoad(){
+  try{ FLAGS=await (await fetch("/api/flags")).json(); }catch(e){ FLAGS=null; }
+  flagDraw();
+}
+function flagAge(iso){
+  const t=Date.parse(iso||""); if(!t) return "?";
+  const m=Math.max(0,Math.floor((Date.now()-t)/60000));
+  return m<60?m+"m":(m<1440?Math.floor(m/60)+"h":Math.floor(m/1440)+"d");
+}
+function flagDraw(){
+  const f=FLAGS||{}; const flags=f.flags||[], boxes=f.inboxes||[], s=f.settings||{};
+  const ob=$("flagOpenBox"), ib=$("flagInboxBox"), sb=$("flagSettingsBox");
+  if(!ob) return;
+  if(!FLAGS){ ob.innerHTML=`<div class="muted2" style="font-size:12px">${T("تعذّر التحميل · failed to load")}</div>`; return; }
+  ob.className=""; ob.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">🚩 ${T("تنبيهات مفتوحة · open flags")} (${flags.length})</b>
+      <span class="spacer"></span>
+      ${flags.length?`<button class="accent" onclick="flagDone(this)">✅ ${T("تم — سكّر الكل · Done — close all")}</button>`:""}</div>
+    ${f.telegram===false?`<div class="en-warn" style="margin-top:6px;font-size:12px">⚠ ${T("تيليجرام غير مضبوط — التنبيهات لن تُرسل حتى تضبط التوكن في الإعدادات ⚙ · Telegram is not configured — the nag cannot send until the token is set in Settings ⚙")}</div>`:""}
+    ${flags.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);margin-top:6px;font-size:12.5px">
+      <span style="flex:none">🚩</span>
+      <div style="flex:1;min-width:0"><b>${poEsc(x.subject||"(no subject)")}</b>
+        <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${poEsc(x.email||"")}</div></div>
+      <span class="muted2" style="flex:none;font-size:11.5px">${T("مفتوح منذ · open")} ${flagAge(x.created_at)}${x.sent_count?` · ${x.sent_count}×`:""}</span></div>`).join("")
+      ||`<div class="muted2" style="font-size:12px;padding:6px 0">${T("لا أعلام مفتوحة · no open flags")}</div>`}`;
+  ib.innerHTML=`
+    <b style="font-size:13px">✉ ${T("الصناديق المراقبة · watched inboxes")}</b>
+    ${boxes.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
+      <b${a.active?"":' style="opacity:.45"'}>${poEsc(a.email)}</b>
+      ${a.last_error?`<span style="color:#b42318;font-size:11px" title="${poEsc(a.last_error)}">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
+      ${a.active?"":`<span class="muted2" style="font-size:11px">${T("موقوف · paused")}</span>`}
+      <span class="spacer"></span>
+      ${CAN_ADMIN&&a.last_error?`<button class="minibtn" onclick="flagInboxFix('${poEsc(a.email)}')" title="${T("أدخل كلمة مرور تطبيق جديدة لهذا الحساب · enter a fresh app password for this account")}">🔑</button>`:""}
+      ${CAN_ADMIN?`<button class="minibtn" onclick="flagInboxActive('${poEsc(a.id)}',${a.active?0:1})" title="${a.active?T("إيقاف مؤقت — يحتفظ بكلمة المرور والموضع · pause — keeps the password and cursor"):T("تشغيل · resume")}">${a.active?"⏸":"▶"}</button>
+      <button class="minibtn" onclick="flagInboxRemove('${poEsc(a.id)}')">🗑</button>`:""}</div>`).join("")
+      ||`<div class="muted2" style="font-size:12px;padding:4px 0">${T("لا صناديق بعد · none yet")}</div>`}
+    ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <input id="flagAcEmail" placeholder="email@gmail.com" style="flex:1;min-width:150px">
+      <input id="flagAcPw" type="password" autocomplete="new-password" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
+      <button class="minibtn" onclick="flagInboxAdd(this)">＋ ${T("أضف · Add")}</button></div>
+    <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة مرور صندوق موجود أعد إدخال نفس البريد مع الكلمة الجديدة · to update an existing inbox's password, re-add the same email with the new one")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
+  sb.innerHTML=`
+    <b style="font-size:13px">⚙ ${T("إعدادات المراقبة · watch settings")}</b>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px;margin-top:6px">
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="flagSetOn" ${s.enabled?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>${T("مفعّل · enabled")}</b></label>
+      <label>${T("عبارات المطابقة · match phrases")}: <input id="flagSetPhr" value="${poEsc((s.phrases||[]).join(", "))}" style="width:230px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق عنوان الإيميل بغض النظر عن حالة الأحرف · comma-separated — matched inside the subject, case-insensitive")}"></label>
+      <label>${T("فحص البريد كل (دقائق) · check mail every (min)")}: <input id="flagSetPoll" type="number" min="1" value="${s.poll_interval_min||2}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
+      <label>${T("تكرار التنبيه كل (دقائق) · repeat alert every (min)")}: <input id="flagSetRep" type="number" min="1" value="${s.repeat_min||1}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
+      ${CAN_ADMIN?`<button class="accent" onclick="flagSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
+}
+async function flagDone(btn){
+  btn.disabled=true;
+  const r=await post("/api/flags/done",{});
+  btn.disabled=false;
+  if(r&&r.ok) toast("✅ "+T("سكّرت · closed")+" "+(r.closed||0));
+  flagLoad();
+}
+async function flagInboxAdd(btn){
+  btn.disabled=true; btn.textContent="…";
+  // strip Gmail's group-of-4 spaces + NBSP/zero-width a paste can carry
+  const pw=((($("flagAcPw")||{}).value)||"").replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff]+/g,"");
+  const r=await post("/api/flags/inbox/add",{email:((($("flagAcEmail")||{}).value)||"").trim(), app_password:pw});
+  btn.disabled=false; btn.textContent="＋ "+T("أضف · Add");
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
+  toast(r.updated?("🔑 "+T("حُدِّثت كلمة المرور · password updated")+" — "+r.email):("✓ "+r.email));
+  flagLoad();
+}
+function flagInboxFix(email){
+  // the 🔑 on a failing chip: prefill the form so the fix is one paste away
+  const e=$("flagAcEmail"), p=$("flagAcPw");
+  if(e) e.value=email;
+  if(p){ p.value=""; p.focus(); }
+}
+async function flagInboxActive(id,active){
+  await post("/api/flags/inbox/active",{id,active:!!active});
+  flagLoad();
+}
+async function flagInboxRemove(id){
+  const a=((FLAGS||{}).inboxes||[]).find(x=>x.id===id)||{};
+  let warn="";
+  try{ const n=((FLAGS||{}).flags||[]).filter(x=>x.inbox_id===id).length;
+    if(n) warn=`\n\n⚠ ${n} ${T("تنبيه مفتوح من هذا الصندوق يبقى يرن حتى ترد done · open flag(s) from it keep nagging until you reply done")}`; }catch(e){}
+  if(!confirm(T("حذف هذا الصندوق؟ · remove this inbox?")+(a.email?"\n"+a.email:"")+warn)) return;
+  await post("/api/flags/inbox/remove",{id});
+  flagLoad();
+}
+async function flagSettingsSave(btn){
+  btn.disabled=true;
+  const r=await post("/api/flags/settings",{
+    enabled:!!($("flagSetOn")||{}).checked,
+    phrases:(($("flagSetPhr")||{}).value)||"",
+    poll_interval_min:(($("flagSetPoll")||{}).value)||2,
+    repeat_min:(($("flagSetRep")||{}).value)||1});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
+  toast("💾 "+T("حُفظت · saved"));
+  flagLoad();
+}
 function gmSettingsOpen(){
   const ov=GM.ov||{}; const s=ov.settings||{}, accts=ov.accounts||[], steps=s.steps||[];
   // 🪪 on-package name → ID number: observed ClickUp "NAME ON PACKAGEE" values
