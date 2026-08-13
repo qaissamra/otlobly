@@ -11472,6 +11472,7 @@ function gmRenderList(){
     return `<div class="gm-row${GM.cur===t.gwd?' on':''}" onclick="gmOpen('${t.gwd}')">
       <div class="gm-top">
         <span class="gm-gwd">${poEsc(t.gwd)}</span>
+        ${((t.members||[]).length>1)?`<span class="pill mono" style="background:var(--bg2);border:1px solid var(--line);color:var(--muted);font-size:9.5px;flex:none" title="${T("محادثة مجمّعة — إيميل واحد لكل هذه الطرود · grouped conversation — one email covers all these parcels")}: ${t.members.map(poEsc).join(" · ")}">+${t.members.length-1}</span>`:""}
         ${gmDots(t.step||0,((gmSeqOf(t)||{}).steps||[]).length)}
         ${t.missing_docs?'<span title="'+T('ناقص مستندات · missing documents')+'">⚠️</span>':''}
         <span class="spacer"></span>
@@ -11540,7 +11541,10 @@ function gmRenderChat(){
   const resend=JSON.parse(th.resend_json||"null");
   $("gmChat").innerHTML=`
     <div class="gm-head">
-      <b class="mono">${poEsc(th.gwd)}</b> ${gmChip(th.state)} ${gmDots(th.step||0,((gmSeqOf(th)||{}).steps||[]).length)}
+      <b class="mono">${poEsc(th.gwd)}</b>${((th.members||[]).length>1)
+        ?th.members.slice(1).map(m=>{ const g=(th.members_gash||{})[m]||{};
+          return ` <span class="pill mono" style="background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-size:10px;cursor:pointer;text-transform:none;letter-spacing:0" onclick="copyCtk('${poEsc(m)}')" title="${T("طرد في نفس المحادثة — الإيميلات تشمله · parcel on this same conversation — the emails cover it")}${g.label||g.bucket?` · ${poEsc(g.label||g.bucket)}`:""}">📦 ${poEsc(m)}</span>`; }).join("")
+        :""} ${gmChip(th.state)} ${gmDots(th.step||0,((gmSeqOf(th)||{}).steps||[]).length)}
       ${(gmSeqOf(th)||{}).name?`<span class="muted2" style="font-size:11px">🧬 ${poEsc(gmSeqOf(th).name)}</span>`:""}
       ${idDoc?`<span class="gm-att">🪪 ${poEsc(idDoc.name)}</span>`:""}
       ${th.missing_docs?tonePill("red","⚠ "+(th.missing_note||T("ناقص مستندات · missing docs"))):""}
@@ -11871,7 +11875,7 @@ function gmCandName(sel){
     setTimeout(()=>{ sel.style.boxShadow=""; },700);
   });
 }
-function gmNewOpen(preGwds){
+function gmNewOpen(preGwds,opts){
   const ov=GM.ov||{}; const cands=(ov.candidates||[]).slice(), ids=ov.ids||[], accts=ov.accounts||[];
   const pre=[...new Set((preGwds||[]).map(g=>String(g||"").trim().toUpperCase()).filter(g=>/^GWD\d+$/.test(g)))];
   // pre-selected GWDs that aren't in the candidate list (e.g. from bulk search) →
@@ -11890,10 +11894,31 @@ function gmNewOpen(preGwds){
     const c=cands.find(x=>x.gwd===g); return !gmSeqRearm(c&&c.thread); }));
   // what step 2 has to remember: rendering the confirmation destroys step 1's
   // controls, so Back rebuilds them from here rather than from the DOM
-  GM.pickState={paste:"", q:"", names:{}, docIds:[], makeDecl:false, docs:{}};
+  GM.pickState={paste:"", q:"", names:{}, docIds:[], makeDecl:false, docs:{},
+                // 📨 one email per order — the Docs tab's order-header 📧
+                // opens the wizard with it already on
+                groupByOrder:!!(opts&&opts.group)};
   GM.idFolder=null; GM.idPending=null;   // a fresh open starts at the folder list
   GM.wiz={step:1};
   gmWizRender();
+}
+// The wizard's send units. Normally one parcel = one unit = one conversation;
+// with "one email per order" ON, the selected parcels group by their board
+// order (candidates carry order_key) and each ≥2-member group becomes ONE
+// grouped conversation. A re-armed conversation always stays its own unit —
+// grouping never swallows a thread GAASH already has mail about.
+function gmWizUnits(gwds){
+  const st=GM.pickState||{};
+  const cand=g=>(GM.enrollCands||[]).find(x=>x.gwd===g)||{};
+  const units=[],by=new Map();
+  (gwds||[]).forEach(g=>{
+    const c=cand(g);
+    if(!st.groupByOrder||gmSeqRearm(c.thread)){ units.push([g]); return; }
+    const k=c.order_key||("solo:"+g);
+    if(by.has(k)) by.get(k).push(g);
+    else{ const u=[g]; by.set(k,u); units.push(u); }
+  });
+  return units;
 }
 // ── the enroll wizard ─────────────────────────────────────────────────────────
 // One scroll had grown to a compose header + search + chips + a full column
@@ -11965,7 +11990,15 @@ function gmWizFoot(back,next,nextLabel,extra){
 function gmWizPackages(){
   const cands=GM.enrollCands||[], st=GM.pickState||{};
   $("wizBody").innerHTML=`
-    <div style="font-size:12.5px;color:var(--muted);margin:2px 0 8px">${T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
+    <div id="gmWizModeLine" style="font-size:12.5px;color:var(--muted);margin:2px 0 8px">${st.groupByOrder
+      ?T("طرود الطلبية الواحدة تُجمَع في إيميل واحد يسردها كلها · one order's parcels share ONE email that lists them all")
+      :T("كل طرد يحصل على محادثة خاصة — إيميل واحد لكل GWD · every package gets its own conversation — one email per GWD")}</div>
+    <label class="wiz-opt" style="margin-bottom:8px">
+      <input type="checkbox" ${st.groupByOrder?"checked":""}
+        onchange="gmPickCapture();GM.pickState.groupByOrder=this.checked;gmWizPackages()">
+      <span><b>📨 ${T("إيميل واحد لكل طلبية · one email per order")}</b>
+        <span class="muted2" style="display:block;font-size:11px">${T("طرود الطلبية نفسها تُذكر معاً في إيميل واحد بكل أرقام التتبع، وتصريح لكل طرد · same-order parcels are listed together in one email with every tracking number, one declaration each")}</span></span>
+    </label>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <input id="gmCandSearch" oninput="gmEnrollRender()" placeholder="🔎 ${T("ابحث برقم/اسم/حالة · search GWD / name / status")}" style="flex:1;font-size:12.5px">
       <button class="minibtn" onclick="gmEnrollSelectShown(true)">${T("اختر الظاهر · select shown")}</button>
@@ -12955,7 +12988,9 @@ function gmWizReview(){
   $("bulkBody").innerHTML=`
     <div class="en-cf">
       <div class="en-warn ${live?"live":"dry"}">${live
-        ? `<b>${T("إيميل حقيقي يخرج الآن · A real email goes out now")}</b> — ${T("واحد لكل طرد، إلى · one per package, to")} <b>${poEsc(to||"?")}</b>`
+        ? `<b>${T("إيميل حقيقي يخرج الآن · A real email goes out now")}</b> — ${st.groupByOrder
+            ?T("واحد لكل طلبية، إلى · one per order, to")
+            :T("واحد لكل طرد، إلى · one per package, to")} <b>${poEsc(to||"?")}</b>`
         : `<b>${T("وضع التجربة — لن يُرسَل أي إيميل · Dry-run — no email will be sent")}</b> — ${T("ستُجهَّز المحادثات فقط · the conversations are only prepared")}`}</div>
       <div class="en-cf-r"><b>${T("سير العمل · Workflow")}</b><span>${poEsc(seq.name||"—")}</span>
         <span class="muted2">${steps} ${T("إيميل على مدى · emails over")} ${days} ${T("يوم · days")}</span></div>
@@ -12966,6 +13001,22 @@ function gmWizReview(){
       <div class="en-cf-r"><b>${T("الطرود · Packages")}</b><span class="muted2">${gwds.length}</span>
         <span class="spacer"></span>
         <span class="muted2" style="font-size:11px">${T("المرفقات تتكرر مع كل إيميل · attachments repeat on every email")}</span></div>
+      ${(()=>{ // 📨 one email per order: say exactly how many emails leave and
+               // which parcels share one — and warn when the template can't
+               // even list a group (no {gwd_list}/{gwd_lines}/{package_count})
+        if(!st.groupByOrder) return "";
+        const units=gmWizUnits(gwds), grps=units.filter(u=>u.length>1);
+        const st0=(seq.steps||[]).find(x=>x.template_id)||{};
+        const tpl=(ov.templates||[]).find(t=>t.id===st0.template_id)||{};
+        const txt=(tpl.body_tpl||"")+" "+(tpl.subject_tpl||"");
+        const noTok=grps.length&&!/\{(gwd_list|gwd_lines|package_count)\}/.test(txt);
+        return `<div class="en-cf-r"><b>📨 ${T("مجموعات · Groups")}</b>
+            <span>${grps.length} ${T("مجموعة · group(s)")} + ${units.length-grps.length} ${T("منفرد · solo")} = <b>${units.length}</b> ${T("إيميل · email(s)")}</span></div>
+          ${grps.map(u=>`<div class="mono muted2" style="font-size:11px;padding:0 8px 2px">📨 ${u.map(poEsc).join(" + ")}</div>`).join("")}
+          ${noTok?`<div class="en-warn" style="background:#fef3c7;border-color:#fcd34d;color:#92400e">
+            <b>⚠ ${T("القالب يذكر طرداً واحداً فقط · the template names only one parcel")}</b>
+            <div style="font-size:11.5px;margin-top:3px">${T("أضف {gwd_list} أو {gwd_lines} إلى القالب ليسرد الإيميل كل أرقام المجموعة — وإلا فسيذكر النص الرقم الأول فقط (التصاريح تُرفق لكل الطرود على أي حال) · add {gwd_list} or {gwd_lines} to the template so the email lists every number in the group — otherwise the text names only the first one (declarations still attach for all)")}</div></div>`:""}`;
+      })()}
       ${(()=>{ // A re-arm re-emails a conversation GAASH ALREADY has. This is
                // the last screen before that happens, so it must not read like
                // a fresh enrollment — name them, and say what is kept.
@@ -12985,7 +13036,7 @@ function gmWizReview(){
     <button class="accent" onclick="gmNewStart(this)">${
       gwds.every(g=>gmSeqRearm((byGwd[g]||{}).thread))
         ? `🔁 ${T("أعد التسليح وأرسل · Re-arm and send")} ${gwds.length}`
-        : `📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${gwds.length}`}</button></div>`;
+        : `📧 ${T("ابدأ الإرسال لـ · Start emailing")} ${st.groupByOrder?gmWizUnits(gwds).length:gwds.length}`}</button></div>`;
 }
 // The real email #1, rendered for this package by the SAME _fill the sender
 // uses — so what you approve is what arrives, not an approximation of it.
@@ -12993,23 +13044,26 @@ async function gmWizPreview(){
   const box=$("wizPrev"); if(!box) return;
   const ov=GM.ov||{}, st=GM.pickState||{}, s=ov.settings||{};
   const gwds=st.gwds||gmNewGwds();
-  const at=Math.max(0,Math.min(gwds.length-1,((GM.wiz||{}).at)||0));
-  const gwd=gwds[at]; if(!gwd) return;
+  // page over UNITS, not parcels — a grouped order is ONE email, previewed once
+  const units=gmWizUnits(gwds);
+  const at=Math.max(0,Math.min(units.length-1,((GM.wiz||{}).at)||0));
+  const unit=units[at]||[]; const gwd=unit[0]; if(!gwd) return;
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
   const st0=(seq.steps||[]).find(x=>x.template_id)||{};
   const to=((seq.to_address||s.to_address)||"").trim();
-  const atts=[...(st.docIds||[]),...((st.docs||{})[gwd]?[(st.docs[gwd]).id]:[])]
-    .map(id=>((st.docs||{})[gwd]&&st.docs[gwd].id===id)?st.docs[gwd]
-      :((ov.ids||[]).find(x=>x.id===id)||null)).filter(Boolean);
+  const atts=[...(st.docIds||[]),...(unit.flatMap(g=>(st.docs||{})[g]?[st.docs[g].id]:[]))]
+    .map(id=>(unit.map(g=>(st.docs||{})[g]).find(d=>d&&d.id===id))
+      ||((ov.ids||[]).find(x=>x.id===id)||null)).filter(Boolean);
   const nav=`<div class="wiz-nav">
       <button class="minibtn" ${at<=0?"disabled":""} onclick="GM.wiz.at=${at-1};gmWizPreview()">◀</button>
-      <span class="mono">${poEsc(gwd)}</span>
-      <span class="muted2">${at+1} / ${gwds.length}</span>
-      <button class="minibtn" ${at>=gwds.length-1?"disabled":""} onclick="GM.wiz.at=${at+1};gmWizPreview()">▶</button></div>`;
+      <span class="mono">${poEsc(gwd)}${unit.length>1?` <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px" title="${unit.map(poEsc).join(" · ")}">+${unit.length-1}</span>`:""}</span>
+      <span class="muted2">${at+1} / ${units.length}</span>
+      <button class="minibtn" ${at>=units.length-1?"disabled":""} onclick="GM.wiz.at=${at+1};gmWizPreview()">▶</button></div>`;
   box.innerHTML=nav+`<div class="muted2" style="padding:14px 2px;font-size:12px">${T("جارِ التحضير… · rendering…")}</div>`;
   let r=null;
   if(st0.template_id)
-    r=await post("/api/gaash/template_render",{gwd,template_id:st0.template_id,preview:true});
+    r=await post("/api/gaash/template_render",{gwd,template_id:st0.template_id,preview:true,
+                                               ...(unit.length>1?{gwds:unit}:{})});
   if($("wizPrev")!==box||(((GM.wiz||{}).at)||0)!==at) return;   // moved on already
   const miss=[...(((r||{}).unresolved)||[]),...(((r||{}).blank)||[])];
   const fl=gmFleet(), prim=gmAcctFor(gwd)||{};
@@ -13088,9 +13142,13 @@ async function gmNewStart(btn){
   // replace:true lets a dead enrollment be re-enrolled — the server still
   // refuses any parcel GAASH has actually been written to, so this cannot
   // restart a live conversation even from a pasted GWD
+  // 📨 one email per order: same-order parcels among the FRESH ones become
+  // grouped units — one thread, one email listing them all (rearms never group)
+  const groups=gmWizUnits(fresh).filter(u=>u.length>1);
   const r=fresh.length?await post("/api/gaash/start",
     {gwds:fresh, id_doc_id:(st.docIds||[]), account_id:(st.acctIds||[]),
-     seq_id:st.seqId||null, names:st.names||{}, docs, replace:true}):null;
+     seq_id:st.seqId||null, names:st.names||{}, docs, replace:true,
+     ...(groups.length?{groups}:{})}):null;
   btn.disabled=false;
   bulkClose();
   res = res.concat((r&&r.results)||[]);
@@ -13226,14 +13284,21 @@ function gmDocsDraw(){
   // product photos: the same cross-board lookup the Workflows expansion uses
   // (bsEnsureData ran in gmDocsRender) — flattened ONCE, never per row
   const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  // one board lookup per parcel, shared by thumbs / status / order grouping
+  const hitOf=new Map();
+  rows.forEach(r=>{
+    let po=null,lx=null;
+    try{
+      if(r.source==="purchases") po=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]||null:null;
+      else lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+    }catch(e){}
+    hitOf.set(r.gwd,{po,lx});
+  });
   const thumbs=r=>{
     try{
-      if(r.source==="purchases"){
-        const hit=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]:null;
-        return hit?poThumbStrip(hit.pk.items,3):"";
-      }
-      const lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
-      return lx?lxThumbs(lx.items,3):"";
+      const h=hitOf.get(r.gwd)||{};
+      if(r.source==="purchases") return h.po?poThumbStrip(h.po.pk.items,3):"";
+      return h.lx?lxThumbs(h.lx.items,3):"";
     }catch(e){ return ""; }
   };
   // the owner's OWN board status (oredered / rd / …), read off the same boards.
@@ -13242,11 +13307,11 @@ function gmDocsDraw(){
   // "—" everywhere. Several products disagreeing → the board's "mixed" pill.
   const boardStatus=r=>{
     try{
+      const h=hitOf.get(r.gwd)||{};
       if(r.source==="purchases"){
-        const hit=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]:null;
-        return hit?gmOrderPill({source:"purchases",status:hit.pk.otlobly_status}):'<span class="muted2">—</span>';
+        return h.po?gmOrderPill({source:"purchases",status:h.po.pk.otlobly_status}):'<span class="muted2">—</span>';
       }
-      const lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+      const lx=h.lx;
       if(!lx) return '<span class="muted2">—</span>';
       const u=lx.sts||[];
       if(u.length===1) return gmOrderPill({source:"leluxe",status:u[0]});
@@ -13254,6 +13319,19 @@ function gmDocsDraw(){
       const eff=(typeof lxKEffStatus==="function")?lxKEffStatus(lx.items,lx.pkgRow):"";
       return eff?gmOrderPill({source:"leluxe",status:eff}):'<span class="muted2">—</span>';
     }catch(e){ return '<span class="muted2">—</span>'; }
+  };
+  // which ORDER a parcel belongs to — several parcels sharing one order nest
+  // under one header (same source ⇒ a group is inherently same-board)
+  const keyOf=r=>{
+    const h=hitOf.get(r.gwd)||{};
+    if(r.source==="purchases")
+      return (h.po&&h.po.p&&h.po.p.po_id!=null)?"po:"+h.po.p.po_id:"solo:"+r.gwd;
+    return (h.lx&&h.lx.order)?"lx:"+h.lx.order.id:"solo:"+r.gwd;
+  };
+  const grpName=r=>{
+    const h=hitOf.get(r.gwd)||{};
+    if(r.source==="purchases") return (h.po&&h.po.p&&h.po.p.ship_to)||"";
+    return (h.lx&&h.lx.order&&h.lx.order.name)||"";
   };
   const row=r=>{
     const lk=(r.links&&r.links[0]&&r.links[0].url)||"";
@@ -13276,6 +13354,45 @@ function gmDocsDraw(){
                       :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
     </div>`;
   };
+  // ── order grouping: walk the FILTERED list in its sort order; ≥2 rows
+  // sharing an order nest under one header (a 1-row order stays a flat row,
+  // exactly like the board's 1-child visual-package collapse). Group headers
+  // default OPEN — GM_DOCS.closed remembers only what the owner folded.
+  GM_DOCS.closed=GM_DOCS.closed||new Set();
+  const blocks=[],byKey=new Map();
+  list.forEach(r=>{
+    const k=keyOf(r);
+    let b=byKey.get(k);
+    if(!b){ b={key:k,rows:[]}; byKey.set(k,b); blocks.push(b); }
+    b.rows.push(r);
+  });
+  const RANK={action:0,stopped:1,unchecked:2,error:2,noanswer:3,info:4,plain:4};
+  const grpHead=(b,name)=>{
+    const open=!GM_DOCS.closed.has(b.key);
+    const worst=b.rows.slice().sort((a,c)=>(RANK[a.state]??3)-(RANK[c.state]??3))[0];
+    const gwds=b.rows.map(x=>x.gwd);
+    const allTh=b.rows.every(x=>x.thread_state);
+    return `<div onclick="gmDocsGrpToggle('${poEsc(b.key)}')" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;cursor:pointer">
+      <span class="caret" style="flex:none;width:14px;color:var(--muted)">${open?"▾":"▸"}</span>
+      <span style="flex:none" title="${b.rows[0].source==="leluxe"?"Leluxe":"Purchases"}">${badge(b.rows[0].source)}</span>
+      <b style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px" title="${poEsc(name)}">${poEsc(name||T("طلبية · order"))}</b>
+      <span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10px;flex:none">📦 ${gwds.length} ${T("طرود · parcels")}</span>
+      ${gmDocsStatePill(worst)}
+      ${open?"":`<span class="muted2 mono" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gwds.map(poEsc).join(" · ")}</span>`}
+      <span class="spacer"></span>
+      ${allTh?`<button class="minibtn" onclick="event.stopPropagation();gmTab('conv');gmOpen('${poEsc(gwds[0])}')" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
+             :`<button class="minibtn" onclick='event.stopPropagation();gmNewOpen(${JSON.stringify(gwds)},{group:true})' title="${T("إيميل واحد لكل الطرود — سجّلها معاً · one email for all parcels — enroll them together")}">📧 ${T("الكل · all")} (${gwds.length})</button>`}
+    </div>`;
+  };
+  const body=blocks.map(b=>{
+    if(b.rows.length<2) return row(b.rows[0]);
+    const name=grpName(b.rows[0]);
+    const open=!GM_DOCS.closed.has(b.key);
+    return `<div style="border-inline-start:2px solid #d9770655">
+      ${grpHead(b,name)}
+      ${open?b.rows.map(row).join(""):""}
+    </div>`;
+  }).join("");
   const n=k=>rows.filter(M[k]).length;
   p.innerHTML=`<div class="panel">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -13307,10 +13424,15 @@ function gmDocsDraw(){
           <span style="flex:none;width:124px">${T("حالة الجمارك · GAASH status")}</span>
           <span class="spacer"></span>
         </div>
-        ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
+        ${list.length?body:`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
       </div>
     </div>
   </div>`;
+}
+function gmDocsGrpToggle(key){
+  GM_DOCS.closed=GM_DOCS.closed||new Set();
+  GM_DOCS.closed.has(key)?GM_DOCS.closed.delete(key):GM_DOCS.closed.add(key);
+  gmDocsDraw();
 }
 // Walk the CURRENTLY FILTERED rows, 2 live checks at a time (GAASH's page is
 // slow; 2 keeps a 35-parcel pile inside a few minutes without hammering them).

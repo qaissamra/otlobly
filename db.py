@@ -533,6 +533,12 @@ def migrate():
         if "paused" not in _columns(c, "gaash_sequences"):
             c.execute("ALTER TABLE gaash_sequences ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
             c.execute("ALTER TABLE gaash_sequences ADD COLUMN description TEXT")
+        # 📧 One clearance email can cover several parcels of the same order. The
+        # thread stays keyed by its PRIMARY GWD; group_gwds_json = JSON list of
+        # ALL member GWDs incl. the primary. NULL = plain solo thread — every
+        # pre-existing row behaves exactly as before (no backfill).
+        if "group_gwds_json" not in _columns(c, "gaash_threads"):
+            c.execute("ALTER TABLE gaash_threads ADD COLUMN group_gwds_json TEXT")
         # Seed business #1 (owner of all pre-tenancy data) exactly once.
         if c.execute("SELECT COUNT(*) n FROM businesses").fetchone()["n"] == 0:
             c.execute("INSERT INTO businesses (id, name, slug, active, created_at) "

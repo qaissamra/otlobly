@@ -1356,6 +1356,121 @@ def main():
     check("the migration is idempotent", gm.migrate_decl_auto() == 0)
     _del_thread("GWD900900900")
 
+    print("— grouped conversations (one email, several parcels of one order) —")
+    _mk_thread("GWD700700701")
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET group_gwds_json=? WHERE gwd=?",
+                  (json.dumps(["GWD700700701", "GWD700700702", "gwd700700703",
+                               "GWD700700702", "junk"]), "GWD700700701"))
+    gth = gm.thread_get("GWD700700701")
+    check("thread_members: primary first, uppercased, deduped, junk dropped",
+          gm.thread_members(gth) == ["GWD700700701", "GWD700700702",
+                                     "GWD700700703"])
+    _mk_thread("GWD700700709")
+    check("a solo thread is its own single member",
+          gm.thread_members(gm.thread_get("GWD700700709")) == ["GWD700700709"])
+    mpm = gm.member_primary_map()
+    check("member_primary_map: members → primary, solos → themselves",
+          mpm.get("GWD700700702") == "GWD700700701"
+          and mpm.get("GWD700700703") == "GWD700700701"
+          and mpm.get("GWD700700709") == "GWD700700709")
+    check("_fill group tokens on a SOLO thread collapse to the one parcel",
+          gm._fill("{package_count}|{gwd_list}|{gwd_lines}", "GWD700700709",
+                   gm.thread_get("GWD700700709"))
+          == "1|GWD700700709|GWD700700709")
+    check("_fill group tokens list every member of a group",
+          gm._fill("{package_count}: {gwd_list}", "GWD700700701", gth)
+          == "3: GWD700700701, GWD700700702, GWD700700703")
+    check("...{gwd_lines} one per line, {gwd} stays the primary",
+          gm._fill("{gwd}\n{gwd_lines}", "GWD700700701", gth)
+          == "GWD700700701\nGWD700700701\nGWD700700702\nGWD700700703")
+    check("members= narrows the list (partial clearance at send time)",
+          gm._fill("{gwd_list}", "GWD700700701", gth,
+                   members=["GWD700700702"]) == "GWD700700702")
+    hmm = EmailMessage()
+    hmm["From"] = "Support <team@glassix.support>"
+    hmm["Subject"] = "About your package GWD700700703"
+    check("a member GWD in the subject lands on the GROUP's thread",
+          gm.match_thread(hmm, "glassix.support", set(), mpm) == "GWD700700701")
+    hs = EmailMessage()
+    hs["To"] = "GaashWW@glassix.support"
+    hs["Subject"] = "please release GWD700700702"
+    check("...and a Gmail-written email naming a member files there too",
+          gm.match_sent_thread(hs, "glassix.support", set(), mpm)
+          == "GWD700700701")
+    real_pt = gm.package_terminal
+    try:
+        gm.package_terminal = lambda g: g == "GWD700700702"
+        check("group_terminal: one cleared member is NOT enough",
+              gm.group_terminal(gth) is False)
+        gm.package_terminal = lambda g: True
+        check("group_terminal: every member cleared → goal met",
+              gm.group_terminal(gth) is True)
+    finally:
+        gm.package_terminal = real_pt
+    _del_thread("GWD700700701")
+    _del_thread("GWD700700709")
+
+    # a real group enrollment over the Purchases parcels from the section above
+    pdb = purchases.load()
+    for p in pdb["purchase_orders"]:
+        if p.get("po_id") == "PO-DECL":
+            p["packages"].append({
+                "package_no": 2, "tracking_number": "GWD900900901",
+                "main_name": "SAMPLE NAME",
+                "items": [{"item_id": "i2", "title": "Strap", "qty": 1}]})
+    purchases.save(pdb)
+    real_pt = gm.package_terminal
+    gm.package_terminal = lambda g: False       # stale boards must not decide
+    try:
+        res = gm.start_threads([], None, None,
+                               groups=[["GWD900900900", "GWD900900901"]])
+        th9 = gm.thread_get("GWD900900900")
+        check("a group enrolls as ONE thread keyed by its first member",
+              len(res) == 1 and res[0]["gwd"] == "GWD900900900"
+              and res[0].get("members") == ["GWD900900900", "GWD900900901"]
+              and gm.thread_get("GWD900900901") is None and th9
+              and json.loads(th9["group_gwds_json"])
+              == ["GWD900900900", "GWD900900901"])
+        with db.connect() as c:
+            c.execute("UPDATE gaash_threads SET docs_json=? WHERE gwd=?",
+                      ('["decl:auto"]', "GWD900900900"))
+        atts = gm._step_attachments(gm.thread_get("GWD900900900"))
+        check("decl:auto papers EVERY member — one PDF per parcel",
+              [a[0] for a in atts] == ["GWD900900900 - declaration.pdf",
+                                       "GWD900900901 - declaration.pdf"]
+              and all(a[1][:5] == b"%PDF-" for a in atts))
+        rows = {r["gwd"]: r for r in gm.docs_queue()["rows"]}
+        check("docs queue: a member parcel wears the group's thread state",
+              rows.get("GWD900900901", {}).get("thread_state") == "active")
+        r2 = gm.start_threads(["GWD900900901"], None, None)
+        check("a member can't be enrolled again solo",
+              r2 and not r2[0]["ok"]
+              and "grouped" in (r2[0].get("error") or ""))
+        r3 = gm.start_threads([], None, None,
+                              groups=[["GWD900900901", "GWD900900900"]])
+        check("...nor folded into a different group",
+              r3 and not r3[0]["ok"])
+        rr = client("emp").post(
+            "/api/gaash/template_render",
+            json={"gwd": "GWD900900900", "template_id": "tpl_group",
+                  "gwds": ["GWD900900900", "GWD900900901"],
+                  "preview": True}).get_json()
+        check("template_render previews a PLANNED group's full member list",
+              rr.get("ok")
+              and "GWD900900900, GWD900900901" in (rr.get("subject") or "")
+              and "GWD900900900\nGWD900900901" in (rr.get("body") or ""))
+        res1 = gm.start_threads([], None, None, groups=[["GWD900900902"]])
+        th1 = gm.thread_get("GWD900900902")
+        check("a 1-member group is a plain solo thread — today's exact path",
+              res1 and res1[0]["ok"] and th1
+              and th1.get("group_gwds_json") is None
+              and "members" not in res1[0])
+    finally:
+        gm.package_terminal = real_pt
+        _del_thread("GWD900900900")
+        _del_thread("GWD900900902")
+
     print()
     if fails:
         print(f"FAILED: {len(fails)} — {fails}")
