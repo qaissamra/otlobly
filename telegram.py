@@ -7,6 +7,10 @@ Credentials: env TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID win, with a config
 fallback (alerts.telegram_token / alerts.telegram_chat) so the owner can paste
 them straight into the Settings page without touching Render. The token is a
 secret — env vars or the data-disk config only, NEVER the repo.
+
+The optional token= on configured/send/send_to/get_updates lets a SECOND bot
+(the 🚩 flags bot, env FLAGS_BOT_TOKEN) reuse this plumbing; the default stays
+the owner alerts bot, and the chat id is shared (chat ids are global per user).
 """
 
 import json
@@ -28,14 +32,16 @@ def _creds():
     return str(tok or "").strip(), str(chat or "").strip()
 
 
-def configured():
+def configured(token=None):
     tok, chat = _creds()
+    tok = str(token or "").strip() or tok
     return bool(tok and chat)
 
 
-def send(text):
+def send(text, token=None):
     """One plain-text message to the owner's chat. {ok: bool, error?: str}."""
     tok, chat = _creds()
+    tok = str(token or "").strip() or tok
     if not (tok and chat):
         return {"ok": False, "error": "Telegram not configured"}
     data = parse.urlencode({"chat_id": chat, "text": text}).encode()
@@ -50,10 +56,10 @@ def send(text):
         return {"ok": False, "error": str(e)}
 
 
-def send_to(chat_id, text):
+def send_to(chat_id, text, token=None):
     """Like send(), but to an explicit chat — the command bot replies to the
     chat that asked (which _creds() verified is the owner's)."""
-    tok, _ = _creds()
+    tok = str(token or "").strip() or _creds()[0]
     if not tok:
         return {"ok": False, "error": "Telegram not configured"}
     data = parse.urlencode({"chat_id": chat_id, "text": text}).encode()
@@ -68,11 +74,11 @@ def send_to(chat_id, text):
         return {"ok": False, "error": str(e)}
 
 
-def get_updates(offset=None, timeout=50):
+def get_updates(offset=None, timeout=50, token=None):
     """Long-poll getUpdates for the owner command bot. Returns
     {ok, result: [updates]} or {ok: False, code} — 409 means another consumer
     (a second poller, or the Settings 'Detect chat id' button) holds the slot."""
-    tok, _ = _creds()
+    tok = str(token or "").strip() or _creds()[0]
     if not tok:
         return {"ok": False, "code": 0, "error": "Telegram not configured"}
     qs = {"timeout": int(timeout)}
