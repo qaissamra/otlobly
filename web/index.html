@@ -3225,9 +3225,22 @@ function lxCfPill(nameLower,val,tip){
 }
 function lxDot(r){
   const m={synced:["#16a34a","synced to ClickUp"],dirty:["#d97706","waiting to sync"],
-    pushing:["#d97706","syncing to ClickUp…"],error:["#dc2626",r.sync_error||"sync failed"]};
+    pushing:["#d97706","syncing to ClickUp…"],error:["#dc2626",r.sync_error||"sync failed"],
+    conflict:["#e5484d","تعارض — بانتظار قرارك · conflict — awaiting your decision"]};
   const[c,t]=m[r.sync_state]||["#999",r.sync_state||""];
   return `<span title="${poEsc(t)}" style="display:inline-block;width:8px;height:8px;border-radius:99px;background:${c};flex:0 0 auto"></span>`;
+}
+// red ⚠ on the ROW itself when a sync conflict is parked and waiting for the
+// owner — the topbar chip alone was easy to miss (the "rd never landed" day).
+// Click jumps straight to that row's block in the review modal. Mirrors
+// sync_counts' rule: state 'conflict' AND a non-empty conflicts list (a
+// lingering blob on a synced row is heal_conflicts' business, not a pill).
+function lxConfPill(r){
+  const cf=(r&&r.sync_state==="conflict"&&r.data&&r.data.conflicts)||[];
+  if(!cf.length) return "";
+  const tip="تغيّر في أوتلوبلي و AZ (2) معاً — انقر للمراجعة · changed in both Otlobly and AZ (2) — click to review: "
+    +cf.map(c=>c.label||c.field).join(", ");
+  return `<button class="pill" style="color:#b42318;background:#fef2f2;border:1px solid #e5484d;cursor:pointer;font-weight:700;font-size:10px;flex:0 0 auto" title="${poEsc(tip)}" onclick="event.stopPropagation();lxConflictsOpen(${r.id})">⚠ ${T("تعارض · conflict")}</button>`;
 }
 function lxImgSrc(i){ return i.file?`/api/leluxe/image?file=${encodeURIComponent(i.file)}`:i.url; }
 function lxAmz(it){ return (it.data&&it.data.image)||""; }
@@ -3263,17 +3276,37 @@ function lxMergedStatusPill(row,tip){
   const gz=row.data&&row.data.gerizim_status;
   return (gz&&typeof gz==="object"&&(gz.label||gz.status))?lxGerizimPill(row,tip):lxGashPill(row,tip);
 }
+// consensus of the STORED "gash status" field across ONE parcel's rows
+// (package row + its products). One tracking number = one parcel = one customs
+// status, so >1 distinct value means one row is wrong — the sweep unifies via
+// the live feed, and until it does the board must SHOW the disagreement
+// instead of silently picking the first non-empty child (the old behavior).
+function lxGashRollup(rows){
+  const vals=[...new Set((rows||[]).filter(Boolean)
+    .map(r=>String(lxF(r,"gash status")??"").trim()).filter(Boolean))];
+  return {val:vals.length===1?vals[0]:null,mixed:vals.length>1,vals};
+}
+function lxGashRollupPill(g,tip){
+  if(!g||(!g.mixed&&!g.val)) return "";
+  if(g.mixed) return tonePill("red","⚠ "+T("مختلط · mixed"),
+    T("صفوف هذا الطرد تحمل قيم GASH STATUS مختلفة · this parcel's rows carry different GASH STATUS values")
+    +": "+g.vals.join(" · ")+(tip?" · "+tip:""),{style:"font-size:10px"});
+  return lxCfPill("gash status",g.val,tip);
+}
 // ONE pill for the GASH column: the furthest leg. Being REGISTERED at Gerizim is
 // a receipt, not a status — a different axis, so it cannot be "the later of the
 // two" and it rode along as a second chip, clipping both to half-words in a
 // 128px column. It goes in the tooltip instead, and only becomes a pill of its
 // own when there is no status yet — otherwise a registered parcel reads blank.
-function lxGashCell(en,gashStatus,tn){
+// `g` is a lxGashRollup() result; a mixed parcel keeps its ⚠ pill visible even
+// when a live pill outranks the field value.
+function lxGashCell(en,g,tn){
   const tip=gzRegTip(tn);
+  if(g&&g.mixed) return [lxMergedStatusPill(en,tip),lxGashRollupPill(g,tip)].filter(Boolean).join(" ");
   // ❔ no-tracking outranks the registration receipt: "we asked and GAASH has no
   // record" is the one that wants doing something about. The badge is the last
   // word only — shown where this cell would otherwise be blank.
-  return lxMergedStatusPill(en,tip)||lxCfPill("gash status",gashStatus,tip)
+  return lxMergedStatusPill(en,tip)||lxGashRollupPill(g,tip)
       || lxNoDataPill(en)||gzBadge(tn);
 }
 // checked-but-unknown: a live check ran and the carriers had nothing — a
@@ -4432,7 +4465,7 @@ function lxKRow(r){
     (e.unpriced?` · ${e.unpriced} منتج بلا سعر — قيمته داخل الحصة · ${e.unpriced} unpriced (absorbed in the split)`:"");
   const estCell=(e.priced||e.share>0)?`<b style="font-size:12px" title="${poEsc(estTip)}">₪${fmt(e.sum)}</b>${e.unpriced?`<span style="color:var(--warn);font-size:10px;flex:0 0 auto" title="${e.unpriced} products with no individual price — their value sits inside the shipping/tax share">+${e.unpriced}?</span>`:""}`:"";
   const gashDate=(pk&&lxF(pk,"gash date"))||its.map(it=>lxF(it,"gash date")).find(Boolean);
-  const gashStatus=(pk&&lxF(pk,"gash status"))||its.map(it=>lxF(it,"gash status")).find(Boolean);
+  const gashStatus=lxGashRollup([pk,...its]);
   const done=lxGzDone(en), doneSt=its.length&&u.length===1?lxIsDone(its[0]):false;
   const due=lxKDue(r);
   const ordTn=o?String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim():"";
@@ -4468,7 +4501,7 @@ function lxKRow(r){
   return `<div class="poc-row lx-krow" title="${pk?"انقر لعرض كل التفاصيل · click for full package details":"انقر للانتقال إلى الطلب · click to jump to the order"}"
     ${click?`onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${click}"`:""} style="cursor:pointer">
     <div class="bt-pin">
-      ${pk?lxDot(pk):""}
+      ${pk?lxDot(pk):""}${lxConfPill((pk&&pk.sync_state==="conflict")?pk:its.find(i=>i.sync_state==="conflict"))}
       <b class="pkg-title" style="font-size:12.5px">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
       ${lxThumbs(its)}
       <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxCountLbl(its)}</span>
@@ -5123,7 +5156,7 @@ function lxCardHtml(o){
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('order',${o.id})" style="cursor:pointer">
       <div class="bt-pin">
         <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
-        ${lxDot(o)}
+        ${lxDot(o)}${lxConfPill(o.sync_state==="conflict"?o:[...(o.packages||[]),...lxItemsOf(o)].find(r=>r.sync_state==="conflict"))}
         <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
         ${lxCopyBtn(o.name)}
         ${lxThumbs(lxItemsOf(o))}
@@ -5226,7 +5259,7 @@ function lxVPkgHtml(o,g){
   // pills read from the first enriched product in the group (they carry the GWD)
   const en=g.items.find(lxEnriched)||g.items[0];
   const gashDate=g.items.map(it=>lxF(it,"gash date")).find(Boolean);
-  const gashStatus=g.items.map(it=>lxF(it,"gash status")).find(Boolean);
+  const gashStatus=lxGashRollup(g.items);
   const ordTn=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();  // prefill for set-tracking
   const gIds=g.items.map(it=>it.id).join(",");
   if(g.items.length===1){
@@ -5246,7 +5279,7 @@ function lxVPkgHtml(o,g){
       </div>
       ${lxtCells("",{
         profile: lxProfileCell(lxAcctChain(it,o)),
-        status: `${lxDot(it)}${lxStatusSelect(it)}`,
+        status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
         gash: lxGashCell(en,gashStatus,g.tn),
         deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
         due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
@@ -5292,13 +5325,13 @@ function lxPkgHtml(o,pk,items){
   const tn=lxPkgTn(pk);
   // an absorbed shell is often empty — fall back to the products for the pills
   const en=lxEnriched(pk)?pk:(items.find(lxEnriched)||pk);
-  const gashStatus=lxF(pk,"gash status")||items.map(it=>lxF(it,"gash status")).find(Boolean);
+  const gashStatus=lxGashRollup([pk,...items]);
   const gashDate=lxF(pk,"gash date")||items.map(it=>lxF(it,"gash date")).find(Boolean);
   const head=`<div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('package',${pk.id})" style="cursor:pointer">
       <div class="bt-pin">
         <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
-        ${lxDot(pk)}
+        ${lxDot(pk)}${lxConfPill(pk)}
         <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
         <span class="muted2" style="font-size:11px;flex:0 0 auto">${lxCountLbl(items)}</span>
         ${lxThumbs(items)}
@@ -5364,7 +5397,7 @@ function lxItemRow(it,parentO,opts){
       ${lxtCells("p",{
         order: orderCell,
         profile: lxProfileCell(profile),
-        status: `${lxDot(it)}${lxStatusSelect(it)}`,
+        status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
         qty: qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:"",
         tracking: tnCell,
         gashstatus: lxCfPill("gash status",lxF(it,"gash status")),
@@ -5388,7 +5421,7 @@ function lxItemRow(it,parentO,opts){
     </div>
     ${lxtCells("",{
       profile: lxProfileCell(lxAcctChain(it,parentO)),
-      status: `${lxDot(it)}${lxStatusSelect(it)}`,
+      status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
       // a package child whose GWD lives on the package row (the usual ClickUp
       // shape) inherits it MUTED — never "no tracking" under a tracked header;
       // an item's own tn (same or divergent) stays normal weight
@@ -5404,7 +5437,7 @@ function lxItemRow(it,parentO,opts){
 function lxOrphanRow(r){
   return `<div class="po-card"><div class="po-head"><div class="po-title" style="cursor:pointer"
       onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('${poEsc(r.kind)}',${r.id})">
-      ${lxDot(r)}
+      ${lxDot(r)}${lxConfPill(r)}
       <b class="po-name" title="${poEsc(r.name)}">${lxShortName(r.name)}</b>
       ${lxCopyBtn(r.name)}
       ${tonePill("amber",r.kind+" w/o parent","its parent order/package isn't in this list",{style:"font-size:10px"})}
@@ -5643,7 +5676,9 @@ function lxInfoOpen(kind,id){
   const ts=trd.tracking_status||{};
   const dl=trd.gaash_deadline, gzDone=lxGzDone(tr), dlMoot=gzDone||ts.bucket==="delivered"||ts.bucket==="cleared";
   const dln=dl&&!dlMoot?dueDays(dl):null, urgent=dln!=null&&dln<=7;
-  const gashStatus=lxF(row,"gash status")||its.map(i=>lxF(i,"gash status")).find(Boolean);
+  // order = ALL its parcels (values can legitimately differ → plain pills);
+  // package = one parcel (a mix there is a data error → ⚠ pill); item = itself
+  const gashRoll=lxGashRollup(k==="item"?[row]:[row,...its]);
   const gashDate=lxF(row,"gash date")||its.map(i=>lxF(i,"gash date")).find(Boolean);
   const amt=lxF(row,"total amount");
   // KV rows per tier — grouped into 📋 info + 🚚 shipping sections
@@ -5665,7 +5700,7 @@ function lxInfoOpen(kind,id){
       +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'')
       +f('المحتوى · Contents',`${lxPkgRows(order||row).length} 📦 · ${lxCountLbl(its)}`);
     shipRows=f('رقم غاش · GAASH tracking',mono(tn))
-      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('حالة غاش (الحقل) · GASH STATUS',gashRoll.vals.map(v=>lxCfPill("gash status",v)).join(" "))
       +f('التتبع الحي · Live tracking',liveRow)
       +(gz?f('🛵 جيرزيم · Gerizim',`${poEsc((GZ_AR[gz.bucket]||[]).join(" ")||gz.label||gz.status||"")}${gz.shelf?` · رف ${poEsc(gz.shelf)}`:''}${gz.sms_at?` · SMS ${poEsc(gz.sms_at)}`:''}`):'')
       +f('تاريخ غاش · GASH date',gashDate?lxMs(gashDate):'');
@@ -5675,7 +5710,7 @@ function lxInfoOpen(kind,id){
       +f('المنتجات · Products',pkgItems.length)
       +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'');
     shipRows=f('رقم غاش · GAASH tracking',mono(tn))
-      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('حالة غاش (الحقل) · GASH STATUS',lxGashRollupPill(gashRoll))
       +f('التتبع الحي · Live tracking',liveRow)
       +f('تاريخ غاش · GASH date',gashDate?lxMs(gashDate):'');
   } else {
@@ -5688,7 +5723,7 @@ function lxInfoOpen(kind,id){
       +f('الحالة · States',poEsc(lxF(row,"states")||""))
       +f('الاستحقاق · Due',row.due_date?lxMs(row.due_date):'');
     shipRows=f('رقم غاش · GAASH tracking',mono(tn))
-      +f('حالة غاش (الحقل) · GASH STATUS',gashStatus?lxCfPill("gash status",gashStatus):'')
+      +f('حالة غاش (الحقل) · GASH STATUS',gashRoll.val?lxCfPill("gash status",gashRoll.val):'')
       +f('التتبع الحي · Live tracking',liveRow);
   }
   const rows=sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows);
@@ -5760,7 +5795,7 @@ function lxEditorHtml(row){
     package:"Package name (usually the GWD tracking number)",
     item:"Product name (start with the quantity — e.g. “10 Anne Klein Women's …”)"}[kind];
   const syncNote=row?`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:8px">
-      ${lxDot(row)} ${row.sync_state==="synced"?"synced to ClickUp":row.sync_state==="error"?("sync failed: "+poEsc(row.sync_error||"")):"waiting to sync"}
+      ${lxDot(row)} ${row.sync_state==="synced"?"synced to ClickUp":row.sync_state==="error"?("sync failed: "+poEsc(row.sync_error||"")):row.sync_state==="conflict"?"⚠ تعارض — افتح المراجعة · conflict — open ⚖ review":"waiting to sync"}
       ${row.clickup_task_id?` · <a href="https://app.clickup.com/t/${poEsc(row.clickup_task_id)}" target="_blank" rel="noopener">open in ClickUp ↗</a>`:""}</div>`:"";
   const editAsin=kind==="item"?String((f["ASIN"]!==undefined?f["ASIN"]:(f["ASIN DROP DOWN"]||""))||"").trim():"";
   const amzBlock=kind==="item"?`<div style="margin-top:10px"><label class="fld">Amazon photo — paste the ASIN, then fetch</label>
@@ -6225,10 +6260,18 @@ function lxCVal(v){
   if(typeof v==="number"||(/^\d{11,}$/).test(String(v))) return poEsc(lxMs(v)||String(v));
   return poEsc(String(v));
 }
-async function lxConflictsOpen(){
+async function lxConflictsOpen(focusRowId){
   $("lxConflictModal").classList.remove("hidden");
   $("lxConflictBody").innerHTML='<div class="muted2" style="padding:16px">⏳ Loading…</div>';
   await lxConflictReload(false);
+  if(typeof focusRowId==="number") lxConflictFocus(focusRowId);
+}
+// scroll + flash one row's block (the row ⚠ pill jumps straight to its case)
+function lxConflictFocus(rowId){
+  const el=$("lxconf_"+rowId); if(!el) return;
+  el.scrollIntoView({block:"start"});
+  el.style.boxShadow="0 0 0 2px #e5484d";
+  setTimeout(()=>{ el.style.boxShadow=""; },1600);
 }
 function lxConflictClose(){ $("lxConflictModal").classList.add("hidden"); }
 async function lxConflictReload(alsoRefresh=true){
@@ -6266,7 +6309,7 @@ function lxConflictRender(list){
           </div>
         </div>
       </div>`).join("");
-    return `<div style="border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:12px">
+    return `<div id="lxconf_${o.row_id}" style="border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
         <b>${kindIcon} ${poEsc(o.order_name||o.name||"")}</b>
         ${(o.kind==="item"||o.kind==="package")?`<span class="muted2" style="font-size:11.5px">${o.kind==="item"?"🛍":"📦"} ${poEsc(o.name||"")}</span>`:""}
@@ -11107,7 +11150,7 @@ function bsFindLx(tn,rows){
     else items.set(r.id,r); });
   let tot=0; items.forEach(it=>{ tot+=Number(lxF(it,"total amount"))||0; });
   const sts=[...new Set([...items.values()].map(it=>it.status).filter(Boolean))];
-  const gash=(pkgRow&&lxF(pkgRow,"gash status"))||[...items.values()].map(it=>lxF(it,"gash status")).find(Boolean);
+  const gash=lxGashRollup([pkgRow,...items.values()]);
   const en=pkgRow||[...items.values()].find(x=>x.data&&x.data.tracking_status)||null;
   return {order, pkgRow, items:[...items.values()], tot:Math.round(tot*100)/100, sts, gash,
           trk:en&&en.data&&en.data.tracking_status||null};
@@ -11199,7 +11242,7 @@ function bsModelRow(m,pinExtra,opts){
     imgs: lxThumbs(lx.items),
     cust:`<span class="muted2" style="font-size:11.5px">${lx.items.length} ${T("منتج · products")}</span>`,
     status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
-    gash: lx.gash?lxCfPill("gash status",lx.gash):(lx.trk?tonePill("gray",lx.trk):'<span class="muted2">—</span>'),
+    gash: lxGashRollupPill(lx.gash)||(lx.trk?tonePill("gray",lx.trk):'<span class="muted2">—</span>'),
     gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
     value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
   })}</div>`};
