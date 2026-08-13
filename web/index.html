@@ -13238,7 +13238,16 @@ async function gmReadyTag(gwd,on){
   gmReadyDraw();
 }
 // ── 📄 Docs queue: every open parcel's GAASH docs banner, both boards ──
-let GM_DOCS={mode:"action", busy:false, stop:false, done:0, total:0};
+let GM_DOCS={mode:"action", busy:false, stop:false, done:0, total:0,
+             // 🧾 by order (grouped) vs 📦 flat parcels — an explicit view
+             // switch, remembered across refreshes like the page itself
+             view:(function(){ try{ return localStorage.getItem("otl_gmdocs_view")||"order"; }
+                               catch(e){ return "order"; } })()};
+function gmDocsView(v){
+  GM_DOCS.view=v;
+  try{ localStorage.setItem("otl_gmdocs_view",v); }catch(e){}
+  gmDocsDraw();
+}
 async function gmDocsRender(){
   const p=$("gmDocsPane"); if(!p) return;
   p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
@@ -13354,13 +13363,14 @@ function gmDocsDraw(){
                       :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
     </div>`;
   };
-  // ── order grouping: walk the FILTERED list in its sort order; ≥2 rows
-  // sharing an order nest under one header (a 1-row order stays a flat row,
-  // exactly like the board's 1-child visual-package collapse). Group headers
-  // default OPEN — GM_DOCS.closed remembers only what the owner folded.
+  // ── order grouping (view "order" only): walk the FILTERED list in its sort
+  // order; ≥2 rows sharing an order nest under one header (a 1-row order stays
+  // a flat row, exactly like the board's 1-child visual-package collapse).
+  // Group headers default OPEN — GM_DOCS.closed remembers what was folded.
+  // View "flat" is the plain one-row-per-parcel list, headers nowhere.
   GM_DOCS.closed=GM_DOCS.closed||new Set();
   const blocks=[],byKey=new Map();
-  list.forEach(r=>{
+  if(GM_DOCS.view!=="flat") list.forEach(r=>{
     const k=keyOf(r);
     let b=byKey.get(k);
     if(!b){ b={key:k,rows:[]}; byKey.set(k,b); blocks.push(b); }
@@ -13384,15 +13394,17 @@ function gmDocsDraw(){
              :`<button class="minibtn" onclick='event.stopPropagation();gmNewOpen(${JSON.stringify(gwds)},{group:true})' title="${T("إيميل واحد لكل الطرود — سجّلها معاً · one email for all parcels — enroll them together")}">📧 ${T("الكل · all")} (${gwds.length})</button>`}
     </div>`;
   };
-  const body=blocks.map(b=>{
-    if(b.rows.length<2) return row(b.rows[0]);
-    const name=grpName(b.rows[0]);
-    const open=!GM_DOCS.closed.has(b.key);
-    return `<div style="border-inline-start:2px solid #d9770655">
-      ${grpHead(b,name)}
-      ${open?b.rows.map(row).join(""):""}
-    </div>`;
-  }).join("");
+  const body=GM_DOCS.view==="flat"
+    ? list.map(row).join("")
+    : blocks.map(b=>{
+        if(b.rows.length<2) return row(b.rows[0]);
+        const name=grpName(b.rows[0]);
+        const open=!GM_DOCS.closed.has(b.key);
+        return `<div style="border-inline-start:2px solid #d9770655">
+          ${grpHead(b,name)}
+          ${open?b.rows.map(row).join(""):""}
+        </div>`;
+      }).join("");
   const n=k=>rows.filter(M[k]).length;
   p.innerHTML=`<div class="panel">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -13406,6 +13418,10 @@ function gmDocsDraw(){
       ${chip("all",T("الكل · All"),rows.length)}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <span style="display:inline-flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <button class="minibtn${GM_DOCS.view!=="flat"?" accent":""}" style="border:0;border-radius:0;padding:2px 10px;font-size:11.5px" onclick="gmDocsView('order')" title="${T("طرود الطلبية الواحدة تحت رأس واحد · one order's parcels nest under one header")}">🧾 ${T("حسب الطلبية · by order")}</button>
+        <button class="minibtn${GM_DOCS.view==="flat"?" accent":""}" style="border:0;border-radius:0;padding:2px 10px;font-size:11.5px" onclick="gmDocsView('flat')" title="${T("صف لكل طرد، بلا تجميع · one row per parcel, no grouping")}">📦 ${T("كل طرد لحاله · flat parcels")}</button>
+      </span>
       ${GM_DOCS.busy
         ? `<span class="muted2" style="font-size:11.5px"><span class="spin"></span> ${T("جارِ الفحص · checking")} <b>${GM_DOCS.done}/${GM_DOCS.total}</b></span>
            <button class="minibtn" onclick="GM_DOCS.stop=true" data-en="■ Stop" data-ar="■ إيقاف">■ ${T("إيقاف · Stop")}</button>`
