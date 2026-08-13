@@ -1136,6 +1136,61 @@ def sync_kept_report():
         leluxe._http = real
 
 
+def sync_3tier_source():
+    """az2_organize builds order → 📦 GWD → products in AZ (2), so products are
+    GRANDCHILDREN of the order. The sync must see them at any depth: merge a
+    grandchild's status change (the rd-never-landed bug), insert new grandkids
+    into their GWD's package (own field or the container's _tn_hint), and never
+    twin a 📦 container task as a product."""
+    global SRC_TASKS
+    with db.connect() as c:
+        c.execute("DELETE FROM leluxe_orders")
+    config = cfg.load()
+    cfg.set_path(config, "leluxe.source_list_id", "SRC")
+    cfg.set_path(config, "leluxe.list_id", "L1")
+    cfg.save(config)
+    SRC_TASKS = [
+        _task("3O", "Order # TIER-1", "order number"),
+        _task("3P", "📦 GWD-T1", "package", parent="3O",
+              fields=[("Tracking Number", "GWD-T1")]),
+        _task("3C1", "4 Watch", "oredered", parent="3P",
+              fields=[("Tracking Number", "GWD-T1")]),
+        _task("3C2", "6 Strap", "oredered", parent="3P"),   # no tn → 📦's hint
+    ]
+    for t in SRC_TASKS:
+        t["date_created"] = "1780000000000"
+    real = leluxe._http
+    leluxe._http = fake_src_http
+    try:
+        r1 = leluxe.sync_from_source("2026-01-01", limit=25)
+        check("3-tier insert: one order", r1.get("orders") == 1 and not r1.get("error"))
+        c1, c2 = leluxe._row_id_by_source("3C1"), leluxe._row_id_by_source("3C2")
+        check("grandchild products inserted", bool(c1) and bool(c2))
+        pk = c2 and leluxe.get_row(leluxe.get_row(c2)["parent_local_id"])
+        check("hintless product lands in the 📦 task's GWD package",
+              pk and pk["kind"] == "package"
+              and (pk["data"].get("tracking_number") or "") == "GWD-T1")
+        prow = leluxe._row_id_by_source("3P")
+        check("the 📦 container was not twinned as a product",
+              prow is None or leluxe.get_row(prow)["kind"] != "item")
+        # the live regression: Faisal flips a grandchild to rd in AZ (2)
+        for t in SRC_TASKS:
+            if t["id"] == "3C1":
+                t["status"] = {"status": "rd"}
+                t["date_updated"] = "200"
+        r2 = leluxe.sync_from_source("2026-01-01")
+        check("grandchild status change lands on the next sync",
+              r2.get("updated", 0) >= 1 and leluxe.get_row(c1)["status"] == "rd")
+        # …and an unmatched container on a MERGE pass is still never twinned
+        r3 = leluxe.sync_from_source("2026-01-01")
+        check("re-sync stays clean (no phantom items)",
+              r3.get("new_items") == 0
+              and (leluxe._row_id_by_source("3P") is None
+                   or leluxe.get_row(leluxe._row_id_by_source("3P"))["kind"] != "item"))
+    finally:
+        leluxe._http = real
+
+
 def frozen_row_thaws():
     """REGRESSION: a row whose source_cu_updated already equals AZ (2)'s
     date_updated, but whose stored base no longer matches AZ (2), used to be
@@ -2547,6 +2602,7 @@ def main():
     print("move packages:");     move_between_packages()
     print("regroup + sweep:");   regroup_and_sweep()
     print("sync kept report:");  sync_kept_report()
+    print("sync 3-tier source:"); sync_3tier_source()
     print("az2 push + undo:");   az2_push_and_undo()
     print("az2 organize:");      az2_organize_flow()
     print("endpoint gates:");    endpoints_gated()
