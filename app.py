@@ -111,6 +111,12 @@ leluxe_goal.start()        # daily goal digest — no-op unless env LELUXE_DIGES
 leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Render's all-NULL copy)
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
+import flag_machine
+flag_machine.start()       # 🚩 action-required inbox watch + flags-bot «done»
+                           # loop — no-op unless env FLAG_MACHINE=1, set ONLY
+                           # in the Render dashboard (like GAASH_MAILER below:
+                           # the live DB is the single truth — never the Mac
+                           # plist, never .env)
 import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
 gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
@@ -2195,11 +2201,29 @@ def api_notifications():
                                "view": "gaashmail"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass
+    # 🚩 emails flagged action-required, still waiting for the owner's «done» —
+    # one standing item; the Telegram nag is the loud channel, this is the
+    # in-app echo (and the only channel when Telegram is down)
+    try:
+        import features
+        import flag_machine as _fm
+        if current_user.has("edit_fulfillment") and \
+                features.has(db.current_business(), "leluxe"):
+            _fl = _fm.open_flags()
+            if _fl:
+                events.append({"ts": max(f.get("created_at") or "" for f in _fl),
+                               "type": "flag_open", "icon": "🚩",
+                               "title": f"{len(_fl)} إيميل يحتاج إجراء · "
+                                        "action-required email(s)",
+                               "sub": (_fl[-1].get("subject") or "")[:80],
+                               "view": "flags"})
+    except Exception:  # noqa - same rule: the bell never breaks
+        pass
     events.sort(key=lambda e: e["ts"], reverse=True)
     out = events[:30]
     # standing alerts survive the recency cap: parked sync conflicts can be DAYS
     # old (that is the whole problem) — sorting by ts pushed them off the list
-    for _typ in ("lx_conflict", "gaash_docs"):
+    for _typ in ("lx_conflict", "gaash_docs", "flag_open"):
         stand = next((e for e in events if e["type"] == _typ), None)
         if stand and stand not in out:
             out.insert(0, stand)
@@ -2944,6 +2968,83 @@ def api_gaash_account_uses():
     appearing afterwards."""
     n = gaash_mail.account_thread_count((request.args.get("id") or "").strip())
     return jsonify({"ok": True, "threads": n})
+
+
+# --------------------------------------------------------------------------- #
+# 🚩 Flag machine — watched inboxes + open flags. flag_* tables are owner-
+# scoped (no business_id), so the leluxe feature flag keeps broker tenants
+# out, same as the gaash_* routes; the daemon only runs where FLAG_MACHINE=1
+# --------------------------------------------------------------------------- #
+@app.route("/api/flags")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_flags():
+    import flag_machine as fm
+    return jsonify({"ok": True, "inboxes": fm.inboxes(),
+                    "flags": fm.open_flags(), "settings": fm.settings(),
+                    "telegram": fm.flags_configured()})
+
+
+@app.route("/api/flags/inbox/add", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_flags_inbox_add():
+    import flag_machine as fm
+    b = request.get_json(force=True, silent=True) or {}
+    res = fm.add_inbox(b.get("email"), b.get("app_password"), b.get("label"))
+    if res.get("ok"):
+        db.audit(auth.actor(),
+                 "flag_inbox_pw_update" if res.get("updated")
+                 else "flag_inbox_add", "flags", res["email"], "")
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/flags/inbox/remove", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_flags_inbox_remove():
+    import flag_machine as fm
+    b = request.get_json(force=True, silent=True) or {}
+    res = fm.remove_inbox(b.get("id"))
+    if res.get("ok"):
+        db.audit(auth.actor(), "flag_inbox_remove", "flags",
+                 str(b.get("id") or ""), f"open flags kept: {res['open_flags']}")
+    return jsonify(res)
+
+
+@app.route("/api/flags/inbox/active", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_flags_inbox_active():
+    import flag_machine as fm
+    b = request.get_json(force=True, silent=True) or {}
+    return jsonify(fm.set_active(b.get("id"), bool(b.get("active"))))
+
+
+@app.route("/api/flags/done", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_flags_done():
+    """Manual «done» — the fallback when Telegram is down."""
+    import flag_machine as fm
+    n = fm.ack_all()
+    db.audit(auth.actor(), "flags_done", "flags", "", f"closed {n}")
+    return jsonify({"ok": True, "closed": n})
+
+
+@app.route("/api/flags/settings", methods=["GET", "POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_flags_settings():
+    import flag_machine as fm
+    if request.method == "GET":
+        return jsonify({"ok": True, "settings": fm.settings()})
+    if not current_user.has("admin_actions"):
+        abort(403)
+    st, err = fm.save_settings(request.get_json(force=True, silent=True) or {})
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "settings": st})
 
 
 @app.route("/api/gaash/resend", methods=["POST"])
