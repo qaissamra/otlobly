@@ -37,6 +37,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
   each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,
   loops until done, logs to docs_sweep.log)
+- flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →
+  dedicated flags-bot Telegram nag every minute until the owner replies done);
+  daemon gated by env FLAG_MACHINE=1, set ONLY in the Render dashboard (like
+  GAASH_MAILER — never the plist, never .env); bot token = env FLAGS_BOT_TOKEN
 
 ## Deploy
 Render Blueprint (render.yaml): pushing to GitHub main auto-deploys

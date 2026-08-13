@@ -39,7 +39,6 @@ HELP = "\n".join([
     "last year rd — RD السنة الماضية",
     "2025 / 2025 rd — سنة معينة",
     "profiles · بروفايلات — جاهز للطلب",
-    "done · تم — سكّر تنبيهات 🚩 الإيميل",
 ])
 
 _YEAR = re.compile(r"^(?:rd\s+)?(\d{4})(?:\s+rd)?$")
@@ -173,15 +172,6 @@ def _handle_update(u, owner_chat, send=None):
     chat_id = (msg.get("chat") or {}).get("id")
     if not chat_id or str(chat_id) != str(owner_chat or ""):
         return False                  # not the owner → ignore silently
-    # «done» acks the 🚩 flag machine — a side effect, so it lives here, not
-    # in handle_command (which is contractually pure)
-    t = " ".join(str(msg.get("text") or "").casefold().split())
-    if t in ("done", "تم", "خلص", "خلصت", "تمام"):
-        import flag_machine           # lazy — CLI runs stay light
-        n = flag_machine.ack_all()
-        send(chat_id, f"✅ تم — سكّرت {n} تنبيه 🚩 · closed {n} flag(s)" if n
-             else "ما في تنبيهات 🚩 مفتوحة · no open flags")
-        return True
     try:
         reply = handle_command(msg.get("text") or "")
     except Exception as e:  # noqa: BLE001 - one bad command ≠ dead bot
