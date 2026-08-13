@@ -1899,7 +1899,8 @@ def _insert_order_tree(src_order, kids, sch, known, keep, made):
     groups = {}
     for ch in kids:
         _, cdata = _decode_task(ch, sch)
-        tn = str(cdata["fields"].get("Tracking Number") or "").strip()
+        tn = (str(cdata["fields"].get("Tracking Number") or "").strip()
+              or str(ch.get("_tn_hint") or "").strip())   # 📦 container's GWD
         groups.setdefault(tn, []).append((ch, cdata))
     for tn, members in groups.items():
         first = members[0][1]["fields"]
@@ -1928,7 +1929,8 @@ def _insert_new_item(order_id, ch, sch, known, keep, made):
     """A product added in AZ (2) after its order was migrated → INSERT it under
     the order's package whose tracking matches (create the package if none)."""
     ccols, cdata = _decode_task(ch, sch)
-    tn = str(cdata["fields"].get("Tracking Number") or "").strip()
+    tn = (str(cdata["fields"].get("Tracking Number") or "").strip()
+          or str(ch.get("_tn_hint") or "").strip())       # 📦 container's GWD
     with db.connect() as c:
         pkgs = [_row(x) for x in c.execute(
             "SELECT * FROM leluxe_orders WHERE parent_local_id=? AND kind='package' "
@@ -2029,10 +2031,13 @@ def _kept_diffs(row_id, src_task, sch, keep, report, oname, order_id):
 
 
 def _merge_order(rid, src_order, kids, sch, known, keep, made,
-                 review_all=False, report=None):
-    """Merge an existing order + its AZ (2) children (merge matched items, insert
-    genuinely new ones). Collects per-field applied changes + parked conflicts
-    into `report` for the sync-review UI."""
+                 review_all=False, report=None, containers=frozenset()):
+    """Merge an existing order + its AZ (2) children — ANY depth (kids is the
+    flattened descendant list; `containers` names the tasks that hold other
+    tasks). Matched rows merge whatever their kind; an UNMATCHED container is
+    skipped, never inserted as a product (a 📦 GWD task is structure, not
+    merchandise). Collects per-field applied changes + parked conflicts into
+    `report` for the sync-review UI."""
     oname = src_order.get("name") or ""
 
     def _record(row_id, kind, name, res, chs):
@@ -2082,6 +2087,8 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
                 made["updated"] += 1
             _record(crid, "item", ch.get("name") or "", r2, chs2)
             _kept_diffs(crid, ch, sch, keep, report, oname, rid)
+        elif ch["id"] in containers:
+            continue                      # unmatched 📦 task — never twin it
         else:
             iid = _insert_new_item(rid, ch, sch, known, keep, made)
             if report is not None:
@@ -2141,6 +2148,30 @@ def restore_presync(path):
     return f"restored {n} rows from {p} (now dirty → re-pushing to the working list)"
 
 
+def _descendants(tid, children):
+    """Every task under `tid`, ANY depth — az2_organize builds 3-tier trees in
+    AZ (2) (order → 📦 GWD → products), so a one-level kids list left grandchild
+    products invisible to every sync: their statuses froze at the last flat-era
+    stamp while each run honestly reported "0 updated" (the rd-never-landed
+    bug, 2026-08-13). Containers pass their Tracking Number down as `_tn_hint`
+    so a hintless product still lands in its GWD's package on insert."""
+    out, stack = [], list(children.get(tid, []))
+    while stack:
+        t = stack.pop()
+        out.append(t)
+        subs = children.get(t["id"]) or []
+        if subs:
+            tn = next((str(cf.get("value") or "").strip()
+                       for cf in (t.get("custom_fields") or [])
+                       if str(cf.get("name") or "").strip().lower()
+                       == "tracking number"), "")
+            for s in subs:
+                if tn and not s.get("_tn_hint"):
+                    s["_tn_hint"] = tn
+            stack.extend(subs)
+    return out
+
+
 def sync_from_source(since_iso, limit=25, config=None, review_all=False):
     """One unified pass over the read-only AZ (2) list: NEW orders (created on/
     after `since_iso`, capped at `limit`) are inserted; every EXISTING local row
@@ -2198,15 +2229,19 @@ def sync_from_source(since_iso, limit=25, config=None, review_all=False):
             if dup:
                 _adopt_source(dup, src_order["id"])
                 rid = dup
-        kids = children.get(src_order["id"], [])
+        kids = _descendants(src_order["id"], children)
+        containers = frozenset(t["id"] for t in kids if children.get(t["id"]))
         if rid:
             _merge_order(rid, src_order, kids, sch, known, keep, made,
-                         review_all, report)
+                         review_all, report, containers)
             if not review_all:            # review mode: nothing moves un-approved
                 for k, v in regroup_order(rid, config).items():
                     made["regroup"][k] += v   # merged GWDs → products follow them
         elif int(src_order.get("date_created") or 0) >= since_ms and inserted < limit:
-            oid = _insert_order_tree(src_order, kids, sch, known, keep, made)
+            # containers never insert as products — the tree builder re-derives
+            # 📦 rows from the leaves' tracking numbers (own field or _tn_hint)
+            leaf_kids = [t for t in kids if t["id"] not in containers]
+            oid = _insert_order_tree(src_order, leaf_kids, sch, known, keep, made)
             inserted += 1
             made["orders"] += 1
             made["order_ids"].append(oid)
