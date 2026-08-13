@@ -5,8 +5,9 @@ Self-checks: 🚩 Flag machine (flag_machine.py + /api/flags/*).
 Pure-logic tests — NO network, NO real IMAP or Telegram: the subject matcher
 (incl. RFC2047 decode), the settings validator, add/remove/pause inboxes with
 an injected verifier, the alert pass (one batched nag, send-then-stamp,
-repeat_min respected, failed send stamps nothing), ack_all, the telegram_bot
-«done» branch (handle_command stays pure), route permissions, and the bell.
+claim-once exactly-once, failed send frees the claim), ack_all, the flags
+bot «done» loop (poll_updates with injected get/send, first-run drain, the
+single-runner lease), route permissions, and the bell.
 
     ./.venv/bin/python test_flag_machine.py
 """
@@ -26,14 +27,17 @@ os.environ.pop("FLAG_MACHINE", None)          # the daemon must NOT start
 os.environ.pop("LELUXE_TG_BOT", None)         # nor the bot poll loop
 os.environ.pop("GAASH_MAILER", None)
 os.environ["OTLOBLY_SECRET"] = "x"
-# dummy creds so telegram.configured() is True — sends are always injected
+# dummy creds so telegram.configured() / flags_configured() are True — sends
+# and getUpdates are always injected, never real
 os.environ["TELEGRAM_BOT_TOKEN"] = "test:token"
 os.environ["TELEGRAM_CHAT_ID"] = "5551234"
+os.environ["FLAGS_BOT_TOKEN"] = "test:flags"
 
 import app as appmod          # noqa: E402
 import auth                   # noqa: E402
 import db                     # noqa: E402
 import flag_machine as fm     # noqa: E402
+import telegram               # noqa: E402
 import telegram_bot           # noqa: E402
 
 fails = []
@@ -173,10 +177,23 @@ def main():
           and all(f["sent_count"] == 2 for f in fm.open_flags()))
     out = fm.alert_once(now=NOW + timedelta(minutes=4),
                         send=lambda t: {"ok": False})
-    check("failed send stamps nothing", out == []
+    _b4 = f"flags:nag:{(NOW + timedelta(minutes=4)).astimezone(timezone.utc).strftime('%Y%m%d%H%M')}"
+    with db.connect() as c:
+        left = c.execute("SELECT COUNT(*) n FROM settings WHERE key=?",
+                         (_b4,)).fetchone()["n"]
+    check("failed send stamps nothing + frees its claim", out == [] and left == 0
           and all(f["sent_count"] == 2 for f in fm.open_flags()))
+    out = fm.alert_once(now=NOW + timedelta(minutes=4), send=ok_send)
+    check("same-minute retry after failure succeeds", len(out) == 1
+          and len(sent) == 3
+          and all(f["sent_count"] == 3 for f in fm.open_flags()))
+    _b6 = f"flags:nag:{(NOW + timedelta(minutes=6)).astimezone(timezone.utc).strftime('%Y%m%d%H%M')}"
+    db.claim_once(_b6)                # the other worker got this minute first
+    out = fm.alert_once(now=NOW + timedelta(minutes=6), send=ok_send)
+    check("pre-claimed minute → no double nag", out == [] and len(sent) == 3
+          and all(f["sent_count"] == 3 for f in fm.open_flags()))
     check("no flags → no send", fm.ack_all() == 2
-          and fm.alert_once(now=NOW, send=ok_send) == [] and len(sent) == 2)
+          and fm.alert_once(now=NOW, send=ok_send) == [] and len(sent) == 3)
     check("ack_all again is 0", fm.ack_all() == 0)
     with db.connect() as c:
         done = c.execute("SELECT COUNT(*) n FROM flag_alerts "
@@ -184,31 +201,77 @@ def main():
     check("done rows carry done_at", done == 2)
     _clear_flags()
 
-    print("— telegram_bot «done» branch —")
-    _mk_flag("watch@gmail.com", "<c@x>", inbox_id=fid)
+    print("— flags bot «done» loop (poll_updates) —")
     got = []
-    handled = telegram_bot._handle_update(
-        {"message": {"chat": {"id": 5551234}, "text": "  DONE "}},
-        "5551234", send=lambda c, t: got.append((c, t)))
-    check("done closes + replies", handled and len(got) == 1
-          and got[0][0] == 5551234 and "1" in got[0][1]
-          and not fm.open_flags())
-    telegram_bot._handle_update(
-        {"message": {"chat": {"id": 5551234}, "text": "تم"}},
-        "5551234", send=lambda c, t: got.append((c, t)))
+
+    def coll(chat, txt):
+        got.append((chat, txt))
+        return {"ok": True}
+
+    _mk_flag("watch@gmail.com", "<c@x>", inbox_id=fid)
+    stale = {"ok": True, "result": [
+        {"update_id": 7, "message": {"chat": {"id": 5551234}, "text": "done"}}]}
+    out = fm.poll_updates(get=lambda off, t: stale, send=coll)
+    check("first-run drain executes nothing", out == [] and not got
+          and len(fm.open_flags()) == 1
+          and db.get_setting("flags:tg_offset") == 8)
+    upd = {"ok": True, "result": [
+        {"update_id": 8, "message": {"chat": {"id": 999}, "text": "done"}},
+        {"update_id": 9, "message": {"chat": {"id": 5551234}, "text": "  DONE "}}]}
+    out = fm.poll_updates(get=lambda off, t: upd, send=coll)
+    check("owner DONE closes + replies, foreign chat ignored",
+          len(out) == 1 and len(got) == 1 and got[0][0] == 5551234
+          and "1" in got[0][1] and not fm.open_flags())
+    check("offset persisted past the batch",
+          db.get_setting("flags:tg_offset") == 10)
+    upd2 = {"ok": True, "result": [
+        {"update_id": 10, "message": {"chat": {"id": 5551234}, "text": "تم"}}]}
+    fm.poll_updates(get=lambda off, t: upd2, send=coll)
     check("تم works, none-open reply", len(got) == 2 and "🚩" in got[1][1])
-    _mk_flag("watch@gmail.com", "<d@x>", inbox_id=fid)
-    handled = telegram_bot._handle_update(
-        {"message": {"chat": {"id": 999}, "text": "done"}},
-        "5551234", send=lambda c, t: got.append((c, t)))
-    check("foreign chat ignored, flags untouched",
-          not handled and len(got) == 2 and len(fm.open_flags()) == 1)
-    check("handle_command stays pure",
-          "أوامر" in telegram_bot.handle_command("done")
-          and len(fm.open_flags()) == 1)
-    check("HELP mentions done", "done" in telegram_bot.HELP)
+    upd3 = {"ok": True, "result": [
+        {"update_id": 11, "message": {"chat": {"id": 5551234}, "text": "hello"}}]}
+    fm.poll_updates(get=lambda off, t: upd3, send=coll)
+    check("other owner text → self-teaching hint",
+          len(got) == 3 and "done" in got[2][1])
+    check("management bot: done is just an unknown command",
+          "أوامر" in telegram_bot.handle_command("done"))
+    check("HELP no longer mentions done", "done" not in telegram_bot.HELP)
+
+    print("— lease + poll cursor —")
+    check("lease: A takes it", fm._lease_ok(me="A"))
+    check("lease: B refused while fresh", not fm._lease_ok(me="B"))
+    db.set_setting(fm.LEASE_KEY, {"id": "A", "ts":
+        (datetime.now(timezone.utc) - timedelta(seconds=200))
+        .isoformat(timespec="seconds")})
+    check("lease: B steals a 200s-stale lease", fm._lease_ok(me="B"))
+    check("lease: A refused after the steal", not fm._lease_ok(me="A"))
+    calls = []
+    _orig_poll = fm.poll_once
+    fm.poll_once = lambda: calls.append(1)
+    try:
+        with db.connect() as c:
+            c.execute("DELETE FROM settings WHERE key=?", (fm.POLL_AT_KEY,))
+        T = datetime.now(timezone.utc)
+        fm.run_once(now=T, send=lambda t: {"ok": True})
+        fm.run_once(now=T + timedelta(seconds=30), send=lambda t: {"ok": True})
+        fm.run_once(now=T + timedelta(minutes=3), send=lambda t: {"ok": True})
+    finally:
+        fm.poll_once = _orig_poll
+    check("DB poll cursor: due, not-due, due again (default 2 min)",
+          len(calls) == 2)
+
+    print("— configured flips —")
+    os.environ.pop("FLAGS_BOT_TOKEN")
+    check("flags_configured false without token", not fm.flags_configured())
+    os.environ["FLAGS_BOT_TOKEN"] = "test:flags"
+    check("flags_configured true again", fm.flags_configured())
+    _tok = os.environ.pop("TELEGRAM_BOT_TOKEN")
+    check("telegram.configured token kwarg",
+          not telegram.configured() and telegram.configured(token="t2"))
+    os.environ["TELEGRAM_BOT_TOKEN"] = _tok
 
     print("— remove keeps open flags —")
+    _mk_flag("watch@gmail.com", "<d@x>", inbox_id=fid)
     r = fm.remove_inbox(fid)
     check("remove names open flags", r["ok"] and r["open_flags"] == 1
           and len(fm.open_flags()) == 1)

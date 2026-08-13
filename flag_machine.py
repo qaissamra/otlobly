@@ -5,13 +5,22 @@ OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[HEADER]` — nothing is
 ever marked read, no mail is ever sent, the accounts are not linked to
 anything. A NEW message whose subject contains a match phrase (default
 "action required") raises an open flag; while any flag is open the owner
-gets ONE batched Telegram message every repeat_min minutes until they reply
-«done»/«تم» to the bot (telegram_bot.py handles the reply — this module must
-NEVER call getUpdates: one consumer per bot token).
+gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
+(env FLAGS_BOT_TOKEN; the chat id is the shared TELEGRAM_CHAT_ID — chat ids
+are global per user) until they reply «done»/«تم» in that bot's chat. This
+module IS the getUpdates consumer for that token — one consumer per bot
+token, and this token has exactly one (the Mac's telegram_bot polls a
+DIFFERENT token and knows nothing about flags).
 
-Runs ONLY where env FLAG_MACHINE=1 — set in com.otlobly.app.plist (the Mac's
-always-on single-process app), never on Render. IMAP mechanics cloned from
-gaash_mail._check_account; send-then-stamp discipline from alerts.py.
+Runs ONLY where env FLAG_MACHINE=1 — set in the RENDER DASHBOARD only, the
+GAASH_MAILER precedent (never render.yaml, never the plist, never .env): the
+live DB is the single truth, and the Mac's stale copy must never nag. Render
+runs 2 gunicorn workers (recycled every ~300-500 requests), so: a DB lease
+(flags:lease) elects the one polling worker, db.claim_once on a per-minute
+bucket makes each nag exactly-once even through a lease race, and every
+cursor (IMAP cadence, Telegram offset) lives in the DB so a worker recycle
+is invisible. IMAP mechanics cloned from gaash_mail._check_account;
+send-then-stamp discipline from alerts.py.
 """
 
 import imaplib
@@ -19,7 +28,8 @@ import json
 import os
 import threading
 import time
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from email import message_from_bytes, policy
 
 import db
@@ -31,8 +41,14 @@ IMAP_HOST, IMAP_PORT = "imap.gmail.com", 993
 MAX_SEEN_IDS = 2000                 # per-inbox Message-ID dedupe backstop
 POLL_UID_CAP = 500                  # per pass — the rest arrive next tick
 LIST_CAP = 10                       # flags listed per Telegram message
-TICK_SECONDS = 60
 SETTINGS_KEY = "flags:settings"
+LEASE_KEY = "flags:lease"
+OFFSET_KEY = "flags:tg_offset"
+POLL_AT_KEY = "flags:last_poll_at"
+LEASE_STALE_S = 180                 # one pass = ≤25s long-poll + 20s send +
+                                    # a multi-inbox IMAP sweep; 90s is too tight
+UPDATES_TIMEOUT_S = 25
+DONE_WORDS = ("done", "تم", "خلص", "خلصت", "تمام")
 
 DEFAULTS = {
     "enabled": True,
@@ -81,6 +97,106 @@ def save_settings(body):
         st["enabled"] = bool(b["enabled"])
     db.set_setting(SETTINGS_KEY, st)
     return st, None
+
+
+# --------------------------------------------------------------------------- #
+# The flags bot + the single-runner lease
+# --------------------------------------------------------------------------- #
+def _flags_token():
+    """The dedicated flags bot's token — env FLAGS_BOT_TOKEN ONLY, no config
+    fallback on purpose: the daemon runs only on Render (where the dashboard
+    holds the env var), and a Settings-page fallback would let a stray paste
+    on the Mac become a second getUpdates consumer against a stale DB."""
+    return (os.environ.get("FLAGS_BOT_TOKEN") or "").strip()
+
+
+def flags_configured():
+    tok = _flags_token()
+    return bool(tok) and telegram.configured(token=tok)
+
+
+_me = None
+
+
+def _my_id():
+    """Per-PROCESS lease identity, created lazily INSIDE the daemon thread —
+    a module-import uuid (telegram_bot's _ME pattern) would be shared by every
+    gunicorn worker under fork-after-import, and each would think the lease
+    was its own. The pid keeps it robust even under a future --preload."""
+    global _me
+    if _me is None:
+        _me = f"{os.getpid()}-{uuid.uuid4().hex}"
+    return _me
+
+
+def _lease_ok(me=None):
+    """True when this process holds (or takes over) the single-poller lease.
+    Clone of telegram_bot._lease_ok with a wider staleness window (a slow
+    IMAP sweep must not lose the lease mid-pass) — and even a raced takeover
+    is safe: nags are claim-guarded, flag inserts are INSERT OR IGNORE,
+    ack_all is idempotent, offsets move through max()."""
+    me = me or _my_id()
+    lease = db.get_setting(LEASE_KEY)
+    if isinstance(lease, dict) and lease.get("id") != me:
+        try:
+            age = (datetime.now(datetime.fromisoformat(lease["ts"]).tzinfo)
+                   - datetime.fromisoformat(lease["ts"])).total_seconds()
+        except (TypeError, ValueError, KeyError):
+            age = 9999
+        if age < LEASE_STALE_S:
+            return False
+    db.set_setting(LEASE_KEY, {"id": me, "ts": db.now_iso()})
+    return True
+
+
+def _drain_offset(get):
+    """First run ever: skip the backlog so old messages never execute a stale
+    «done». Only the lease holder reaches this, and a raced drain would
+    execute nothing anyway — no claim needed."""
+    out = get(None, 0)
+    updates = out.get("result") or []
+    if updates:
+        return updates[-1]["update_id"] + 1
+    return 0
+
+
+def poll_updates(get=None, send=None):
+    """Drain the FLAGS bot's getUpdates; «done»/«تم» from the owner chat
+    closes every open flag. Any other owner text gets a one-line hint — the
+    bot's whole vocabulary is one word, so it teaches itself (and pressing
+    Start after setup doubles as a liveness check). Returns the replies sent
+    (tests inject get/send — zero network)."""
+    tok = _flags_token()
+    get = get or (lambda off, t: telegram.get_updates(offset=off, timeout=t,
+                                                      token=tok))
+    send = send or (lambda chat, txt: telegram.send_to(chat, txt, token=tok))
+    offset = db.get_setting(OFFSET_KEY)
+    if offset is None:
+        db.set_setting(OFFSET_KEY, _drain_offset(get))
+        return []
+    out = get(offset or None, UPDATES_TIMEOUT_S)
+    if not out.get("ok"):
+        return []
+    owner = telegram._creds()[1]
+    replies = []
+    for u in out.get("result") or []:
+        offset = max(offset or 0, u.get("update_id", 0) + 1)
+        msg = u.get("message") or u.get("edited_message") or {}
+        chat_id = (msg.get("chat") or {}).get("id")
+        if not chat_id or str(chat_id) != str(owner or ""):
+            continue                  # not the owner → ignore silently
+        t = " ".join(str(msg.get("text") or "").casefold().split())
+        if t in DONE_WORDS:
+            n = ack_all()
+            txt = (f"✅ تم — سكّرت {n} تنبيه 🚩 · closed {n} flag(s)" if n
+                   else "ما في تنبيهات 🚩 مفتوحة · no open flags")
+        else:
+            txt = ("🚩 رد «done» أو «تم» هنا لإغلاق التنبيهات · "
+                   "reply done/تم here to close the flags")
+        send(chat_id, txt)
+        replies.append(txt)
+    db.set_setting(OFFSET_KEY, offset)
+    return replies
 
 
 # --------------------------------------------------------------------------- #
@@ -339,19 +455,22 @@ def _build_message(flags, now):
                      f"open {_age(now, f.get('created_at'))}{sent}")
     if len(flags) > LIST_CAP:
         lines.append(f"(+{len(flags) - LIST_CAP} أخرى · more)")
-    lines += ["", "رد «done» أو «تم» لإيقاف التنبيهات · "
-                  "reply \"done\" to stop these alerts"]
+    lines += ["", "رد «done» أو «تم» هنا · "
+                  "reply \"done\" here in this chat to stop these alerts"]
     return "\n".join(lines)
 
 
 def alert_once(now=None, send=None):
     """One nag cycle: if flags are open and the repeat interval passed, send
-    ONE batched Telegram message and stamp it — stamp only AFTER an ok send
-    (alerts.py discipline: a failed send is a free retry next tick)."""
-    send = send or telegram.send
+    ONE batched Telegram message (from the flags bot) and stamp it — stamp
+    only AFTER an ok send (alerts.py discipline: a failed send is a free
+    retry next tick). A db.claim_once on the minute bucket makes the send
+    exactly-once across gunicorn workers: the lease read-then-write is not
+    atomic, so a lease race alone could double-nag — the claim cannot."""
+    send = send or (lambda t: telegram.send(t, token=_flags_token()))
     now = now or datetime.now(timezone.utc)
     flags = open_flags()
-    if not flags or not telegram.configured():
+    if not flags or not flags_configured():
         return []
     repeat_s = settings()["repeat_min"] * 60
     newest_sent = max((_parse_iso(f["last_sent_at"]) for f in flags
@@ -359,9 +478,20 @@ def alert_once(now=None, send=None):
     fresh = any(not f.get("last_sent_at") for f in flags)
     if not fresh and newest_sent and (now - newest_sent).total_seconds() < repeat_s:
         return []
+    bucket = now.astimezone(timezone.utc).strftime("%Y%m%d%H%M")
+    claim = f"flags:nag:{bucket}"
+    if not db.claim_once(claim):
+        return []                     # the other worker owns this minute
     txt = _build_message(flags, now)
     if not (send(txt) or {}).get("ok"):
+        with db.connect() as c:       # free the minute so the next tick retries
+            c.execute("DELETE FROM settings WHERE key=?", (claim,))
         return []
+    # claim-key hygiene — a week-long open flag at repeat_min=1 would leak
+    # ~1440 settings rows/day; the YYYYMMDDHHMM buckets sort lexicographically
+    with db.connect() as c:
+        c.execute("DELETE FROM settings WHERE key LIKE 'flags:nag:%' AND key<?",
+                  (f"flags:nag:{(now - timedelta(hours=24)).astimezone(timezone.utc).strftime('%Y%m%d%H%M')}",))
     ids = [f["id"] for f in flags]
     with db.connect() as c:
         c.execute(f"""UPDATE flag_alerts
@@ -381,21 +511,24 @@ def ack_all():
 
 
 # --------------------------------------------------------------------------- #
-# Daemon — one thread, one tick per minute
+# Daemon — lease-elected loop, paced by the flags bot's long-poll
 # --------------------------------------------------------------------------- #
 _started = False
-_next_poll_at = 0.0          # module-global is fine: single process (the plist)
 
 
 def run_once(now=None, send=None, do_poll=None):
-    """One tick: (a) IMAP poll when due, (b) the repeating nag. Tests pass
-    do_poll=False and a fake send."""
-    global _next_poll_at
+    """One tick: (a) IMAP poll when due, (b) the repeating nag. The «done»
+    half lives in poll_updates(), not here. Tests pass do_poll=False and a
+    fake send. The poll cursor is a DB setting (not a module global) so the
+    cadence stays single across workers and survives worker recycling."""
+    now = now or datetime.now(timezone.utc)
     if do_poll is None:
-        do_poll = time.time() >= _next_poll_at
-    if do_poll:
-        _next_poll_at = time.time() + \
+        last = _parse_iso(db.get_setting(POLL_AT_KEY) or "")
+        do_poll = not last or (now - last).total_seconds() >= \
             max(1, int(settings()["poll_interval_min"])) * 60
+    if do_poll:
+        # set BEFORE polling — a crashing IMAP pass must not tight-loop
+        db.set_setting(POLL_AT_KEY, now.isoformat(timespec="seconds"))
         poll_once()
     return alert_once(now=now, send=send)
 
@@ -403,24 +536,33 @@ def run_once(now=None, send=None, do_poll=None):
 def _loop():
     time.sleep(60)                    # let the app finish booting first
     while True:
-        try:
+        wait = 2                      # the ≤25s getUpdates long-poll is the
+        try:                          # real pacing; nag/IMAP have DB due-checks
             with memlog.watch("flags"):
-                out = run_once()
-            if out:
-                print(f"flags: nagged ({len(out)} message)")
+                if not flags_configured():
+                    wait = 300
+                elif not _lease_ok():
+                    wait = 60         # the other worker holds the lease
+                else:
+                    poll_updates()    # «done» — returns fast on a message
+                    _lease_ok()       # restamp before the slow IMAP half
+                    out = run_once()
+                    if out:
+                        print("flags: nagged (1 message)")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"flags: pass failed ({e})")
-        time.sleep(TICK_SECONDS)
+            wait = 10
+        time.sleep(wait)
 
 
 def start():
-    """🚩 watcher. No-op unless env FLAG_MACHINE is truthy — the flag lives
-    ONLY in com.otlobly.app.plist (this Mac). The RENDER check is
-    belt-and-suspenders: Render injects RENDER=true into every service, so a
-    leaked FLAG_MACHINE var still can't double-poll from the cloud."""
+    """🚩 watcher + flags-bot «done» loop. No-op unless env FLAG_MACHINE is
+    truthy — set ONLY in the Render dashboard (the GAASH_MAILER precedent:
+    the live DB is the single truth; never render.yaml, never the Mac plist,
+    never .env). Both gunicorn workers start the thread; the flags:lease
+    picks the one that actually polls."""
     global _started
-    if _started or os.environ.get("FLAG_MACHINE", "") in ("", "0") \
-            or os.environ.get("RENDER"):
+    if _started or os.environ.get("FLAG_MACHINE", "") in ("", "0"):
         return
     _started = True
     threading.Thread(target=_loop, name="otlobly-flags", daemon=True).start()

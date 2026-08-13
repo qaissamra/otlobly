@@ -71,6 +71,11 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID      # the owner's chat (Settings → Detect chat id)
         sync: false
+      # ── 🚩 Flag machine: DEDICATED second bot (its own token — one getUpdates      ──
+      # ── consumer per token; the chat id reuses TELEGRAM_CHAT_ID). The enable flag  ──
+      # ── FLAG_MACHINE=1 itself is dashboard-only, the GAASH_MAILER precedent.       ──
+      - key: FLAGS_BOT_TOKEN       # @BotFather token for the 🚩 flags bot
+        sync: false
       - key: WHATSAPP_TOKEN        # permanent token for the WhatsApp Business number
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID

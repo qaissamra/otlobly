@@ -112,10 +112,11 @@ leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Ren
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
 import flag_machine
-flag_machine.start()       # 🚩 action-required inbox watch — no-op unless env
-                           # FLAG_MACHINE=1 (com.otlobly.app.plist only; a
-                           # RENDER check inside start() keeps the cloud inert
-                           # even if the flag ever leaks there)
+flag_machine.start()       # 🚩 action-required inbox watch + flags-bot «done»
+                           # loop — no-op unless env FLAG_MACHINE=1, set ONLY
+                           # in the Render dashboard (like GAASH_MAILER below:
+                           # the live DB is the single truth — never the Mac
+                           # plist, never .env)
 import gaash_mail
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
 gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
@@ -2979,10 +2980,9 @@ def api_gaash_account_uses():
 @auth.require_feature("leluxe")
 def api_flags():
     import flag_machine as fm
-    import telegram
     return jsonify({"ok": True, "inboxes": fm.inboxes(),
                     "flags": fm.open_flags(), "settings": fm.settings(),
-                    "telegram": telegram.configured()})
+                    "telegram": fm.flags_configured()})
 
 
 @app.route("/api/flags/inbox/add", methods=["POST"])

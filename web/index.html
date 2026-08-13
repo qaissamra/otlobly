@@ -13406,7 +13406,7 @@ function flagDraw(){
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">🚩 ${T("تنبيهات مفتوحة · open flags")} (${flags.length})</b>
       <span class="spacer"></span>
       ${flags.length?`<button class="accent" onclick="flagDone(this)">✅ ${T("تم — سكّر الكل · Done — close all")}</button>`:""}</div>
-    ${f.telegram===false?`<div class="en-warn" style="margin-top:6px;font-size:12px">⚠ ${T("تيليجرام غير مضبوط — التنبيهات لن تُرسل حتى تضبط التوكن في الإعدادات ⚙ · Telegram is not configured — the nag cannot send until the token is set in Settings ⚙")}</div>`:""}
+    ${f.telegram===false?`<div class="en-warn" style="margin-top:6px;font-size:12px">⚠ ${T("بوت الأعلام غير مضبوط — التنبيهات لن تُرسل حتى يُضاف FLAGS_BOT_TOKEN في إعدادات Render · the flags bot is not configured — the nag cannot send until FLAGS_BOT_TOKEN is set in the Render dashboard")}</div>`:""}
     ${flags.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);margin-top:6px;font-size:12.5px">
       <span style="flex:none">🚩</span>
       <div style="flex:1;min-width:0"><b>${poEsc(x.subject||"(no subject)")}</b>
