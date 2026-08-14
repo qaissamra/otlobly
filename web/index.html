@@ -13699,10 +13699,60 @@ async function gmDocsCheck(gwd,btn,quiet){
 }
 // ── ⚙ Accounts + templates + behavior ──
 // ── 🚩 Flag machine — watched inboxes → Telegram nag until «done» ─────────────
-let FLAGS=null;
+let FLAGS=null, FLAG_PROFILES=null;
+// The profile codes (B70, E-B15…) and their ClickUp colours, from the cached
+// schema — a few KB, vs /api/leluxe/orders which ships the whole board and is
+// admin-only. Seeding LX.schema is what makes lxProfileChip() paint the same
+// colour here as on the Purchases and Leluxe boards (lxOptColor reads only that).
+async function flagProfilesLoad(){
+  if(FLAG_PROFILES) return FLAG_PROFILES;
+  try{ const d=await (await fetch("/api/leluxe/field_options?field=NAME")).json();
+    FLAG_PROFILES=(d&&d.options)||[]; }catch(e){ FLAG_PROFILES=[]; }
+  if(FLAG_PROFILES.length && (!LX||!LX.schema))
+    LX=Object.assign({},LX||{},{schema:{fields:{NAME:{options:FLAG_PROFILES}}}});
+  return FLAG_PROFILES;
+}
+// ClickUp's own order is orderindex (B10 before B2) — sort the picker the way a
+// human reads it: letters first, then the number.
+function flagProfileSorted(extra){
+  const seen=new Set(), out=[];
+  (FLAG_PROFILES||[]).forEach(o=>{ if(o.name&&!seen.has(o.name)){seen.add(o.name);out.push(o);} });
+  (extra||[]).forEach(n=>{ if(n&&!seen.has(n)){seen.add(n);out.push({name:n,color:null});} });
+  const part=n=>{ const m=String(n).match(/^(.*?)(\d+)$/); return m?[m[1],parseInt(m[2],10)]:[String(n),-1]; };
+  return out.sort((a,b)=>{ const A=part(a.name),B=part(b.name);
+    return A[0]===B[0] ? A[1]-B[1] : A[0].localeCompare(B[0]); });
+}
 async function flagLoad(){
+  await flagProfilesLoad();
   try{ FLAGS=await (await fetch("/api/flags")).json(); }catch(e){ FLAGS=null; }
   flagDraw();
+}
+// Searchable, coloured profile menu — same shape as the Leluxe filter value
+// picker (.pop/.cu-menu/.cu-search + the global cuFilter/popToggle). A native
+// <datalist> is NOT used: browsers draw it with the OS widget, which can't carry
+// the ClickUp colour.
+function flagProfileMenu(pick, cur, extra){
+  return `<span class="pop">
+    <button class="po-btn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}">${
+      cur?lxProfileChip(cur,cur):`<span class="muted2">${T("اختر بروفايل · pick a profile")}</span>`} ▾</button>
+    <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0" onclick="event.stopPropagation()">
+      <input class="cu-search" placeholder="${T("بحث · search")} — B70, E-B15…" oninput="cuFilter(this)">
+      <div class="pop-item cu-item" onclick="${pick}('')"><span class="muted2">— ${T("بلا · none")} —</span></div>
+      ${flagProfileSorted(extra).map(o=>`<div class="pop-item cu-item" style="cursor:pointer" onclick="${pick}('${poEsc(o.name)}')">${
+        o.color?solidPill(o.color,o.name,o.name,{cls:"mono",style:"font-size:10px"})
+               :`<b class="mono" style="font-size:11px">${poEsc(o.name)}</b>`}</div>`).join("")}
+    </div></span>`;
+}
+let FLAG_PICK="";                   // the ADD form's chosen profile
+function flagProfilePick(v){
+  FLAG_PICK=v;
+  const i=$("flagAcName"); if(i) i.value=v;
+  flagDraw();
+}
+async function flagProfileSet(id,v){ // an EXISTING inbox: save it, no password
+  const r=await post("/api/flags/inbox/label",{id,label:v});
+  if(!r||!r.ok) toast((r&&r.error)||"failed");
+  flagLoad();
 }
 function flagAge(iso){
   const t=Date.parse(iso||""); if(!t) return "?";
@@ -13729,13 +13779,14 @@ function flagDraw(){
     ${flags.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);margin-top:6px;font-size:12.5px">
       <span style="flex:none">🚩</span>
       <div style="flex:1;min-width:0"><b>${poEsc(x.subject||"(no subject)")}</b>
-        <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${x.profile?`<b style="color:var(--ink)">${poEsc(x.profile)}</b> · `:""}${poEsc(x.email||"")}</div></div>
+        <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${x.profile?lxProfileChip(x.profile,x.profile)+" · ":""}${poEsc(x.email||"")}</div></div>
       <span class="muted2" style="flex:none;font-size:11.5px;text-align:end" title="${poEsc(x.sent_at||"")}">${x.sent_at?`${T("أُرسل · sent")} ${flagSent(x.sent_at)}<br>`:""}${T("مفتوح منذ · open")} ${flagAge(x.created_at)}${x.sent_count?` · ${x.sent_count}×`:""}</span></div>`).join("")
       ||`<div class="muted2" style="font-size:12px;padding:6px 0">${T("لا أعلام مفتوحة · no open flags")}</div>`}`;
   ib.innerHTML=`
     <b style="font-size:13px">✉ ${T("الصناديق المراقبة · watched inboxes")}</b>
     ${boxes.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
-      ${a.label?`<span style="flex:none;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:1px 7px;font-weight:800;font-size:11.5px${a.active?"":";opacity:.45"}">${poEsc(a.label)}</span>`:""}
+      ${CAN_ADMIN?`<span style="flex:none${a.active?"":";opacity:.45"}">${flagProfileMenu(`flagProfileSet.bind(null,'${poEsc(a.id)}')`, a.label, a.label?[a.label]:[])}</span>`
+        :(a.label?`<span style="flex:none">${lxProfileChip(a.label,a.label)}</span>`:"")}
       <b${a.active?"":' style="opacity:.45"'}>${poEsc(a.email)}</b>
       ${a.last_error?`<span style="color:#b42318;font-size:11px" title="${poEsc(a.last_error)}">⚠ ${poEsc(String(a.last_error).slice(0,60))}</span>`:'<span style="color:#30a46c">✓</span>'}
       ${a.active?"":`<span class="muted2" style="font-size:11px">${T("موقوف · paused")}</span>`}
@@ -13747,16 +13798,17 @@ function flagDraw(){
     ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
       <input id="flagAcEmail" placeholder="email@gmail.com" style="flex:1;min-width:150px">
       <input id="flagAcPw" type="password" autocomplete="new-password" placeholder="${T("كلمة مرور التطبيق (16 حرفاً) · app password (16 letters)")}" style="flex:1;min-width:170px">
-      <input id="flagAcName" placeholder="${T("اسم البروفايل (اختياري) · profile name (optional)")}" style="flex:1;min-width:130px">
+      ${flagProfileMenu("flagProfilePick", FLAG_PICK, FLAG_PICK?[FLAG_PICK]:[])}
+      <input id="flagAcName" value="${poEsc(FLAG_PICK||"")}" oninput="FLAG_PICK=this.value" placeholder="${T("أو اكتبه · or type it")}" style="flex:0 0 120px">
       <button class="minibtn" onclick="flagInboxAdd(this)">＋ ${T("أضف · Add")}</button></div>
-    <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة المرور أو اسم البروفايل أعد إدخال نفس البريد · to update an inbox's password or profile name, re-add the same email")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
+    <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("البروفايل من قائمة كليك أب — أو اكتب أي اسم · profile comes from the ClickUp list — or type any name")} · ${T("لتحديث كلمة المرور أعد إدخال نفس البريد · to update a password, re-add the same email")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
   const gb=$("flagGwdBox"), gws=f.gwds||[];
   if(gb) gb.innerHTML=`
     <b style="font-size:13px">📦 ${T("أرقام الطرود المجمّعة · tracking numbers collected")} (${gws.length})</b>
     <div class="muted2" style="font-size:11px;margin-top:2px">${T("كل رقم GWD يظهر في أي إيميل يصل الصناديق المراقبة — حتى لو ما كان فيه كلمة التنبيه · every GWD seen in ANY watched mail, keyword or not")}</div>
     ${gws.map(g=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);margin-top:5px;font-size:12.5px">
       <span class="mono"><b>${poEsc(g.gwd)}</b></span>${lxCopyRawBtn(g.gwd)}
-      ${g.profile?`<span class="pill">${poEsc(g.profile)}</span>`:""}
+      ${g.profile?lxProfileChip(g.profile,g.profile):""}
       <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(g.subject||"")}</span>
       <span class="spacer"></span>
       <span class="muted2" style="flex:none;font-size:11px" title="${poEsc(g.seen_at||"")}">${poEsc(relTime(g.seen_at))}</span></div>`).join("")
@@ -13798,7 +13850,7 @@ function flagHistDraw(){
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(r.subject||"(no subject)")}</b></span></div>`;
     return `<div class="poc-row">${pin}${lxtCells("fh",{
       sender:  `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.sender||"—")}</span>`,
-      profile: r.profile?`<b>${poEsc(r.profile)}</b>`:`<span class="muted2">—</span>`,
+      profile: r.profile?lxProfileChip(r.profile,r.profile):`<span class="muted2">—</span>`,
       inbox:   `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.email||"")}</span>`,
       state:   r.state==="open"?tonePill("red",T("مفتوح · open"),T("ما زال ينبّه · still nagging"))
                               :tonePill("green",T("تم · done")),

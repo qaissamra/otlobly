@@ -335,6 +335,17 @@ def remove_inbox(inbox_id):
         return {"ok": cur.rowcount > 0, "open_flags": n}
 
 
+def set_label(inbox_id, label):
+    """Name an inbox after its buyer profile (B70, E-B15…) WITHOUT retyping the
+    app password — add_inbox used to be the only writer. .strip() and nothing
+    else: lxOptColor matches ClickUp option names case-sensitively, and this
+    field also holds hand-typed labels, so upper-casing would be wrong twice."""
+    with db.connect() as c:
+        cur = c.execute("UPDATE flag_inboxes SET label=? WHERE id=?",
+                        (str(label or "").strip() or None, inbox_id))
+        return {"ok": cur.rowcount > 0}
+
+
 def set_active(inbox_id, active):
     with db.connect() as c:
         cur = c.execute("UPDATE flag_inboxes SET active=? WHERE id=?",

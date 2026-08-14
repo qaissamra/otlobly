@@ -200,6 +200,20 @@ def main():
     check("label saved, cursor untouched", row4["label"] == "AZ Profile 7"
           and row4["imap_last_uid"] == 41)
 
+    check("set_label names an inbox without the app password",
+          fm.set_label(fid, "  E-B15  ")["ok"]
+          and [a for a in fm.inboxes() if a["id"] == fid][0]["label"] == "E-B15")
+    # lxOptColor matches ClickUp option names case-SENSITIVELY, and this field
+    # also holds hand-typed labels — so nothing may be upper-cased
+    fm.set_label(fid, "e-b15 spare")
+    check("case preserved exactly (no upper-casing)",
+          [a for a in fm.inboxes() if a["id"] == fid][0]["label"] == "e-b15 spare")
+    fm.set_label(fid, "")
+    check("blank label clears it",
+          [a for a in fm.inboxes() if a["id"] == fid][0]["label"] is None)
+    check("set_label on an unknown inbox is False",
+          not fm.set_label("nope", "B70")["ok"])
+    fm.set_label(fid, "AZ Profile 7")          # restore for later checks
     check("pause", fm.set_active(fid, False)["ok"])
     check("resume", fm.set_active(fid, True)["ok"])
     check("redact hides password", all("app_password" not in a
@@ -506,6 +520,22 @@ def main():
         fm._verify_imap = _orig
     check("route add keeps a refused inbox (200 + saved_with_error)",
           resp.status_code == 200 and resp.get_json().get("saved_with_error"))
+    _lid = [a for a in fm.inboxes() if a["email"] == "route@gmail.com"][0]["id"]
+    check("sales cannot set a profile",
+          sal.post("/api/flags/inbox/label",
+                   json={"id": _lid, "label": "B70"}).status_code == 403)
+    check("fulfillment cannot set a profile",
+          ful.post("/api/flags/inbox/label",
+                   json={"id": _lid, "label": "B70"}).status_code == 403)
+    d = adm.post("/api/flags/inbox/label",
+                 json={"id": _lid, "label": "B70"}).get_json()
+    check("admin sets a profile via the route", d["ok"]
+          and [a for a in fm.inboxes() if a["id"] == _lid][0]["label"] == "B70")
+    d = ful.get("/api/leluxe/field_options?field=NAME").get_json()
+    check("field options readable by fulfillment (the picker's source)",
+          d["ok"] and isinstance(d["options"], list))
+    check("sales blocked from field options",
+          sal.get("/api/leluxe/field_options").status_code == 403)
     d = adm.post("/api/flags/settings", json={"repeat_min": 3}).get_json()
     check("admin saves settings", d["ok"] and d["settings"]["repeat_min"] == 3)
     d = ful.post("/api/flags/done", json={}).get_json()

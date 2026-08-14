@@ -2522,6 +2522,23 @@ def api_leluxe_discover():
                     "statuses": len(sch["statuses"]), "fields": len(sch["fields"])})
 
 
+@app.route("/api/leluxe/field_options")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_leluxe_field_options():
+    """One custom field's option names + their ClickUp colours, straight from
+    the cached schema in config.json. Exists so a page that only needs to
+    COLOUR a profile code (the 🚩 Flags picker) doesn't have to pull
+    /api/leluxe/orders — that ships the whole board (~800KB) and is
+    admin-only, which a fulfillment user on 🚩 can't call at all."""
+    fdef = leluxe_mod._sch_field_def(
+        (leluxe_mod.schema() or {}).get("fields") or {},
+        (request.args.get("field") or "NAME").strip())
+    return jsonify({"ok": True, "options": [
+        {"name": o.get("name"), "color": o.get("color")}
+        for o in (fdef.get("options") or []) if o.get("name")]})
+
+
 @app.route("/api/leluxe/orders")
 @auth.require("admin_actions")
 @auth.require_feature("leluxe")
@@ -3124,6 +3141,20 @@ def api_flags_inbox_remove():
     if res.get("ok"):
         db.audit(auth.actor(), "flag_inbox_remove", "flags",
                  str(b.get("id") or ""), f"open flags kept: {res['open_flags']}")
+    return jsonify(res)
+
+
+@app.route("/api/flags/inbox/label", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_flags_inbox_label():
+    """Name an inbox after its buyer profile — no app password needed."""
+    import flag_machine as fm
+    b = request.get_json(force=True, silent=True) or {}
+    res = fm.set_label(b.get("id"), b.get("label"))
+    if res.get("ok"):
+        db.audit(auth.actor(), "flag_inbox_label", "flags",
+                 str(b.get("id") or ""), str(b.get("label") or ""))
     return jsonify(res)
 
 
