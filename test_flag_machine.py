@@ -343,9 +343,23 @@ def main():
 
     print("— configured flips —")
     os.environ.pop("FLAGS_BOT_TOKEN")
-    check("flags_configured false without token", not fm.flags_configured())
+    check("flags_configured false without token", not fm.flags_configured()
+          and fm.flags_missing() == "FLAGS_BOT_TOKEN")
     os.environ["FLAGS_BOT_TOKEN"] = "test:flags"
-    check("flags_configured true again", fm.flags_configured())
+    check("flags_configured true again", fm.flags_configured()
+          and fm.flags_missing() == "")
+    # the 2026-08-14 outage: a good token but no chat id anywhere. The page
+    # must name the MISSING piece, not blame the token.
+    _chat = os.environ.pop("TELEGRAM_CHAT_ID")
+    check("no chat id → not configured, and it says which",
+          not fm.flags_configured() and "CHAT_ID" in fm.flags_missing())
+    os.environ["FLAGS_CHAT_ID"] = "777"
+    check("FLAGS_CHAT_ID alone is enough", fm.flags_configured()
+          and fm._flags_chat() == "777")
+    os.environ["TELEGRAM_CHAT_ID"] = _chat
+    check("FLAGS_CHAT_ID wins over TELEGRAM_CHAT_ID", fm._flags_chat() == "777")
+    os.environ.pop("FLAGS_CHAT_ID")
+    check("falls back to TELEGRAM_CHAT_ID", fm._flags_chat() == _chat)
     _tok = os.environ.pop("TELEGRAM_BOT_TOKEN")
     check("telegram.configured token kwarg",
           not telegram.configured() and telegram.configured(token="t2"))

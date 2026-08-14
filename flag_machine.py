@@ -112,9 +112,30 @@ def _flags_token():
     return (os.environ.get("FLAGS_BOT_TOKEN") or "").strip()
 
 
+def _flags_chat():
+    """Where the nag goes: env FLAGS_CHAT_ID, else the alerts bot's chat.
+
+    The fallback is a convenience, not a dependency — 2026-08-14 the flags
+    machine sat mute for hours because TELEGRAM_CHAT_ID had never been set on
+    Render, and the page blamed the (perfectly good) flags token. Own the
+    chat id here so this feature can never again be dark because a DIFFERENT
+    feature is unconfigured."""
+    return ((os.environ.get("FLAGS_CHAT_ID") or "").strip()
+            or telegram._creds()[1])
+
+
+def flags_missing():
+    """Which piece of the flags-bot config is absent — '' when it's ready.
+    Named parts, because 'not configured' cost an afternoon once."""
+    if not _flags_token():
+        return "FLAGS_BOT_TOKEN"
+    if not _flags_chat():
+        return "FLAGS_CHAT_ID (or TELEGRAM_CHAT_ID)"
+    return ""
+
+
 def flags_configured():
-    tok = _flags_token()
-    return bool(tok) and telegram.configured(token=tok)
+    return not flags_missing()
 
 
 _me = None
@@ -179,7 +200,7 @@ def poll_updates(get=None, send=None):
     out = get(offset or None, UPDATES_TIMEOUT_S)
     if not out.get("ok"):
         return []
-    owner = telegram._creds()[1]
+    owner = _flags_chat()
     replies = []
     for u in out.get("result") or []:
         offset = max(offset or 0, u.get("update_id", 0) + 1)
@@ -519,7 +540,8 @@ def alert_once(now=None, send=None):
     retry next tick). A db.claim_once on the minute bucket makes the send
     exactly-once across gunicorn workers: the lease read-then-write is not
     atomic, so a lease race alone could double-nag — the claim cannot."""
-    send = send or (lambda t: telegram.send(t, token=_flags_token()))
+    send = send or (lambda t: telegram.send_to(_flags_chat(), t,
+                                               token=_flags_token()))
     now = now or datetime.now(timezone.utc)
     flags = open_flags()
     if not flags or not flags_configured():

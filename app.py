@@ -2984,7 +2984,8 @@ def api_flags():
     import flag_machine as fm
     return jsonify({"ok": True, "inboxes": fm.inboxes(),
                     "flags": fm.open_flags(), "settings": fm.settings(),
-                    "telegram": fm.flags_configured()})
+                    "telegram": fm.flags_configured(),
+                    "telegram_missing": fm.flags_missing()})
 
 
 @app.route("/api/flags/inbox/add", methods=["POST"])
