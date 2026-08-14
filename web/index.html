@@ -431,8 +431,8 @@
   .lx-cols{display:grid;grid-template-columns:var(--lxgrid,78px 100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .po-cols{display:grid;grid-template-columns:var(--pogrid,118px 88px 128px 98px 74px 118px 96px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
+  .pok-cols{display:grid;grid-template-columns:var(--pokgrid,88px 96px 88px 128px 98px 74px 118px 96px 134px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .pop-cols{display:grid;grid-template-columns:var(--popgrid,88px 120px 120px 112px 96px 40px 110px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
   .od-cols{display:grid;grid-template-columns:var(--odgrid,170px 110px 90px 96px 64px 64px 88px 132px 120px 92px 130px 96px 168px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3959,6 +3959,7 @@ const LXT_COLS={
     {key:"deadline",  label:"الموعد · deadline",    w:98},
     {key:"docs",      label:"الوثائق · docs",        w:74},
     {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
+    {key:"rdnum",     label:"رقم RD · RD number",  w:96, min:64, sortable:true},
     {key:"status",    label:"الحالة · status",      w:134, min:84},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
@@ -3975,6 +3976,7 @@ const LXT_COLS={
     {key:"docs",      label:"الوثائق · docs",        w:74},
     {key:"gerizim",   label:"جيرزيم · gerizim",       w:118},
     {key:"idnum",     label:"🪪 الهوية · ID number",  w:110, sortable:true},
+    {key:"rdnum",     label:"رقم RD · RD number",  w:96, min:64, sortable:true},
     {key:"status",    label:"الحالة · status",      w:134, min:84},
     {key:"menu",      label:"",            w:28,  locked:true},
   ],
@@ -8441,6 +8443,23 @@ function poPkgDueEdit(el,poId,pi){
     pk.due_date=(v||"").trim()||null; poSave(p); renderPurchases();
   },renderPurchases);
 }
+// 🟢 RD number — the refund number the owner types himself once Amazon issues
+// it, per PACKAGE (each parcel is refunded on its own). Green because on this
+// board green reads "money came back". Click to edit inline, or ⋯ → Edit package.
+function pkgRdCell(p,pk,pi){
+  const v=(pk.rd_number||"").trim();
+  const chip=v?tonePill("green",v,"",{style:"font-size:10.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis"})
+              :(CAN_EDIT?'<span class="muted2" style="opacity:.45">—</span>':"");
+  const tip=T('رقم الاسترداد · RD (refund) number')+(CAN_EDIT?' — '+T('انقر للتعديل · click to edit'):"");
+  return `<span class="cf-cell" style="flex:1;min-width:24px;cursor:${CAN_EDIT?'pointer':'default'}" title="${tip}"
+    ${CAN_EDIT?`onclick="event.stopPropagation();pkgRdEdit(this,'${p.po_id}',${pi})"`:""}>${chip}</span>`;
+}
+function pkgRdEdit(el,poId,pi){
+  const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
+  editCell(el,{type:"text",value:(pk.rd_number||"").trim(),placeholder:"RD…",minWidth:"110px"},v=>{
+    pk.rd_number=(v||"").trim()||null; poSave(p); renderPurchases();
+  },renderPurchases);
+}
 async function poEstimateAll(btn){
   if(!POS||!POS.length){ toast("No purchase orders yet"); return; }
   // one job per PACKAGE so prices appear package-by-package, live
@@ -8954,6 +8973,7 @@ function poRenderPkgsFlat(mount,list){
     if(key==="profile") return String(p.profile_box||"~").toLowerCase();
     if(key==="pcust") return String(pkgWho(pk)||"~").toLowerCase();
     if(key==="pdue"){ const d=poPkgDue(pk); return d?(Date.parse(d)||Infinity):Infinity; }
+    if(key==="rdnum") return String(pk.rd_number||"~").toLowerCase();
     return poSortVal(p,key);
   });
   const totEst=rows.reduce((a,[,pk])=>a+pkgEstTotal(pk).sum,0);
@@ -8989,6 +9009,7 @@ function poPkFlatRow(p,pk,pi){
     docs: pkgDocsPill(p,pk,pi),
     gerizim: pkgGerizimCell(pk,gaash),
     idnum: idNumCell(pkgIdNumber(pk)),
+    rdnum: pkgRdCell(p,pk,pi),
     status: pkgCuSelect(p,pk,pi),
     menu,
     ...poCfCells(p),
@@ -8999,6 +9020,7 @@ function poPkFlatRow(p,pk,pi){
       <span class="pkg-title" style="flex:0 0 auto">📦${pk.package_no}</span>
       ${poThumbStrip(pk.items)}
       <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+      ${pkgPhotoBadge(pk)}
     </div>
     ${lxtCells("pok",cells)}
   </div>`;
@@ -10144,7 +10166,7 @@ function pkgInfoOpen(id,pi){
     `<span style="color:#b42318">${poEsc(pk.arrival)}</span> ${solidPill('#e5484d',`⚠ متأخر ${lateN} يوم · ${lateN}d LATE`)}`);
   $("pkgInfoBody").innerHTML=`
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      ${poThumbStrip(pk.items,6)}
+      <span style="flex:0 0 auto">${poThumbStrip(pk.items,6)}</span>
       ${pkgDatePill(pk)} ${pkgGaashPill(pk)} ${pkgDocsPill(p,pk,pi)} ${pkgGerizimPill(pk)} ${pkgCuSelect(p,pk,pi)}
     </div>
     ${dl?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -10162,7 +10184,8 @@ function pkgInfoOpen(id,pi){
         +f('≈ تقدير التكلفة · Cost est', est.priced?money(est.sum):'')
         +f('المنتجات · Products', (pk.items||[]).length);
       const shipRows=
-        f('رقم غاش · GAASH tracking', gwd?`<span class="mono">${poEsc(gwd)}</span>${lxCopyRawBtn(gwd)}`:'')
+        f('رقم RD · RD number', pk.rd_number?tonePill("green",pk.rd_number):'')
+        +f('رقم غاش · GAASH tracking', gwd?`<span class="mono">${poEsc(gwd)}</span>${lxCopyRawBtn(gwd)}`:'')
         +f('رقم الزبون · Customer tracking', pk.customer_tracking?`<span class="mono">${poEsc(pk.customer_tracking)}</span>${lxCopyRawBtn(pk.customer_tracking)}`:'')
         +f('حالة غاش · GAASH status', poEsc(ts.text||ts.label||''))
         +f('آخر فحص · Last checked', agoTxt(pk.tracking_checked))
@@ -10176,7 +10199,10 @@ function pkgInfoOpen(id,pi){
       const imgSec=atts.length?sec(`🖼 لقطة الشراء · checkout screenshot <span style="font-weight:600;text-transform:none;letter-spacing:0">— من الطلب · from the order</span>`,
         atts.map(fn=>{ const u='/api/po_image?file='+encodeURIComponent(fn);
           return `<img src="${poEsc(u)}" loading="lazy" title="انقر للفتح بالحجم الكامل · click to open full size" style="width:100%;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:zoom-in;display:block;margin:6px 0 8px" onclick="window.open('${poEsc(u)}','_blank','noopener')">`; }).join("")):"";
-      return sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows)+imgSec; })()}
+      // 📷 THIS package's own photos — paste with ⌘V while the popup is open.
+      // Admin-only end to end (route + section): the owner's own working shots.
+      const pkgImgSec=CAN_ADMIN?sec('📷 صور الطرد · package photos',pkgPhotosHtml(p,pk,pi)):"";
+      return sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows)+pkgImgSec+imgSec; })()}
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
       <button class="po-btn" onclick="pkgInfoClose();trackPkg(null,'${p.po_id}',${pi})">🔎 تتبع الشحنة · Check shipping</button>
       ${gwd?`<button class="po-btn" onclick="pkgInfoClose();gaashUploadOpen('${p.po_id}',${pi})">🪪 رفع مستندات · Upload docs</button>`:''}
@@ -10188,6 +10214,64 @@ function pkgInfoOpen(id,pi){
     </div>`;
   $("pkgInfoModal").classList.remove("hidden");
 }
+/* ---- 📷 Package photos: paste a screenshot straight onto ONE package ----
+   Stored per package (pkg_images) beside the checkout screenshots, served and
+   written by admin-only routes. The gallery mirrors the order-detail one:
+   118px tiles, ✕ to remove, click to open full size. */
+function pkgPhotoUrl(fn){ return '/api/purchase/package/image?file='+encodeURIComponent(fn); }
+// row hint that this package carries photos — the row click already opens them
+function pkgPhotoBadge(pk){
+  const n=((pk&&pk.pkg_images)||[]).filter(Boolean).length;
+  if(!n||typeof CAN_ADMIN==="undefined"||!CAN_ADMIN) return "";
+  return `<span class="pill" style="flex:0 0 auto;background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:9.5px;padding:1px 5px"
+    title="${T('صور على هذا الطرد — افتح الطرد لعرضها · photos on this package — open it to see them')}">📷${n}</span>`;
+}
+function pkgPhotosHtml(p,pk,pi){
+  const imgs=(pk.pkg_images||[]).filter(Boolean);
+  const tiles=imgs.map(fn=>{ const u=pkgPhotoUrl(fn);
+    return `<div style="position:relative;width:118px;height:118px;flex:0 0 auto">
+      <img src="${poEsc(u)}" loading="lazy" title="${T('انقر للفتح بالحجم الكامل · click to open full size')}"
+        style="width:118px;height:118px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:zoom-in;display:block"
+        onclick="window.open('${poEsc(u)}','_blank','noopener')"
+        onerror="this.parentNode.style.display='none'">
+      <button class="iconbtn" title="${T('حذف الصورة · remove')}" onclick="event.stopPropagation();pkgPhotoDel('${poEsc(p.po_id)}',${pi},'${poEsc(fn)}')"
+        style="position:absolute;top:3px;inset-inline-end:3px;background:#fff;border:1px solid var(--line);border-radius:50%;width:22px;height:22px;line-height:1;padding:0">✕</button>
+    </div>`; }).join("");
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px">${tiles}
+      <div id="pkgPasteHint" style="width:118px;height:118px;flex:0 0 auto;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;line-height:1.4;color:var(--muted);padding:6px">
+        ⌘V<br>${T('الصق لقطة الشاشة هنا · paste a screenshot here')}</div>
+    </div>`;
+}
+async function pkgPhotoDel(poId,pi,fn){
+  const p=poFind(poId), pk=p&&(p.packages||[])[pi]; if(!pk) return;
+  if(!confirm(T("حذف هذه الصورة؟ · Remove this image?"))) return;
+  let r; try{ r=await post("/api/purchase/package/image/delete",
+    {po_id:poId, package_no:pk.package_no, file:fn}); }catch(e){ r=null; }
+  if(r&&r.ok){ pk.pkg_images=r.pkg_images||[]; pkgInfoOpen(poId,pi); renderPurchases();
+    toast(T("حُذفت · removed")); }
+  else toast(T("تعذّر الحذف · remove failed")+((r&&r.error)?": "+r.error:""));
+}
+document.addEventListener("paste",e=>{        // ⌘V while a package popup is open
+  if(!PKG_INFO||!CAN_ADMIN||$("pkgInfoModal").classList.contains("hidden")) return;
+  const p=poFind(PKG_INFO.id), pk=p&&(p.packages||[])[PKG_INFO.pi]; if(!pk) return;
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(const it of items){
+    if(it.type&&it.type.startsWith("image/")){
+      e.preventDefault();
+      const f=it.getAsFile(); const rd=new FileReader();
+      rd.onload=async()=>{ toast("⬆ "+T("رفع الصورة… · uploading…"));
+        let r; try{ r=await post("/api/purchase/package/image",
+          {po_id:p.po_id, package_no:pk.package_no, filename:(f&&f.name)||"pasted.png", data_base64:rd.result}); }
+        catch(err){ r=null; }
+        if(r&&r.ok){ pk.pkg_images=r.pkg_images||[];
+          pkgInfoOpen(p.po_id,PKG_INFO.pi); renderPurchases();
+          toast("📋 "+T("تم لصق الصورة ✓ · image pasted")); }
+        else toast(T("فشل رفع الصورة · paste upload failed")+((r&&r.error)?": "+r.error:"")); };
+      rd.readAsDataURL(f);
+      break;
+    }
+  }
+});
 // Tracking number with the LAST 4 DIGITS emphasized — the team refers to
 // parcels by their last-4; hover the row for the 📋 that copies the full number.
 function poTn4(t,fs){
@@ -10222,6 +10306,7 @@ function poPkgHtml(p,pk,pi){
         <span class="pkg-title" style="flex:0 0 auto">📦${pk.package_no}</span>
         ${poThumbStrip(pk.items)}
         <span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· ${gaash?`${poTn4(gaash)}${lxCopyRawBtn(gaash)}`:'<span style="color:var(--warn)">no GAASH #</span>'}</span>
+        ${pkgPhotoBadge(pk)}
       </div>
       ${lxtCells("po",{
         pcust: poNameCell(pkgWho(pk)),
@@ -10232,6 +10317,7 @@ function poPkgHtml(p,pk,pi){
         deadline: pkgDeadlinePill(p,pk,pi),
         docs: pkgDocsPill(p,pk,pi),
         gerizim: pkgGerizimCell(pk,gaash),
+        rdnum: pkgRdCell(p,pk,pi),
         status: pkgCuSelect(p,pk,pi),
         menu,
       })}
@@ -10298,6 +10384,9 @@ function pkeRender(){
     <div class="muted2" style="font-size:10.5px;margin-top:2px">هذا التاريخ يقود حالة الطرد وتنبيه “متأخر” · this date drives the status pill + late alarm</div>
     <label class="fld" style="margin-top:11px">رقم غاش · GAASH tracking # (${poEsc(courier)})</label>
     <input class="mono" style="width:100%" value="${poEsc(pk.tracking_number)}" placeholder="${poEsc(courier)}…" onchange="pkeSet('tracking_number',this.value)">
+    <label class="fld" style="margin-top:11px">رقم RD · RD number</label>
+    <input class="mono" style="width:100%" value="${poEsc(pk.rd_number||"")}" placeholder="RD…" onchange="pkeSet('rd_number',this.value)">
+    <div class="muted2" style="font-size:10.5px;margin-top:2px">رقم الاسترداد لهذا الطرد — يظهر بالأخضر في عمود RD · this package's refund number — shows green in the RD column</div>
     <label class="fld" style="margin-top:11px">رقم تتبع العميل · Customer tracking # (OTL)</label>
     ${pk.customer_tracking
       ? `<div style="display:flex;gap:6px;align-items:center"><b class="mono" style="flex:1">🎟 ${poEsc(pk.customer_tracking)}</b>

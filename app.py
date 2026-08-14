@@ -2233,6 +2233,111 @@ def api_notifications():
     return jsonify({"ok": True, "needs_quote": needs_quote, "events": out})
 
 
+def _safe_seg(v, fallback):
+    """One filename segment: letters/digits/dot/dash/underscore only. Anything a
+    client sends that could walk the path ("../", "/") is stripped, never escaped."""
+    s = re.sub(r"[^A-Za-z0-9._-]", "", str(v or ""))
+    return s or fallback
+
+
+# 📷 Package photos — pasted onto ONE package (⌘V in the package popup), stored
+# beside the checkout screenshots in po_images/ but tracked per package. Admin
+# only, on the owner's instruction: these are his own working shots, not
+# something the fulfillment roles need (and view_cost would be the wrong gate —
+# it exists for money, not for photos).
+_PKG_IMG_EXT = {"png", "jpg", "jpeg", "webp", "gif", "heic"}
+_PKG_IMG_MAX = 15 * 1024 * 1024        # same ceiling as the GAASH document library
+
+
+def _pkg_by_no(pdb, po_id, package_no):
+    """(po, package) located the way /api/pkgprep/status does — by po_id +
+    package_no, never by array index: an index shifts when a package is deleted."""
+    import purchases
+    po = purchases.find(pdb, (po_id or "").strip())
+    if not po:
+        return None, None
+    pk = next((p for p in po.get("packages") or []
+               if str(p.get("package_no")) == str(package_no)), None)
+    return po, pk
+
+
+@app.route("/api/purchase/package/image", methods=["GET", "POST"])
+@auth.require("admin_actions")
+def api_pkg_image():
+    import base64
+    import purchases
+    if request.method == "GET":
+        fn = request.args.get("file", "")
+        p = purchases.IMAGE_DIR / fn
+        if fn and "/" not in fn and ".." not in fn and p.exists():
+            return send_file(p)
+        abort(404)
+    b = request.get_json(force=True, silent=True) or {}
+    data = b.get("data_base64", "")
+    if data.strip().startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(data)
+    except Exception as e:  # noqa - a broken paste must not 500
+        return jsonify({"ok": False, "error": f"bad image data: {e}"}), 400
+    if not raw:
+        return jsonify({"ok": False, "error": "empty image"}), 400
+    if len(raw) > _PKG_IMG_MAX:
+        return jsonify({"ok": False, "error": "image is larger than 15 MB"}), 400
+    ext = _safe_seg((b.get("filename") or "img.png").rsplit(".", 1)[-1].lower(), "png")[:5]
+    if ext not in _PKG_IMG_EXT:
+        ext = "png"
+    # fresh load → mutate → save: this writer owns pkg_images only, and must
+    # never hold a snapshot across the file write (purchases.json has no lock)
+    pdb = purchases.load()
+    po, pk = _pkg_by_no(pdb, b.get("po_id"), b.get("package_no"))
+    if not pk:
+        return jsonify({"ok": False, "error": "package not found"}), 404
+    purchases.IMAGE_DIR.mkdir(exist_ok=True)
+    fn = (f"pkg-{_safe_seg(po.get('po_id'), 'po')}"
+          f"-{_safe_seg(pk.get('package_no'), '0')}-{uuid.uuid4().hex[:8]}.{ext}")
+    try:
+        (purchases.IMAGE_DIR / fn).write_bytes(raw)
+    except Exception as e:  # noqa
+        return jsonify({"ok": False, "error": str(e)}), 500
+    pk["pkg_images"] = [f for f in (pk.get("pkg_images") or []) if f] + [fn]
+    po["updated_at"] = purchases.now_iso()
+    purchases.save(pdb)
+    activity.log("uploaded", "purchase", po["po_id"], _polabel(po),
+                 detail=f"photo on package {pk.get('package_no')}", user=_user())
+    return jsonify({"ok": True, "file": fn, "pkg_images": pk["pkg_images"]})
+
+
+@app.route("/api/purchase/package/image/delete", methods=["POST"])
+@auth.require("admin_actions")
+def api_pkg_image_delete():
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    fn = (b.get("file") or "").strip()
+    if not fn or "/" in fn or ".." in fn:
+        return jsonify({"ok": False, "error": "bad file"}), 400
+    pdb = purchases.load()
+    po, pk = _pkg_by_no(pdb, b.get("po_id"), b.get("package_no"))
+    if not pk:
+        return jsonify({"ok": False, "error": "package not found"}), 404
+    pk["pkg_images"] = [f for f in (pk.get("pkg_images") or []) if f and f != fn]
+    po["updated_at"] = purchases.now_iso()
+    purchases.save(pdb)
+    # only unlink once no package still points at it (a copied filename is rare
+    # but deleting a file another row shows would be worse than leaving bytes)
+    still = any(fn in (p.get("pkg_images") or [])
+                for o in pdb.get("purchase_orders") or []
+                for p in o.get("packages") or [])
+    if not still:
+        try:
+            (purchases.IMAGE_DIR / fn).unlink(missing_ok=True)
+        except Exception:                      # noqa: BLE001 — store already consistent
+            pass
+    activity.log("deleted", "purchase", po["po_id"], _polabel(po),
+                 detail=f"photo on package {pk.get('package_no')}", user=_user())
+    return jsonify({"ok": True, "pkg_images": pk["pkg_images"]})
+
+
 @app.route("/api/po_image", methods=["GET", "POST"])
 @login_required
 def api_po_image():
@@ -2255,7 +2360,9 @@ def api_po_image():
         data = data.split(",", 1)[1]
     ext = (b.get("filename", "img.png").rsplit(".", 1)[-1] or "png")[:5]
     purchases.IMAGE_DIR.mkdir(exist_ok=True)
-    fn = f"{b.get('po_id', 'po')}-{uuid.uuid4().hex[:8]}.{ext}"
+    # po_id lands in a filename — the GET/delete sides already refuse "/", so
+    # keep the write side from being the one that escapes the folder
+    fn = f"{_safe_seg(b.get('po_id'), 'po')}-{uuid.uuid4().hex[:8]}.{_safe_seg(ext, 'png')}"
     try:
         (purchases.IMAGE_DIR / fn).write_bytes(base64.b64decode(data))
     except Exception as e:  # noqa

@@ -332,6 +332,10 @@ def _norm_packages(packages):
             "docs_state": p.get("docs_state"),               # GAASH docs banner (action/info/…) — see tracking.docs_status
             "docs_checked": p.get("docs_checked"),           # last docs-banner check (~daily cadence)
             "due_date": (p.get("due_date") or "").strip() or None,  # owner-set package due date
+            "rd_number": (p.get("rd_number") or "").strip() or None,  # owner-typed RD (refund) number
+            # 📷 photos pasted onto THIS package (filenames in po_images/) —
+            # admin-only; see save_full for why a missing key is preserved
+            "pkg_images": [str(f) for f in (p.get("pkg_images") or []) if f],
             "alerts_sent": p.get("alerts_sent") or {},       # Telegram threshold stamps {key: iso}
             "track_notified": p.get("track_notified") or {},   # {order_id: iso} — customer-notify stamps
             "items": [_norm_item(it) for it in p.get("items", [])],
@@ -366,6 +370,18 @@ def save_full(db, po_dict, orders):
         "created_at": (existing or {}).get("created_at") or now_iso(),
         "updated_at": now_iso(),
     }
+    # 📷 Package photos are written by their OWN endpoint, not by the board's
+    # whole-PO save. A client whose copy predates a paste would post the package
+    # without the key and wipe the photos — so a MISSING key keeps what's on
+    # disk (an explicit list still wins, which is how a delete goes through).
+    # Same protection as `custom` above, matched by package_no not by index.
+    if existing:
+        old_imgs = {str(pk.get("package_no")): (pk.get("pkg_images") or [])
+                    for pk in existing.get("packages") or []}
+        for i, pk in enumerate(po["packages"]):
+            src = (po_dict.get("packages") or [])[i] if i < len(po_dict.get("packages") or []) else {}
+            if not isinstance(src, dict) or "pkg_images" not in src:
+                pk["pkg_images"] = list(old_imgs.get(str(pk.get("package_no")), []))
     attach_matches(po, orders)
     ensure_customer_tracking(db, po)   # auto-mint OTL numbers for newly-tracked packages
     if existing:
