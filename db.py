@@ -387,6 +387,7 @@ CREATE TABLE IF NOT EXISTS flag_alerts (
   subject TEXT,                         -- RFC2047-decoded
   sender TEXT,
   matched_phrase TEXT,
+  sent_at TEXT,                         -- the email's own Date header (ISO)
   created_at TEXT,
   state TEXT NOT NULL DEFAULT 'open',   -- open | done
   done_at TEXT,
@@ -395,6 +396,24 @@ CREATE TABLE IF NOT EXISTS flag_alerts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_flagalerts_msg ON flag_alerts(email, msg_id);
 CREATE INDEX IF NOT EXISTS ix_flagalerts_state ON flag_alerts(state);
+-- 🚩 GWD tracking numbers seen in ANY watched mail (not only flagged mail).
+-- Only the NUMBERS are kept — the email body is read, scanned and dropped,
+-- never stored. One row per number per inbox; a re-sighting is a no-op.
+CREATE TABLE IF NOT EXISTS flag_gwds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gwd TEXT NOT NULL,
+  inbox_id TEXT,
+  email TEXT,                           -- denormalized: survives inbox removal
+  msg_id TEXT,                          -- the mail it was first seen in
+  subject TEXT,
+  sender TEXT,
+  seen_at TEXT,
+  exported_at TEXT,                     -- stamped when pushed to ClickUp
+  export_order_id TEXT,                 -- the leluxe order it was attached to
+  export_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_flaggwds ON flag_gwds(inbox_id, gwd);
+CREATE INDEX IF NOT EXISTS ix_flaggwds_seen ON flag_gwds(seen_at);
 """
 
 
@@ -541,6 +560,10 @@ def migrate():
         # them so {id_name} and the chat pill keep resolving.
         if "docs_json" not in _columns(c, "gaash_threads"):
             c.execute("ALTER TABLE gaash_threads ADD COLUMN docs_json TEXT")
+        # 🚩 when the flagged email was SENT (its own Date header) — created_at
+        # only says when the poll first saw it
+        if "sent_at" not in _columns(c, "flag_alerts"):
+            c.execute("ALTER TABLE flag_alerts ADD COLUMN sent_at TEXT")
         # 📧 Owner replies written in Gmail itself land in [Gmail]/Sent Mail,
         # never INBOX — a second per-account UID cursor tracks that folder.
         if "sent_last_uid" not in _columns(c, "gaash_accounts"):

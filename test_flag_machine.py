@@ -94,6 +94,51 @@ def main():
     hm = message_from_bytes(bytes(m), policy=policy.default)
     check("rfc2047 round-trip", "=?utf-8?" in bytes(m).decode("ascii", "ignore")
           and fm.match_subject(str(hm.get("Subject")), P))
+    check("date header parses",
+          (fm._parse_date_hdr("Wed, 13 Aug 2026 09:15:00 +0300") or "")
+          .startswith("2026-08-13"))
+    check("garbage date → None", fm._parse_date_hdr("not a date") is None
+          and fm._parse_date_hdr(None) is None)
+
+    print("— GWD extraction —")
+    check("plain + case + dedupe + order",
+          fm.gwd_tokens("see gwd123456789 and GWD987654321, also Gwd123456789")
+          == ["GWD123456789", "GWD987654321"])
+    check("embedded in prose/HTML",
+          fm.gwd_tokens("<p>Parcel GWD555000111 held</p>") == ["GWD555000111"])
+    check("no separator variants (the repo has none)",
+          fm.gwd_tokens("GWD-123456789") == []
+          and fm.gwd_tokens("GWD 123456789") == [])
+    check("needs digits", fm.gwd_tokens("GWDX or GWD") == [])
+    check("empty/None safe", fm.gwd_tokens("") == [] and fm.gwd_tokens(None) == [])
+
+    print("— body text extraction (never covered before) —")
+    from gaash_mail import _extract_text
+    _p = EmailMessage()
+    _p["Subject"] = "s"
+    _p.set_content("plain GWD111111111 body")
+    check("plain text", "GWD111111111" in
+          _extract_text(message_from_bytes(bytes(_p), policy=policy.default)))
+    _h = EmailMessage()
+    _h["Subject"] = "s"
+    _h.set_content("<html><body><p>html GWD222222222</p>"
+                   "<style>x{}</style></body></html>", subtype="html")
+    _ht = _extract_text(message_from_bytes(bytes(_h), policy=policy.default))
+    check("html-only is stripped to text",
+          "GWD222222222" in _ht and "<p>" not in _ht)
+    _m = EmailMessage()
+    _m["Subject"] = "s"
+    _m.set_content("alt plain GWD333333333")
+    _m.add_alternative("<p>alt html</p>", subtype="html")
+    check("multipart/alternative prefers plain", "GWD333333333" in
+          _extract_text(message_from_bytes(bytes(_m), policy=policy.default)))
+    _a = EmailMessage()
+    _a["Subject"] = "s"
+    _a.set_content("with attachment GWD444444444")
+    _a.add_attachment(b"\x00\x01binary", maintype="application",
+                      subtype="pdf", filename="x.pdf")
+    check("attachment ignored, text still read", "GWD444444444" in
+          _extract_text(message_from_bytes(bytes(_a), policy=policy.default)))
 
     print("— settings —")
     st = fm.settings()
@@ -137,12 +182,141 @@ def main():
     def _boom(e, p):
         raise RuntimeError("connection refused")
     r3 = fm.add_inbox("other@gmail.com", "pw pw pw pw", verify=_boom)
-    check("verify failure surfaces", not r3["ok"] and "IMAP" in r3["error"])
+    check("refused add is SAVED with its error", r3["ok"]
+          and "IMAP" in r3.get("saved_with_error", ""))
+    with db.connect() as c:
+        row3 = dict(c.execute("SELECT * FROM flag_inboxes WHERE email=?",
+                              ("other@gmail.com",)).fetchone())
+    check("refused row: ⚠ error + NULL cursor, still active",
+          row3["last_error"] and row3["imap_last_uid"] is None
+          and row3["active"] == 1)
+    r4 = fm.add_inbox("watch@gmail.com", "qrst uvwx yzab cdef",
+                      verify=lambda e, p: (7, 99), label="AZ Profile 7")
+    check("re-add sets the profile name in place", r4["ok"] and r4["updated"]
+          and "saved_with_error" not in r4)
+    with db.connect() as c:
+        row4 = dict(c.execute("SELECT label, imap_last_uid FROM flag_inboxes "
+                              "WHERE id=?", (fid,)).fetchone())
+    check("label saved, cursor untouched", row4["label"] == "AZ Profile 7"
+          and row4["imap_last_uid"] == 41)
 
     check("pause", fm.set_active(fid, False)["ok"])
     check("resume", fm.set_active(fid, True)["ok"])
     check("redact hides password", all("app_password" not in a
           and a.get("has_password") for a in fm.inboxes()))
+
+    print("— fake-IMAP poll (NULL-cursor seed + sent_at + GWD harvest) —")
+
+    def _mail(subject, sender, date, mid, body):
+        m = EmailMessage()
+        m["Subject"] = subject
+        m["From"] = sender
+        m["Date"] = date
+        m["Message-ID"] = mid
+        m.set_content(body)
+        return m
+
+    # uid 43 → flagged (keyword in subject) AND carries two parcel numbers
+    _M43 = _mail("Action Required: verify your payment method",
+                 "Amazon <account-update@amazon.com>",
+                 "Wed, 13 Aug 2026 09:15:00 +0300", "<fake-43@amazon.com>",
+                 "held: GWD123456789 and also gwd987654321 — please act")
+    # uid 44 → NOT flagged (no keyword), but still donates its number
+    _M44 = _mail("Your parcel is on the way", "GAASH <no-reply@gaash.com>",
+                 "Wed, 13 Aug 2026 10:00:00 +0300", "<fake-44@gaash.com>",
+                 "shipment GWD555000111 left the warehouse")
+    _MSGS = {43: _M43, 44: _M44}
+
+    class _FakeIMAP:
+        """UIDVALIDITY 7, UIDNEXT 45, messages at uid 43 and 44. Serves the
+        header-only and the partial-body fetch the poll makes."""
+
+        def __init__(self, host=None, port=None):
+            pass
+
+        def login(self, e, p):
+            return ("OK", [b"ok"])
+
+        def status(self, folder, what):
+            return ("OK", [b"INBOX (UIDVALIDITY 7 UIDNEXT 45)"])
+
+        def select(self, folder, readonly=True):
+            return ("OK", [b"1"])
+
+        def uid(self, cmd, *args):
+            if cmd == "search":
+                return ("OK", [b"43 44"])
+            if cmd == "FETCH":
+                uid, spec = int(args[0]), args[1]
+                m = _MSGS.get(uid)
+                if not m:
+                    return ("NO", [])
+                if "HEADER" in spec:
+                    payload = bytes(m).split(b"\r\n\r\n", 1)[0].split(b"\n\n", 1)[0]
+                    return ("OK", [(b"%d (BODY[HEADER])" % uid, payload)])
+                return ("OK", [(b"%d (BODY[]<0>)" % uid, bytes(m))])
+            return ("OK", [])
+
+        def logout(self):
+            return ("OK", [b"bye"])
+
+    import imaplib as _il
+    _real_imap = _il.IMAP4_SSL
+    _il.IMAP4_SSL = _FakeIMAP
+    try:
+        raised = fm.poll_once()
+    finally:
+        _il.IMAP4_SSL = _real_imap
+    # watch@ (cursor 41) sees uid 43 and flags it; other@ (NULL cursor) seeds
+    # at 43 and ingests NOTHING — the whole point of the seed
+    check("cursored inbox flags the new mail, seeded one doesn't", raised == 1)
+    fl = fm.open_flags()
+    check("flag carries sent_at + profile from the join", len(fl) == 1
+          and fl[0]["email"] == "watch@gmail.com"
+          and (fl[0]["sent_at"] or "").startswith("2026-08-13")
+          and fl[0]["profile"] == "AZ Profile 7")
+    with db.connect() as c:
+        row5 = dict(c.execute("SELECT imap_last_uid, last_error FROM "
+                              "flag_inboxes WHERE email=?",
+                              ("other@gmail.com",)).fetchone())
+    check("NULL cursor seeded at newest, error cleared by the clean poll",
+          row5["imap_last_uid"] == 44 and row5["last_error"] is None)
+
+    gw, gw_trunc = fm.gwds()
+    got = sorted(g["gwd"] for g in gw)
+    check("GWDs harvested from flagged AND unflagged mail",
+          got == ["GWD123456789", "GWD555000111", "GWD987654321"]
+          and not gw_trunc)
+    check("GWD rows carry the inbox + its profile",
+          all(g["email"] == "watch@gmail.com" and g["profile"] == "AZ Profile 7"
+              for g in gw))
+    check("the unflagged mail's number is attributed to its own email",
+          [g["subject"] for g in gw if g["gwd"] == "GWD555000111"]
+          == ["Your parcel is on the way"])
+    _il.IMAP4_SSL = _FakeIMAP
+    try:
+        again = fm.poll_once()
+    finally:
+        _il.IMAP4_SSL = _real_imap
+    check("re-poll adds nothing (cursor + unique index)",
+          again == 0 and len(fm.gwds()[0]) == 3)
+
+    print("— history —")
+    hist, htrunc = fm.all_flags()
+    check("history holds the flag, newest first, with profile",
+          len(hist) == 1 and hist[0]["subject"].startswith("Action Required")
+          and hist[0]["profile"] == "AZ Profile 7" and not htrunc)
+    fm.ack_all()
+    hist2, _ = fm.all_flags()
+    check("closed flags STAY in history (the whole point)",
+          len(hist2) == 1 and hist2[0]["state"] == "done"
+          and hist2[0]["done_at"] and not fm.open_flags())
+    check("history limit + truncated flag", fm.all_flags(limit=1)[1] is False)
+    txt = fm._build_message(fl, datetime.now(timezone.utc))
+    check("nag line: profile · email + sent time + done hint",
+          "AZ Profile 7 · watch@gmail.com" in txt and "sent" in txt
+          and "done" in txt)
+    _clear_flags()
 
     print("— dedupe index —")
     _mk_flag("watch@gmail.com", "<m1@x>")
@@ -262,9 +436,23 @@ def main():
 
     print("— configured flips —")
     os.environ.pop("FLAGS_BOT_TOKEN")
-    check("flags_configured false without token", not fm.flags_configured())
+    check("flags_configured false without token", not fm.flags_configured()
+          and fm.flags_missing() == "FLAGS_BOT_TOKEN")
     os.environ["FLAGS_BOT_TOKEN"] = "test:flags"
-    check("flags_configured true again", fm.flags_configured())
+    check("flags_configured true again", fm.flags_configured()
+          and fm.flags_missing() == "")
+    # the 2026-08-14 outage: a good token but no chat id anywhere. The page
+    # must name the MISSING piece, not blame the token.
+    _chat = os.environ.pop("TELEGRAM_CHAT_ID")
+    check("no chat id → not configured, and it says which",
+          not fm.flags_configured() and "CHAT_ID" in fm.flags_missing())
+    os.environ["FLAGS_CHAT_ID"] = "777"
+    check("FLAGS_CHAT_ID alone is enough", fm.flags_configured()
+          and fm._flags_chat() == "777")
+    os.environ["TELEGRAM_CHAT_ID"] = _chat
+    check("FLAGS_CHAT_ID wins over TELEGRAM_CHAT_ID", fm._flags_chat() == "777")
+    os.environ.pop("FLAGS_CHAT_ID")
+    check("falls back to TELEGRAM_CHAT_ID", fm._flags_chat() == _chat)
     _tok = os.environ.pop("TELEGRAM_BOT_TOKEN")
     check("telegram.configured token kwarg",
           not telegram.configured() and telegram.configured(token="t2"))
@@ -286,6 +474,10 @@ def main():
     d = ful.get("/api/flags").get_json()
     check("fulfillment reads", d["ok"] and len(d["flags"]) == 1
           and "settings" in d and "telegram" in d)
+    check("payload carries history + gwds for the table",
+          isinstance(d.get("history"), list) and isinstance(d.get("gwds"), list)
+          and any(h["state"] == "done" for h in d["history"])
+          and "history_truncated" in d)
     check("fulfillment cannot add",
           ful.post("/api/flags/inbox/add", json={}).status_code == 403)
     check("fulfillment cannot save settings",
@@ -302,6 +494,18 @@ def main():
     finally:
         fm._verify_imap = _orig
     check("admin adds via route", d["ok"])
+
+    def _refuse(e, p):
+        raise RuntimeError("conn boom")
+    fm._verify_imap = _refuse
+    try:
+        resp = adm.post("/api/flags/inbox/add",
+                        json={"email": "routefail@gmail.com",
+                              "app_password": "aaaa bbbb cccc dddd"})
+    finally:
+        fm._verify_imap = _orig
+    check("route add keeps a refused inbox (200 + saved_with_error)",
+          resp.status_code == 200 and resp.get_json().get("saved_with_error"))
     d = adm.post("/api/flags/settings", json={"repeat_min": 3}).get_json()
     check("admin saves settings", d["ok"] and d["settings"]["repeat_min"] == 3)
     d = ful.post("/api/flags/done", json={}).get_json()

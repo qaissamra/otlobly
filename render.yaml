@@ -76,6 +76,10 @@ services:
       # ── FLAG_MACHINE=1 itself is dashboard-only, the GAASH_MAILER precedent.       ──
       - key: FLAGS_BOT_TOKEN       # @BotFather token for the 🚩 flags bot
         sync: false
+      - key: FLAGS_CHAT_ID         # where the 🚩 nag goes. Optional — falls back
+        sync: false                # to TELEGRAM_CHAT_ID, but set it and the flags
+                                   # machine never goes dark because the ALERTS
+                                   # bot happens to be unconfigured (2026-08-14)
       - key: WHATSAPP_TOKEN        # permanent token for the WhatsApp Business number
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID

@@ -2216,7 +2216,9 @@ def api_notifications():
                                "type": "flag_open", "icon": "🚩",
                                "title": f"{len(_fl)} إيميل يحتاج إجراء · "
                                         "action-required email(s)",
-                               "sub": (_fl[-1].get("subject") or "")[:80],
+                               "sub": ((f"{_fl[-1]['profile']} — "
+                                        if _fl[-1].get("profile") else "")
+                                       + (_fl[-1].get("subject") or ""))[:80],
                                "view": "flags"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass
@@ -3088,9 +3090,14 @@ def api_gaash_account_uses():
 @auth.require_feature("leluxe")
 def api_flags():
     import flag_machine as fm
+    hist, hist_trunc = fm.all_flags(int(request.args.get("limit") or 200))
+    gw, gw_trunc = fm.gwds()
     return jsonify({"ok": True, "inboxes": fm.inboxes(),
                     "flags": fm.open_flags(), "settings": fm.settings(),
-                    "telegram": fm.flags_configured()})
+                    "telegram": fm.flags_configured(),
+                    "telegram_missing": fm.flags_missing(),
+                    "history": hist, "history_truncated": hist_trunc,
+                    "gwds": gw, "gwds_truncated": gw_trunc})
 
 
 @app.route("/api/flags/inbox/add", methods=["POST"])

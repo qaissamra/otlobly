@@ -1,8 +1,10 @@
 """🚩 Flag machine — email "action required" watch → Telegram nag until done.
 
 Watches any number of Gmail inboxes through IMAP app passwords, PURE
-OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[HEADER]` — nothing is
-ever marked read, no mail is ever sent, the accounts are not linked to
+OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[…]` (headers always,
+plus a 64 KB partial body when GWD collection is on) — PEEK and EXAMINE both
+guarantee nothing is ever marked read; no mail is ever sent, no attachment is
+ever saved, no body text is ever stored, and the accounts are not linked to
 anything. A NEW message whose subject contains a match phrase (default
 "action required") raises an open flag; while any flag is open the owner
 gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
@@ -10,7 +12,9 @@ gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
 are global per user) until they reply «done»/«تم» in that bot's chat. This
 module IS the getUpdates consumer for that token — one consumer per bot
 token, and this token has exactly one (the Mac's telegram_bot polls a
-DIFFERENT token and knows nothing about flags).
+DIFFERENT token and knows nothing about flags). Separately, every message —
+flagged or not — is scanned for GWD parcel numbers, which are collected into
+flag_gwds for the 📦 list (the numbers only, never the text they came from).
 
 Runs ONLY where env FLAG_MACHINE=1 — set in the RENDER DASHBOARD only, the
 GAASH_MAILER precedent (never render.yaml, never the plist, never .env): the
@@ -26,20 +30,26 @@ send-then-stamp discipline from alerts.py.
 import imaplib
 import json
 import os
+import re
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from email import message_from_bytes, policy
 
+from email.utils import parsedate_to_datetime
+
 import db
 import memlog
 import telegram
-from gaash_mail import _AUTH_BLOCKED, _AUTH_HELP, _clean_pw, _mailbox_status
+from gaash_mail import (_AUTH_BLOCKED, _AUTH_HELP, _clean_pw, _extract_text,
+                        _fetch_bytes, _mailbox_status)
 
 IMAP_HOST, IMAP_PORT = "imap.gmail.com", 993
 MAX_SEEN_IDS = 2000                 # per-inbox Message-ID dedupe backstop
 POLL_UID_CAP = 500                  # per pass — the rest arrive next tick
+BODY_UID_CAP = 100                  # …but bodies cost more, so fewer per pass
+BODY_PEEK_BYTES = 65536             # partial fetch: a 20MB attachment costs 64KB
 LIST_CAP = 10                       # flags listed per Telegram message
 SETTINGS_KEY = "flags:settings"
 LEASE_KEY = "flags:lease"
@@ -55,6 +65,7 @@ DEFAULTS = {
     "phrases": ["action required"],   # subject substrings, case-insensitive
     "poll_interval_min": 2,           # IMAP pass cadence
     "repeat_min": 1,                  # nag cadence — the every-minute ask
+    "collect_gwds": True,             # harvest GWD numbers from EVERY message
 }
 
 
@@ -95,6 +106,8 @@ def save_settings(body):
         return None, "intervals must be at least 1 minute"
     if "enabled" in b:
         st["enabled"] = bool(b["enabled"])
+    if "collect_gwds" in b:
+        st["collect_gwds"] = bool(b["collect_gwds"])
     db.set_setting(SETTINGS_KEY, st)
     return st, None
 
@@ -110,9 +123,30 @@ def _flags_token():
     return (os.environ.get("FLAGS_BOT_TOKEN") or "").strip()
 
 
+def _flags_chat():
+    """Where the nag goes: env FLAGS_CHAT_ID, else the alerts bot's chat.
+
+    The fallback is a convenience, not a dependency — 2026-08-14 the flags
+    machine sat mute for hours because TELEGRAM_CHAT_ID had never been set on
+    Render, and the page blamed the (perfectly good) flags token. Own the
+    chat id here so this feature can never again be dark because a DIFFERENT
+    feature is unconfigured."""
+    return ((os.environ.get("FLAGS_CHAT_ID") or "").strip()
+            or telegram._creds()[1])
+
+
+def flags_missing():
+    """Which piece of the flags-bot config is absent — '' when it's ready.
+    Named parts, because 'not configured' cost an afternoon once."""
+    if not _flags_token():
+        return "FLAGS_BOT_TOKEN"
+    if not _flags_chat():
+        return "FLAGS_CHAT_ID (or TELEGRAM_CHAT_ID)"
+    return ""
+
+
 def flags_configured():
-    tok = _flags_token()
-    return bool(tok) and telegram.configured(token=tok)
+    return not flags_missing()
 
 
 _me = None
@@ -177,7 +211,7 @@ def poll_updates(get=None, send=None):
     out = get(offset or None, UPDATES_TIMEOUT_S)
     if not out.get("ok"):
         return []
-    owner = telegram._creds()[1]
+    owner = _flags_chat()
     replies = []
     for u in out.get("result") or []:
         offset = max(offset or 0, u.get("update_id", 0) + 1)
@@ -228,11 +262,17 @@ def _verify_imap(email_addr, pw):
 
 
 def add_inbox(email_addr, app_password, label=None, verify=None):
-    """Verify the IMAP login, then store the inbox. Never raises.
+    """Verify the IMAP login, then store the inbox. Never raises — and never
+    VANISHES: a login Gmail refuses is still saved, with the refusal in
+    last_error, so what the owner typed always shows up in the list (⚠ chip
+    + 🔑 re-add fix; the poll keeps retrying it). The saved row's cursor
+    stays NULL until a login succeeds — the first good poll then seeds at the
+    newest message, so old mail is never flagged.
 
-    Re-adding an email that already exists UPDATES its password in place —
-    the id and cursor survive, so open flags stay bound and no old mail is
-    re-read. That's the recovery path when Google revokes an app password."""
+    Re-adding an email that already exists UPDATES its password (and profile
+    name) in place — the id and cursor survive, so open flags stay bound and
+    no old mail is re-read. That's the recovery path when Google revokes an
+    app password."""
     email_addr = (email_addr or "").strip().lower()
     pw = _clean_pw(app_password)
     if not email_addr or "@" not in email_addr:
@@ -244,38 +284,44 @@ def add_inbox(email_addr, app_password, label=None, verify=None):
                         (email_addr,)).fetchone()
     existing_id = row["id"] if row else None
     uv = un = None
+    err = None
     try:
         uv, un = (verify or _verify_imap)(email_addr, pw)
     except imaplib.IMAP4.error as e:
         # IMAP says WEB_LOGIN_REQUIRED for the block SMTP calls 5.7.14
         said = " ".join(str(e).split())[:200]
         blocked = "web_login" in said.lower() or "webloginrequired" in said.lower()
-        return {"ok": False,
-                "error": (_AUTH_BLOCKED if blocked else _AUTH_HELP)
-                + " (Also make sure IMAP is enabled in Gmail settings.)"
-                + (f" — Gmail said: {said}" if said else "")}
+        err = ((_AUTH_BLOCKED if blocked else _AUTH_HELP)
+               + " (Also make sure IMAP is enabled in Gmail settings.)"
+               + (f" — Gmail said: {said}" if said else ""))
     except Exception as e:  # noqa
-        return {"ok": False, "error": f"IMAP connection failed: {str(e)[:120]}"}
+        err = f"IMAP connection failed: {str(e)[:120]}"
     if existing_id:
         with db.connect() as c:
-            c.execute("UPDATE flag_inboxes SET app_password=?, last_error=NULL "
-                      "WHERE id=?", (pw, existing_id))
+            c.execute("UPDATE flag_inboxes SET app_password=?, last_error=? "
+                      "WHERE id=?", (pw, err, existing_id))
             if (label or "").strip():
                 c.execute("UPDATE flag_inboxes SET label=? WHERE id=?",
                           ((label or "").strip(), existing_id))
-        return {"ok": True, "id": existing_id, "email": email_addr,
-                "updated": True}
-    fid = f"fin_{int(time.time() * 1000)}"
-    with db.connect() as c:
-        c.execute("""INSERT INTO flag_inboxes
-            (id,email,label,app_password,active,added_at,
-             imap_uidvalidity,imap_last_uid,seen_ids_json)
-            VALUES (?,?,?,?,1,?,?,?,?)""",
-                  (fid, email_addr, (label or "").strip() or None, pw,
-                   db.now_iso(), uv,
-                   max(0, (un or 1) - 1),   # start at newest: never flag old mail
-                   "[]"))
-    return {"ok": True, "id": fid, "email": email_addr}
+        out = {"ok": True, "id": existing_id, "email": email_addr,
+               "updated": True}
+    else:
+        fid = f"fin_{int(time.time() * 1000)}"
+        with db.connect() as c:
+            c.execute("""INSERT INTO flag_inboxes
+                (id,email,label,app_password,active,added_at,last_error,
+                 imap_uidvalidity,imap_last_uid,seen_ids_json)
+                VALUES (?,?,?,?,1,?,?,?,?,?)""",
+                      (fid, email_addr, (label or "").strip() or None, pw,
+                       db.now_iso(), err, uv,
+                       # start at newest: never flag old mail. Verify failed →
+                       # NULL cursor; the first GOOD poll seeds it instead.
+                       None if err else max(0, (un or 1) - 1),
+                       "[]"))
+        out = {"ok": True, "id": fid, "email": email_addr}
+    if err:
+        out["saved_with_error"] = err
+    return out
 
 
 def remove_inbox(inbox_id):
@@ -299,6 +345,19 @@ def set_active(inbox_id, active):
 # --------------------------------------------------------------------------- #
 # Matching
 # --------------------------------------------------------------------------- #
+def _parse_date_hdr(s):
+    """The email's own Date header → ISO string, or None on garbage."""
+    try:
+        dt = parsedate_to_datetime(str(s or ""))
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().isoformat(timespec="seconds")
+    except Exception:  # noqa
+        return None
+
+
 def match_subject(subject, phrases):
     """The phrase that fires, or None. Case/whitespace-insensitive substring
     match against the ALREADY-DECODED subject (policy.default did RFC2047)."""
@@ -310,20 +369,47 @@ def match_subject(subject, phrases):
     return None
 
 
+# GAASH parcel numbers as they appear in prose. Digits only, no separators —
+# no dash/space variant exists anywhere in this codebase, so don't invent one.
+# (leluxe.GWD_CANON's "GWD + 9 digits" is advisory; never gate on the length.)
+GWD_RE = re.compile(r"GWD\d+", re.I)
+
+
+def gwd_tokens(text):
+    """Every GWD number in free text — uppercased, deduped, first-seen order."""
+    out, seen = [], set()
+    for m in GWD_RE.findall(str(text or "")):
+        g = m.upper()
+        if g not in seen:
+            seen.add(g)
+            out.append(g)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Poll pass — read new mail, raise flags
 # --------------------------------------------------------------------------- #
-def _check_inbox(inbox, phrases):
-    """Poll one Gmail INBOX header-only. Returns (new_flags, patch).
-    Raises on connection errors (poll_once catches per inbox)."""
+def _check_inbox(inbox, phrases, collect_gwds=False):
+    """Poll one Gmail INBOX. Returns (new_flags, new_gwds, patch).
+    Raises on connection errors (poll_once catches per inbox).
+
+    A flag needs the header only. GWD collection needs the text of EVERY
+    message, so it takes a second fetch — a 64 KB PARTIAL, which keeps a
+    20 MB attachment down to 64 KB and is plenty for numbers quoted in the
+    body. Attachments are never saved; the text is scanned and dropped."""
     seen = set(json.loads(inbox.get("seen_ids_json") or "[]"))
     last = int(inbox.get("imap_last_uid") or 0)
-    new_flags = []
+    new_flags, new_gwds = [], []
+    cap = BODY_UID_CAP if collect_gwds else POLL_UID_CAP
 
     M = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
     try:
         M.login(inbox["email"], _clean_pw(inbox.get("app_password")))
         uv, un = _mailbox_status(M)
+        if inbox.get("imap_last_uid") is None:
+            # saved-with-error row logging in for the first time: seed at the
+            # newest message — a 0 cursor would ingest the ENTIRE mailbox
+            last = max(0, (un or 1) - 1)
         if uv and inbox.get("imap_uidvalidity") and uv != inbox["imap_uidvalidity"]:
             last = max(0, (un or 1) - 1)   # mailbox renumbered — resume at the end
         M.select("INBOX", readonly=True)
@@ -332,7 +418,7 @@ def _check_inbox(inbox, phrases):
         if typ == "OK" and data and data[0]:
             # IMAP quirk: "n:*" past the end still returns the last UID
             uids = sorted(u for u in (int(x) for x in data[0].split()) if u > last)
-        uids = uids[:POLL_UID_CAP]         # cursor advances only through processed
+        uids = uids[:cap]                  # cursor advances only through processed
         max_uid = last
         for uid in uids:
             max_uid = max(max_uid, uid)
@@ -353,12 +439,28 @@ def _check_inbox(inbox, phrases):
                 continue
             seen.add(mid)
             subj = str(hm.get("Subject") or "")
+            sender = str(hm.get("From") or "")
+            if collect_gwds:
+                # every message, flagged or not — the owner wants every parcel
+                # number that lands in the mailbox, not only the shouty ones
+                text = subj
+                raw = _fetch_bytes(M, uid, f"(BODY.PEEK[]<0.{BODY_PEEK_BYTES}>)")
+                if raw:
+                    try:
+                        text += "\n" + _extract_text(
+                            message_from_bytes(raw, policy=policy.default))
+                    except Exception:  # noqa - a mangled body ≠ a lost poll
+                        pass
+                for g in gwd_tokens(text):
+                    new_gwds.append({"gwd": g, "msg_id": mid, "subject": subj,
+                                     "sender": sender})
             phrase = match_subject(subj, phrases)
             if not phrase:
                 continue
             new_flags.append({"msg_id": mid, "uid": uid, "subject": subj,
-                              "sender": str(hm.get("From") or ""),
-                              "matched_phrase": phrase})
+                              "sender": sender,
+                              "matched_phrase": phrase,
+                              "sent_at": _parse_date_hdr(hm.get("Date"))})
     finally:
         try:
             M.logout()
@@ -369,7 +471,7 @@ def _check_inbox(inbox, phrases):
              "imap_uidvalidity": uv or inbox.get("imap_uidvalidity"),
              "last_check": db.now_iso(),
              "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:])}
-    return new_flags, patch
+    return new_flags, new_gwds, patch
 
 
 def poll_once():
@@ -384,7 +486,8 @@ def poll_once():
     raised = 0
     for a in boxes:
         try:
-            flags, patch = _check_inbox(a, st["phrases"])
+            flags, found, patch = _check_inbox(a, st["phrases"],
+                                               collect_gwds=st["collect_gwds"])
         except Exception as e:  # noqa
             msg = str(e)[:150]
             if "AUTHENTICATIONFAILED" in msg.upper():
@@ -407,12 +510,21 @@ def poll_once():
                 # unique (email, msg_id) absorbs any UIDVALIDITY-overlap re-read
                 cur = c.execute("""INSERT OR IGNORE INTO flag_alerts
                     (inbox_id,email,msg_id,uid,subject,sender,matched_phrase,
-                     created_at,state,sent_count)
-                    VALUES (?,?,?,?,?,?,?,?, 'open', 0)""",
+                     sent_at,created_at,state,sent_count)
+                    VALUES (?,?,?,?,?,?,?,?,?, 'open', 0)""",
                                 (a["id"], a["email"], f["msg_id"], f["uid"],
                                  f["subject"], f["sender"], f["matched_phrase"],
+                                 f.get("sent_at") or db.now_iso(),
                                  db.now_iso()))
                 raised += cur.rowcount
+            for g in found:
+                # one row per number per inbox — a number quoted in ten emails
+                # is still one line in the list to export
+                c.execute("""INSERT OR IGNORE INTO flag_gwds
+                    (gwd,inbox_id,email,msg_id,subject,sender,seen_at)
+                    VALUES (?,?,?,?,?,?,?)""",
+                          (g["gwd"], a["id"], a["email"], g["msg_id"],
+                           g["subject"], g["sender"], db.now_iso()))
     return raised
 
 
@@ -420,9 +532,38 @@ def poll_once():
 # Alert pass — the repeating nag
 # --------------------------------------------------------------------------- #
 def open_flags():
+    """Open flags + each one's profile name (the inbox label — NULL when the
+    inbox was removed or never labeled; the flag's own email copy survives).
+    One query feeds the UI, the Telegram nag and the bell alike."""
     with db.connect() as c:
         return [dict(r) for r in c.execute(
-            "SELECT * FROM flag_alerts WHERE state='open' ORDER BY created_at")]
+            "SELECT a.*, i.label AS profile FROM flag_alerts a "
+            "LEFT JOIN flag_inboxes i ON i.id = a.inbox_id "
+            "WHERE a.state='open' ORDER BY a.created_at")]
+
+
+def all_flags(limit=200):
+    """Every flagged email ever, newest first — the 🚩 history table. Closing
+    a flag only sets state='done', so nothing here was ever lost; it simply
+    had nowhere to be shown. Returns (rows, truncated)."""
+    limit = max(1, min(int(limit or 200), 1000))
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT a.*, i.label AS profile FROM flag_alerts a "
+            "LEFT JOIN flag_inboxes i ON i.id = a.inbox_id "
+            "ORDER BY a.created_at DESC LIMIT ?", (limit + 1,))]
+    return rows[:limit], len(rows) > limit
+
+
+def gwds(limit=200):
+    """Collected GWD numbers, newest first. Returns (rows, truncated)."""
+    limit = max(1, min(int(limit or 200), 1000))
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT g.*, i.label AS profile FROM flag_gwds g "
+            "LEFT JOIN flag_inboxes i ON i.id = g.inbox_id "
+            "ORDER BY g.seen_at DESC, g.id DESC LIMIT ?", (limit + 1,))]
+    return rows[:limit], len(rows) > limit
 
 
 def _parse_iso(s):
@@ -445,14 +586,28 @@ def _age(now, iso):
     return f"{m // (60 * 24)}d"
 
 
+def _sent_label(now, iso):
+    """When the email was sent: clock time if within a day, else age."""
+    dt = _parse_iso(iso or "")
+    if not dt:
+        return None
+    if (now - dt).total_seconds() < 86400:
+        return dt.astimezone().strftime("%H:%M")
+    return _age(now, iso)
+
+
 def _build_message(flags, now):
     lines = [f"🚩 ACTION REQUIRED — {len(flags)} تنبيه مفتوح · open flag(s)", ""]
     for i, f in enumerate(flags[:LIST_CAP], 1):
-        sent = f" (sent {f['sent_count']}×)" if f.get("sent_count") else ""
-        lines.append(f"{i}) {f['email']}")
+        nagged = f" (sent {f['sent_count']}×)" if f.get("sent_count") else ""
+        who = (f"{f['profile']} · {f['email']}" if f.get("profile")
+               else f["email"])
+        lines.append(f"{i}) {who}")
         lines.append(f"   «{(f.get('subject') or '(no subject)')[:120]}»")
-        lines.append(f"   from: {(f.get('sender') or '?')[:80]} · "
-                     f"open {_age(now, f.get('created_at'))}{sent}")
+        at = _sent_label(now, f.get("sent_at"))
+        lines.append(f"   from: {(f.get('sender') or '?')[:80]}"
+                     + (f" · أُرسل · sent {at}" if at else "")
+                     + f" · open {_age(now, f.get('created_at'))}{nagged}")
     if len(flags) > LIST_CAP:
         lines.append(f"(+{len(flags) - LIST_CAP} أخرى · more)")
     lines += ["", "رد «done» أو «تم» هنا · "
@@ -467,7 +622,8 @@ def alert_once(now=None, send=None):
     retry next tick). A db.claim_once on the minute bucket makes the send
     exactly-once across gunicorn workers: the lease read-then-write is not
     atomic, so a lease race alone could double-nag — the claim cannot."""
-    send = send or (lambda t: telegram.send(t, token=_flags_token()))
+    send = send or (lambda t: telegram.send_to(_flags_chat(), t,
+                                               token=_flags_token()))
     now = now or datetime.now(timezone.utc)
     flags = open_flags()
     if not flags or not flags_configured():
