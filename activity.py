@@ -179,7 +179,7 @@ def platform_recent(businesses, limit=100):
 _PO_FIELDS = ("amazon_order_number", "ship_to", "profile_box", "order_placed",
               "total_usd", "total_aed", "status")
 _PKG_FIELDS = ("arrival", "tracking_number", "otlobly_status", "gaash_docs_at",
-               "gaash_deadline")
+               "gaash_deadline", "rd_number")
 _ITEM_FIELDS = ("title", "asin", "customer_name", "qty", "status", "notes")
 
 

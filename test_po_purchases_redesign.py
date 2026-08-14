@@ -91,6 +91,35 @@ def main():
     check("customer-grouped item rows survive", 'class="poc-cust' in html and "itemEditOpen(" in html)
     check("3-word name clip survives", "const short3=" in html)
 
+    # 9) 🟢 RD number — own column on BOTH package tables, green pill, inline
+    # editor + the ⋯ → Edit package field the owner asked for.
+    check("rdnum column registered on the package tables",
+          html.count('{key:"rdnum"') == 2)
+    check("RD cell renders green and edits inline",
+          "function pkgRdCell(" in html and 'tonePill("green"' in html
+          and "function pkgRdEdit(" in html and "pk.rd_number=" in html)
+    check("RD cell wired into the tree row AND the flat package row",
+          html.count("rdnum: pkgRdCell(p,pk,pi)") == 2)
+    check("RD field in the edit-package sheet",
+          "pkeSet('rd_number',this.value)" in html)
+    check("RD column sorts", 'if(key==="rdnum")' in html)
+
+    # 10) 📷 package photos — admin-only gallery + ⌘V paste + row badge.
+    check("package photo gallery + paste handler",
+          all(s in html for s in ("function pkgPhotosHtml(", "function pkgPhotoDel(",
+                                  "/api/purchase/package/image",
+                                  '$("pkgInfoModal").classList.contains("hidden")')))
+    check("photo section is admin-gated", "CAN_ADMIN?sec('📷" in html.replace(" ", "")
+          or "const pkgImgSec=CAN_ADMIN?sec(" in html)
+    check("paste handler refuses non-admins", "if(!PKG_INFO||!CAN_ADMIN" in html)
+    check("📷N badge on both package rows",
+          "function pkgPhotoBadge(" in html and html.count("${pkgPhotoBadge(pk)}") == 2)
+
+    # 11) the popup's product thumbs can no longer be squeezed to nothing by the
+    # pill row beside them (the "I don't see the image" report)
+    check("popup thumb strip is flex:0 0 auto",
+          '<span style="flex:0 0 auto">${poThumbStrip(pk.items,6)}</span>' in html)
+
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     return 0 if not fails else 1
 
