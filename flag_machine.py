@@ -50,6 +50,7 @@ MAX_SEEN_IDS = 2000                 # per-inbox Message-ID dedupe backstop
 POLL_UID_CAP = 500                  # per pass — the rest arrive next tick
 BODY_UID_CAP = 100                  # …but bodies cost more, so fewer per pass
 BODY_PEEK_BYTES = 65536             # partial fetch: a 20MB attachment costs 64KB
+LAST_SEEN_CAP = 12                  # per-inbox "what did it actually read" ring
 LIST_CAP = 10                       # flags listed per Telegram message
 SETTINGS_KEY = "flags:settings"
 LEASE_KEY = "flags:lease"
@@ -242,6 +243,10 @@ def inboxes(redact=True):
             "SELECT * FROM flag_inboxes ORDER BY added_at")]
     for a in rows:
         a.pop("seen_ids_json", None)
+        try:
+            a["last_seen"] = list(reversed(json.loads(a.pop("last_seen_json", None) or "[]")))
+        except (ValueError, TypeError):
+            a["last_seen"] = []
         if redact:
             a["has_password"] = bool(a.pop("app_password", None))
     return rows
@@ -410,7 +415,7 @@ def _check_inbox(inbox, phrases, collect_gwds=False):
     body. Attachments are never saved; the text is scanned and dropped."""
     seen = set(json.loads(inbox.get("seen_ids_json") or "[]"))
     last = int(inbox.get("imap_last_uid") or 0)
-    new_flags, new_gwds = [], []
+    new_flags, new_gwds, seen_log = [], [], []
     cap = BODY_UID_CAP if collect_gwds else POLL_UID_CAP
 
     M = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
@@ -442,6 +447,11 @@ def _check_inbox(inbox, phrases, collect_gwds=False):
                         hdr = bytes(item[1])
                         break
             if not hdr:
+                # the cursor has already moved past this uid, so a silent skip
+                # would lose the message forever with nothing to show for it
+                seen_log.append({"uid": uid, "subject": "", "sender": "",
+                                 "at": db.now_iso(), "hit": False,
+                                 "note": "header fetch failed"})
                 continue
             hm = message_from_bytes(hdr, policy=policy.default)
             mid = (str(hm.get("Message-ID") or "")).strip() or \
@@ -466,6 +476,11 @@ def _check_inbox(inbox, phrases, collect_gwds=False):
                     new_gwds.append({"gwd": g, "msg_id": mid, "subject": subj,
                                      "sender": sender})
             phrase = match_subject(subj, phrases)
+            seen_log.append({"uid": uid, "subject": subj[:120],
+                             "sender": sender[:80], "at": db.now_iso(),
+                             "hit": bool(phrase),
+                             "gwds": [g["gwd"] for g in new_gwds
+                                      if g["msg_id"] == mid]})
             if not phrase:
                 continue
             new_flags.append({"msg_id": mid, "uid": uid, "subject": subj,
@@ -481,7 +496,10 @@ def _check_inbox(inbox, phrases, collect_gwds=False):
     patch = {"imap_last_uid": max_uid if uids else last,
              "imap_uidvalidity": uv or inbox.get("imap_uidvalidity"),
              "last_check": db.now_iso(),
-             "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:])}
+             "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:]),
+             "last_seen_json": json.dumps(
+                 (json.loads(inbox.get("last_seen_json") or "[]") + seen_log)[-LAST_SEEN_CAP:],
+                 ensure_ascii=False)}
     return new_flags, new_gwds, patch
 
 
@@ -514,9 +532,10 @@ def poll_once():
         with db.connect() as c:
             c.execute("UPDATE flag_inboxes SET imap_last_uid=?, "
                       "imap_uidvalidity=?, last_check=?, last_error=NULL, "
-                      "seen_ids_json=? WHERE id=?",
+                      "seen_ids_json=?, last_seen_json=? WHERE id=?",
                       (patch["imap_last_uid"], patch["imap_uidvalidity"],
-                       patch["last_check"], patch["seen_ids_json"], a["id"]))
+                       patch["last_check"], patch["seen_ids_json"],
+                       patch["last_seen_json"], a["id"]))
             for f in flags:
                 # unique (email, msg_id) absorbs any UIDVALIDITY-overlap re-read
                 cur = c.execute("""INSERT OR IGNORE INTO flag_alerts
