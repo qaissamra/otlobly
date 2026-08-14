@@ -207,7 +207,7 @@
      overflow:visible + z-index:40 on open — collapsing the h-scroll container
      (sticky pin + header desync) and painting rows OVER the topbar. Don't
      re-add them. */
-  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop,.od-cols .lxc>.pop,.cu-cols .lxc>.pop,.dp-cols .lxc>.pop,.ct-cols .lxc>.pop,.ic-cols .lxc>.pop,.tr-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc>.pop,.lx-pcols .lxc>.pop,.lx-kcols .lxc>.pop,.po-cols .lxc>.pop,.pok-cols .lxc>.pop,.pop-cols .lxc>.pop,.bs-cols .lxc>.pop,.wf-cols .lxc>.pop,.en-cols .lxc>.pop,.od-cols .lxc>.pop,.cu-cols .lxc>.pop,.dp-cols .lxc>.pop,.ct-cols .lxc>.pop,.ic-cols .lxc>.pop,.tr-cols .lxc>.pop,.fh-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -441,6 +441,7 @@
   .ct-cols{display:grid;grid-template-columns:var(--ctgrid,80px 96px 120px 150px 56px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .ic-cols{display:grid;grid-template-columns:var(--icgrid,200px 100px 200px);gap:6px;align-items:center;flex:0 0 auto}
   .tr-cols{display:grid;grid-template-columns:var(--trgrid,110px 96px 96px 240px);gap:6px;align-items:center;flex:0 0 auto}
+  .fh-cols{display:grid;grid-template-columns:var(--fhgrid,150px 120px 90px 150px 74px 90px 64px 150px);gap:6px;align-items:center;flex:0 0 auto}
   /* 📧 enroll picker: the ONLY .bt-* table that lives inside a modal. Its
      sticky header is tuned to the page topbar (top:70px) — reset it to the
      modal body, cap the scroll box, and let a cell dropdown escape the box. */
@@ -626,17 +627,17 @@
   }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc,.od-cols .lxc,.cu-cols .lxc,.dp-cols .lxc,.ct-cols .lxc,.ic-cols .lxc,.tr-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
-  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b,.od-cols .lxc>.pill,.od-cols .lxc>span,.od-cols .lxc>b,.cu-cols .lxc>.pill,.cu-cols .lxc>span,.cu-cols .lxc>b,.dp-cols .lxc>.pill,.dp-cols .lxc>span,.dp-cols .lxc>b,.ct-cols .lxc>span,.ct-cols .lxc>b,.ic-cols .lxc>span,.ic-cols .lxc>b,.tr-cols .lxc>span,.tr-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lx-cols .lxc,.lx-pcols .lxc,.lx-kcols .lxc,.po-cols .lxc,.pok-cols .lxc,.pop-cols .lxc,.bs-cols .lxc,.wf-cols .lxc,.en-cols .lxc,.od-cols .lxc,.cu-cols .lxc,.dp-cols .lxc,.ct-cols .lxc,.ic-cols .lxc,.tr-cols .lxc,.fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
+  .lx-cols .lxc>.pill,.lx-cols .lxc>span,.lx-cols .lxc>b,.lx-pcols .lxc>.pill,.lx-pcols .lxc>span,.lx-pcols .lxc>select,.lx-kcols .lxc>.pill,.lx-kcols .lxc>span,.lx-kcols .lxc>b,.po-cols .lxc>.pill,.po-cols .lxc>span,.po-cols .lxc>b,.pok-cols .lxc>.pill,.pok-cols .lxc>span,.pok-cols .lxc>b,.pop-cols .lxc>.pill,.pop-cols .lxc>span,.pop-cols .lxc>b,.bs-cols .lxc>.pill,.bs-cols .lxc>span,.bs-cols .lxc>b,.wf-cols .lxc>.pill,.wf-cols .lxc>span,.wf-cols .lxc>b,.en-cols .lxc>.pill,.en-cols .lxc>span,.en-cols .lxc>b,.od-cols .lxc>.pill,.od-cols .lxc>span,.od-cols .lxc>b,.cu-cols .lxc>.pill,.cu-cols .lxc>span,.cu-cols .lxc>b,.dp-cols .lxc>.pill,.dp-cols .lxc>span,.dp-cols .lxc>b,.ct-cols .lxc>span,.ct-cols .lxc>b,.ic-cols .lxc>span,.ic-cols .lxc>b,.tr-cols .lxc>span,.tr-cols .lxc>b,.fh-cols .lxc>span,.fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead,.en-colhead,.od-colhead,.cu-colhead,.dp-colhead,.ct-colhead,.ic-colhead,.tr-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
-  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl,.en-colhead .lbl,.od-colhead .lbl,.cu-colhead .lbl,.dp-colhead .lbl,.ct-colhead .lbl,.ic-colhead .lbl,.tr-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort,.en-colhead .lx-sort,.od-colhead .lx-sort,.cu-colhead .lx-sort,.dp-colhead .lx-sort,.ct-colhead .lx-sort,.ic-colhead .lx-sort,.tr-colhead .lx-sort{cursor:pointer;user-select:none}
-  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover,.en-colhead .lx-sort:hover,.od-colhead .lx-sort:hover,.cu-colhead .lx-sort:hover,.dp-colhead .lx-sort:hover,.ct-colhead .lx-sort:hover,.ic-colhead .lx-sort:hover,.tr-colhead .lx-sort:hover{color:var(--ink)}
+  .lx-colhead,.lx-pcolhead,.lx-kcolhead,.po-colhead,.pok-colhead,.pop-colhead,.bs-colhead,.wf-colhead,.en-colhead,.od-colhead,.cu-colhead,.dp-colhead,.ct-colhead,.ic-colhead,.tr-colhead,.fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}
+  .lx-colhead .lbl,.lx-pcolhead .lbl,.lx-kcolhead .lbl,.po-colhead .lbl,.pok-colhead .lbl,.pop-colhead .lbl,.bs-colhead .lbl,.wf-colhead .lbl,.en-colhead .lbl,.od-colhead .lbl,.cu-colhead .lbl,.dp-colhead .lbl,.ct-colhead .lbl,.ic-colhead .lbl,.tr-colhead .lbl,.fh-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-colhead .lx-sort,.lx-pcolhead .lx-sort,.lx-kcolhead .lx-sort,.po-colhead .lx-sort,.pok-colhead .lx-sort,.pop-colhead .lx-sort,.bs-colhead .lx-sort,.wf-colhead .lx-sort,.en-colhead .lx-sort,.od-colhead .lx-sort,.cu-colhead .lx-sort,.dp-colhead .lx-sort,.ct-colhead .lx-sort,.ic-colhead .lx-sort,.tr-colhead .lx-sort,.fh-colhead .lx-sort{cursor:pointer;user-select:none}
+  .lx-colhead .lx-sort:hover,.lx-pcolhead .lx-sort:hover,.lx-kcolhead .lx-sort:hover,.po-colhead .lx-sort:hover,.pok-colhead .lx-sort:hover,.pop-colhead .lx-sort:hover,.bs-colhead .lx-sort:hover,.wf-colhead .lx-sort:hover,.en-colhead .lx-sort:hover,.od-colhead .lx-sort:hover,.cu-colhead .lx-sort:hover,.dp-colhead .lx-sort:hover,.ct-colhead .lx-sort:hover,.ic-colhead .lx-sort:hover,.tr-colhead .lx-sort:hover,.fh-colhead .lx-sort:hover{color:var(--ink)}
   /* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl,.en-colhead .en-cols .lbl,.od-colhead .od-cols .lbl,.cu-colhead .cu-cols .lbl,.dp-colhead .dp-cols .lbl,.ct-colhead .ct-cols .lbl,.ic-colhead .ic-cols .lbl,.tr-colhead .tr-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl,.lx-pcolhead .lx-pcols .lbl,.lx-kcolhead .lx-kcols .lbl,.po-colhead .po-cols .lbl,.pok-colhead .pok-cols .lbl,.pop-colhead .pop-cols .lbl,.bs-colhead .bs-cols .lbl,.wf-colhead .wf-cols .lbl,.en-colhead .en-cols .lbl,.od-colhead .od-cols .lbl,.cu-colhead .cu-cols .lbl,.dp-colhead .dp-cols .lbl,.ct-colhead .ct-cols .lbl,.ic-colhead .ic-cols .lbl,.tr-colhead .tr-cols .lbl,.fh-colhead .fh-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -835,7 +836,7 @@
   .bt-wrap .poc-meta{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}
-  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin,.bs-colhead .bt-pin,.en-colhead .bt-pin,.od-colhead .bt-pin,.cu-colhead .bt-pin,.dp-colhead .bt-pin,.ct-colhead .bt-pin,.ic-colhead .bt-pin,.tr-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .lx-colhead .bt-pin,.lx-pcolhead .bt-pin,.lx-kcolhead .bt-pin,.po-colhead .bt-pin,.pok-colhead .bt-pin,.pop-colhead .bt-pin,.wf-colhead .bt-pin,.bs-colhead .bt-pin,.en-colhead .bt-pin,.od-colhead .bt-pin,.cu-colhead .bt-pin,.dp-colhead .bt-pin,.ct-colhead .bt-pin,.ic-colhead .bt-pin,.tr-colhead .bt-pin,.fh-colhead .bt-pin{background:var(--bg);align-self:auto}
   /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
   .wf-row:hover{background:var(--bg2)}
   .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
@@ -1312,7 +1313,16 @@
       <span class="muted2" style="font-size:12px" data-en="watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done" data-ar="يراقب صناديق Gmail للقراءة فقط — أي إيميل جديد عنوانه فيه “action required” ينبّه على تيليجرام كل دقيقة حتى ترد done">watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done</span></div>
     <div class="panel" style="max-width:760px"><div id="flagOpenBox" class="muted2" style="font-size:12px">loading…</div></div>
     <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagInboxBox"></div></div>
+    <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagGwdBox"></div></div>
     <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagSettingsBox"></div></div>
+    <div class="panel" style="margin-top:14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b style="font-size:13px">🗒 <span data-en="history — every flagged email" data-ar="السجل — كل إيميل تم تعليمه">history — every flagged email</span></b>
+        <span class="spacer" style="flex:1"></span>
+        <input id="flagHistFilter" oninput="flagHistDraw()" placeholder="🔎 بحث · filter" style="width:190px">
+      </div>
+      <div id="flagHistMount" style="margin-top:8px"></div>
+    </div>
   </div>
 
   <!-- Admin Settings -->
@@ -3447,6 +3457,7 @@ const LX_TABLES={
   "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
   "ic": {key:"ic_colw", varn:"--icgrid",  head:".ic-colhead .ic-cols",   rows:"cartList"},
   "tr": {key:"tr_colw", varn:"--trgrid",  head:".tr-colhead .tr-cols",   rows:"trashList"},
+  "fh": {key:"fh_colw", varn:"--fhgrid",  head:".fh-colhead .fh-cols",   rows:"flagHistMount"},
 };
 function lxColwGet(tbl){ try{ return JSON.parse(localStorage.getItem(LX_TABLES[tbl].key)||"null"); }catch(e){ return null; } }
 function lxColwSet(tbl,arr){ try{ arr?localStorage.setItem(LX_TABLES[tbl].key,JSON.stringify(arr)):localStorage.removeItem(LX_TABLES[tbl].key); }catch(e){} }
@@ -4051,6 +4062,16 @@ const LXT_COLS={
     {key:"desc",     label:"الوصف · description",    w:170},
     {key:"menu",     label:"",             w:28,  locked:true},
   ],
+  // 🚩 flag history — every flagged email ever, open and closed alike
+  "fh":[
+    {key:"sender",  label:"من · from",                w:170, sortable:true},
+    {key:"profile", label:"البروفايل · profile",      w:110, sortable:true},
+    {key:"inbox",   label:"الصندوق · inbox",          w:170, sortable:true},
+    {key:"state",   label:"الحالة · state",           w:84,  sortable:true},
+    {key:"closed",  label:"أُغلق · closed",           w:104, sortable:true},
+    {key:"nagged",  label:"تنبيهات · nagged",         w:74,  sortable:true},
+    {key:"gwds",    label:"أرقام الطرود · GWD",       w:150},
+  ],
 };
 const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],"po":["po-colhead","po-cols"],
@@ -4059,10 +4080,10 @@ const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "en":["en-colhead","en-cols"],"od":["od-colhead","od-cols"],
                "cu":["cu-colhead","cu-cols"],"dp":["dp-colhead","dp-cols"],
                "ct":["ct-colhead","ct-cols"],"ic":["ic-colhead","ic-cols"],
-               "tr":["tr-colhead","tr-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","ic":"","tr":" pin-md"};
+               "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
+const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","ic":"","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop","bs","wf","en","od","cu","dp","ct","ic","tr"].forEach(t=>{
+["","p","k","po","pok","pop","bs","wf","en","od","cu","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -13438,14 +13459,69 @@ function flagDraw(){
       <input id="flagAcName" placeholder="${T("اسم البروفايل (اختياري) · profile name (optional)")}" style="flex:1;min-width:130px">
       <button class="minibtn" onclick="flagInboxAdd(this)">＋ ${T("أضف · Add")}</button></div>
     <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("لتحديث كلمة المرور أو اسم البروفايل أعد إدخال نفس البريد · to update an inbox's password or profile name, re-add the same email")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
+  const gb=$("flagGwdBox"), gws=f.gwds||[];
+  if(gb) gb.innerHTML=`
+    <b style="font-size:13px">📦 ${T("أرقام الطرود المجمّعة · tracking numbers collected")} (${gws.length})</b>
+    <div class="muted2" style="font-size:11px;margin-top:2px">${T("كل رقم GWD يظهر في أي إيميل يصل الصناديق المراقبة — حتى لو ما كان فيه كلمة التنبيه · every GWD seen in ANY watched mail, keyword or not")}</div>
+    ${gws.map(g=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);margin-top:5px;font-size:12.5px">
+      <span class="mono"><b>${poEsc(g.gwd)}</b></span>${lxCopyRawBtn(g.gwd)}
+      ${g.profile?`<span class="pill">${poEsc(g.profile)}</span>`:""}
+      <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(g.subject||"")}</span>
+      <span class="spacer"></span>
+      <span class="muted2" style="flex:none;font-size:11px" title="${poEsc(g.seen_at||"")}">${poEsc(relTime(g.seen_at))}</span></div>`).join("")
+      ||`<div class="muted2" style="font-size:12px;padding:6px 0">${T("لا أرقام بعد · none yet")}</div>`}`;
   sb.innerHTML=`
     <b style="font-size:13px">⚙ ${T("إعدادات المراقبة · watch settings")}</b>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px;margin-top:6px">
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="flagSetOn" ${s.enabled?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>${T("مفعّل · enabled")}</b></label>
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer" title="${T("يقرأ نص كل إيميل ليلتقط أرقام GWD — بدون فتحه أو تعليمه مقروء · reads each email's text to catch GWD numbers — never marks anything read")}"><input type="checkbox" id="flagSetGwd" ${s.collect_gwds?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>📦 ${T("اجمع أرقام الطرود · collect GWDs")}</b></label>
       <label>${T("عبارات المطابقة · match phrases")}: <input id="flagSetPhr" value="${poEsc((s.phrases||[]).join(", "))}" style="width:230px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق عنوان الإيميل بغض النظر عن حالة الأحرف · comma-separated — matched inside the subject, case-insensitive")}"></label>
       <label>${T("فحص البريد كل (دقائق) · check mail every (min)")}: <input id="flagSetPoll" type="number" min="1" value="${s.poll_interval_min||2}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
       <label>${T("تكرار التنبيه كل (دقائق) · repeat alert every (min)")}: <input id="flagSetRep" type="number" min="1" value="${s.repeat_min||1}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
       ${CAN_ADMIN?`<button class="accent" onclick="flagSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
+  flagHistDraw();
+}
+// ── 🗒 history: every flagged email, open and closed. Closing a flag only
+// marks it done — nothing is ever deleted, it just had nowhere to be seen.
+function fhSortVal(r,k){
+  if(k==="sender")  return (r.sender||"").toLowerCase();
+  if(k==="profile") return (r.profile||"").toLowerCase();
+  if(k==="inbox")   return (r.email||"").toLowerCase();
+  if(k==="state")   return r.state||"";
+  if(k==="closed")  return r.done_at||"";
+  if(k==="nagged")  return r.sent_count||0;
+  return r.created_at||"";
+}
+function flagHistDraw(){
+  const mount=$("flagHistMount"); if(!mount) return;
+  const term=(($("flagHistFilter")||{}).value||"").trim().toLowerCase();
+  const byMsg={};                       // GWDs found in the same email
+  ((FLAGS||{}).gwds||[]).forEach(g=>{ (byMsg[g.msg_id]=byMsg[g.msg_id]||[]).push(g.gwd); });
+  let rows=((FLAGS||{}).history||[]).map(r=>({...r,gwds:byMsg[r.msg_id]||[]}));
+  if(term) rows=rows.filter(r=>[r.subject,r.sender,r.email,r.profile,(r.gwds||[]).join(" ")]
+    .join(" ").toLowerCase().includes(term));
+  rows=lxtSortApply("fh",rows.slice(),fhSortVal);
+  const rowsHtml=rows.map(r=>{
+    const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
+      <span class="mono muted2" style="flex:none;font-size:11px" title="${poEsc(r.sent_at||r.created_at||"")}">${poEsc(gmWhen(r.sent_at||r.created_at))}</span>
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(r.subject||"(no subject)")}</b></span></div>`;
+    return `<div class="poc-row">${pin}${lxtCells("fh",{
+      sender:  `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.sender||"—")}</span>`,
+      profile: r.profile?`<b>${poEsc(r.profile)}</b>`:`<span class="muted2">—</span>`,
+      inbox:   `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.email||"")}</span>`,
+      state:   r.state==="open"?tonePill("red",T("مفتوح · open"),T("ما زال ينبّه · still nagging"))
+                              :tonePill("green",T("تم · done")),
+      closed:  r.done_at?`<span class="muted2" title="${poEsc(r.done_at)}">${poEsc(relTime(r.done_at))}</span>`
+                        :`<span class="muted2">${poEsc(flagAge(r.created_at))}</span>`,
+      nagged:  r.sent_count?`<span class="mono">${r.sent_count}×</span>`:`<span class="muted2">—</span>`,
+      gwds:    (r.gwds||[]).map(g=>`<span class="mono" style="font-size:11px">${poEsc(g)}</span>${lxCopyRawBtn(g)}`).join(" ")
+               ||`<span class="muted2">—</span>`,
+    })}</div>`;}).join("");
+  const foot=((FLAGS||{}).history_truncated)?`<div class="muted2" style="font-size:11px;padding:8px 0;border-top:1px solid var(--line)">${T("أقدم من ذلك غير معروض · older not shown")}</div>`:"";
+  mount.innerHTML=lxtHead("fh",T("التاريخ والموضوع · date & subject"))
+    +lxtWrap("fh",`<div class="pkg open"><div class="pkg-body">${rowsHtml
+      ||`<div class="muted2" style="padding:14px">${T("لا شيء بعد · nothing yet")}</div>`}</div></div>`)+foot;
+  lxColwApply(); lxtGridApply("fh",mount);
 }
 async function flagDone(btn){
   btn.disabled=true;
@@ -13491,6 +13567,7 @@ async function flagSettingsSave(btn){
   btn.disabled=true;
   const r=await post("/api/flags/settings",{
     enabled:!!($("flagSetOn")||{}).checked,
+    collect_gwds:!!($("flagSetGwd")||{}).checked,
     phrases:(($("flagSetPhr")||{}).value)||"",
     poll_interval_min:(($("flagSetPoll")||{}).value)||2,
     repeat_min:(($("flagSetRep")||{}).value)||1});

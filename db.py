@@ -396,6 +396,24 @@ CREATE TABLE IF NOT EXISTS flag_alerts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_flagalerts_msg ON flag_alerts(email, msg_id);
 CREATE INDEX IF NOT EXISTS ix_flagalerts_state ON flag_alerts(state);
+-- 🚩 GWD tracking numbers seen in ANY watched mail (not only flagged mail).
+-- Only the NUMBERS are kept — the email body is read, scanned and dropped,
+-- never stored. One row per number per inbox; a re-sighting is a no-op.
+CREATE TABLE IF NOT EXISTS flag_gwds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gwd TEXT NOT NULL,
+  inbox_id TEXT,
+  email TEXT,                           -- denormalized: survives inbox removal
+  msg_id TEXT,                          -- the mail it was first seen in
+  subject TEXT,
+  sender TEXT,
+  seen_at TEXT,
+  exported_at TEXT,                     -- stamped when pushed to ClickUp
+  export_order_id TEXT,                 -- the leluxe order it was attached to
+  export_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_flaggwds ON flag_gwds(inbox_id, gwd);
+CREATE INDEX IF NOT EXISTS ix_flaggwds_seen ON flag_gwds(seen_at);
 """
 
 

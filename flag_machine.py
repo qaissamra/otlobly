@@ -1,8 +1,10 @@
 """🚩 Flag machine — email "action required" watch → Telegram nag until done.
 
 Watches any number of Gmail inboxes through IMAP app passwords, PURE
-OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[HEADER]` — nothing is
-ever marked read, no mail is ever sent, the accounts are not linked to
+OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[…]` (headers always,
+plus a 64 KB partial body when GWD collection is on) — PEEK and EXAMINE both
+guarantee nothing is ever marked read; no mail is ever sent, no attachment is
+ever saved, no body text is ever stored, and the accounts are not linked to
 anything. A NEW message whose subject contains a match phrase (default
 "action required") raises an open flag; while any flag is open the owner
 gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
@@ -10,7 +12,9 @@ gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
 are global per user) until they reply «done»/«تم» in that bot's chat. This
 module IS the getUpdates consumer for that token — one consumer per bot
 token, and this token has exactly one (the Mac's telegram_bot polls a
-DIFFERENT token and knows nothing about flags).
+DIFFERENT token and knows nothing about flags). Separately, every message —
+flagged or not — is scanned for GWD parcel numbers, which are collected into
+flag_gwds for the 📦 list (the numbers only, never the text they came from).
 
 Runs ONLY where env FLAG_MACHINE=1 — set in the RENDER DASHBOARD only, the
 GAASH_MAILER precedent (never render.yaml, never the plist, never .env): the
@@ -26,6 +30,7 @@ send-then-stamp discipline from alerts.py.
 import imaplib
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -37,11 +42,14 @@ from email.utils import parsedate_to_datetime
 import db
 import memlog
 import telegram
-from gaash_mail import _AUTH_BLOCKED, _AUTH_HELP, _clean_pw, _mailbox_status
+from gaash_mail import (_AUTH_BLOCKED, _AUTH_HELP, _clean_pw, _extract_text,
+                        _fetch_bytes, _mailbox_status)
 
 IMAP_HOST, IMAP_PORT = "imap.gmail.com", 993
 MAX_SEEN_IDS = 2000                 # per-inbox Message-ID dedupe backstop
 POLL_UID_CAP = 500                  # per pass — the rest arrive next tick
+BODY_UID_CAP = 100                  # …but bodies cost more, so fewer per pass
+BODY_PEEK_BYTES = 65536             # partial fetch: a 20MB attachment costs 64KB
 LIST_CAP = 10                       # flags listed per Telegram message
 SETTINGS_KEY = "flags:settings"
 LEASE_KEY = "flags:lease"
@@ -57,6 +65,7 @@ DEFAULTS = {
     "phrases": ["action required"],   # subject substrings, case-insensitive
     "poll_interval_min": 2,           # IMAP pass cadence
     "repeat_min": 1,                  # nag cadence — the every-minute ask
+    "collect_gwds": True,             # harvest GWD numbers from EVERY message
 }
 
 
@@ -97,6 +106,8 @@ def save_settings(body):
         return None, "intervals must be at least 1 minute"
     if "enabled" in b:
         st["enabled"] = bool(b["enabled"])
+    if "collect_gwds" in b:
+        st["collect_gwds"] = bool(b["collect_gwds"])
     db.set_setting(SETTINGS_KEY, st)
     return st, None
 
@@ -358,15 +369,38 @@ def match_subject(subject, phrases):
     return None
 
 
+# GAASH parcel numbers as they appear in prose. Digits only, no separators —
+# no dash/space variant exists anywhere in this codebase, so don't invent one.
+# (leluxe.GWD_CANON's "GWD + 9 digits" is advisory; never gate on the length.)
+GWD_RE = re.compile(r"GWD\d+", re.I)
+
+
+def gwd_tokens(text):
+    """Every GWD number in free text — uppercased, deduped, first-seen order."""
+    out, seen = [], set()
+    for m in GWD_RE.findall(str(text or "")):
+        g = m.upper()
+        if g not in seen:
+            seen.add(g)
+            out.append(g)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Poll pass — read new mail, raise flags
 # --------------------------------------------------------------------------- #
-def _check_inbox(inbox, phrases):
-    """Poll one Gmail INBOX header-only. Returns (new_flags, patch).
-    Raises on connection errors (poll_once catches per inbox)."""
+def _check_inbox(inbox, phrases, collect_gwds=False):
+    """Poll one Gmail INBOX. Returns (new_flags, new_gwds, patch).
+    Raises on connection errors (poll_once catches per inbox).
+
+    A flag needs the header only. GWD collection needs the text of EVERY
+    message, so it takes a second fetch — a 64 KB PARTIAL, which keeps a
+    20 MB attachment down to 64 KB and is plenty for numbers quoted in the
+    body. Attachments are never saved; the text is scanned and dropped."""
     seen = set(json.loads(inbox.get("seen_ids_json") or "[]"))
     last = int(inbox.get("imap_last_uid") or 0)
-    new_flags = []
+    new_flags, new_gwds = [], []
+    cap = BODY_UID_CAP if collect_gwds else POLL_UID_CAP
 
     M = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
     try:
@@ -384,7 +418,7 @@ def _check_inbox(inbox, phrases):
         if typ == "OK" and data and data[0]:
             # IMAP quirk: "n:*" past the end still returns the last UID
             uids = sorted(u for u in (int(x) for x in data[0].split()) if u > last)
-        uids = uids[:POLL_UID_CAP]         # cursor advances only through processed
+        uids = uids[:cap]                  # cursor advances only through processed
         max_uid = last
         for uid in uids:
             max_uid = max(max_uid, uid)
@@ -405,11 +439,26 @@ def _check_inbox(inbox, phrases):
                 continue
             seen.add(mid)
             subj = str(hm.get("Subject") or "")
+            sender = str(hm.get("From") or "")
+            if collect_gwds:
+                # every message, flagged or not — the owner wants every parcel
+                # number that lands in the mailbox, not only the shouty ones
+                text = subj
+                raw = _fetch_bytes(M, uid, f"(BODY.PEEK[]<0.{BODY_PEEK_BYTES}>)")
+                if raw:
+                    try:
+                        text += "\n" + _extract_text(
+                            message_from_bytes(raw, policy=policy.default))
+                    except Exception:  # noqa - a mangled body ≠ a lost poll
+                        pass
+                for g in gwd_tokens(text):
+                    new_gwds.append({"gwd": g, "msg_id": mid, "subject": subj,
+                                     "sender": sender})
             phrase = match_subject(subj, phrases)
             if not phrase:
                 continue
             new_flags.append({"msg_id": mid, "uid": uid, "subject": subj,
-                              "sender": str(hm.get("From") or ""),
+                              "sender": sender,
                               "matched_phrase": phrase,
                               "sent_at": _parse_date_hdr(hm.get("Date"))})
     finally:
@@ -422,7 +471,7 @@ def _check_inbox(inbox, phrases):
              "imap_uidvalidity": uv or inbox.get("imap_uidvalidity"),
              "last_check": db.now_iso(),
              "seen_ids_json": json.dumps(list(seen)[-MAX_SEEN_IDS:])}
-    return new_flags, patch
+    return new_flags, new_gwds, patch
 
 
 def poll_once():
@@ -437,7 +486,8 @@ def poll_once():
     raised = 0
     for a in boxes:
         try:
-            flags, patch = _check_inbox(a, st["phrases"])
+            flags, found, patch = _check_inbox(a, st["phrases"],
+                                               collect_gwds=st["collect_gwds"])
         except Exception as e:  # noqa
             msg = str(e)[:150]
             if "AUTHENTICATIONFAILED" in msg.upper():
@@ -467,6 +517,14 @@ def poll_once():
                                  f.get("sent_at") or db.now_iso(),
                                  db.now_iso()))
                 raised += cur.rowcount
+            for g in found:
+                # one row per number per inbox — a number quoted in ten emails
+                # is still one line in the list to export
+                c.execute("""INSERT OR IGNORE INTO flag_gwds
+                    (gwd,inbox_id,email,msg_id,subject,sender,seen_at)
+                    VALUES (?,?,?,?,?,?,?)""",
+                          (g["gwd"], a["id"], a["email"], g["msg_id"],
+                           g["subject"], g["sender"], db.now_iso()))
     return raised
 
 
@@ -482,6 +540,30 @@ def open_flags():
             "SELECT a.*, i.label AS profile FROM flag_alerts a "
             "LEFT JOIN flag_inboxes i ON i.id = a.inbox_id "
             "WHERE a.state='open' ORDER BY a.created_at")]
+
+
+def all_flags(limit=200):
+    """Every flagged email ever, newest first — the 🚩 history table. Closing
+    a flag only sets state='done', so nothing here was ever lost; it simply
+    had nowhere to be shown. Returns (rows, truncated)."""
+    limit = max(1, min(int(limit or 200), 1000))
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT a.*, i.label AS profile FROM flag_alerts a "
+            "LEFT JOIN flag_inboxes i ON i.id = a.inbox_id "
+            "ORDER BY a.created_at DESC LIMIT ?", (limit + 1,))]
+    return rows[:limit], len(rows) > limit
+
+
+def gwds(limit=200):
+    """Collected GWD numbers, newest first. Returns (rows, truncated)."""
+    limit = max(1, min(int(limit or 200), 1000))
+    with db.connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT g.*, i.label AS profile FROM flag_gwds g "
+            "LEFT JOIN flag_inboxes i ON i.id = g.inbox_id "
+            "ORDER BY g.seen_at DESC, g.id DESC LIMIT ?", (limit + 1,))]
+    return rows[:limit], len(rows) > limit
 
 
 def _parse_iso(s):

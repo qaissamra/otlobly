@@ -2982,10 +2982,14 @@ def api_gaash_account_uses():
 @auth.require_feature("leluxe")
 def api_flags():
     import flag_machine as fm
+    hist, hist_trunc = fm.all_flags(int(request.args.get("limit") or 200))
+    gw, gw_trunc = fm.gwds()
     return jsonify({"ok": True, "inboxes": fm.inboxes(),
                     "flags": fm.open_flags(), "settings": fm.settings(),
                     "telegram": fm.flags_configured(),
-                    "telegram_missing": fm.flags_missing()})
+                    "telegram_missing": fm.flags_missing(),
+                    "history": hist, "history_truncated": hist_trunc,
+                    "gwds": gw, "gwds_truncated": gw_trunc})
 
 
 @app.route("/api/flags/inbox/add", methods=["POST"])
