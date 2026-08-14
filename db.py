@@ -564,6 +564,11 @@ def migrate():
         # only says when the poll first saw it
         if "sent_at" not in _columns(c, "flag_alerts"):
             c.execute("ALTER TABLE flag_alerts ADD COLUMN sent_at TEXT")
+        # 🚩 the last few messages the poll actually LOOKED at, per inbox —
+        # without it "nothing was flagged" and "nothing arrived" are the same
+        # picture from outside, and there is no way to tell them apart
+        if "last_seen_json" not in _columns(c, "flag_inboxes"):
+            c.execute("ALTER TABLE flag_inboxes ADD COLUMN last_seen_json TEXT")
         # 📧 Owner replies written in Gmail itself land in [Gmail]/Sent Mail,
         # never INBOX — a second per-account UID cursor tracks that folder.
         if "sent_last_uid" not in _columns(c, "gaash_accounts"):

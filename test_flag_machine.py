@@ -296,6 +296,18 @@ def main():
     check("NULL cursor seeded at newest, error cleared by the clean poll",
           row5["imap_last_uid"] == 44 and row5["last_error"] is None)
 
+    boxes = {b["email"]: b for b in fm.inboxes()}
+    seen = boxes["watch@gmail.com"]["last_seen"]
+    check("last_seen records BOTH messages, newest first, with the verdict",
+          len(seen) == 2 and seen[0]["uid"] == 44 and seen[1]["uid"] == 43
+          and seen[1]["hit"] is True and seen[0]["hit"] is False
+          and "Action Required" in seen[1]["subject"])
+    check("last_seen shows which numbers came out of which mail",
+          sorted(seen[1].get("gwds") or []) == ["GWD123456789", "GWD987654321"]
+          and (seen[0].get("gwds") or []) == ["GWD555000111"])
+    check("an inbox that read nothing has an empty last_seen",
+          boxes["other@gmail.com"]["last_seen"] == [])
+
     gw, gw_trunc = fm.gwds()
     got = sorted(g["gwd"] for g in gw)
     check("GWDs harvested from flagged AND unflagged mail",
