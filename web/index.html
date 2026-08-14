@@ -4811,7 +4811,7 @@ function lxGoalCelebrate(milestone,month){
 //    10s poll below makes a value typed in ClickUp land here within ~12s. ──
 let GOALS=null, GOALS_BUSY=false, GOALS_POLL=null;
 const GL_OPEN={};                                    // category key → breakdown expanded
-const GL_COLORS={it:"#3e63dd",pc:"#12a594",watches:"#f59e0b",otlobly:"#f76808",itpc:"#3e63dd"};
+const GL_COLORS={it:"#3e63dd",pc:"#12a594",watches:"#f59e0b",otlobly:"#f76808",itpc:"#3e63dd",unsorted:"#94a3b8"};
 async function loadGoals(refresh){
   if(GOALS_BUSY) return;
   GOALS_BUSY=true;
@@ -4847,7 +4847,11 @@ function renderGoals(){
     if(it&&pc){
       const m={key:"itpc",label:it.label+" + "+pc.label,mode:"combo",
         target:+(it.target+pc.target).toFixed(2),actual:+(it.actual+pc.actual).toFixed(2),
-        n:(it.n||0)+(pc.n||0),need_per_day:+((it.need_per_day||0)+(pc.need_per_day||0)).toFixed(2),
+        // an order holding both a graphics card and an "Other IT" item feeds
+        // BOTH cards — union the ids so the combined bar says 1 order, not 2
+        n:new Set([...(it.order_ids||[]),...(pc.order_ids||[])]).size,
+        items:(it.items||0)+(pc.items||0),counts:true,
+        need_per_day:+((it.need_per_day||0)+(pc.need_per_day||0)).toFixed(2),
         breakdown:[...(it.breakdown||[]),...(pc.breakdown||[])].sort((a,b)=>String(b.day||"").localeCompare(String(a.day||""))),
         breakdown_more:(it.breakdown_more||0)+(pc.breakdown_more||0),
         warnings:[...(it.warnings||[]),...(pc.warnings||[])],
@@ -4897,18 +4901,24 @@ function renderGoals(){
 }
 function glCatCard(c){
   const color=GL_COLORS[c.key]||"var(--accent)";
-  const done=c.actual>=c.target, width=Math.min(100,c.target?c.actual/c.target*100:0);
-  const open=!!GL_OPEN[c.key], editable=CAN_ADMIN&&c.key!=="itpc";
+  const scored=c.counts!==false;                       // Unsorted is shown, never scored
+  const done=scored&&c.actual>=c.target, width=Math.min(100,c.target?c.actual/c.target*100:0);
+  const open=!!GL_OPEN[c.key], editable=CAN_ADMIN&&c.key!=="itpc"&&scored;
   const warns=(c.warnings||[]).filter(x=>x.kind!=="brand_missing");
   const missing=(c.warnings||[]).filter(x=>x.kind==="brand_missing");
-  const brands=c.mode==="brand"&&(c.brands||[]).length?` <span class="muted2" style="font-size:10.5px">(${poEsc(c.brands.join(", "))})</span>`:"";
+  const brands=(c.brands||[]).length?` <span class="muted2" style="font-size:10.5px">(${poEsc(c.brands.join(", "))})</span>`:"";
   const split=(c.split||[]).map(s=>`<span class="qchip" style="font-size:10.5px">${poEsc(s.label)}: <b>${lxGm(s.actual)}</b></span>`).join(" ");
   const dd=s=>s?`${s.slice(8)}/${s.slice(5,7)}`:"—";
+  const WARN={
+    no_amount:["⚠ بلا مبلغ","لا يوجد Total Amount على المهمة — عبّيه في ClickUp"],
+    parent_fallback:["⚠ Order #","احتُسب مبلغ مهمة الـ Order # لأن منتجاتها بلا أسعار"],
+    no_brand:["⚠ بلا براند","لم يُحدَّد Brand على المنتج — عيّنه في ClickUp لينتقل لبطاقته"],
+    brand_unclaimed:["⚠ براند غير مصنّف","هذا البراند لا تطالب به أي بطاقة — أضفه لبطاقتها من ⚙ الإعدادات"]};
   const rows=!open?"":`<div style="margin-top:8px;max-height:260px;overflow:auto">${
     (c.breakdown||[]).map(u=>`<div class="gl-row"${u.warn?' style="opacity:.75"':''}>
         <span class="n" title="${poEsc(u.top_name&&u.top_name!==u.name?u.top_name+" › "+u.name:u.name)}">${u.url?`<a href="${poEsc(u.url)}" target="_blank" rel="noopener" style="color:inherit">${poEsc(u.name||"—")}</a>`:poEsc(u.name||"—")}</span>
         ${u.brand?`<span class="pill" style="background:var(--bg3);color:var(--ink)">${poEsc(u.brand)}</span>`:""}
-        ${u.warn?`<span class="qchip alert" style="font-size:10px" title="${u.warn==="no_amount"?"لا يوجد Total Amount على المهمة — عبّيه في ClickUp":"احتُسب مبلغ مهمة الـ Order # لأن منتجاتها بلا أسعار"}">${u.warn==="no_amount"?"⚠ بلا مبلغ":"⚠ Order #"}</span>`:""}
+        ${u.warn&&WARN[u.warn]?`<span class="qchip alert" style="font-size:10px" title="${poEsc(WARN[u.warn][1])}">${WARN[u.warn][0]}</span>`:""}
         <span class="muted2" style="font-variant-numeric:tabular-nums">${dd(u.day)}</span>
         <b style="font-variant-numeric:tabular-nums">${u.usd?lxGm(u.usd):"—"}</b>
       </div>`).join("")||`<div class="muted2" style="font-size:12px;padding:6px 0">لا طلبات ضمن الفترة بعد · nothing in the window yet</div>`}
@@ -4917,19 +4927,23 @@ function glCatCard(c){
     <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
       <b style="font-size:13.5px">${editable?`<span class="gl-edit" onclick="glEditLabel(this,'${c.key}')" title="اضغط لتعديل الاسم · click to rename">${poEsc(c.label)}</span>`:poEsc(c.label)}</b>${brands}
       <span class="spacer" style="flex:1"></span>
-      <span style="font-weight:900;font-variant-numeric:tabular-nums;color:${done?"#16a34a":"inherit"}">${c.pct}%</span>
+      ${scored?`<span style="font-weight:900;font-variant-numeric:tabular-nums;color:${done?"#16a34a":"inherit"}">${c.pct}%</span>`
+        :`<span class="qchip" style="font-size:10.5px" title="مبالغ لم تُوجَّه لأي بطاقة — لا تدخل في مجموع الحملة">خارج الحملة</span>`}
     </div>
-    <div style="font-size:19px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:2px">${lxGm(c.actual)} <small style="font-size:12px;color:var(--muted)">/ ${editable?`<span class="gl-edit" onclick="glEditTarget(this,'${c.key}')" title="اضغط لتعديل الهدف · click to edit the target">${lxGm(c.target)}</span>`:lxGm(c.target)}</small></div>
-    <div class="gl-track"><span class="gl-fill" style="width:${Math.max(2,width)}%;background:${done?"linear-gradient(90deg,#16a34a,#22c55e)":color}"></span></div>
+    <div style="font-size:19px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:2px">${lxGm(c.actual)} ${scored?`<small style="font-size:12px;color:var(--muted)">/ ${editable?`<span class="gl-edit" onclick="glEditTarget(this,'${c.key}')" title="اضغط لتعديل الهدف · click to edit the target">${lxGm(c.target)}</span>`:lxGm(c.target)}</small>`:""}</div>
+    ${scored?`<div class="gl-track"><span class="gl-fill" style="width:${Math.max(2,width)}%;background:${done?"linear-gradient(90deg,#16a34a,#22c55e)":color}"></span></div>`
+      :`<div class="muted2" style="font-size:11px;margin:4px 0 6px">لا تُحتسب ضمن الحملة — عيّن البراند في ClickUp لتنتقل لبطاقتها · unrouted, not scored</div>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--muted)">
-      <span>${c.n||0} order${c.n===1?"":"s"}</span>
-      ${c.need_per_day?`<span>· ${lxGm(c.need_per_day)}/day</span>`:""}
+      <span title="عدد الطلبات المختلفة — الطلب الواحد بعدة منتجات يُحسب مرة واحدة">${c.n||0} order${c.n===1?"":"s"}</span>
+      ${c.items&&c.items!==c.n?`<span title="عدد المنتجات المسعّرة داخل هذه الطلبات">· ${c.items} منتج</span>`:""}
+      ${scored&&c.need_per_day?`<span>· ${lxGm(c.need_per_day)}/day</span>`:""}
       <span class="spacer" style="flex:1"></span>
       ${warns.length?`<span class="qchip alert" style="cursor:pointer;font-size:10.5px" onclick="glToggleBreak('${c.key}')" title="مهام تحتاج انتباه — افتح التفاصيل">⚠ ${warns.length}</span>`:""}
       <button class="minibtn" onclick="glToggleBreak('${c.key}')">${open?"▴":"▾"} تفاصيل</button>
     </div>
     ${split?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${split}</div>`:""}
-    ${missing.map(x=>`<div class="qchip alert" style="margin-top:6px" title="أضف خيار البراند في حقل Brand داخل قائمة ClickUp حتى تُفرز مهام الـPC — بدونه كل شيء يُحسب ضمن IT">⚠ البراند "${poEsc(x.name)}" غير موجود في ClickUp بعد</div>`).join("")}
+    ${missing.map(x=>`<div class="qchip alert" style="margin-top:6px" title="أضف خيار البراند في حقل Brand داخل قائمة ClickUp حتى تُفرز مهام هذه البطاقة">⚠ البراند "${poEsc(x.name)}" غير موجود في ClickUp بعد</div>`).join("")}
+    ${c.mode==="purchases"&&(c.brands||[]).length?`<div class="muted2" style="font-size:10.5px;margin-top:6px">يشمل طلبات Purchases + مهام ClickUp ببراند ${poEsc(c.brands.join(", "))} — لو أُدخل المنتج نفسه في الاثنين يُحسب مرتين</div>`:""}
     ${rows}</div>`;
 }
 function glToggleBreak(key){ GL_OPEN[key]=!GL_OPEN[key]; renderGoals(); }
@@ -4971,14 +4985,16 @@ function glSettingsRender(){
   const el=$("glSettings");
   if(!GOALS){ el.innerHTML=`<div class="muted2" style="padding:10px">Loading…</div>`; return; }
   const st=GOALS.settings||{}, wh=GOALS.webhook||{};
-  const pc=(st.categories||[]).find(c=>c.key==="pc")||{};
+  // every card that routes by Brand gets its own input — that's how an
+  // unclaimed brand (sandisk, MIX…) is moved off the Unsorted card without code
+  const branded=(st.categories||[]).filter(c=>["brand","all","purchases"].includes(c.mode));
   el.innerHTML=`
     <div style="font-weight:800;font-size:13px;margin-bottom:8px">⚙ إعدادات الحملة · campaign settings <span class="muted2" style="font-weight:400;font-size:11px">(الأهداف والأسماء تُعدَّل بالضغط عليها فوق مباشرة)</span></div>
     <div class="form-grid">
       <label class="fld"><span data-en="From" data-ar="من">من</span><input type="date" id="glWs" value="${poEsc(st.window_start||"")}"></label>
       <label class="fld"><span data-en="To" data-ar="إلى">إلى</span><input type="date" id="glWe" value="${poEsc(st.window_end||"")}"></label>
-      ${(st.categories||[]).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
-      <label class="fld"><span>${poEsc(pc.label||"")} brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هذه الفئة — مفصولة بفواصل، غير حساسة لحالة الأحرف · the ClickUp Brand options this category claims">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="Other IT"></label>
+      ${(st.categories||[]).filter(c=>c.counts!==false).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
+      ${branded.map(c=>`<label class="fld"><span>🏷 ${poEsc(c.label)} brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هذه البطاقة — مفصولة بفواصل، غير حساسة لحالة الأحرف. البراند يفوز على القائمة: منتج ببراند ساعات داخل قائمة الـIT يُحسب ضمن Le Luxe · the ClickUp Brand options this card claims, on any list">?</span></span><input id="glB_${c.key}" value="${poEsc((c.brands||[]).join(", "))}" placeholder="—"></label>`).join("")}
       <label class="fld"><span>حالات مستثناة · excluded statuses <span class="gm-q" title="مهام بهذه الحالات لا تُحسب أبدًا (على مستوى الطلب أو المنتج)">?</span></span><input id="glExcl" value="${poEsc((st.excluded||[]).join(", "))}" placeholder="cancelled"></label>
       <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>${(()=>{const two=(st.categories||[]).filter(c=>["it","pc"].includes(c.key));
         // named from the cards themselves — these two get renamed from the page
@@ -5009,9 +5025,14 @@ async function glSettingsSave(btn){
   ((GOALS&&GOALS.settings&&GOALS.settings.categories)||[]).forEach(c=>{
     const el=$("glT_"+c.key);
     if(el&&String(el.value).trim()!=="") cats[c.key]={key:c.key,target:Number(el.value)};
+    // brands: only send when the field is actually rendered, so a card whose
+    // input isn't on screen never gets its claims wiped
+    const b=$("glB_"+c.key);
+    if(b){
+      const brands=(b.value||"").split(",").map(s=>s.trim()).filter(Boolean);
+      cats[c.key]=cats[c.key]||{key:c.key}; cats[c.key].brands=brands;
+    }
   });
-  const brands=($("glBrands").value||"").split(",").map(s=>s.trim()).filter(Boolean);
-  if(brands.length){ cats.pc=cats.pc||{key:"pc"}; cats.pc.brands=brands; }
   const list=Object.values(cats);
   if(list.length) body.categories=list;
   await glSaveSettings(body,btn);
