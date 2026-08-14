@@ -13737,17 +13737,25 @@ function flagProfileMenu(pick, cur, extra){
       cur?lxProfileChip(cur,cur):`<span class="muted2">${T("اختر بروفايل · pick a profile")}</span>`} ▾</button>
     <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0" onclick="event.stopPropagation()">
       <input class="cu-search" placeholder="${T("بحث · search")} — B70, E-B15…" oninput="cuFilter(this)">
-      <div class="pop-item cu-item" onclick="${pick}('')"><span class="muted2">— ${T("بلا · none")} —</span></div>
-      ${flagProfileSorted(extra).map(o=>`<div class="pop-item cu-item" style="cursor:pointer" onclick="${pick}('${poEsc(o.name)}')">${
+      <div class="pop-item cu-item" onclick="${pick}('',this)"><span class="muted2">— ${T("بلا · none")} —</span></div>
+      ${flagProfileSorted(extra).map(o=>`<div class="pop-item cu-item" style="cursor:pointer" onclick="${pick}('${poEsc(o.name)}',this)">${
         o.color?solidPill(o.color,o.name,o.name,{cls:"mono",style:"font-size:10px"})
                :`<b class="mono" style="font-size:11px">${poEsc(o.name)}</b>`}</div>`).join("")}
     </div></span>`;
 }
 let FLAG_PICK="";                   // the ADD form's chosen profile
-function flagProfilePick(v){
+function flagProfilePick(v,el){
+  // Update IN PLACE — never re-render the panel here. flagDraw() rebuilds the
+  // add form, which wiped the email + app password the owner had already typed
+  // (they picked the profile last, and watched their inbox vanish).
   FLAG_PICK=v;
   const i=$("flagAcName"); if(i) i.value=v;
-  flagDraw();
+  const menu=el&&el.closest(".pop-menu");
+  if(menu){
+    const btn=menu.previousElementSibling;
+    if(btn) btn.innerHTML=(v?lxProfileChip(v,v):`<span class="muted2">${T("اختر بروفايل · pick a profile")}</span>`)+" ▾";
+    menu.classList.remove("open");
+  }
 }
 async function flagProfileSet(id,v){ // an EXISTING inbox: save it, no password
   const r=await post("/api/flags/inbox/label",{id,label:v});
@@ -13782,6 +13790,10 @@ function flagDraw(){
         <div class="muted2" style="font-size:11.5px">${poEsc(x.sender||"?")} · ${x.profile?lxProfileChip(x.profile,x.profile)+" · ":""}${poEsc(x.email||"")}</div></div>
       <span class="muted2" style="flex:none;font-size:11.5px;text-align:end" title="${poEsc(x.sent_at||"")}">${x.sent_at?`${T("أُرسل · sent")} ${flagSent(x.sent_at)}<br>`:""}${T("مفتوح منذ · open")} ${flagAge(x.created_at)}${x.sent_count?` · ${x.sent_count}×`:""}</span></div>`).join("")
       ||`<div class="muted2" style="font-size:12px;padding:6px 0">${T("لا أعلام مفتوحة · no open flags")}</div>`}`;
+  // anything half-typed survives a redraw — losing a pasted app password to a
+  // background refresh is the kind of thing you only notice after retyping it
+  const keep={e:(($("flagAcEmail")||{}).value)||"", p:(($("flagAcPw")||{}).value)||"",
+              n:(($("flagAcName")||{}).value)||""};
   ib.innerHTML=`
     <b style="font-size:13px">✉ ${T("الصناديق المراقبة · watched inboxes")}</b>
     ${boxes.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:12.5px">
@@ -13802,6 +13814,9 @@ function flagDraw(){
       <input id="flagAcName" value="${poEsc(FLAG_PICK||"")}" oninput="FLAG_PICK=this.value" placeholder="${T("أو اكتبه · or type it")}" style="flex:0 0 120px">
       <button class="minibtn" onclick="flagInboxAdd(this)">＋ ${T("أضف · Add")}</button></div>
     <div class="muted2" style="font-size:11px;margin-top:3px">myaccount.google.com/apppasswords — ${T("فعّل التحقق بخطوتين أولاً · turn on 2-Step Verification first")} · ${T("البروفايل من قائمة كليك أب — أو اكتب أي اسم · profile comes from the ClickUp list — or type any name")} · ${T("لتحديث كلمة المرور أعد إدخال نفس البريد · to update a password, re-add the same email")} · ${T("مراقبة فقط — لا يُفتح بريد ولا يُرسل شيء · observation only — nothing is marked read, nothing is sent")}</div>`:""}`;
+  if($("flagAcEmail")&&keep.e) $("flagAcEmail").value=keep.e;
+  if($("flagAcPw")&&keep.p)    $("flagAcPw").value=keep.p;
+  if($("flagAcName")&&keep.n)  $("flagAcName").value=keep.n;
   const gb=$("flagGwdBox"), gws=f.gwds||[];
   if(gb) gb.innerHTML=`
     <b style="font-size:13px">📦 ${T("أرقام الطرود المجمّعة · tracking numbers collected")} (${gws.length})</b>
@@ -13883,6 +13898,8 @@ async function flagInboxAdd(btn){
   if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
   if(r.saved_with_error) toast("⚠ "+T("حُفظ لكن Gmail رفض الدخول — انظر القائمة · saved, but Gmail refused the login — see the list")+" — "+r.email);
   else toast(r.updated?("🔑 "+T("حُدِّث · updated")+" — "+r.email):("✓ "+r.email));
+  FLAG_PICK="";                       // added: clear the form for the next one
+  ["flagAcEmail","flagAcPw","flagAcName"].forEach(id=>{ const el=$(id); if(el) el.value=""; });
   flagLoad();
 }
 function flagInboxFix(email){
