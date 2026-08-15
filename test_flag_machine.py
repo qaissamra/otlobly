@@ -558,6 +558,23 @@ def main():
                               if a["email"] == "route@gmail.com"][0]["id"]}).get_json()
     check("admin removes via route", d["ok"])
 
+    print("— UI regression guards (web/index.html) —")
+    from pathlib import Path
+    ui = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
+    # 2026-08-14, reported live: picking a profile called flagDraw(), which
+    # rebuilt the add form and wiped the email + app password already typed
+    # above it, so the inbox was silently never added. Two guards, because the
+    # fix has two independent halves.
+    body = ui.split("function flagProfilePick(")[1].split("\nasync function")[0]
+    code = "\n".join(l for l in body.splitlines()
+                     if not l.strip().startswith("//"))   # comments may NAME it
+    check("picking a profile must never re-render the form",
+          "flagDraw(" not in code)
+    check("…it writes the field in place instead",
+          '$("flagAcName")' in code and "i.value=v" in code.replace(" ", ""))
+    check("a redraw preserves anything half-typed (email, password, profile)",
+          "keep.e" in ui and "keep.p" in ui and "keep.n" in ui)
+
     print("— bell —")
     _mk_flag("watch@gmail.com", "<bell@x>", subject="Action required: docs")
     d = ful.get("/api/notifications").get_json()
