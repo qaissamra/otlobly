@@ -443,6 +443,56 @@ def ids_add(name, filename, data, folder=None):
 # per-package pick, a manual send — and resolves to fresh bytes at send time.
 DECL_AUTO = "decl:auto"
 
+# GAASH's ops upload page. The `type` query param picks which document SLOT the
+# page offers (6 = Israeli ID card, 8 = passport, 7 = goods-use declaration…);
+# it repeats for several slots. Palestinian customers carry a passport, never a
+# teudat zehut, so 6 was the wrong hardcoded default — and when GAASH has said
+# which document it wants (the type in its own upload link), that beats guessing.
+UPLOAD_TYPE_FALLBACK = 8            # جواز سفر · passport
+
+
+def upload_link_for(gwd, types=None):
+    """The document-upload URL for a parcel — GAASH's OWN requested slot when
+    they told us, else a passport slot. `types` forces specific slots."""
+    if not types:
+        t = docs_asked_type(gwd)
+        types = [t or UPLOAD_TYPE_FALLBACK]
+    q = "".join(f"&type={int(t)}" for t in types if str(t).strip())
+    return f"https://ops.gaashwd.com/fileUpload?packageId={gwd}{q}"
+
+
+def docs_asked_type(gwd):
+    """Which document type GAASH asked for on this parcel (int), or None.
+    Read off the stored docs_state upload link — no network call."""
+    ds = docs_state_for(gwd) or {}
+    for lk in ds.get("links") or []:
+        m = re.search(r"[?&]type=(\d+)", str((lk or {}).get("url") or ""))
+        if m and (lk.get("type") == 0 or "/fileupload" in str(lk.get("url")).lower()):
+            return int(m.group(1))
+    return None
+
+
+def docs_state_for(gwd):
+    """The last docs banner stored for this parcel, from either board."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return None
+    try:
+        row = _leluxe_row_for(g)
+        ds = ((row or {}).get("data") or {}).get("docs_state")
+        if isinstance(ds, dict):
+            return ds
+    except Exception:  # noqa - a missing mirror must never break an email
+        pass
+    try:
+        _po, pk = _po_package(g)
+        ds = (pk or {}).get("docs_state")
+        if isinstance(ds, dict):
+            return ds
+    except Exception:  # noqa
+        pass
+    return None
+
 
 def declaration_build(gwd):
     """One package's customs declaration as (filename, bytes), or ValueError
@@ -2019,6 +2069,44 @@ def _customer_for(gwd):
     return ""
 
 
+def customer_for_gwd(gwd):
+    """The CRM customer this parcel belongs to, or None — resolved the same way
+    {id_number} resolves: the Purchases order behind the package, by phone.
+    The upload wizard needs the whole record (their filed ID photo), not just
+    the number."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return None
+    try:
+        import normalize
+        import purchases
+        cores = {}
+        for c in db.list_customers():
+            core = normalize.phone_core(c.get("whatsapp") or "")
+            if core:
+                cores.setdefault(core, c)
+        names = {_fold(c.get("name")): c for c in db.list_customers()
+                 if (c.get("name") or "").strip()}
+        for p in (purchases.load() or {}).get("purchase_orders") or []:
+            for pk in (p.get("packages") or []):
+                if str(pk.get("tracking_number") or "").strip().upper() != g:
+                    continue
+                for it in (pk.get("items") or []):
+                    oid = it.get("customer_order_id")
+                    o = db.get_order(oid) if oid else None
+                    for ph in ((o or {}).get("customer") or {}).get("phones") or []:
+                        hit = cores.get(normalize.phone_core(ph.get("e164") or ""))
+                        if hit:
+                            return hit
+                    nm = _fold(((o or {}).get("customer") or {}).get("name")
+                               or it.get("customer_name"))
+                    if nm and nm in names:
+                        return names[nm]
+    except Exception:  # noqa - never let a lookup break the wizard
+        pass
+    return None
+
+
 def _id_number_for(gwd):
     """The package customer's CRM ID number (submitted via the Request-ID link),
     or "". Resolves the customer by phone — the Purchases order link first, then a
@@ -2951,8 +3039,7 @@ def _fill(tpl, gwd, thread=None, step=None, members=None):
             .replace("{package_count}", str(len(mem)))
             .replace("{gwd}", gwd)
             .replace("{customer}", _customer_for(gwd))
-            .replace("{upload_link}",
-                     f"https://ops.gaashwd.com/fileUpload?packageId={gwd}&type=6")
+            .replace("{upload_link}", upload_link_for(gwd))
             .replace("{id_name}", id_name)
             .replace("{days_waiting}", days)
             .replace("{step}", str(step or (thread or {}).get("step") or "")))

@@ -126,6 +126,10 @@ def main():
     out = gm._fill("pkg {gwd} step {step} link {upload_link}", "GWD200", th, 2)
     check("placeholders fill", "GWD200" in out and "step 2" in out
           and "fileUpload?packageId=GWD200" in out)
+    # the upload slot must NOT be the Israeli ID card (type 6) by default —
+    # these customers are Palestinian and carry a passport (type 8)
+    check("the upload link offers a passport slot, not an Israeli ID one",
+          "type=8" in out and "type=6" not in out)
 
     print("— sequencer: dry-run never burns the claim —")
     past = (now - timedelta(minutes=5)).isoformat(timespec="seconds")

@@ -129,6 +129,10 @@ DEFAULT_GAASH_STEPS = [
 DEFAULT_GAASH_MAIL = {
     "to_address": "GaashWW@glassix.support",
     "dry_run": True,                 # nothing is ever emailed until the owner flips this
+    # 🪪 the same guard for DOCUMENT UPLOADS (the Docs tab's ⬆ Upload wizard):
+    # an upload lands a real document on a real customs record, so it rehearses
+    # — showing exactly what would go — until the owner flips this too
+    "upload_dry_run": True,
     "ack_window_min": 3,             # incoming within N min of our send = auto-ack
     "poll_interval_min": 5,
     "cadence_days": [2, 2, 2],       # gaps after emails 1, 2, 3
@@ -402,7 +406,7 @@ def apply(body, config=None, persist=True):
         if "to_address" in gm:
             cfg.set_path(config, "gaash_mail.to_address",
                          str(gm["to_address"] or "").strip())
-        for k in ("dry_run", "auto_resend"):
+        for k in ("dry_run", "upload_dry_run", "auto_resend"):
             if k in gm:
                 cfg.set_path(config, f"gaash_mail.{k}", bool(gm[k]))
         for k, lo, hi in (("ack_window_min", 0, 60), ("poll_interval_min", 1, 120),

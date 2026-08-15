@@ -118,6 +118,7 @@ flag_machine.start()       # 🚩 action-required inbox watch + flags-bot «done
                            # the live DB is the single truth — never the Mac
                            # plist, never .env)
 import gaash_mail
+import gaash_upload
 gaash_mail.migrate_v2()    # one-time: legacy 4-step settings chain → sequences-as-data
 gaash_mail.migrate_decl_auto()   # filed declarations → written fresh on every email
 gaash_mail.seed_followup_template()   # the hand-sent nudge, added once, then yours
@@ -2804,6 +2805,148 @@ def api_gaash_docs_check():
     if not tn:
         return jsonify({"ok": False, "error": "tracking required"}), 400
     return jsonify({"ok": True, "tracking": tn, "docs": _docs_check_one(tn)})
+
+
+# --------------------------------------------------------------------------- #
+# 🪪 Upload documents to GAASH (the wizard behind the Docs tab's ⬆ Upload)
+# --------------------------------------------------------------------------- #
+def _upload_dry_run():
+    """Armed or not. Default ON — an upload puts a document on a real customs
+    record, so it stays a rehearsal until the owner switches it off in Settings."""
+    s = gaash_mail._setts()
+    v = s.get("upload_dry_run")
+    return True if v is None else bool(v)
+
+
+def _pick_doc_bytes(gwd, pick):
+    """(filename, bytes, human label) for one picked document.
+    Resolved SERVER-side — document bytes never round-trip through the browser."""
+    src = (pick.get("source") or "").strip()
+    if src == "declaration":
+        got = gaash_mail.declaration_attachment(gwd)
+        if not got:
+            raise gaash_upload.UploadError(
+                "couldn't build the declaration for this parcel — open 🩺 Readiness "
+                "and check the name and ID it ships under")
+        return got[0], got[1], "declaration (generated now)"
+    if src == "library":
+        doc = gaash_mail._id_doc(pick.get("id"))
+        if not doc:
+            return None, None, ""
+        p = gaash_mail.id_file_path(doc.get("filename"))
+        if not p or not p.exists():
+            raise gaash_upload.UploadError(f"{doc.get('name')} is missing from the library")
+        return doc.get("filename"), p.read_bytes(), doc.get("name") or ""
+    if src == "customer":
+        fn = (pick.get("id") or "").strip()
+        p = cust_mod.ID_DIR / fn
+        if not fn or "/" in fn or not p.exists():
+            raise gaash_upload.UploadError("that customer ID photo is missing")
+        return fn, p.read_bytes(), "customer's own ID"
+    raise gaash_upload.UploadError("pick a document first")
+
+
+@app.route("/api/gaash/upload/plan")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_upload_plan():
+    """What the wizard needs to open: the slots GAASH would show for these
+    types (labelled in THEIR words), every document that could fill them, and
+    whether this parcel can be papered at all."""
+    tn = (request.args.get("gwd") or "").strip().upper()
+    types = [t for t in (request.args.get("types") or "").split(",") if t.strip()]
+    if not re.match(r"GWD\d+$", tn):
+        return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    asked = gaash_mail.docs_asked_type(tn)
+    if not types:
+        types = [str(asked or gaash_mail.UPLOAD_TYPE_FALLBACK)]
+    try:
+        info = gaash_upload.page_info(tn, types)
+    except gaash_upload.UploadError as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+    cust = gaash_mail.customer_for_gwd(tn) or {}
+    lib = [{"id": d["id"], "name": d.get("name") or "", "folder": d.get("folder") or "id",
+            "filename": d.get("filename")} for d in gaash_mail.ids_list()]
+    decl_ok, decl_why = True, ""
+    try:
+        gaash_mail.declaration_build(tn)
+    except Exception as e:  # noqa - the reason is what the wizard shows
+        decl_ok, decl_why = False, str(e)[:160]
+    return jsonify({
+        "ok": True, "gwd": tn, "asked_type": asked, "slots": info["slots"],
+        "types": gaash_upload.DOC_TYPES, "dry_run": _upload_dry_run(),
+        "max_bytes": gaash_upload.MAX_BYTES,
+        "library": lib,
+        "customer": ({"name": cust.get("name") or "",
+                      "id_number": cust.get("id_number") or "",
+                      "id_image": cust.get("id_image") or ""} if cust else None),
+        "declaration": {"ok": decl_ok, "why": decl_why,
+                        "name": gaash_mail.parcel_name(tn),
+                        "id_number": gaash_mail.id_number_for_email(tn)},
+    })
+
+
+@app.route("/api/gaash/upload", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_upload():
+    """Send the picked documents to GAASH. Dry-run unless the owner armed it;
+    on a real success stamp docs-sent and re-ask GAASH so the pill updates."""
+    b = request.get_json(force=True, silent=True) or {}
+    tn = (b.get("gwd") or "").strip().upper()
+    if not re.match(r"GWD\d+$", tn):
+        return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    picks = [p for p in (b.get("docs") or []) if isinstance(p, dict)]
+    if not picks:
+        return jsonify({"ok": False, "error": "pick at least one document"}), 400
+    # the caller may only make it MORE cautious, never less
+    dry = _upload_dry_run() or bool(b.get("dry_run"))
+    docs = []
+    try:
+        for p in picks:
+            fn, blob, label = _pick_doc_bytes(tn, p)
+            if blob is None:
+                raise gaash_upload.UploadError("one of the picked documents is gone")
+            docs.append({"type": int(p.get("type")), "filename": fn, "data": blob,
+                         "source": p.get("source"), "source_id": p.get("id"),
+                         "label": label})
+        res = gaash_upload.upload(tn, docs, dry_run=dry)
+    except gaash_upload.UploadError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:  # noqa
+        return jsonify({"ok": False, "error": f"upload failed: {e}"}), 500
+    res["labels"] = {str(d["type"]): d.get("label") or "" for d in docs}
+    if res.get("ok") and not dry:
+        types = sorted({int(d["type"]) for d in docs})
+        _stamp_docs_sent(tn, types)
+        try:
+            res["docs_state"] = _docs_check_one(tn)      # 🟡 → 🔵 without a manual re-check
+        except Exception:  # noqa
+            pass
+        activity.log("uploaded", "purchase", tn, tn,
+                     detail=f"sent {len(docs)} document(s) to GAASH", user=_user())
+    return jsonify(res)
+
+
+def _stamp_docs_sent(tn, types):
+    """Record the send on whichever Purchases package carries this GWD — the
+    same fields the manual flow writes, so the red 'docs not received' chip
+    keeps working."""
+    try:
+        import purchases as pm
+        pdb = pm.load()
+        hit = False
+        for po in pdb.get("purchase_orders") or []:
+            for pk in po.get("packages") or []:
+                if str(pk.get("tracking_number") or "").strip().upper() == tn:
+                    pk["gaash_docs_at"] = pm.now_iso()
+                    pk["gaash_docs_types"] = types
+                    po["updated_at"] = pm.now_iso()
+                    hit = True
+        if hit:
+            pm.save(pdb)
+    except Exception:  # noqa - the upload already succeeded; a stamp miss is minor
+        pass
 
 
 @app.route("/api/leluxe/item_image", methods=["POST"])
