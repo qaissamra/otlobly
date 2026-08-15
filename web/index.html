@@ -3365,6 +3365,21 @@ function lxDeadlinePill(pk,short){
 }
 // GAASH docs banner (the status page's yellow/blue): action = GAASH asks us to
 // upload (clickable → their own upload link); info AND plain+arrived both render
+// WHICH of GAASH's links to open. They send two for a parcel that needs papers:
+// type 3 "Update Info" — the ISRAELI id form (HawbPersonalIdEntry), useless for
+// Palestinian customers — and type 0 "Upload Document" — the real upload page,
+// with the document slot GAASH itself asked for already in the URL (type=8 =
+// passport). We used to take links[0] and always land on the Israeli form.
+function docsUploadLink(ds){
+  const ls=(ds&&ds.links)||[];
+  const up=ls.find(l=>l&&(l.type===0||/\/fileUpload/i.test(l.url||"")));
+  return ((up||ls[0]||{}).url)||"";
+}
+// the document TYPE GAASH asked for on this parcel (6=ID, 8=passport…), read
+// off that same upload link — "" when they didn't say
+function docsAskedType(ds){
+  const m=/[?&]type=(\d+)/.exec(docsUploadLink(ds)||""); return m?m[1]:"";
+}
 // blue — a parcel with no status cards still gets the page's DEFAULT teal
 // "in the customs process, expected release soon" card, so "plain" ≠ nothing.
 function lxDocsPill(pk){
@@ -3374,7 +3389,7 @@ function lxDocsPill(pk){
   // and "notfound" is stored as a bare STRING so it can't match) — docs moot
   const gz=pk.data&&pk.data.gerizim_status; if(gz&&typeof gz==="object") return "";
   if(ds.state==="action"){
-    const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
+    const lk=docsUploadLink(ds);
     const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
     const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
     return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
@@ -5675,7 +5690,7 @@ async function lxCheckDocs(gwd){
   }else if(!ds){
     pr.innerHTML=`❔ <b>${poEsc(gwd)}</b> — صفحة غاش لا تجيب لهذا الرقم · GAASH's status page has no answer for this number`;
   }else if(ds.state==="action"){
-    const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
+    const lk=docsUploadLink(ds);
     pr.innerHTML=`🟡 <b>${poEsc(gwd)}</b> — غاش يطلب مستندات · GAASH is asking for documents`
       +(lk?` — <a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer"><b>رفع الآن · upload now</b></a>`:"");
     toast(`🟡 ${gwd} — upload requested`);
@@ -9910,7 +9925,7 @@ function pkgDocsPill(p,pk,pi){
   const pgz=pk&&pk.gerizim_status;   // dict ⇒ Gerizim has it ⇒ past customs
   if(ds&&ds.state&&bucket!=="delivered"&&bucket!=="cleared"&&!(pgz&&typeof pgz==="object")){
     if(ds.state==="action"){
-      const lk=(ds.links&&ds.links[0]&&ds.links[0].url)||"";
+      const lk=docsUploadLink(ds);
       const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
       const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
       return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
@@ -13531,7 +13546,7 @@ function gmDocsDraw(){
     return (h.lx&&h.lx.order&&h.lx.order.name)||"";
   };
   const row=r=>{
-    const lk=(r.links&&r.links[0]&&r.links[0].url)||"";
+    const lk=docsUploadLink(r);
     const dl=r.gaash_deadline?`<span class="muted2 mono" style="font-size:10.5px;flex:none" title="GAASH deadline ${poEsc(r.gaash_deadline)}">⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${T("فات · passed")} ${-r.days_left}d</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}</span>`:"";
     const chk=r.docs_checked?`<span class="muted2" style="font-size:10px;flex:none">${agoTxt(r.docs_checked)}</span>`:"";
     const stale=r.stale&&r.state!=="unchecked"?`<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:9.5px" title="${T("آخر فحص قديم — أعد الفحص · last check is old — re-check")}">${T("قديم · stale")}</span>`:"";
@@ -13545,7 +13560,7 @@ function gmDocsDraw(){
       <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:10px"})}</span>
       ${dl}${chk}${stale}
       <span class="spacer"></span>
-      ${lk?`<a class="minibtn" style="text-decoration:none" href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" title="${T("افتح صفحة الرفع عند غاش · open GAASH's upload page")}">⬆ ${T("رفع · Upload")}</a>`:""}
+      ${lk?`<button class="minibtn" onclick="guOpen('${poEsc(r.gwd)}')" title="${T("اختر المستندات وراجعها ثم ارفعها لغاش · pick the documents, review them, then upload to GAASH")}">⬆ ${T("رفع · Upload")}</button>`:""}
       <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
       ${r.thread_state?`<button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
                       :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
@@ -13632,6 +13647,148 @@ function gmDocsDraw(){
       </div>
     </div>
   </div>`;
+}
+/* ── 🪪 Upload documents to GAASH ────────────────────────────────────────────
+   Three steps, the same shape as the enroll wizard, but it ends in an UPLOAD
+   instead of an email: pick the slots GAASH asked for → choose the actual
+   file for each → REVIEW the real document, then send. Nothing is posted
+   while dry-run is on; the review screen says so plainly. */
+let GU=null;
+async function guOpen(gwd){
+  GU={gwd, step:1, types:[], picks:{}, plan:null, busy:false, res:null};
+  bulkOpen("🪪 "+T("رفع مستندات لغاش · Upload documents to GAASH")+" · "+gwd);
+  $("bulkBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ سؤال غاش عن الخانات… · asking GAASH which slots it opens…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
+  if(!GU||GU.gwd!==gwd) return;
+  if(!d||!d.ok){ $("bulkBody").innerHTML=`<div class="panel" style="padding:14px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر فتح صفحة غاش · couldn't reach GAASH's page"))}</div>`; return; }
+  GU.plan=d;
+  // start with exactly what GAASH asked for — their answer beats our guess
+  GU.types=[String(d.asked_type||(d.slots[0]||{}).type||8)];
+  guRender();
+}
+const GU_STEPS=[{n:1,lab:"المستندات · Documents"},{n:2,lab:"الملفات · Files"},{n:3,lab:"المراجعة · Review"}];
+function guGo(n){
+  if(!GU) return;
+  if(n>1&&!GU.types.length){ toast(T("اختر نوع مستند واحداً على الأقل · pick at least one document type")); return; }
+  if(n>2){ const missing=GU.types.filter(t=>!GU.picks[t]);
+    if(missing.length){ toast(T("اختر ملفاً لكل خانة · choose a file for every slot")); return; } }
+  GU.step=Math.max(1,Math.min(3,n)); guRender();
+}
+function guRender(){
+  if(!GU||!GU.plan) return;
+  const p=GU.plan, dry=p.dry_run;
+  const strip=`<div class="wiz-strip">${GU_STEPS.map(s=>`
+    <button class="wiz-tab${s.n===GU.step?" on":""}${s.n<GU.step?" done":""}" onclick="guGo(${s.n})"><i>${s.n<GU.step?"✓":s.n}</i>${T(s.lab)}</button>`).join("")}</div>`;
+  const banner=dry
+    ? `<div class="en-warn dry"><b>🧪 ${T("وضع التجربة — لن يُرفع شيء · Dry-run — nothing will be uploaded")}</b> — ${T("كل شيء يُجهَّز ويُعرض، ولا يُرسل لغاش · everything is prepared and shown, nothing reaches GAASH")}</div>`
+    : `<div class="en-warn live"><b>⬆ ${T("رفع حقيقي إلى غاش · A real upload to GAASH")}</b> — ${T("المستندات ستصل سجل الجمارك فعلياً · these documents really land on the customs record")}</div>`;
+  $("bulkBody").innerHTML=strip+banner+`<div id="guBody"></div>`;
+  ({1:guStepTypes,2:guStepFiles,3:guStepReview}[GU.step]||guStepTypes)();
+}
+function guToggleType(t){
+  t=String(t); const i=GU.types.indexOf(t);
+  if(i<0) GU.types.push(t); else { GU.types.splice(i,1); delete GU.picks[t]; }
+  guRender();
+}
+function guStepTypes(){
+  const p=GU.plan, asked=String(p.asked_type||"");
+  const rows=Object.keys(p.types).map(t=>{
+    const on=GU.types.includes(String(t));
+    return `<label class="wiz-opt" style="align-items:center">
+      <input type="checkbox" ${on?"checked":""} onchange="guToggleType('${t}')">
+      <span><b>${poEsc(p.types[t])}</b>
+        ${String(t)===asked?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px;margin-inline-start:6px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
+        <span class="muted2" style="display:block;font-size:11px">type ${poEsc(t)}</span></span></label>`;
+  }).join("");
+  $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("أي خانات تفتحها عند غاش؟ المطلوب مُختار مسبقاً · which slots to open at GAASH — what they asked for is pre-picked")}</div>${rows}`;
+  guFoot(0,2);
+}
+function guPick(t,src,id){ GU.picks[String(t)]={source:src,id:id}; guRender(); }
+function guStepFiles(){
+  const p=GU.plan;
+  const body=GU.types.map(t=>{
+    const cur=GU.picks[t]||{}, isDecl=String(t)==="7";
+    const opt=(src,id,label,sub,warn)=>{
+      const on=cur.source===src&&String(cur.id||"")===String(id||"");
+      return `<label class="wiz-opt" style="align-items:center;${warn?'opacity:.6;':''}">
+        <input type="radio" name="gu_${poEsc(t)}" ${on?"checked":""} ${warn?"disabled":""} onchange="guPick('${poEsc(t)}','${src}','${poEsc(id||"")}')">
+        <span><b>${poEsc(label)}</b><span class="muted2" style="display:block;font-size:11px">${poEsc(sub||"")}</span></span></label>`;
+    };
+    let opts="";
+    if(isDecl) opts=opt("declaration","",T("📄 تصريح يُبنى الآن · declaration, built now"),
+        p.declaration.ok?`${T("الاسم · name")}: ${p.declaration.name||"—"} · 🪪 ${p.declaration.id_number||"—"}`:p.declaration.why,
+        !p.declaration.ok);
+    if(p.customer&&p.customer.id_image)
+      opts+=opt("customer",p.customer.id_image,`🪪 ${T("هوية العميل · customer's own ID")} — ${p.customer.name||""}`,
+        p.customer.id_number?`🪪 ${p.customer.id_number}`:T("بلا رقم هوية · no ID number on file"));
+    opts+=(p.library||[]).map(d=>opt("library",d.id,d.name,d.folder)).join("");
+    return `<div style="margin-bottom:12px"><div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${poEsc(p.types[t]||("type "+t))}</div>
+      ${opts||`<div class="muted2" style="font-size:12px">${T("لا مستندات في المكتبة — ارفع واحداً من ⚙ الحسابات والقوالب · nothing in the library yet")}</div>`}</div>`;
+  }).join("");
+  $("guBody").innerHTML=body;
+  guFoot(1,3);
+}
+function guStepReview(){
+  const p=GU.plan;
+  const cards=GU.types.map(t=>{
+    const pick=GU.picks[t]||{}, slot=(p.slots||[]).find(s=>String(s.type)===String(t))||{};
+    let src="", cap="";
+    if(pick.source==="declaration"){ src=`/api/gaash/declaration_preview?gwd=${encodeURIComponent(GU.gwd)}`;
+      cap=`${T("الاسم · name")}: ${p.declaration.name||"—"} · 🪪 ${p.declaration.id_number||"—"}`; }
+    else if(pick.source==="customer"){ src=`/api/customer_image?file=${encodeURIComponent(pick.id)}`;
+      cap=`${p.customer&&p.customer.name||""} · 🪪 ${(p.customer&&p.customer.id_number)||"—"}`; }
+    else { const d=(p.library||[]).find(x=>String(x.id)===String(pick.id))||{};
+      src=`/api/gaash/idfile?file=${encodeURIComponent(d.filename||"")}`; cap=d.name||""; }
+    const isPdf=/\.pdf$/i.test(src)||pick.source==="declaration";
+    const view=isPdf
+      ? `<iframe src="${poEsc(src)}" style="width:100%;height:230px;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>`
+      : `<img src="${poEsc(src)}" style="width:100%;max-height:230px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff" onerror="this.style.display='none'">`;
+    return `<div class="panel" style="padding:10px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        <b style="font-size:12.5px">${poEsc(p.types[t]||("type "+t))}</b>
+        ${slot.label?`<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10px" title="${T("اسم الخانة عند غاش · GAASH's own name for this slot")}" dir="rtl">${poEsc(slot.label)}</span>`:""}
+        <span class="spacer"></span><span class="muted2" style="font-size:11px">${poEsc(cap)}</span>
+      </div>${view}</div>`;
+  }).join("");
+  $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("هذا ما سيصل غاش — تأكد أنها الهوية والتصريح الصحيحان · this is exactly what GAASH receives — check it is the right ID and declaration")}</div>${cards}
+    ${GU.res?guResultHtml():""}`;
+  guFoot(2,0);
+}
+function guResultHtml(){
+  const r=GU.res||{};
+  const rows=(r.docs||[]).map(d=>`<div style="display:flex;gap:8px;font-size:11.5px;padding:2px 0"><span class="mono">${poEsc(d.filename)}</span>
+    <span class="muted2" dir="rtl">${poEsc(d.gaash_label||"")}</span><span class="spacer"></span>
+    <span class="muted2">${Math.round((d.bytes||0)/1024)} KB${d.note?` · ${poEsc(d.note)}`:""}</span></div>`).join("");
+  return `<div class="en-warn ${r.ok?(r.dry_run?"dry":"live"):""}" style="${r.ok?"":"background:#fee2e2;border-color:#fca5a5;color:#b42318"}">
+    <b>${r.ok?(r.dry_run?"🧪 "+T("جاهز — لم يُرسل شيء · ready — nothing was sent"):"✅ "+T("تم الرفع · uploaded")):"⚠ "+T("فشل · failed")}</b>
+    <div style="font-size:11.5px;margin-top:3px">${poEsc(r.note||r.error||"")}</div>${rows}</div>`;
+}
+function guFoot(back,next){
+  const dry=GU.plan.dry_run;
+  $("bulkFoot").innerHTML=`<div style="display:flex;gap:8px;width:100%;align-items:center">
+    <a class="minibtn" style="text-decoration:none;margin-inline-end:auto" target="_blank" rel="noopener noreferrer"
+       href="${poEsc(GU.plan.slots&&GU.plan.slots.length?("https://ops.gaashwd.com/fileUpload?packageId="+encodeURIComponent(GU.gwd)+GU.types.map(t=>"&type="+encodeURIComponent(t)).join("")):"#")}"
+       title="${T("افتح صفحة غاش يدوياً · open GAASH's page by hand")}">↗ ${T("صفحة غاش · GAASH's page")}</a>
+    ${back?`<button class="minibtn" onclick="guGo(${back})">← ${T("رجوع · Back")}</button>`:""}
+    <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>
+    ${next?`<button class="accent" onclick="guGo(${next})">${T("التالي · Next")} →</button>`
+          :`<button class="accent" id="guSend" onclick="guSend(this)">${dry?"🧪 "+T("جهّز (تجربة) · Prepare (dry-run)"):"⬆ "+T("ارفع الآن · Upload now")}</button>`}</div>`;
+}
+async function guSend(btn){
+  if(!GU||GU.busy) return;
+  const docs=GU.types.map(t=>({type:Number(t),source:(GU.picks[t]||{}).source,id:(GU.picks[t]||{}).id}));
+  GU.busy=true; btn.disabled=true; btn.textContent="⏳ "+T("جارٍ… · working…");
+  let r; try{ r=await post("/api/gaash/upload",{gwd:GU.gwd,docs}); }catch(e){ r={ok:false,error:String(e)}; }
+  GU.busy=false; GU.res=r||{ok:false,error:"no answer"};
+  guRender();
+  if(r&&r.ok&&!r.dry_run){
+    toast("✅ "+T("رُفعت المستندات · documents uploaded"));
+    if(r.docs_state){ const row=(GM.docs||[]).find(x=>x.gwd===GU.gwd);
+      if(row){ row.state=r.docs_state.state||row.state; row.links=r.docs_state.links||row.links;
+               row.docs_checked=r.docs_state.checked||row.docs_checked; row.stale=false; } }
+    gmDocsDraw();
+  } else if(r&&r.ok){ toast("🧪 "+T("جاهز — لم يُرسل شيء · ready — nothing sent"));
+  } else toast("⚠ "+((r&&r.error)||T("فشل الرفع · upload failed")));
 }
 function gmDocsGrpToggle(key){
   GM_DOCS.closed=GM_DOCS.closed||new Set();
@@ -13976,6 +14133,7 @@ function gmSettingsOpen(){
     ${CAN_ADMIN?`<hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px">
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="gmSetDry" ${s.dry_run?"checked":""}> <b>${T("وضع التجربة (لا إرسال) · dry-run (no sends)")}</b></label>
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer" title="${T("مرفوع = يجهّز ويعرض فقط، لا يصل غاش · ticked = prepare and preview only, nothing reaches GAASH")}"><input type="checkbox" id="gmSetUpDry" ${(s.upload_dry_run===undefined?true:s.upload_dry_run)?"checked":""}> <b>${T("رفع المستندات: وضع التجربة · document upload: dry-run")}</b></label>
       <label>${T("إلى · to")}: <input id="gmSetTo" value="${poEsc(s.to_address||"")}" style="width:210px"></label>
       <label>${T("الأيام بين الإيميلات · days between emails")}: <input id="gmSetCad" value="${(s.cadence_days||[2,2,2]).join(",")}" style="width:70px"></label>
     </div>
@@ -14074,7 +14232,8 @@ async function gmTestSend(id,btn){
 }
 async function gmSettingsSave(btn){
   const cad=(($("gmSetCad")||{}).value||"").split(",").map(x=>parseFloat(x)).filter(x=>x>0);
-  const gm={dry_run:!!($("gmSetDry")||{}).checked, to_address:($("gmSetTo")||{}).value,
+  const gm={dry_run:!!($("gmSetDry")||{}).checked,
+    upload_dry_run:!!($("gmSetUpDry")||{}).checked, to_address:($("gmSetTo")||{}).value,
     steps:[0,1,2,3].map(i=>({subject_tpl:($("gmStS"+i)||{}).value, body_tpl:($("gmStB"+i)||{}).value}))};
   if(cad.length===3) gm.cadence_days=cad;
   // 🪪 the FULL name→ID dict every save (server replaces wholesale) — an emptied
