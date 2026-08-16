@@ -278,6 +278,11 @@
   th,td{text-align:left;padding:9px 11px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top}
   th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;background:var(--bg2);cursor:pointer}
   tr.row:hover{background:var(--bg2)}
+  .gmd-row:hover{background:var(--bg2)}   /* 📄 Docs queue rows — same hover as every other table */
+  /* every pill in the Docs table sits flush with its column header (.pill's own
+     margin-left would push it 6px right); a 2nd pill in one cell keeps its gap */
+  .gmd-row .pill,.gmd-grp .pill{margin-left:0}
+  .gmd-row .pill+.pill,.gmd-grp .pill+.pill{margin-left:6px}
   .amt{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
   .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
     font-size:11px;font-weight:700;white-space:nowrap;border:1px solid transparent}
@@ -13463,24 +13468,38 @@ async function gmDocsRender(){
   if(GM_DOCS.mode==="action"&&!GM.docs.some(r=>r.state==="action"||r.state==="stopped")) GM_DOCS.mode="all";
   gmDocsDraw();
 }
+// UI_AUDIT: no hand-rolled pills — these all go through the helper family above,
+// so they inherit .pill's own 10px and match the ORDER STATUS + GAASH STATUS
+// columns beside them. The hex handed to hexPill is the old markup's TEXT
+// colour; hexPill tints the background and border from it, which keeps the
+// darker, more readable ink these pills already had. Column-edge alignment is
+// handled once in CSS (.gmd-row .pill), not per call.
 function gmDocsStatePill(r){
   if(r.state==="action"){
     const t=T("غاش يطلب مستندات · GAASH asks for docs")+((r.codes||[]).includes(818)?" (ID)":"");
-    return `<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10.5px" title="${poEsc(t)}">🟡 ${T("مطلوب رفع · upload asked")}</span>`;
+    return hexPill("#b45309","🟡 "+T("مطلوب رفع · upload asked"),t);
   }
   if(r.state==="stopped")
-    return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10.5px">⛔ ${T("توقف التخليص · stopped")}</span>`;
+    return hexPill("#dc2626","⛔ "+T("توقف التخليص · stopped"));
   if(r.state==="noanswer"){
     const odd=!/^GWD\d{9}$/.test(r.gwd||"");
-    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px dashed var(--line);font-size:10.5px" title="${T("غاش لا سجل لهذا الرقم — تأكد من رقم التتبع · GAASH has no record of this number — check the Tracking Number")}">🚫 ${T("لا جواب · no answer")}</span>`
-      +(odd?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px" title="${T("الأرقام عادةً GWD + ٩ أرقام · a GWD is normally GWD + 9 digits")}">⚠ ${T("رقم غير معتاد · unusual number")}</span>`:"");
+    // dashed border keeps "no answer" visually distinct from plain "unchecked"
+    return tonePill("gray","🚫 "+T("لا جواب · no answer"),
+        T("غاش لا سجل لهذا الرقم — تأكد من رقم التتبع · GAASH has no record of this number — check the Tracking Number"),
+        {style:"border-style:dashed"})
+      +(odd?hexPill("#b45309","⚠ "+T("رقم غير معتاد · unusual number"),
+        T("الأرقام عادةً GWD + ٩ أرقام · a GWD is normally GWD + 9 digits"),
+        {style:"font-size:9.5px"}):"");
   }
   if(r.state==="unchecked"||r.state==="error")
-    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10.5px" title="${T(r.state==="error"?"تعذّر الفحص آخر مرة — أعد المحاولة · last check failed — try again":"لم يُفحص بعد — اضغط فحص · not checked yet — press Check")}">❔ ${T("غير مفحوص · unchecked")}</span>`;
+    return tonePill("gray","❔ "+T("غير مفحوص · unchecked"),
+      T(r.state==="error"?"تعذّر الفحص آخر مرة — أعد المحاولة · last check failed — try again":"لم يُفحص بعد — اضغط فحص · not checked yet — press Check"));
   // GAASH's docs clock only starts at arrival — say so instead of claiming customs
   if(!r.arrived)
-    return `<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10.5px" title="${T("لم يصل إسرائيل بعد — لا مستندات مطلوبة حتى الوصول · not in Israel yet — nothing is asked before arrival")}">🚚 ${T("لم يصل بعد · not arrived")}</span>`;
-  return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10.5px" title="${T("لا طلب مستندات، قيد المعالجة · no request, customs processing")}">🔵 ${T("بالجمارك · in customs")}</span>`;
+    return tonePill("gray","🚚 "+T("لم يصل بعد · not arrived"),
+      T("لم يصل إسرائيل بعد — لا مستندات مطلوبة حتى الوصول · not in Israel yet — nothing is asked before arrival"));
+  return hexPill("#0f766e","🔵 "+T("بالجمارك · in customs"),
+    T("لا طلب مستندات، قيد المعالجة · no request, customs processing"));
 }
 function gmDocsDraw(){
   const p=$("gmDocsPane"); if(!p) return;
@@ -13547,14 +13566,20 @@ function gmDocsDraw(){
   };
   const row=r=>{
     const lk=docsUploadLink(r);
-    const dl=r.gaash_deadline?`<span class="muted2 mono" style="font-size:10.5px;flex:none" title="GAASH deadline ${poEsc(r.gaash_deadline)}">⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${T("فات · passed")} ${-r.days_left}d</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}</span>`:"";
-    const chk=r.docs_checked?`<span class="muted2" style="font-size:10px;flex:none">${agoTxt(r.docs_checked)}</span>`:"";
-    const stale=r.stale&&r.state!=="unchecked"?`<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:9.5px" title="${T("آخر فحص قديم — أعد الفحص · last check is old — re-check")}">${T("قديم · stale")}</span>`:"";
-    return `<div id="gmdr_${poEsc(r.gwd)}" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
-      <span style="flex:none" title="${r.source==="leluxe"?"Leluxe":"Purchases"}">${badge(r.source)}</span>
-      <b class="mono" style="font-size:11.5px;flex:none;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
+    // deadline + last-check are real columns (they have header labels), so the
+    // slot is always rendered — an empty one keeps the row grid intact.
+    // overdue reads "12d late" (number first) so it stays on one line in the column
+    const dl=`<span class="muted2 mono" style="font-size:10.5px;flex:none;width:74px;white-space:nowrap;overflow:hidden" title="${r.gaash_deadline?"GAASH deadline "+poEsc(r.gaash_deadline):""}">${r.gaash_deadline?`⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${-r.days_left}d ${T("متأخر · late")}</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}`:""}</span>`;
+    const chk=`<span class="muted2" style="font-size:10px;flex:none;width:52px">${r.docs_checked?agoTxt(r.docs_checked):""}</span>`;
+    const stale=r.stale&&r.state!=="unchecked"?tonePill("gray",T("قديم · stale"),T("آخر فحص قديم — أعد الفحص · last check is old — re-check"),{style:"font-size:9.5px;flex:none"}):"";
+    // the name is the customs ship-under name; FAISAL is the blank→default, so
+    // dim it and let a real name stand out (parcel-name rule)
+    const nm=r.pname||r.name||"";
+    return `<div id="gmdr_${poEsc(r.gwd)}" class="gmd-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
+      <span style="flex:none;width:14px" title="${r.source==="leluxe"?"Leluxe":"Purchases"}">${badge(r.source)}</span>
+      <b class="mono" style="font-size:11.5px;flex:none;width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
       <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
-      <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.pname||r.name||"")}</span>
+      <span class="${/^faisal$/i.test(nm.trim())?"muted2":""}" style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(nm)}</span>
       <span style="width:130px;flex:none">${gmDocsStatePill(r)}</span>
       <span style="width:120px;flex:none;overflow:hidden" title="${T("حالتك على اللوحة · your own board status")}">${boardStatus(r)}</span>
       <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:10px"})}</span>
@@ -13562,8 +13587,8 @@ function gmDocsDraw(){
       <span class="spacer"></span>
       ${lk?`<button class="minibtn" onclick="guOpen('${poEsc(r.gwd)}')" title="${T("اختر المستندات وراجعها ثم ارفعها لغاش · pick the documents, review them, then upload to GAASH")}">⬆ ${T("رفع · Upload")}</button>`:""}
       <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
-      ${r.thread_state?`<button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
-                      :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
+      ${r.thread_state?`<button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" aria-label="${T("افتح المحادثة · open the conversation")}" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
+                      :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" aria-label="${T("سجّله في سير عمل · enroll in a workflow")}" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
     </div>`;
   };
   // ── order grouping (view "order" only): walk the FILTERED list in its sort
@@ -13585,11 +13610,11 @@ function gmDocsDraw(){
     const worst=b.rows.slice().sort((a,c)=>(RANK[a.state]??3)-(RANK[c.state]??3))[0];
     const gwds=b.rows.map(x=>x.gwd);
     const allTh=b.rows.every(x=>x.thread_state);
-    return `<div onclick="gmDocsGrpToggle('${poEsc(b.key)}')" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;cursor:pointer">
+    return `<div class="gmd-grp" onclick="gmDocsGrpToggle('${poEsc(b.key)}')" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;cursor:pointer">
       <span class="caret" style="flex:none;width:14px;color:var(--muted)">${open?"▾":"▸"}</span>
-      <span style="flex:none" title="${b.rows[0].source==="leluxe"?"Leluxe":"Purchases"}">${badge(b.rows[0].source)}</span>
+      <span style="flex:none;width:14px" title="${b.rows[0].source==="leluxe"?"Leluxe":"Purchases"}">${badge(b.rows[0].source)}</span>
       <b style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px" title="${poEsc(name)}">${poEsc(name||T("طلبية · order"))}</b>
-      <span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10px;flex:none">📦 ${gwds.length} ${T("طرود · parcels")}</span>
+      ${tonePill("gray","📦 "+gwds.length+" "+T("طرود · parcels"),"",{style:"flex:none"})}
       ${gmDocsStatePill(worst)}
       ${open?"":`<span class="muted2 mono" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gwds.map(poEsc).join(" · ")}</span>`}
       <span class="spacer"></span>
@@ -13633,7 +13658,7 @@ function gmDocsDraw(){
     </div>
     <div style="overflow-x:auto">
       <div style="min-width:1064px">
-        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;white-space:nowrap">
           <span style="flex:none;width:14px"></span>
           <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
           <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
@@ -13641,6 +13666,8 @@ function gmDocsDraw(){
           <span style="flex:none;width:130px">${T("المستندات · docs")}</span>
           <span style="flex:none;width:120px">${T("حالة الطلب · order status")}</span>
           <span style="flex:none;width:124px">${T("حالة الجمارك · GAASH status")}</span>
+          <span style="flex:none;width:74px">${T("المهلة · deadline")}</span>
+          <span style="flex:none;width:52px">${T("آخر فحص · checked")}</span>
           <span class="spacer"></span>
         </div>
         ${list.length?body:`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
