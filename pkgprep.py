@@ -124,6 +124,62 @@ def _pkgs_for(order_ids, pkgmeta):
         key=lambda p: (p["po_id"] or "", p["package_no"] or 0))
 
 
+def _place_unkeyed(order, out, recv, sent, exc, meta):
+    """Credit linked supply that the ASIN could not place on any line.
+
+    A PO item carries customer_order_id — THAT link is what proves the piece
+    belongs to this order; its ASIN only says which LINE. An order placed from
+    an a.co short link has no ASIN on the line (expanding one is a network call
+    Amazon blocks from our host, so intake stores the bare link), which made the
+    two sides key differently — (order, None) against (order, B0DSZPZGJZ). The
+    received unit landed nowhere, the order looked like "nothing arrived", and
+    build() dropped THE WHOLE CUSTOMER off the board: their parcel sat received
+    in the office with no card telling anyone to pack it.
+
+    Only an ASIN-less line may absorb a stray piece. A line naming a DIFFERENT
+    product stays missing on purpose — that is a real mismatch (the wrong thing
+    was bought), not a lookup failure, and hiding it would be worse.
+    """
+    oid = order["order_id"]
+    slots = [row for row, it in zip(out, order.get("items") or [])
+             if not (it.get("asin") or "").strip()]
+    if not slots:
+        return
+    for row in slots:
+        if row["missing_qty"] <= 0:
+            continue
+        # same order as the keyed pass: exceptions first (never coming), then
+        # what is in hand, then what already went out
+        for key in [k for k in list(exc) if k[0] == oid]:
+            for st in list(exc[key]):
+                take = min(exc[key][st], row["missing_qty"])
+                if take <= 0:
+                    continue
+                exc[key][st] -= take
+                row["exception_qty"] += take
+                row["missing_qty"] -= take
+                if st not in row["exceptions"]:
+                    row["exceptions"].append(st)
+        for pool, field in ((recv, "received_qty"), (sent, "sent_qty")):
+            for key in [k for k in list(pool) if k[0] == oid and pool[k] > 0]:
+                take = min(pool[key], row["missing_qty"])
+                if take <= 0:
+                    continue
+                pool[key] -= take
+                row[field] += take
+                row["missing_qty"] -= take
+                # the line knew no ASIN; the piece that filled it does — borrow
+                # its identity so the card can show a photo and a real title
+                if not row["asin"]:
+                    m = meta.get(key) or {}
+                    row["asin"] = key[1]
+                    row["title"] = row["title"] or m.get("title")
+                    row["image"] = row["image"] or m.get("image")
+        row["state"] = ("missing" if row["missing_qty"] else
+                        "received" if row["received_qty"] else
+                        "sent" if row["sent_qty"] else "exception")
+
+
 def _annotate_items(order, recv, sent, exc, meta):
     """Attach received/sent/exception/missing unit counts to each order item.
 
@@ -170,6 +226,7 @@ def _annotate_items(order, recv, sent, exc, meta):
             "missing_qty": missing,
             "state": state,
         })
+    _place_unkeyed(order, out, recv, sent, exc, meta)
     return out
 
 

@@ -255,6 +255,47 @@ def main():
           and "function ppFlds(" in html)
     check("package row shows the OTL number", "pkg.customer_tracking" in html)
 
+    # ---- a line with NO ASIN still sees its linked pieces ------------------- #
+    # Live incident 2026-08-16: عنان العجاوي's parcel sat RECEIVED in the office
+    # while she was missing from the board entirely. Her order came from an a.co
+    # short link, so the line carried no ASIN — Amazon blocks the expansion from
+    # our host — while the PO item that fulfils it did. (order, None) never met
+    # (order, B0DSZPZGJZ), the order scored "nothing arrived", and build() drops
+    # such people completely. The customer_order_id link is the authority.
+    print("— ASIN-less order lines (a.co short links) —")
+    nolink = [
+        _order("OTL-0101", "Shortlink Sami", [{"qty": 1, "raw_url": "https://a.co/d/084hXpF5"}],
+               amount=35.59, phones=[PH]),
+        _order("OTL-0102", "Partly Petra",
+               [{"qty": 1, "raw_url": "https://a.co/d/05iF7eTH"},
+                {"qty": 1, "raw_url": "https://a.co/d/0dQ9v14T"}],
+               amount=92.32, phones=[PH2]),
+        # a line that NAMES a different product must stay missing — a real
+        # mismatch (wrong thing bought) must never be papered over
+        _order("OTL-0103", "Mismatch Mona", [{"asin": "B0WANTED", "qty": 1}],
+               amount=10.0, phones=[]),
+    ]
+    nopdb = {"purchase_orders": [{"po_id": "PO-9", "packages": [
+        _pkg("recieved rd", 1, [_pitem("OTL-0101", "B0DSZPZGJZ", 1,
+                                       image="http://img/sun.jpg", title="Windshield Sun Shade"),
+                                _pitem("OTL-0102", "B0DTV2MT5W", 1),
+                                _pitem("OTL-0103", "B0BOUGHT", 1)])]}]}
+    r2 = pkgprep.build(nolink, nopdb, 3.1)
+    ready2 = {c["name"]: c for c in r2["ready"]}
+    wait2 = {c["name"]: c for c in r2["waiting"]}
+    check("an ASIN-less line credits its linked received piece",
+          "Shortlink Sami" in ready2 and ready2["Shortlink Sami"]["n_received"] == 1
+          and ready2["Shortlink Sami"]["n_missing"] == 0)
+    line = ready2["Shortlink Sami"]["orders"][0]["items"][0] if "Shortlink Sami" in ready2 else {}
+    check("...and borrows the PO item's ASIN, title and photo for the card",
+          line.get("asin") == "B0DSZPZGJZ" and line.get("title") == "Windshield Sun Shade"
+          and line.get("image") == "http://img/sun.jpg")
+    check("one received of two ASIN-less lines is WAITING, not READY",
+          "Partly Petra" in wait2 and wait2["Partly Petra"]["n_received"] == 1
+          and wait2["Partly Petra"]["n_missing"] == 1)
+    check("a line naming a DIFFERENT product stays missing (not silently filled)",
+          "Mismatch Mona" not in ready2 and "Mismatch Mona" not in wait2)
+
     print()
     if fails:
         print(f"FAILED: {len(fails)} check(s):", *fails, sep="\n  - ")
