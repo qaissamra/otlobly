@@ -449,6 +449,41 @@ def main():
                   json={"email": "a@b.com", "app_password": "x"}).status_code == 403)
     check("employee cannot upload IDs",
           ce.post("/api/gaash/ids", json={"name": "x"}).status_code == 403)
+
+    print("— 🪪 library uploads are stored as PDF (converted on the way in) —")
+    import base64 as _b64
+    import struct as _struct
+    # the smallest JPEG gaash_upload's SOF reader copes with: APP0 then SOF0
+    jpg = (b"\xff\xd8\xff\xe0" + _struct.pack(">H", 16) + b"JFIF\x00" + b"\x00" * 9
+           + b"\xff\xc0" + _struct.pack(">H", 17) + b"\x08"
+           + _struct.pack(">HH", 6, 8) + b"\x03" + b"\x00" * 9
+           + b"\xff\xd9")
+    r = co.post("/api/gaash/ids", json={
+        "name": "conv jpg", "filename": "scan.jpg", "folder": "id",
+        "data_base64": _b64.b64encode(jpg).decode()}).get_json()
+    stored = gm.id_file_path(r.get("filename", "")) if r.get("ok") else None
+    check("a JPEG upload files as .pdf",
+          r.get("ok") and r["filename"].endswith(".pdf"))
+    check("...and the stored bytes ARE a PDF",
+          stored and stored.read_bytes().startswith(b"%PDF-"))
+    check("...the response says what happened, with the stored size",
+          "wrapped" in (r.get("note") or "") and r.get("size") == stored.stat().st_size)
+    before = len(gm.ids_list())
+    bad = co.post("/api/gaash/ids", json={
+        "name": "junk", "filename": "junk.png", "folder": "id",
+        "data_base64": _b64.b64encode(b"this is not an image").decode()})
+    check("an unconvertible file is refused with the reason",
+          bad.status_code == 400 and "GAASH only takes those" in
+          (bad.get_json() or {}).get("error", ""))
+    check("...and nothing was filed", len(gm.ids_list()) == before)
+    real_pdf = b"%PDF-1.4 tiny"
+    r2 = co.post("/api/gaash/ids", json={
+        "name": "already pdf", "filename": "cert.pdf", "folder": "certificate",
+        "data_base64": _b64.b64encode(real_pdf).decode()}).get_json()
+    stored2 = gm.id_file_path(r2.get("filename", "")) if r2.get("ok") else None
+    check("a real PDF passes through byte-identical",
+          r2.get("ok") and stored2 and stored2.read_bytes() == real_pdf
+          and not r2.get("note"))
     r = co.post("/api/gaash/thread",
                 json={"gwd": "GWD400", "action": "missing_docs", "note": "KMT"})
     th = r.get_json().get("thread")

@@ -113,6 +113,12 @@ def main():
     badimg = anon.post("/api/id/submit", json={"token": token, "id_number": "PAL-1",
                                                "data_base64": "not-valid-base64!!"})
     check("an unreadable photo is rejected", badimg.status_code == 400)
+    notpic = anon.post("/api/id/submit",
+                       json={"token": token, "id_number": "PAL-1",
+                             "data_base64": base64.b64encode(b"plain text, no image").decode(),
+                             "filename": "id.png"})
+    check("a photo that can't become a PDF (not JPG/PNG/PDF) is rejected",
+          notpic.status_code == 400)
     # a rejection must not burn the single-use token — the customer retries
     check("a rejected submit leaves the link usable",
           anon.get(f"/api/idreq/{token}").get_json().get("ok") is True)
@@ -130,6 +136,22 @@ def main():
     check("customer ID image saved + on disk",
           bool(cust2.get("id_image")) and (cust_mod.ID_DIR / cust2["id_image"]).exists())
     check("the order was stamped id_submitted_at", bool(db.get_order(oid).get("id_submitted_at")))
+
+    print("— staff CRM photo upload gets the same PDF-convertible gate —")
+    badc = adm.post("/api/customer_image",
+                    json={"customer_id": c["customer_id"], "filename": "x.png",
+                          "data_base64": base64.b64encode(b"not an image at all").decode()})
+    check("staff upload refuses a non-JPG/PNG/PDF", badc.status_code == 400)
+    bigc = adm.post("/api/customer_image",
+                    json={"customer_id": c["customer_id"], "filename": "big.jpg",
+                          "data_base64": base64.b64encode(b"\xff" * (16 * 1024 * 1024)).decode()})
+    check("staff upload refuses an over-15MB file (route had NO cap before)",
+          bigc.status_code == 400)
+    okc = adm.post("/api/customer_image",
+                   json={"customer_id": c["customer_id"], "filename": "id2.png",
+                         "data_base64": base64.b64encode(_PNG).decode()})
+    check("a real PNG still lands on the profile",
+          okc.status_code == 200 and okc.get_json().get("ok"))
 
     print("— id_number flows onto order rows (Purchases order-map) —")
     rep = adm.get("/api/report").get_json()
