@@ -11946,9 +11946,12 @@ async function gmSendDeclMake(btn){
 // a wrong ID number reached customs on four parcels — it was rebuilt correctly
 // from a wrong source onto every email, and the one document nobody could click
 // was the one carrying the mistake. The name is the link; ✕ still removes.
-function gmChipUrl(d){
-  // decl:auto is written at send time, so its "file" is a route that builds it
-  if(d.id==="decl:auto") return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(GM.cur||"")}`;
+function gmChipUrl(d,gwd){
+  // decl:auto is written at send time, so its "file" is a route that builds it.
+  // The gwd is passed in because the chip may belong to a parcel that is not the
+  // open conversation — the enroll wizard previews parcels before any thread
+  // exists, and a grouped unit papers every member. GM.cur is only the fallback.
+  if(d.id==="decl:auto") return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(gwd||GM.cur||"")}`;
   return d.filename?`/api/gaash/idfile?file=${encodeURIComponent(d.filename)}`:"";
 }
 // ✕ on a chip must drop it from THIS message, always. gmIdPick routes through
@@ -13259,9 +13262,24 @@ async function gmWizPreview(){
   const seq=(ov.sequences||[]).find(x=>x.id===st.seqId)||(ov.sequences||[])[0]||{};
   const st0=(seq.steps||[]).find(x=>x.template_id)||{};
   const to=((seq.to_address||s.to_address)||"").trim();
-  const atts=[...(st.docIds||[]),...(unit.flatMap(g=>(st.docs||{})[g]?[st.docs[g].id]:[]))]
-    .map(id=>(unit.map(g=>(st.docs||{})[g]).find(d=>d&&d.id===id))
-      ||((ov.ids||[]).find(x=>x.id===id)||null)).filter(Boolean);
+  // One chip per attachment the send REALLY makes. A library document is a file
+  // with a URL; the declaration is written fresh onto each email and never
+  // stored, so it has no filename and opens through the route that builds it —
+  // and a GROUPED unit carries ONE PER MEMBER, exactly as _step_attachments
+  // does. Matching them back by id gave every member the FIRST member's entry
+  // (they all share the id "decl:auto") and a href of file=undefined: three
+  // parcels, three identical chips, and the one document nobody could click was
+  // the one carrying the numbers. Declarations first — the order the send packs.
+  const atts=[
+    ...unit.filter(g=>((st.docs||{})[g]||{}).id).map(g=>({...st.docs[g],gwd:g,auto:true})),
+    ...(st.docIds||[]).map(id=>(ov.ids||[]).find(x=>x.id===id)).filter(Boolean),
+  ];
+  const attOpen=T("افتح للمراجعة قبل الإرسال · open it to check before you send");
+  const attChip=a=>{ const u=gmChipUrl(a,a.gwd);
+    return `<span class="gm-att">${u
+      ?`<a href="${u}" target="_blank" title="${attOpen}: ${poEsc(a.name)}">📎 ${poEsc(a.name)}</a>`
+      :`📎 ${poEsc(a.name)}`}${a.auto?`<span class="gm-cap" style="margin-inline-start:4px">· ${
+        T("يُبنى عند الإرسال · built on send")}</span>`:""}</span>`; };
   const nav=`<div class="wiz-nav">
       <button class="minibtn" ${at<=0?"disabled":""} onclick="GM.wiz.at=${at-1};gmWizPreview()">◀</button>
       <span class="mono">${poEsc(gwd)}${unit.length>1?` <span class="pill" style="background:var(--bg2);border:1px solid var(--line);font-size:10px" title="${unit.map(poEsc).join(" · ")}">+${unit.length-1}</span>`:""}</span>
@@ -13286,8 +13304,7 @@ async function gmWizPreview(){
     <div class="wiz-mail-h"><span class="muted2">${T("الموضوع · Subject")}</span>
       <b>${poEsc((r&&r.subject)||T("لا قالب لهذا السير · this workflow has no template"))}</b></div>
     <div class="wiz-mail-b">${poEsc((r&&r.body)||"")}</div>
-    ${atts.length?`<div class="wiz-mail-f">${atts.map(a=>`
-      <a class="gm-att" target="_blank" href="/api/gaash/idfile?file=${encodeURIComponent(a.filename)}">📎 ${poEsc(a.name)}</a>`).join("")}</div>`:
+    ${atts.length?`<div class="wiz-mail-f">${atts.map(attChip).join("")}</div>`:
       `<div class="wiz-mail-f muted2" style="font-size:11.5px">${T("بلا مرفقات · no attachments")}</div>`}
     ${miss.length?`<div class="wiz-mail-f" style="color:#b45309;font-size:11px">⚠ ${T("لم يُملأ · not filled in")}: ${
       miss.map(t=>`<b class="mono">{${poEsc(t)}}</b>`).join(" · ")}</div>`:""}</div>`;
