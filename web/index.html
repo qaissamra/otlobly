@@ -13650,12 +13650,12 @@ function gmDocsDraw(){
 }
 /* ── 🪪 Upload documents to GAASH ────────────────────────────────────────────
    Three steps, the same shape as the enroll wizard, but it ends in an UPLOAD
-   instead of an email: pick the slots GAASH asked for → choose the actual
-   file for each → REVIEW the real document, then send. Nothing is posted
-   while dry-run is on; the review screen says so plainly. */
+   instead of an email: pick the slots GAASH asked for → then ONE PAGE PER
+   SLOT to choose (or upload) the actual file → REVIEW the real documents,
+   then send. Nothing is posted while dry-run is on; the review says so. */
 let GU=null;
 async function guOpen(gwd){
-  GU={gwd, step:1, types:[], picks:{}, plan:null, busy:false, res:null};
+  GU={gwd, step:1, fi:0, types:[], picks:{}, plan:null, planTypes:"", busy:false, res:null, up:null, idNum:""};
   bulkOpen("🪪 "+T("رفع مستندات لغاش · Upload documents to GAASH")+" · "+gwd);
   $("bulkBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ سؤال غاش عن الخانات… · asking GAASH which slots it opens…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
@@ -13664,21 +13664,69 @@ async function guOpen(gwd){
   GU.plan=d;
   // start with exactly what GAASH asked for — their answer beats our guess
   GU.types=[String(d.asked_type||(d.slots[0]||{}).type||8)];
+  GU.planTypes=GU.types.join(",");     // the types this plan's slots were fetched for
   guRender();
 }
 const GU_STEPS=[{n:1,lab:"المستندات · Documents"},{n:2,lab:"الملفات · Files"},{n:3,lab:"المراجعة · Review"}];
+function guSlotName(t){ return T(((GU.plan||{}).types||{})[t]||("type "+t)); }
 function guGo(n){
+  // the step-strip tabs. Jumping to Review with an unfilled slot LANDS ON that
+  // slot's page (naming it) instead of failing with a generic toast.
   if(!GU) return;
   if(n>1&&!GU.types.length){ toast(T("اختر نوع مستند واحداً على الأقل · pick at least one document type")); return; }
   if(n>2){ const missing=GU.types.filter(t=>!GU.picks[t]);
-    if(missing.length){ toast(T("اختر ملفاً لكل خانة · choose a file for every slot")); return; } }
+    if(missing.length){ GU.step=2; GU.fi=Math.max(0,GU.types.indexOf(missing[0])); guRender();
+      toast(T("اختر ملفاً لهذه الخانة · choose a file for this slot")+" — "+guSlotName(missing[0])); return; } }
+  if(n===3){ guEnterReview(); return; }
+  if(n===2) GU.fi=0;
   GU.step=Math.max(1,Math.min(3,n)); guRender();
+}
+function guNext(){
+  if(!GU) return;
+  if(GU.step===1){
+    if(!GU.types.length){ toast(T("اختر نوع مستند واحداً على الأقل · pick at least one document type")); return; }
+    GU.step=2; GU.fi=0; guRender(); return;
+  }
+  const t=GU.types[GU.fi];
+  if(!GU.picks[t]){ toast(T("اختر ملفاً لهذه الخانة · choose a file for this slot")+" — "+guSlotName(t)); return; }
+  if(GU.fi<GU.types.length-1){ GU.fi++; guRender(); } else guEnterReview();
+}
+function guBack(){
+  if(!GU) return;
+  if(GU.step===3){ GU.step=2; GU.fi=Math.max(0,GU.types.length-1); guRender(); return; }
+  if(GU.fi>0){ GU.fi--; } else GU.step=1;
+  guRender();
+}
+async function guEnterReview(){
+  // the plan's slots (GAASH's own Hebrew labels) were fetched for the asked
+  // type only — refetch for everything ticked so every review card is labelled
+  if(!GU) return;
+  const want=GU.types.slice().join(","), gwd=GU.gwd;
+  if(want!==GU.planTypes){
+    if($("guBody")) $("guBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ تجهيز المراجعة… · preparing the review…")}</div>`;
+    let d=null; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd)+"&types="+encodeURIComponent(want))).json(); }catch(e){}
+    if(!GU||GU.gwd!==gwd) return;
+    // a failed refetch keeps the old plan — the review still works, at worst
+    // the extra slots miss their GAASH-label pill
+    if(d&&d.ok){ GU.plan=d; GU.planTypes=want; }
+  }
+  GU.step=3; guRender();
+}
+async function guReplan(){
+  // refresh the plan in place (same picks, same slot) — after filing the
+  // customer's ID number the declaration and customer lines must update
+  const gwd=GU&&GU.gwd; if(!gwd) return;
+  const want=GU.types.slice().join(",");
+  let d=null; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd)+"&types="+encodeURIComponent(want))).json(); }catch(e){}
+  if(!GU||GU.gwd!==gwd) return;
+  if(d&&d.ok){ GU.plan=d; GU.planTypes=want; }
+  guRender();
 }
 function guRender(){
   if(!GU||!GU.plan) return;
   const p=GU.plan, dry=p.dry_run;
   const strip=`<div class="wiz-strip">${GU_STEPS.map(s=>`
-    <button class="wiz-tab${s.n===GU.step?" on":""}${s.n<GU.step?" done":""}" onclick="guGo(${s.n})"><i>${s.n<GU.step?"✓":s.n}</i>${T(s.lab)}</button>`).join("")}</div>`;
+    <button class="wiz-tab${s.n===GU.step?" on":""}${s.n<GU.step?" done":""}" onclick="guGo(${s.n})"><i>${s.n<GU.step?"✓":s.n}</i>${T(s.lab)}${s.n===2&&GU.step===2&&GU.types.length>1?` ${GU.fi+1}/${GU.types.length}`:""}</button>`).join("")}</div>`;
   const banner=dry
     ? `<div class="en-warn dry"><b>🧪 ${T("وضع التجربة — لن يُرفع شيء · Dry-run — nothing will be uploaded")}</b> — ${T("كل شيء يُجهَّز ويُعرض، ولا يُرسل لغاش · everything is prepared and shown, nothing reaches GAASH")}</div>`
     : `<div class="en-warn live"><b>⬆ ${T("رفع حقيقي إلى غاش · A real upload to GAASH")}</b> — ${T("المستندات ستصل سجل الجمارك فعلياً · these documents really land on the customs record")}</div>`;
@@ -13701,44 +13749,122 @@ function guStepTypes(){
         <span class="muted2" style="display:block;font-size:11px">type ${poEsc(t)}</span></span></label>`;
   }).join("");
   $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("أي خانات تفتحها عند غاش؟ المطلوب مُختار مسبقاً · which slots to open at GAASH — what they asked for is pre-picked")}</div>${rows}`;
-  guFoot(0,2);
+  guFoot(0,1);
 }
 function guPick(t,src,id){ GU.picks[String(t)]={source:src,id:id}; guRender(); }
+// which library folder a slot's upload files under — 6/8 are people (id),
+// 3/7 are declarations, everything else is a standing paper (certificate)
+function guFolderFor(t){ return {"6":"id","8":"id","7":"declaration","3":"declaration"}[String(t)]||"certificate"; }
 function guStepFiles(){
-  const p=GU.plan;
-  const body=GU.types.map(t=>{
-    const cur=GU.picks[t]||{}, isDecl=String(t)==="7";
-    const opt=(src,id,label,sub,warn)=>{
-      const on=cur.source===src&&String(cur.id||"")===String(id||"");
-      return `<label class="wiz-opt" style="align-items:center;${warn?'opacity:.6;':''}">
-        <input type="radio" name="gu_${poEsc(t)}" ${on?"checked":""} ${warn?"disabled":""} onchange="guPick('${poEsc(t)}','${src}','${poEsc(id||"")}')">
-        <span><b>${poEsc(label)}</b><span class="muted2" style="display:block;font-size:11px">${poEsc(sub||"")}</span></span></label>`;
-    };
-    let opts="";
-    if(isDecl) opts=opt("declaration","",T("📄 تصريح يُبنى الآن · declaration, built now"),
+  const p=GU.plan, t=GU.types[GU.fi], cur=GU.picks[t]||{}, isDecl=String(t)==="7";
+  const overKb=d=>(p.max_bytes&&(d.size||0)>p.max_bytes)
+    ?`⚠ ${Math.round(d.size/1024)} KB — ${T("فوق حد غاش ٢ م.ب · over GAASH's 2 MB limit")}`:"";
+  const opt=(src,id,label,sub,warn,amber)=>{
+    const on=cur.source===src&&String(cur.id||"")===String(id||"");
+    return `<label class="wiz-opt" style="align-items:center;${warn?'opacity:.6;':''}">
+      <input type="radio" name="gu_${poEsc(t)}" ${on?"checked":""} ${warn?"disabled":""} onchange="guPick('${poEsc(t)}','${src}','${poEsc(id||"")}')">
+      <span><b>${poEsc(label)}</b><span class="muted2" style="display:block;font-size:11px">${poEsc(sub||"")}</span>${amber?`<span style="display:block;font-size:11px;color:#b45309">${poEsc(amber)}</span>`:""}</span></label>`;
+  };
+  let opts="";
+  if(isDecl){
+    opts=opt("declaration","",T("📄 تصريح يُبنى الآن · declaration, built now"),
         p.declaration.ok?`${T("الاسم · name")}: ${p.declaration.name||"—"} · 🪪 ${p.declaration.id_number||"—"}`:p.declaration.why,
         !p.declaration.ok);
-    if(p.customer&&p.customer.id_image)
-      opts+=opt("customer",p.customer.id_image,`🪪 ${T("هوية العميل · customer's own ID")} — ${p.customer.name||""}`,
-        p.customer.id_number?`🪪 ${p.customer.id_number}`:T("بلا رقم هوية · no ID number on file"));
-    opts+=(p.library||[]).map(d=>opt("library",d.id,d.name,d.folder)).join("");
-    return `<div style="margin-bottom:12px"><div class="muted2" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${poEsc(p.types[t]||("type "+t))}</div>
-      ${opts||`<div class="muted2" style="font-size:12px">${T("لا مستندات في المكتبة — ارفع واحداً من ⚙ الحسابات والقوالب · nothing in the library yet")}</div>`}</div>`;
-  }).join("");
-  $("guBody").innerHTML=body;
-  guFoot(1,3);
+    if(p.declaration.ok)
+      opts+=`<div style="margin:-4px 0 10px 26px"><a class="minibtn" style="text-decoration:none" target="_blank" rel="noopener noreferrer"
+        href="/api/gaash/declaration_preview?gwd=${encodeURIComponent(GU.gwd)}"
+        title="${T("المستند نفسه الذي سيُرسل · the exact document the send would post")}">👁 ${T("معاينة التصريح · view the declaration")}</a></div>`;
+  }
+  if(p.customer&&p.customer.id_image)
+    opts+=opt("customer",p.customer.id_image,`🪪 ${T("هوية العميل · customer's own ID")} — ${p.customer.name||""}`,
+      p.customer.id_number?`🪪 ${p.customer.id_number}`:T("بلا رقم هوية · no ID number on file"));
+  // no ID number on file — offer to file it right here (a blank number on a
+  // declaration is how a wrong ID once reached customs)
+  if(p.customer&&!p.customer.id_number&&p.customer.customer_id&&CAN_ADMIN&&(isDecl||p.customer.id_image))
+    opts+=`<div class="panel" style="padding:8px 10px;margin:-2px 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="muted2" style="font-size:11.5px;flex:1 1 100%">🪪 ${T("رقم هوية العميل ينقص — سجّله الآن ليُطبع على أوراقه · the customer's ID number is missing — file it now so their papers carry it")}</span>
+      <input id="guIdNum" placeholder="${T("رقم الهوية · ID number")}" value="${poEsc(GU.idNum||"")}" oninput="GU.idNum=this.value"
+        style="flex:1;min-width:140px;font-size:12.5px">
+      <button class="minibtn" onclick="guIdFixSave(this)">${T("حفظ · Save")}</button></div>`;
+  const want=guFolderFor(t);
+  const lib=(p.library||[]).slice().sort((a,b)=>((a.folder===want)?0:1)-((b.folder===want)?0:1));
+  opts+=lib.map(d=>opt("library",d.id,d.name,d.folder,false,overKb(d))).join("");
+  let up="";
+  if(CAN_ADMIN) up=(GU.up&&String(GU.up.t)===String(t))?guUpFormHtml()
+    :`<button class="minibtn" style="margin-top:2px" onclick="guUpPick('${poEsc(t)}')">＋ ${T("رفع ملف جديد · upload a new file")}</button>`;
+  const head=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 10px">
+    <b style="font-size:13px">${poEsc(p.types[t]||("type "+t))}</b>
+    ${String(t)===String(p.asked_type||"")?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
+    <span class="spacer"></span>
+    <span class="muted2" style="font-size:11px">${T("خانة · slot")} ${GU.fi+1}/${GU.types.length}</span></div>`;
+  $("guBody").innerHTML=head
+    +(opts||`<div class="muted2" style="font-size:12px;margin-bottom:8px">${T("لا مستندات في المكتبة بعد — ارفع واحداً من هنا · nothing in the library yet — upload one right here")}</div>`)
+    +up;
+  guFoot(1,1);
+}
+async function guIdFixSave(btn){
+  const v=(($("guIdNum")||{}).value||"").trim();
+  if(!v){ toast(T("اكتب رقم الهوية أولاً · type the ID number first")); return; }
+  btn.disabled=true;
+  let r=null; try{ r=await post("/api/customer/id_number",{customer_id:GU.plan.customer.customer_id, id_number:v}); }catch(e){}
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر الحفظ · could not save")); return; }
+  GU.idNum=""; toast("🪪 ✓ "+v);
+  await guReplan();
+}
+function guUpPick(t){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
+  inp.onchange=()=>{ const f=inp.files[0]; if(!f||!GU) return;
+    const mx=(GU.plan||{}).max_bytes||2*1024*1024;
+    // an image is WRAPPED into the PDF, not recompressed, so an over-limit
+    // file here is guaranteed to be refused at send — say so now
+    if(f.size>mx){ toast(`⚠ ${Math.round(f.size/1024)} KB — ${T("فوق حد غاش ٢ م.ب — استخدم نسخة أصغر · over GAASH's 2 MB limit — use a smaller scan")}`); return; }
+    GU.up={t:String(t), file:f, name:f.name.replace(/\.[^.]+$/,"")};
+    guRender(); };
+  inp.click();
+}
+function guUpFormHtml(){
+  const f=GU.up.file, fold=guFolderFor(GU.up.t);
+  const foldLab={id:"🪪 "+T("هويات · IDs"),declaration:"📄 "+T("تصاريح · declarations"),certificate:"📜 "+T("شهادات · certificates")}[fold]||fold;
+  return `<div class="panel" style="padding:10px;margin-top:6px">
+    <div class="muted2" style="font-size:11.5px;margin-bottom:6px">${poEsc(f.name)} · ${gmSize(f.size)} → ${foldLab}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="guUpName" value="${poEsc(GU.up.name||"")}" oninput="GU.up.name=this.value"
+        placeholder="${T("اسم المستند · document name")}" style="flex:1;min-width:160px;font-size:12.5px">
+      <button class="minibtn" onclick="GU.up=null;guRender()">${T("إلغاء · Cancel")}</button>
+      <button class="accent" onclick="guUpSave(this)">${T("حفظ في المكتبة · Save to library")}</button></div></div>`;
+}
+async function guUpSave(btn){
+  const u=GU&&GU.up; if(!u) return;
+  const name=(u.name||"").trim()||u.file.name;
+  btn.disabled=true; btn.textContent="⏳";
+  let r=null;
+  try{ const b=await gmFileB64(u.file);
+       r=await post("/api/gaash/ids",{name, filename:u.file.name, data_base64:b.data_base64, folder:guFolderFor(u.t)}); }
+  catch(e){}
+  if(!GU||GU.up!==u) return;                         // wizard closed / reopened meanwhile
+  if(!r||!r.ok){ btn.disabled=false; btn.textContent=T("حفظ في المكتبة · Save to library");
+    toast((r&&r.error)||T("فشل الرفع · upload failed")); return; }
+  // now a permanent 🪪 library document — reusable on every future parcel
+  (GU.plan.library=GU.plan.library||[]).push({id:r.id, name, folder:guFolderFor(u.t), filename:r.filename, size:u.file.size});
+  const t=u.t; GU.up=null;
+  toast("🪪 "+name);
+  guPick(t,"library",r.id);                          // re-renders, new file selected
 }
 function guStepReview(){
   const p=GU.plan;
   const cards=GU.types.map(t=>{
     const pick=GU.picks[t]||{}, slot=(p.slots||[]).find(s=>String(s.type)===String(t))||{};
-    let src="", cap="";
+    let src="", cap="", over="";
     if(pick.source==="declaration"){ src=`/api/gaash/declaration_preview?gwd=${encodeURIComponent(GU.gwd)}`;
       cap=`${T("الاسم · name")}: ${p.declaration.name||"—"} · 🪪 ${p.declaration.id_number||"—"}`; }
     else if(pick.source==="customer"){ src=`/api/customer_image?file=${encodeURIComponent(pick.id)}`;
       cap=`${p.customer&&p.customer.name||""} · 🪪 ${(p.customer&&p.customer.id_number)||"—"}`; }
     else { const d=(p.library||[]).find(x=>String(x.id)===String(pick.id))||{};
-      src=`/api/gaash/idfile?file=${encodeURIComponent(d.filename||"")}`; cap=d.name||""; }
+      src=`/api/gaash/idfile?file=${encodeURIComponent(d.filename||"")}`; cap=d.name||"";
+      if(d.size){ const kb=`${Math.round(d.size/1024)} KB`;
+        if(p.max_bytes&&d.size>p.max_bytes) over=`⚠ ${kb} — ${T("فوق حد غاش ٢ م.ب · over GAASH's 2 MB limit")}`;
+        else cap+=` · ${kb}`; } }
     const isPdf=/\.pdf$/i.test(src)||pick.source==="declaration";
     const view=isPdf
       ? `<iframe src="${poEsc(src)}" style="width:100%;height:230px;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>`
@@ -13748,11 +13874,12 @@ function guStepReview(){
         <b style="font-size:12.5px">${poEsc(p.types[t]||("type "+t))}</b>
         ${slot.label?`<span class="pill" style="background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:10px" title="${T("اسم الخانة عند غاش · GAASH's own name for this slot")}" dir="rtl">${poEsc(slot.label)}</span>`:""}
         <span class="spacer"></span><span class="muted2" style="font-size:11px">${poEsc(cap)}</span>
+        ${over?`<span style="font-size:11px;color:#b45309">${poEsc(over)}</span>`:""}
       </div>${view}</div>`;
   }).join("");
   $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("هذا ما سيصل غاش — تأكد أنها الهوية والتصريح الصحيحان · this is exactly what GAASH receives — check it is the right ID and declaration")}</div>${cards}
     ${GU.res?guResultHtml():""}`;
-  guFoot(2,0);
+  guFoot(1,0);
 }
 function guResultHtml(){
   const r=GU.res||{};
@@ -13769,9 +13896,9 @@ function guFoot(back,next){
     <a class="minibtn" style="text-decoration:none;margin-inline-end:auto" target="_blank" rel="noopener noreferrer"
        href="${poEsc(GU.plan.slots&&GU.plan.slots.length?("https://ops.gaashwd.com/fileUpload?packageId="+encodeURIComponent(GU.gwd)+GU.types.map(t=>"&type="+encodeURIComponent(t)).join("")):"#")}"
        title="${T("افتح صفحة غاش يدوياً · open GAASH's page by hand")}">↗ ${T("صفحة غاش · GAASH's page")}</a>
-    ${back?`<button class="minibtn" onclick="guGo(${back})">← ${T("رجوع · Back")}</button>`:""}
+    ${back?`<button class="minibtn" onclick="guBack()">← ${T("رجوع · Back")}</button>`:""}
     <button class="minibtn" onclick="bulkClose()">${T("إغلاق · Close")}</button>
-    ${next?`<button class="accent" onclick="guGo(${next})">${T("التالي · Next")} →</button>`
+    ${next?`<button class="accent" onclick="guNext()">${T("التالي · Next")} →</button>`
           :`<button class="accent" id="guSend" onclick="guSend(this)">${dry?"🧪 "+T("جهّز (تجربة) · Prepare (dry-run)"):"⬆ "+T("ارفع الآن · Upload now")}</button>`}</div>`;
 }
 async function guSend(btn){
