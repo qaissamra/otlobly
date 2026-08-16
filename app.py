@@ -2865,8 +2865,19 @@ def api_gaash_upload_plan():
     except gaash_upload.UploadError as e:
         return jsonify({"ok": False, "error": str(e)}), 502
     cust = gaash_mail.customer_for_gwd(tn) or {}
+
+    def _lib_size(fn):
+        # best-effort — a missing file must not sink the whole plan; the pick
+        # itself still fails loudly at send time via _pick_doc_bytes
+        try:
+            p = gaash_mail.id_file_path(fn)
+            return p.stat().st_size if p and p.exists() else 0
+        except Exception:  # noqa
+            return 0
+
     lib = [{"id": d["id"], "name": d.get("name") or "", "folder": d.get("folder") or "id",
-            "filename": d.get("filename")} for d in gaash_mail.ids_list()]
+            "filename": d.get("filename"), "size": _lib_size(d.get("filename"))}
+           for d in gaash_mail.ids_list()]
     decl_ok, decl_why = True, ""
     try:
         gaash_mail.declaration_build(tn)
@@ -2877,7 +2888,8 @@ def api_gaash_upload_plan():
         "types": gaash_upload.DOC_TYPES, "dry_run": _upload_dry_run(),
         "max_bytes": gaash_upload.MAX_BYTES,
         "library": lib,
-        "customer": ({"name": cust.get("name") or "",
+        "customer": ({"customer_id": cust.get("customer_id") or "",
+                      "name": cust.get("name") or "",
                       "id_number": cust.get("id_number") or "",
                       "id_image": cust.get("id_image") or ""} if cust else None),
         "declaration": {"ok": decl_ok, "why": decl_why,

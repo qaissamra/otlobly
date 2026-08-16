@@ -145,6 +145,37 @@ def main():
     check("_fill leaves {id_number} blank for an unknown package",
           gm._fill("ID:{id_number}", "GWDNOBODY9") == "ID:")
 
+    print("— the upload wizard's plan carries customer_id + library sizes —")
+    # the wizard route insists on a REAL GWD shape (GWD + digits only), so give
+    # the same order a second, numeric package; page_info hits GAASH's real
+    # page — stub it; everything else is local
+    pdb = purchases.load()
+    pdb["purchase_orders"][-1]["packages"].append(
+        {"package_no": 2, "tracking_number": "GWD000001234",
+         "items": [{"asin": "B0IDTEST", "customer_name": "Sami",
+                    "customer_order_id": oid}]})
+    purchases.save(pdb)
+    import gaash_upload as gu
+    orig_pi = gu.page_info
+    gu.page_info = lambda tn, types: {"slots": [{"type": 8, "label": "צילום דרכון"}]}
+    try:
+        added = gm.ids_add("qais ID", "qais.png", _PNG, folder="id")
+        plan = adm.get("/api/gaash/upload/plan?gwd=GWD000001234").get_json()
+        check("plan answers ok", plan.get("ok") is True)
+        check("plan customer carries customer_id (the inline ID-number fix posts with it)",
+              (plan.get("customer") or {}).get("customer_id") == c["customer_id"])
+        lib = [d for d in plan.get("library") or [] if d["id"] == added["id"]]
+        check("library rows carry their real byte size",
+              lib and lib[0].get("size") == len(_PNG))
+        # a vanished file must not sink the plan — its size just reads 0
+        (gm.IDS_DIR / added["filename"]).unlink()
+        plan2 = adm.get("/api/gaash/upload/plan?gwd=GWD000001234").get_json()
+        lib2 = [d for d in plan2.get("library") or [] if d["id"] == added["id"]]
+        check("a missing library file reads size 0 and the plan still opens",
+              plan2.get("ok") is True and lib2 and lib2[0].get("size") == 0)
+    finally:
+        gu.page_info = orig_pi
+
     print()
     if fails:
         print(f"FAILED: {len(fails)} — {fails}")
