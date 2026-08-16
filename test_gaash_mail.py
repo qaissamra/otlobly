@@ -1510,6 +1510,34 @@ def main():
         _del_thread("GWD900900900")
         _del_thread("GWD900900902")
 
+    print("— UI guards · the enroll wizard's attachment chips (web/index.html) —")
+    cf = client("otlo")
+    ui = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
+    prev = ui.split("async function gmWizPreview(")[1].split("\nfunction gmPickCapture(")[0]
+    # 2026-08-16, reported live: the review step built EVERY chip's href as
+    # /api/gaash/idfile?file=<a.filename>. The declaration is never on disk and
+    # has no filename, so the one attachment carrying the customs numbers opened
+    # file=undefined → 404. The same expression matched declarations back by id,
+    # and every member of a grouped unit shares the id "decl:auto" — a 3-parcel
+    # group drew the FIRST parcel's paper three times. Both halves, guarded.
+    check("preview chips never hand-build an /idfile URL",
+          "/api/gaash/idfile" not in prev)
+    check("every chip's URL comes from the one helper",
+          prev.count("gmChipUrl(") == 1 and "gmChipUrl(a,a.gwd)" in prev)
+    check("one declaration entry per MEMBER parcel, each keeping its own gwd",
+          "unit.filter(g=>((st.docs||{})[g]||{}).id)" in prev and "gwd:g" in prev)
+    check("a document with no URL renders as text, never a dead link",
+          'href=""' not in prev and ":`📎 ${poEsc(a.name)}`" in prev)
+    check("gmChipUrl papers the gwd it is handed (GM.cur only as fallback)",
+          "function gmChipUrl(d,gwd)" in ui
+          and 'declaration_preview?gwd=${encodeURIComponent(gwd||GM.cur||"")}' in ui)
+    # the route the chip now points at answers with a NAMED reason; the URL it
+    # used to point at is the dead 404 that started this
+    check("declaration_preview refuses with a reason, not a 404",
+          cf.get("/api/gaash/declaration_preview?gwd=GWD000000000").status_code == 400)
+    check("idfile?file=undefined is exactly the 404 the old chip produced",
+          cf.get("/api/gaash/idfile?file=undefined").status_code == 404)
+
     print()
     if fails:
         print(f"FAILED: {len(fails)} — {fails}")
