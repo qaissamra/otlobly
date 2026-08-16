@@ -1159,7 +1159,7 @@
       <button onclick="toggleIdGallery()" id="idToggleBtn" title="see every uploaded ID document in one place">🪪 View IDs</button>
       <button onclick="toggleCustForm()" class="accent">+ Add customer</button>
       <button onclick="syncCustomers(this)">↻ Sync from orders</button>
-      <input type="file" id="custIdInput" accept="image/*" style="display:none">
+      <input type="file" id="custIdInput" accept="image/jpeg,image/png,.pdf" style="display:none">
     </div>
     <div class="panel hidden" id="custFormPanel" style="margin-bottom:12px">
       <h2>New / edit customer</h2>
@@ -13135,7 +13135,7 @@ function gmIdPick(id){
 }
 function gmIdFolder(k){ GM.idFolder=k||null; GM.declMsg=null; gmIdsRender(); }
 async function gmIdUpload(){
-  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
+  const inp=document.createElement("input"); inp.type="file"; inp.accept=".pdf,image/jpeg,image/png";
   inp.onchange=()=>{ const f=inp.files[0]; if(f) gmIdUploadForm(f); };
   inp.click();
 }
@@ -13169,7 +13169,7 @@ async function gmIdSave(btn){
   GM.idPending=null; GM.idFolder=folder;
   await gmLoad();                       // refresh GM.ov.ids
   gmIdPick(r.id);                       // the new one becomes the attachment
-  toast(`🪪 ${poEsc(name||f.name)}`);
+  toast(`🪪 ${poEsc(name||f.name)}${r.note?" · "+r.note:""}`);
 }
 // ── step 2: say EXACTLY what is about to happen, in the page ──────────────────
 // This used to be a native confirm() — a grey OS box that cannot name the
@@ -13813,7 +13813,7 @@ async function guIdFixSave(btn){
   await guReplan();
 }
 function guUpPick(t){
-  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*,.pdf";
+  const inp=document.createElement("input"); inp.type="file"; inp.accept=".pdf,image/jpeg,image/png";
   inp.onchange=()=>{ const f=inp.files[0]; if(!f||!GU) return;
     const mx=(GU.plan||{}).max_bytes||2*1024*1024;
     // an image is WRAPPED into the PDF, not recompressed, so an over-limit
@@ -13845,10 +13845,11 @@ async function guUpSave(btn){
   if(!GU||GU.up!==u) return;                         // wizard closed / reopened meanwhile
   if(!r||!r.ok){ btn.disabled=false; btn.textContent=T("حفظ في المكتبة · Save to library");
     toast((r&&r.error)||T("فشل الرفع · upload failed")); return; }
-  // now a permanent 🪪 library document — reusable on every future parcel
-  (GU.plan.library=GU.plan.library||[]).push({id:r.id, name, folder:guFolderFor(u.t), filename:r.filename, size:u.file.size});
+  // now a permanent 🪪 library document — stored as a PDF (the server wraps
+  // JPG/PNG on the way in), reusable on every future parcel
+  (GU.plan.library=GU.plan.library||[]).push({id:r.id, name, folder:guFolderFor(u.t), filename:r.filename, size:r.size||u.file.size});
   const t=u.t; GU.up=null;
-  toast("🪪 "+name);
+  toast("🪪 "+name+(r.note?" · "+r.note:""));
   guPick(t,"library",r.id);                          // re-renders, new file selected
 }
 function guStepReview(){

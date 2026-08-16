@@ -2421,11 +2421,23 @@ def api_customer_image():
     data = b.get("data_base64", "")
     if data.strip().startswith("data:") and "," in data:
         data = data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(data)
+    except Exception:  # noqa
+        raw = b""
+    if not raw or len(raw) > 15 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "bad or oversized file (15 MB max)"}), 400
+    # same gate as the customer's own submit: this photo must be convertible
+    # to a PDF (JPG/PNG/PDF), or the GAASH send would refuse it much later
+    try:
+        gaash_upload.to_pdf(b.get("filename") or "id.png", raw)
+    except gaash_upload.UploadError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     ext = (b.get("filename", "id.png").rsplit(".", 1)[-1] or "png")[:5]
     cust_mod.ID_DIR.mkdir(exist_ok=True)
     fn = f"{b.get('customer_id', 'cust')}-{uuid.uuid4().hex[:8]}.{ext}"
     try:
-        (cust_mod.ID_DIR / fn).write_bytes(base64.b64decode(data))
+        (cust_mod.ID_DIR / fn).write_bytes(raw)
     except Exception as e:  # noqa
         return jsonify({"ok": False, "error": str(e)})
     c = db.get_customer(b.get("customer_id"))
@@ -3382,8 +3394,18 @@ def api_gaash_ids():
         data = b""
     if not data or len(data) > 15 * 1024 * 1024:
         return jsonify({"ok": False, "error": "bad or oversized file"}), 400
-    return jsonify(gaash_mail.ids_add(b.get("name"), b.get("filename"), data,
-                                      folder=b.get("folder")))
+    # the library STORES PDFs: converted once here, so the preview is
+    # byte-for-byte what GAASH receives and a HEIC can never sit in the
+    # library looking fine only to fail at the customs send weeks later
+    try:
+        data, note = gaash_upload.to_pdf(b.get("filename"), data)
+    except gaash_upload.UploadError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    fn = (Path(str(b.get("filename") or "doc")).stem or "doc") + ".pdf"
+    res = gaash_mail.ids_add(b.get("name"), fn, data, folder=b.get("folder"))
+    if res.get("ok"):
+        res["note"], res["size"] = note, len(data)
+    return jsonify(res)
 
 
 @app.route("/api/gaash/declaration", methods=["POST"])
@@ -4976,6 +4998,16 @@ def api_id_submit():
     if not raw or len(raw) > 15 * 1024 * 1024:
         return jsonify({"error": "الصورة كبيرة جداً أو غير صالحة (الحد 15 ميغابايت) · "
                                  "That photo is too large or unreadable (15 MB max)."}), 400
+    # customs papers must become PDFs — validate NOW with the same converter
+    # the GAASH send uses, so an unconvertible photo (HEIC…) is refused while
+    # the customer is still holding their phone, not weeks later at customs.
+    # The original image is what gets stored (the ID gallery renders <img>).
+    try:
+        gaash_upload.to_pdf(b.get("filename") or "id.png", raw)
+    except gaash_upload.UploadError:
+        return jsonify({"error": "الصورة يجب أن تكون JPG أو PNG أو PDF — أعد إرسالها "
+                                 "بصيغة أخرى · The photo must be a JPG, PNG or PDF — "
+                                 "please send it again in one of those formats."}), 400
     ext = re.sub(r"[^a-z0-9]", "", (b.get("filename", "id.png")
                  .rsplit(".", 1)[-1] or "png").lower())[:5] or "png"
     fn = f"{cust['customer_id']}-{uuid.uuid4().hex[:8]}.{ext}"
