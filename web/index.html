@@ -3380,10 +3380,46 @@ function docsUploadLink(ds){
   const up=ls.find(l=>l&&(l.type===0||/\/fileUpload/i.test(l.url||"")));
   return ((up||ls[0]||{}).url)||"";
 }
-// the document TYPE GAASH asked for on this parcel (6=ID, 8=passport…), read
-// off that same upload link — "" when they didn't say
-function docsAskedType(ds){
-  const m=/[?&]type=(\d+)/.exec(docsUploadLink(ds)||""); return m?m[1]:"";
+// EVERY document type GAASH asked for on this parcel (6=ID, 8=passport…), read
+// off that same upload link. They REPEAT the param — …&type=6&type=7 means "ID
+// card AND goods-use declaration" — so one match is half an answer, which is
+// exactly how GWD004775212 sat in customs waiting on a paper nobody knew about.
+// [] when they didn't say.
+function docsAskedTypes(ds){
+  const u=docsUploadLink(ds)||"", rx=/[?&]type=(\d+)/g, out=[];
+  let m; while((m=rx.exec(u))) if(!out.includes(m[1])) out.push(m[1]);
+  return out;
+}
+// those types spelled out — "هوية + إقرار استخدام البضاعة" — so the board can say
+// WHAT is missing without anyone opening the wizard. GAASH_DOCS is declared far
+// below; that's fine, these only ever run at render time. "" when they didn't say.
+function docsAskedNames(ds){
+  return docsAskedTypes(ds).map(t=>{
+    const hit=GAASH_DOCS.find(d=>String(d[0])===String(t));
+    return hit?T(hit[1]):("type "+t);
+  }).join(" + ");
+}
+// GAASH's upload URL for a parcel, with every slot they asked for already in it
+// — built server-side from the stored docs_state (no call out to GAASH), so the
+// manual builder and the email composer can't drift from the wizard. Memoised:
+// the manual modal opens from eight buttons and they all want the same answer.
+const GUL_CACHE={};
+async function gaashUploadLink(gwd){
+  gwd=(gwd||"").trim().toUpperCase(); if(!gwd) return null;
+  if(GUL_CACHE[gwd]) return GUL_CACHE[gwd];
+  let d=null; try{ d=await (await fetch("/api/gaash/upload_link?gwd="+encodeURIComponent(gwd))).json(); }catch(e){}
+  if(d&&d.ok) GUL_CACHE[gwd]=d;
+  return (d&&d.ok)?d:null;
+}
+// the amber "GAASH wants papers" pill, shared by the Leluxe and Purchases
+// columns so their wording can't drift apart: names the documents in the
+// tooltip, and counts them on the pill when there's more than one.
+function docsActionPill(ds){
+  const lk=docsUploadLink(ds), names=docsAskedNames(ds), n=docsAskedTypes(ds).length;
+  const tip=(names?"GAASH is asking for: "+names:"GAASH is asking for documents")
+    +(((ds||{}).codes||[]).includes(818)?" (customer ID)":"");
+  const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs${n>1?` ×${n}`:""}</span>`;
+  return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
 }
 // blue — a parcel with no status cards still gets the page's DEFAULT teal
 // "in the customs process, expected release soon" card, so "plain" ≠ nothing.
@@ -3393,12 +3429,7 @@ function lxDocsPill(pk){
   // Gerizim has it ⇒ past customs (they only get it after GAASH hands it off,
   // and "notfound" is stored as a bare STRING so it can't match) — docs moot
   const gz=pk.data&&pk.data.gerizim_status; if(gz&&typeof gz==="object") return "";
-  if(ds.state==="action"){
-    const lk=docsUploadLink(ds);
-    const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
-    const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
-    return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
-  }
+  if(ds.state==="action") return docsActionPill(ds);
   if(ds.state==="stopped")
     return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`;
   if(ds.state==="info"||(ds.state==="plain"&&ds.arrived))
@@ -4595,7 +4626,10 @@ async function lxMailCompose(tn,orderId){
   const cs=(QSETTINGS&&QSETTINGS.clearance)||{};
   const o=orderId?lxFind(orderId):null;
   const customer=(o&&(lxF(o,"exact name")||lxF(o,"name")))||"";
-  const upload=`https://ops.gaashwd.com/fileUpload?packageId=${encodeURIComponent(tn)}&type=6`;
+  // every slot GAASH asked for, from the server — never a hardcoded ID-card
+  // slot, which Palestinian customers can't fill anyway (they carry a passport)
+  const upload=((await gaashUploadLink(tn))||{}).url
+    ||`https://ops.gaashwd.com/fileUpload?packageId=${encodeURIComponent(tn)}&type=8`;
   const fill=s=>String(s||"").split("{gwd}").join(tn).split("{upload_link}").join(upload).split("{customer}").join(customer||"—");
   const rec=LX_MAIL[tn];
   bulkOpen("📧 بريد التخليص · Clearance email");
@@ -9546,7 +9580,7 @@ function gaashUploadOpenGwd(gwd,stampCb){
   $("bulkBody").innerHTML=`<div class="muted2" style="font-size:12px;margin:4px 0 8px">
       اختر المستندات التي طلبتها غاش لـ <b class="mono">${poEsc(gwd)}</b> — كل نوع يضيف خانة رفع في صفحتهم · pick the documents GAASH asked for; each adds an upload slot on their page</div>`+
     GAASH_DOCS.map(([t,l])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer">
-      <input type="checkbox" class="gud" value="${t}" ${t===6?'checked':''} onchange="gaashUploadSync()"> ${l}
+      <input type="checkbox" class="gud" value="${t}" ${t===8?'checked':''} onchange="gaashUploadSync()"> ${l}
       <span class="muted2 mono" style="margin-inline-start:auto;font-size:10.5px">type ${t}</span></label>`).join('');
   $("bulkFoot").innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">
     <a id="gudLink" target="_blank" rel="noopener" class="mono" style="font-size:11px;word-break:break-all;color:var(--muted)"></a>
@@ -9555,6 +9589,15 @@ function gaashUploadOpenGwd(gwd,stampCb){
       <button class="minibtn" onclick="gaashUploadGo(true)">📋 نسخ الرابط · Copy link</button>
     </div></div>`;
   gaashUploadSync();
+  // The boxes above open pre-ticked with the passport slot — our best guess. Now
+  // ask what GAASH ACTUALLY asked for and re-tick to match (they often name two).
+  // This can't be awaited up front: eight onclick handlers open this modal.
+  gaashUploadLink(gwd).then(d=>{
+    const at=((d&&d.asked_types)||[]).map(String), bb=$("bulkBody");
+    if(!at.length||!bb||bb.dataset.gwd!==gwd) return;   // GAASH silent, or the modal moved on
+    document.querySelectorAll('.gud').forEach(c=>{ c.checked=at.includes(c.value); });
+    gaashUploadSync();
+  });
 }
 // Purchases wrapper — keeps the docs-attempt stamp: GAASH gives no upload receipt,
 // but it RE-ASKS (a new CD event) while docs are missing — a CD newer than this
@@ -9929,12 +9972,7 @@ function pkgDocsPill(p,pk,pi){
   const bucket=((pk&&pk.tracking_status)||{}).bucket||"";
   const pgz=pk&&pk.gerizim_status;   // dict ⇒ Gerizim has it ⇒ past customs
   if(ds&&ds.state&&bucket!=="delivered"&&bucket!=="cleared"&&!(pgz&&typeof pgz==="object")){
-    if(ds.state==="action"){
-      const lk=docsUploadLink(ds);
-      const tip="GAASH is asking for documents"+((ds.codes||[]).includes(818)?" (customer ID)":"");
-      const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs</span>`;
-      return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
-    }
+    if(ds.state==="action") return docsActionPill(ds);
     if(ds.state==="stopped")
       return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`;
     if(ds.state==="info"||(ds.state==="plain"&&ds.arrived))
@@ -13589,10 +13627,19 @@ function gmDocsDraw(){
     const dl=`<span class="muted2 mono" style="font-size:10.5px;flex:none;width:74px;white-space:nowrap;overflow:hidden" title="${r.gaash_deadline?"GAASH deadline "+poEsc(r.gaash_deadline):""}">${r.gaash_deadline?`⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${-r.days_left}d ${T("متأخر · late")}</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}`:""}</span>`;
     const chk=`<span class="muted2" style="font-size:10px;flex:none;width:52px">${r.docs_checked?agoTxt(r.docs_checked):""}</span>`;
     const stale=r.stale&&r.state!=="unchecked"?tonePill("gray",T("قديم · stale"),T("آخر فحص قديم — أعد الفحص · last check is old — re-check"),{style:"font-size:9.5px;flex:none"}):"";
+    // WHICH papers, spelled out. Triage is the whole point of the 📄 tab, and
+    // "upload asked" alone never said whether that's one document or three.
+    // Its own line under the row: the column strip is already full at 1280px,
+    // and squeezed into it the names ellipsed down to nothing.
+    const askedNm=r.state==="action"?docsAskedNames(r):"";
+    const asked=askedNm?`<div style="padding:0 8px 5px;padding-inline-start:126px">${
+      tonePill("gray","📎 "+askedNm,T("ما طلبته غاش بالضبط · exactly what GAASH asked for"),
+               {style:"font-size:9.5px"})}</div>`:"";
     // the name is the customs ship-under name; FAISAL is the blank→default, so
     // dim it and let a real name stand out (parcel-name rule)
     const nm=r.pname||r.name||"";
-    return `<div id="gmdr_${poEsc(r.gwd)}" class="gmd-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
+    return `<div id="gmdr_${poEsc(r.gwd)}" class="gmd-row" style="border-top:1px solid var(--line);font-size:12px">
+      <div style="display:flex;gap:8px;align-items:center;padding:5px 8px">
       <span style="flex:none;width:14px" title="${r.source==="leluxe"?"Leluxe":"Purchases"}">${badge(r.source)}</span>
       <b class="mono" style="font-size:11.5px;flex:none;width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
       <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
@@ -13606,6 +13653,7 @@ function gmDocsDraw(){
       <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
       ${r.thread_state?`<button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" aria-label="${T("افتح المحادثة · open the conversation")}" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
                       :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" aria-label="${T("سجّله في سير عمل · enroll in a workflow")}" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
+      </div>${asked}
     </div>`;
   };
   // ── order grouping (view "order" only): walk the FILTERED list in its sort
@@ -13706,11 +13754,19 @@ async function guOpen(gwd){
   if(!GU||GU.gwd!==gwd) return;
   if(!d||!d.ok){ $("bulkBody").innerHTML=`<div class="panel" style="padding:14px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر فتح صفحة غاش · couldn't reach GAASH's page"))}</div>`; return; }
   GU.plan=d;
-  // start with exactly what GAASH asked for — their answer beats our guess
-  GU.types=[String(d.asked_type||(d.slots[0]||{}).type||8)];
-  GU.planTypes=GU.types.join(",");     // the types this plan's slots were fetched for
+  // start with exactly what GAASH asked for — ALL of it. They routinely name two
+  // in one link (ID + goods-use declaration); pre-picking only the first is how
+  // a parcel gets half its papers and waits out the customs deadline.
+  const at=guAskedList(d);
+  GU.types=at.length?at:[String((d.slots[0]||{}).type||8)];
+  GU.planTypes=(d.plan_types||GU.types).join(",");   // what this plan's slots were fetched for
   guRender();
 }
+// every document type GAASH asked for, as strings. asked_types is the list;
+// asked_type is the derived singular, read only by a shell cached before the
+// list existed — never parse GAASH's URL here, the server already did.
+function guAskedList(p){ p=p||{};
+  return (p.asked_types||(p.asked_type?[p.asked_type]:[])).map(String); }
 const GU_STEPS=[{n:1,lab:"المستندات · Documents"},{n:2,lab:"الملفات · Files"},{n:3,lab:"المراجعة · Review"}];
 function guSlotName(t){ return T(((GU.plan||{}).types||{})[t]||("type "+t)); }
 function guGo(n){
@@ -13783,16 +13839,24 @@ function guToggleType(t){
   guRender();
 }
 function guStepTypes(){
-  const p=GU.plan, asked=String(p.asked_type||"");
-  const rows=Object.keys(p.types).map(t=>{
+  const p=GU.plan, asked=new Set(guAskedList(p));
+  // what GAASH asked for floats to the top — the same idea as the file step
+  // sorting the matching library folder first
+  const rows=Object.keys(p.types)
+    .sort((a,b)=>(asked.has(String(a))?0:1)-(asked.has(String(b))?0:1))
+    .map(t=>{
     const on=GU.types.includes(String(t));
     return `<label class="wiz-opt" style="align-items:center">
       <input type="checkbox" ${on?"checked":""} onchange="guToggleType('${t}')">
       <span><b>${poEsc(p.types[t])}</b>
-        ${String(t)===asked?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px;margin-inline-start:6px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
+        ${asked.has(String(t))?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px;margin-inline-start:6px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
         <span class="muted2" style="display:block;font-size:11px">type ${poEsc(t)}</span></span></label>`;
   }).join("");
-  $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("أي خانات تفتحها عند غاش؟ المطلوب مُختار مسبقاً · which slots to open at GAASH — what they asked for is pre-picked")}</div>${rows}`;
+  // when they asked for more than one, say the number out loud — and say how to
+  // send one now, since step 2 won't let you past a slot with no file in it
+  const many=asked.size>1?`<div style="font-size:12.5px;margin:2px 0 6px;color:#b45309">
+    <b>${T("غاش طلبت · GAASH asked for")} ${asked.size} ${T("مستندات · documents")}</b> — ${T("أزل ما لن ترفعه الآن · untick anything you're not sending yet")}</div>`:"";
+  $("guBody").innerHTML=many+`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("أي خانات تفتحها عند غاش؟ المطلوب مُختار مسبقاً · which slots to open at GAASH — what they asked for is pre-picked")}</div>${rows}`;
   guFoot(0,1);
 }
 function guPick(t,src,id){ GU.picks[String(t)]={source:src,id:id}; guRender(); }
@@ -13838,7 +13902,7 @@ function guStepFiles(){
     :`<button class="minibtn" style="margin-top:2px" onclick="guUpPick('${poEsc(t)}')">＋ ${T("رفع ملف جديد · upload a new file")}</button>`;
   const head=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 10px">
     <b style="font-size:13px">${poEsc(p.types[t]||("type "+t))}</b>
-    ${String(t)===String(p.asked_type||"")?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
+    ${guAskedList(p).includes(String(t))?`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:9.5px">${T("غاش طلب هذا · GAASH asked for this")}</span>`:""}
     <span class="spacer"></span>
     <span class="muted2" style="font-size:11px">${T("خانة · slot")} ${GU.fi+1}/${GU.types.length}</span></div>`;
   $("guBody").innerHTML=head

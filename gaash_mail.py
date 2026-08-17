@@ -452,24 +452,46 @@ UPLOAD_TYPE_FALLBACK = 8            # جواز سفر · passport
 
 
 def upload_link_for(gwd, types=None):
-    """The document-upload URL for a parcel — GAASH's OWN requested slot when
+    """The document-upload URL for a parcel — every slot GAASH asked for when
     they told us, else a passport slot. `types` forces specific slots."""
     if not types:
-        t = docs_asked_type(gwd)
-        types = [t or UPLOAD_TYPE_FALLBACK]
+        types = docs_asked_types(gwd) or [UPLOAD_TYPE_FALLBACK]
     q = "".join(f"&type={int(t)}" for t in types if str(t).strip())
     return f"https://ops.gaashwd.com/fileUpload?packageId={gwd}{q}"
 
 
+def docs_asked_types(gwd):
+    """EVERY document type GAASH asked for on this parcel, in their own order —
+    [] when they haven't asked. Read off the stored docs_state, no network.
+
+    GAASH packs a whole request into ONE link by REPEATING the query param:
+    …/fileUpload?packageId=GWD004775212&type=6&type=7 means "ID card AND
+    goods-use declaration". Until 2026-08-17 this read the first match only, so
+    the board announced half the ask — GWD004775212 sat in customs while the
+    wizard swore an ID photo was all they wanted. Read every one of them.
+
+    Two vocabularies share the word "type" here, which is how that survived:
+    lk["type"] is GAASH's LINK KIND (0 upload · 1 permit · 2 pay · 3 update-info
+    — the guard that keeps us off their useless Israeli-ID form), while the
+    type= query param is the DOCUMENT SLOT (1-10). A parcel may carry more than
+    one upload link, so union across all of them rather than taking the first.
+    """
+    out = []
+    for lk in (docs_state_for(gwd) or {}).get("links") or []:
+        url = str((lk or {}).get("url") or "")
+        if not (lk and (lk.get("type") == 0 or "/fileupload" in url.lower())):
+            continue
+        for t in re.findall(r"[?&]type=(\d+)", url):
+            if int(t) not in out:        # deduped: the wizard keys picks by type
+                out.append(int(t))
+    return out
+
+
 def docs_asked_type(gwd):
-    """Which document type GAASH asked for on this parcel (int), or None.
-    Read off the stored docs_state upload link — no network call."""
-    ds = docs_state_for(gwd) or {}
-    for lk in ds.get("links") or []:
-        m = re.search(r"[?&]type=(\d+)", str((lk or {}).get("url") or ""))
-        if m and (lk.get("type") == 0 or "/fileupload" in str(lk.get("url")).lower()):
-            return int(m.group(1))
-    return None
+    """The FIRST document type GAASH asked for (int), or None — the singular
+    view of docs_asked_types, derived so the two can never drift apart."""
+    types = docs_asked_types(gwd)
+    return types[0] if types else None
 
 
 def docs_state_for(gwd):

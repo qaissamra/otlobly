@@ -2858,6 +2858,23 @@ def _pick_doc_bytes(gwd, pick):
     raise gaash_upload.UploadError("pick a document first")
 
 
+@app.route("/api/gaash/upload_link")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_upload_link():
+    """The ops upload URL for a parcel with EVERY slot GAASH asked for already
+    in it. Stored docs_state only — no call out to GAASH — so the manual
+    link-builder and the clearance-email composer can stop guessing type=6 and
+    read the same answer the wizard does."""
+    tn = (request.args.get("gwd") or "").strip().upper()
+    if not re.match(r"GWD\d+$", tn):
+        return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    return jsonify({"ok": True, "gwd": tn,
+                    "asked_types": gaash_mail.docs_asked_types(tn),
+                    "fallback": gaash_mail.UPLOAD_TYPE_FALLBACK,
+                    "url": gaash_mail.upload_link_for(tn)})
+
+
 @app.route("/api/gaash/upload/plan")
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
@@ -2869,11 +2886,13 @@ def api_gaash_upload_plan():
     types = [t for t in (request.args.get("types") or "").split(",") if t.strip()]
     if not re.match(r"GWD\d+$", tn):
         return jsonify({"ok": False, "error": "not a GWD number"}), 400
-    asked = gaash_mail.docs_asked_type(tn)
-    if not types:
-        types = [str(asked or gaash_mail.UPLOAD_TYPE_FALLBACK)]
+    # GAASH can ask for SEVERAL documents at once (one link, repeated type=), so
+    # the default opens every slot they named — not just the first one.
+    asked = gaash_mail.docs_asked_types(tn)
+    want = ([int(t) for t in types if t.strip().isdigit()]
+            or asked or [gaash_mail.UPLOAD_TYPE_FALLBACK])
     try:
-        info = gaash_upload.page_info(tn, types)
+        info = gaash_upload.page_info(tn, want)
     except gaash_upload.UploadError as e:
         return jsonify({"ok": False, "error": str(e)}), 502
     cust = gaash_mail.customer_for_gwd(tn) or {}
@@ -2896,7 +2915,12 @@ def api_gaash_upload_plan():
     except Exception as e:  # noqa - the reason is what the wizard shows
         decl_ok, decl_why = False, str(e)[:160]
     return jsonify({
-        "ok": True, "gwd": tn, "asked_type": asked, "slots": info["slots"],
+        "ok": True, "gwd": tn, "asked_types": asked,
+        # singular kept for an offline-shell page cached before asked_types
+        # existed — DERIVED, never computed twice, so the two can't disagree
+        "asked_type": (asked[0] if asked else None),
+        "plan_types": want,           # exactly what these slots were fetched for
+        "slots": info["slots"],
         "types": gaash_upload.DOC_TYPES, "dry_run": _upload_dry_run(),
         "max_bytes": gaash_upload.MAX_BYTES,
         "library": lib,
