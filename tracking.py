@@ -187,6 +187,10 @@ def ops_deadline(tn, timeout=8):
     if not tn:
         return None
     try:
+        # `type` only picks which upload slots the page renders; the expiry we
+        # scrape below belongs to the packageId, so any type does. Deliberately
+        # NOT gaash_mail.docs_asked_types() — that reads the DB, and this runs
+        # inside the tracking sweep for parcels that mostly have no docs_state.
         req = request.Request(f"{OPS_UPLOAD}?packageId={quote(tn)}&type=6",
                               headers={"User-Agent": UA})
         with request.urlopen(req, timeout=timeout) as r:

@@ -144,6 +144,17 @@ def main():
         check("a slot with no document refuses (never uploads a blank)", False)
     except gu.UploadError:
         check("a slot with no document refuses (never uploads a blank)", True)
+    # Since 2026-08-17 the wizard opens EVERY slot GAASH asked for, so the picks
+    # arrive in the operator's ticking order, not GAASH's slot order. Pairing is
+    # by TYPE (build_request's by_type dict), so the two need never agree — this
+    # is what stops a passport being filed as a declaration.
+    rev = gu.build_request("GWD004721753", [docs[1], docs[0]], info)
+    check("picks handed in reverse still file by slot, not by position",
+          [d["type"] for d in rev["docs"]] == [8, 7]
+          and rev["body"].index(b"passport.pdf") < rev["body"].index(b"decl.pdf"))
+    check("page_url repeats the param once per slot",
+          gu.page_url("GWD004775212", [6, 7])
+          == "https://ops.gaashwd.com/fileUpload?packageId=GWD004775212&type=6&type=7")
     big = {"type": 8, "filename": "huge.pdf", "data": b"%PDF-" + b"x" * (gu.MAX_BYTES + 1)}
     try:
         gu.build_request("GWD004721753", [big, docs[1]], info)

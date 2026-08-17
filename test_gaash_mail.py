@@ -1510,8 +1510,73 @@ def main():
         _del_thread("GWD900900900")
         _del_thread("GWD900900902")
 
+    print("— GAASH asks for SEVERAL documents: read every one —")
+    # 2026-08-17, reported live on GWD004775212: GAASH packs a whole request into
+    # ONE link by REPEATING the param — ?packageId=…&type=6&type=7 means "ID card
+    # AND goods-use declaration". docs_asked_type used re.search, took the 6, and
+    # the board swore an ID photo was the whole ask while the parcel sat in
+    # customs waiting on a declaration nobody knew had been requested.
+    UP = "https://ops.gaashwd.com/fileUpload?packageId=GWD004775212"
+    ISRAELI = {"url": "https://ops.gaashwd.com/HawbPersonalIdEntry?id=9&type=3",
+               "type": 3, "label": "Update Info"}
+
+    def _asked(links):
+        """Park a PO package carrying these docs_state links, then re-read it
+        through the real docs_state_for path (no monkeypatching)."""
+        pdb = purch.load()
+        pdb["purchase_orders"] = [p for p in pdb.get("purchase_orders") or []
+                                  if p.get("po_id") != "PO-ASK"]
+        pdb["purchase_orders"].append({
+            "po_id": "PO-ASK", "ship_to": "Asked Buyer", "packages": [
+                {"package_no": 1, "tracking_number": "GWD004775212", "items": [],
+                 "otlobly_status": "",
+                 "docs_state": {"state": "action", "codes": [816],
+                                "arrived": True, "links": links}}]})
+        purch.save(pdb)
+        return gm.docs_asked_types("GWD004775212")
+
+    check("BOTH slots in one link are read, in GAASH's own order",
+          _asked([{"url": UP + "&type=6&type=7", "type": 0,
+                   "label": "Upload Document"}]) == [6, 7])
+    check("the singular view is the first of that list, not a second parser",
+          gm.docs_asked_type("GWD004775212") == 6)
+    check("the email's {upload_link} opens both slots, not just the first",
+          all(t in gm.upload_link_for("GWD004775212")
+              for t in ("type=6", "type=7")))
+    check("one slot still reads as one",
+          _asked([{"url": UP + "&type=8", "type": 0, "label": "Upload"}]) == [8])
+    check("a repeated slot is deduped (the wizard keys its picks by type)",
+          _asked([{"url": UP + "&type=6&type=6", "type": 0, "label": "Upload"}])
+          == [6])
+    # the links[0] bug, in its plural costume: their Israeli-ID form carries a
+    # type= param too, and it is USELESS for a Palestinian customer
+    check("the Israeli-ID form is skipped even when GAASH lists it first",
+          _asked([ISRAELI, {"url": UP + "&type=6&type=7", "type": 0,
+                            "label": "Upload Document"}]) == [6, 7])
+    check("two upload links union, order-preserving and deduped",
+          _asked([{"url": UP + "&type=6", "type": 0, "label": "Upload Document"},
+                  {"url": UP + "&type=7&type=6", "type": 1,
+                   "label": "Upload Permit"}]) == [6, 7])
+    check("no links at all means GAASH asked for nothing",
+          _asked([]) == [] and gm.docs_asked_type("GWD004775212") is None)
+    # and with nothing asked we still guess a PASSPORT, never an Israeli ID
+    check("the silent-GAASH fallback is still the passport slot",
+          "type=8" in gm.upload_link_for("GWD004775212")
+          and "type=6" not in gm.upload_link_for("GWD004775212"))
+
+    # NOTE: /login is capped at 10 per minute and this suite already spends all
+    # ten — log in ONCE here and hand the same client to the UI guards below.
+    ca = client("otlo")
+    _asked([{"url": UP + "&type=6&type=7", "type": 0, "label": "Upload Document"}])
+    lr = ca.get("/api/gaash/upload_link?gwd=GWD004775212").get_json()
+    check("/api/gaash/upload_link hands the board the whole ask",
+          lr["ok"] and lr["asked_types"] == [6, 7]
+          and "type=6" in lr["url"] and "type=7" in lr["url"])
+    check("/api/gaash/upload_link refuses a non-GWD with a reason",
+          ca.get("/api/gaash/upload_link?gwd=nope").status_code == 400)
+
     print("— UI guards · the enroll wizard's attachment chips (web/index.html) —")
-    cf = client("otlo")
+    cf = ca                     # reused on purpose — see the login cap above
     ui = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
     prev = ui.split("async function gmWizPreview(")[1].split("\nfunction gmPickCapture(")[0]
     # 2026-08-16, reported live: the review step built EVERY chip's href as
@@ -1537,6 +1602,33 @@ def main():
           cf.get("/api/gaash/declaration_preview?gwd=GWD000000000").status_code == 400)
     check("idfile?file=undefined is exactly the 404 the old chip produced",
           cf.get("/api/gaash/idfile?file=undefined").status_code == 404)
+
+    print("— UI guards · the wizard opens EVERY slot GAASH asked for —")
+    # the single-equality badge was the visible half of the GWD004775212 bug: it
+    # could only ever mark one row, so a second requested document was invisible
+    steps = ui.split("function guStepTypes(")[1].split("\nfunction guPick(")[0]
+    check("step 1 tests membership of the asked LIST, not equality with one type",
+          "String(t)===asked" not in steps and "asked.has(String(t))" in steps)
+    check("step 1 says the number out loud when they asked for more than one",
+          "asked.size>1" in steps)
+    check("the per-slot header badge is a list test too",
+          "guAskedList(p).includes(String(t))" in ui
+          and "String(t)===String(p.asked_type" not in ui)
+    check("guOpen seeds every asked type, not just the first",
+          "GU.types=at.length?at:" in ui and "guAskedList(d)" in ui)
+    # a singular JS twin next to a plural Python source of truth is the exact
+    # trap that produced this bug — it must not come back
+    check("the dead single-type JS parser is gone",
+          "function docsAskedType(" not in ui
+          and "function docsAskedTypes(" in ui)
+    # covers BOTH old hardcoded builders (the compose modal and the manual
+    # link-builder) in one string; GAASH_DOCS's [6,"هوية…"] can't match it.
+    # Comment lines are dropped — the prose explaining the bug quotes the URL.
+    code = "\n".join(ln for ln in ui.splitlines() if not ln.lstrip().startswith("//"))
+    check("nothing hardcodes the Israeli ID-card slot into an upload URL",
+          "&type=6" not in code)
+    check("the board names the documents instead of just counting them",
+          "function docsAskedNames(" in ui and "docsActionPill(" in ui)
 
     print()
     if fails:
