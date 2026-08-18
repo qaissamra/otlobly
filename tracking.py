@@ -177,6 +177,94 @@ def clean_tracking(tn):
 
 OPS_UPLOAD = "https://ops.gaashwd.com/fileUpload"
 
+# ── Has the box actually landed? (the guard on ops_deadline) ───────────────
+# Reading the ops upload page CREATES GAASH's document-upload link, and that
+# link expires 35 days after it is created. So asking for a deadline before the
+# parcel arrives silently burns days off the real window — measured 2026-08-18:
+# three parcels carry a deadline equal to OUR OWN scrape date + 35 with no
+# arrival event at all (GWD004562751 has been in transit since March and its
+# link now dies 2026-09-11), and three more lost 2, 6 and 7 days.
+#
+# CD and SD are deliberately NOT arrival codes. GAASH asks for documents in
+# ADVANCE: a CD event precedes the K3 arrival in 116 of 117 parcels, by up to
+# 23 days. A guard that accepted CD would still have burned every parcel this
+# one exists to protect. Only K3 (arrived), K2 (cleared) and D1 (delivered)
+# prove the box is in the country — the pipeline is physically monotonic, so
+# any of the three is a lower bound even when the earlier events are missing
+# (4 of 154 real parcels have no K3; one of them is D1-only and DID arrive).
+ARRIVAL_CODES = ("K3", "K2", "D1")
+
+
+def arrival_from_events(events):
+    """Earliest proof of arrival in a timeline → {"code", "at"} or None.
+
+    `events` is the [{code, text, time}] shape events_from_raw returns and the
+    tracking cache stores. Takes the EARLIEST arrival-coded event (GAASH
+    restamps events, and a later K2/D1 must never post-date the real landing),
+    preferring K3 > K2 > D1 when several share a timestamp. An arrival event
+    whose time is blank or unparsable still counts as proof — it returns
+    {"code": c, "at": None}, because a blank StatusTime is a GAASH data quirk,
+    not an absence of arrival."""
+    best = None
+    for e in events or []:
+        if not isinstance(e, dict):
+            continue
+        code = str(e.get("code") or "").strip().upper()
+        if code not in ARRIVAL_CODES:
+            continue
+        at = str(e.get("time") or "").strip()[:10] or None
+        rank = ARRIVAL_CODES.index(code)
+        # sort key: dated events beat undated, then earliest date, then K3>K2>D1
+        key = (at is None, at or "", rank)
+        if best is None or key < best[0]:
+            best = (key, {"code": code, "at": at})
+    return best[1] if best else None
+
+
+def arrival_signal(*, events=None, docs_state=None, gerizim_arrived=False,
+                   gash_rank=None, stored_arrival=None):
+    """Has this parcel reached the country? → (verdict, reason)
+
+    verdict: "arrived"     — proof; fetching the deadline is SAFE
+             "not_arrived" — proof of the negative; never fetch
+             "unknown"     — no evidence; never fetch (fail closed)
+
+    Only "arrived" permits a fetch; the other two differ solely in the reason
+    string we show the operator. Every argument is optional — each board passes
+    whatever it actually has, already reduced to plain values so this module
+    never has to import leluxe (which imports us)."""
+    if stored_arrival:
+        return "arrived", "stored"
+    hit = arrival_from_events(events)
+    if hit:
+        return "arrived", hit["code"].lower()
+    if gerizim_arrived:
+        return "arrived", "gerizim"
+    # The owner's own GASH STATUS ladder — but only ranks 1 (ARIIVED Destination)
+    # and >= 4 (CLEARED GASH onward) actually say the box is here. Ranks 2 and 3
+    # ("customer ID", "documents sent", "MOC - Palestinian authority") are the
+    # CD trap wearing a different hat: they mirror GAASH's docs/authority
+    # requests, which are raised BEFORE the parcel lands. Measured 2026-08-18:
+    # GWD004721753 sat at " customer ID" (rank 2) with no arrival event at all,
+    # and is one of the three parcels whose link we minted early.
+    if gash_rank is not None and (gash_rank == 1 or gash_rank >= 4):
+        return "arrived", "gash:%d" % gash_rank
+    # GAASH's own IsArrived. Only True carries information: docs_status writes a
+    # plain bool and its "no answer" path defaults to False, so False here means
+    # "we didn't learn anything", never "it hasn't landed".
+    if isinstance(docs_state, dict) and docs_state.get("arrived") is True:
+        return "arrived", "is-arrived"
+    if gash_rank == 0:                       # the owner set "STILL NOT ARRIVED"
+        return "not_arrived", "gash:0"
+    if events:                               # a real timeline, with no arrival in it
+        return "not_arrived", "timeline:no-arrival-code"
+    return "unknown", "no-evidence"
+
+
+def parcel_arrived(**kw):
+    """arrival_signal(...) reduced to the one bool the deadline gates need."""
+    return arrival_signal(**kw)[0] == "arrived"
+
 
 def ops_deadline(tn, timeout=8):
     """GAASH's hard deadline for a parcel, scraped from their doc-upload page

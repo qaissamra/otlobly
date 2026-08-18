@@ -4097,6 +4097,15 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     skip = set() if (only or force) else _skip_gwds(rows, config)
     eff = _eff_tn_map(rows)
     bulk = not (only or force)
+    # read once per sweep (small file, pure disk) — the arrival gate below needs
+    # a timeline at QUEUE-BUILD time, before any fetch has happened
+    try:
+        trk_cache = tracking._load_cache()
+    except Exception:  # noqa: BLE001 — a cache hiccup must not stall the sweep
+        trk_cache = {}
+    arrived_tn = set()          # parcel-level OR across that GWD's rows
+    dl_due_tn = set()           # the 14-day cadence wants one, arrival aside
+    dl_why = {}                 # why we are NOT asking (shown in the 🔎 toast)
     work, excluded = {}, {}
     for row in rows:
         # the row's EFFECTIVE parcel number — a product with no number of its
@@ -4119,17 +4128,53 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
             except (ValueError, TypeError):
                 need = True
         # only a DICT is real Gerizim presence — the stored "notfound" STRING
-        # must not pin eligible False forever (it used to block gaash_deadline
+        # must not pin not_finished False forever (it used to block gaash_deadline
         # from ever being fetched again, even with force)
-        eligible = (ts.get("bucket") if isinstance(ts, dict) else None) \
+        not_finished = (ts.get("bucket") if isinstance(ts, dict) else None) \
             not in ("cleared", "delivered") and not (isinstance(gz, dict) and gz)
+        # The LOWER bound (2026-08-18): reading GAASH's ops page CREATES the
+        # upload link, whose 35-day clock then starts — so the deadline must
+        # never be asked for before the box has landed. Three parcels are still
+        # carrying a deadline of "our own scrape date + 35" with no arrival
+        # event at all. `force` bypasses the 14-day cadence below, never this.
+        verdict, why = tracking.arrival_signal(
+            stored_arrival=d.get("gaash_arrival"),
+            events=(trk_cache.get(tn) or {}).get("events"),
+            docs_state=d.get("docs_state"),
+            gerizim_arrived=isinstance(gz, dict) and gz.get("bucket") in GZ_ARRIVED,
+            gash_rank=_gash_rank(next((v for k, v in (d.get("fields") or {}).items()
+                                       if k.strip().lower() == GASH_FIELD), None)))
+        arrived = verdict == "arrived"
+        if arrived:
+            arrived_tn.add(tn)
+        else:
+            dl_why.setdefault(tn, why)
         need_dl = need_docs = False
-        if eligible:
+        due_dl = False
+        if not_finished:
             try:
-                need_dl = force or not d.get("gaash_deadline") or \
+                due_dl = force or not d.get("gaash_deadline") or \
                     datetime.fromisoformat(d.get("gaash_deadline_checked") or "") <= dl_cutoff
             except (ValueError, TypeError):
-                need_dl = True
+                due_dl = True
+        # the cadence is remembered separately from the gate: a parcel already
+        # queued for TRACKING whose fresh timeline reveals a K3 can then be
+        # promoted at the call site, instead of waiting a whole sweep
+        if due_dl:
+            dl_due_tn.add(tn)
+        # A deadline scraped BEFORE the parcel landed is a ROLLING number, not
+        # the real expiry: measured over 30 live snapshots, a pre-arrival
+        # scrape returns that scrape + 35 every single time (58/58), and GAASH
+        # only pins it to arrival + 35 once the box is actually here. So
+        # arrival invalidates whatever we cached, whatever the 14-day cadence
+        # says — otherwise the board keeps showing a date that is too EARLY
+        # (27 of 59 arrived parcels were reading 20-34 days instead of 35).
+        stale_dl = bool(d.get("gaash_arrival") and d.get("gaash_deadline_checked")
+                        and str(d["gaash_deadline_checked"])[:10] < d["gaash_arrival"])
+        if stale_dl and not_finished:
+            dl_due_tn.add(tn)
+        need_dl = (due_dl or stale_dl) and arrived
+        if not_finished:
             try:
                 need_docs = force or \
                     datetime.fromisoformat(d.get("docs_checked") or "") <= docs_cutoff
@@ -4146,6 +4191,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
         want_dl = any(t[2] for t in targets)
         want_docs = any(t[3] for t in targets) and docs_done < docs_cap
         st = gz_new = deadline = docs = gaash_err = None
+        dl_skipped = None if want_dl else dl_why.get(tn)
         if want_track:
             data = None
             try:
@@ -4171,6 +4217,22 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                 gz_new = gerizim.track(tn)
             except Exception:  # noqa: BLE001
                 gz_new = None
+        if want_track:
+            # fresh evidence overrides the queue-time verdict IN BOTH DIRECTIONS:
+            # a same-round K3 promotes a parcel queued only for tracking, and a
+            # timeline that shows no arrival demotes one gated on a stale cache
+            fresh = None
+            if isinstance(data, dict):
+                try:
+                    fresh = tracking.arrival_from_events(tracking.events_from_raw(data))
+                except Exception:  # noqa: BLE001
+                    fresh = None
+            if want_dl and not (fresh or tn in arrived_tn):
+                want_dl = False
+                dl_skipped = "timeline:no-arrival-code"
+            elif not want_dl and fresh and tn in dl_due_tn:
+                want_dl = True
+                dl_skipped = None
         if want_dl:
             try:
                 deadline = tracking.ops_deadline(tn)
@@ -4190,12 +4252,25 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
             "error": gaash_err,
             "gz": gz_new.get("bucket") if isinstance(gz_new, dict) else gz_new,
             "deadline": deadline,
+            # why no deadline was asked for — the 🔎 toast explains itself
+            # instead of looking like a silent failure
+            "deadline_skipped": dl_skipped,
             "docs": (docs or {}).get("state"),
             "warn": ("unusual GWD length — usually GWD + 9 digits"
                      if tn.upper().startswith("GWD")
                      and not GWD_CANON.match(tn.upper()) else None),
         })
         stamp = now.isoformat()
+        # the arrival marker: write-once, monotonic (earliest proof wins). The
+        # gate above needs an answer at queue-build time, and the shared cache
+        # covers only a fraction of the board — so every successful track fetch
+        # stamps it on the row itself, which is the only source always present.
+        arr_new = None
+        if want_track and isinstance(data, dict):
+            try:
+                arr_new = tracking.arrival_from_events(tracking.events_from_raw(data))
+            except Exception:  # noqa: BLE001
+                arr_new = None
         for row_id, *_flags in targets:
             with db.connect() as c:
                 r = c.execute("SELECT data_json FROM leluxe_orders WHERE id=?",
@@ -4219,6 +4294,13 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                     # where no real stage was ever stored (a transient Gerizim
                     # 404 must never erase a known stage)
                     d["gerizim_status"] = gz_new
+                if arr_new and (not d.get("gaash_arrival")
+                                or (arr_new["at"] and arr_new["at"] < d["gaash_arrival"])):
+                    d["gaash_arrival"] = arr_new["at"]
+                    d["gaash_arrival_code"] = arr_new["code"]
+                # NB: nothing is stamped when the deadline was SKIPPED —
+                # gaash_deadline_checked means "when we last asked GAASH", and
+                # it is also the forensic record that proved the early-mint bug
                 if want_dl:
                     d["gaash_deadline_checked"] = stamp
                     if deadline:

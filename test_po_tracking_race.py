@@ -63,6 +63,14 @@ def main():
         latest_status=lambda d: {"bucket": "transit", "text": "In transit"},
         cache_put_events=lambda *a, **k: None,
         events_from_raw=lambda d: [],
+                # These fixtures are parcels that have ALREADY LANDED — declared
+        # explicitly, because the deadline fetch is arrival-gated since
+        # 2026-08-18 (reading GAASH's ops page mints the 35-day upload link).
+        # The gate itself is covered by test_gaash_deadline_gate.py.
+        arrival_signal=lambda **k: ("arrived", "test-fixture"),
+        parcel_arrived=lambda **k: True,
+        arrival_from_events=lambda evs: {"code": "K3", "at": "2026-07-01"},
+        _load_cache=lambda: {},
         ops_deadline=lambda tn, **k: None)
 
     def gz_track(tn, **k):

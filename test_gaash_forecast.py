@@ -353,8 +353,10 @@ def test_cache_and_no_network():
 
     boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError("network!"))
     saved = {}
+    # ops_deadline is the expensive one: calling it MINTS GAASH's 35-day upload
+    # link, so it must never be reachable from the forecast path
     for name in ("timelines_with_fallback", "track", "get_session", "fetch_one",
-                 "timelines", "timeline"):
+                 "timelines", "timeline", "ops_deadline", "docs_status"):
         if hasattr(tracking, name):
             saved[name] = getattr(tracking, name)
             setattr(tracking, name, boom)
