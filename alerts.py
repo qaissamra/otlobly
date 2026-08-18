@@ -15,6 +15,7 @@ neutralizes gunicorn's 2 workers running the loop twice (first stamp wins).
 """
 
 import os
+import re
 import threading
 import time
 from datetime import date
@@ -29,6 +30,17 @@ STOP_DEFAULT = ["rd", "delivered", "delievered rd", "delievered no rd",
                 "recieved rd", "recieved no rd", "sent rd", "sent no rd", "complete"]
 GAASH_DAYS_DEFAULT = [7, 3, 1]
 ARRIVAL_DAYS_DEFAULT = [5, 7, 8]
+
+_GD_RE = re.compile(r"gd\d+")
+
+
+def _gd_key(dl_iso, name):
+    """Countdown stamps are keyed by the DEADLINE they fired against, not by the
+    threshold alone. `alerts_sent` is write-once-forever, so a bare "gd7" about a
+    wrong (prematurely minted) deadline would suppress the countdown for the
+    corrected one GAASH re-issues. Versioning re-arms it exactly once."""
+    return f"{name}@{dl_iso}"
+
 
 
 def stop_statuses(config=None):
@@ -84,10 +96,21 @@ def run_once(send=telegram.send):
 
             # ── GD: the lost-forever countdown ──
             dl = _d(pk.get("gaash_deadline"))
+            # Legacy bare stamps ("gd7") → versioned ("gd7@2026-08-31"). Rewritten,
+            # never re-fired: the key created here is immediately "already sent"
+            # for the CURRENT deadline, so this migration sends nothing. Only a
+            # genuinely different deadline (a re-issued link) produces a new key.
+            if dl and any(k == "gd_past" or _GD_RE.fullmatch(k) for k in stamps):
+                for k in [k for k in stamps if k == "gd_past" or _GD_RE.fullmatch(k)]:
+                    stamps.setdefault(_gd_key(pk["gaash_deadline"], k), stamps[k])
+                    del stamps[k]
+                pk["alerts_sent"] = stamps
+                dirty = True
             if dl and gaash_b not in ("cleared", "delivered") and not isinstance(gz, dict):
                 left = (dl - today).days
                 hit = [n for n in gd_days if left <= n]
-                key = "gd_past" if left < 0 else (f"gd{min(hit)}" if hit else None)
+                name = "gd_past" if left < 0 else (f"gd{min(hit)}" if hit else None)
+                key = _gd_key(pk["gaash_deadline"], name) if name else None
                 if key and key not in stamps:
                     txt = (f"🛑 موعد غاش النهائي فات ({pk['gaash_deadline']}) — الطرد بخطر الضياع!\n"
                            if left < 0 else
@@ -97,7 +120,8 @@ def run_once(send=telegram.send):
                         now = db.now_iso()
                         stamps[key] = now
                         for n in (gd_days if left < 0 else hit):
-                            stamps.setdefault(f"gd{n}", now)   # crossed thresholds count as done
+                            # crossed thresholds count as done — versioned too
+                            stamps.setdefault(_gd_key(pk["gaash_deadline"], f"gd{n}"), now)
                         pk["alerts_sent"] = stamps
                         sent.append(txt)
                         dirty = True

@@ -479,6 +479,12 @@ def flat_tracking_enrichment():
         get_session=lambda **k: ("api", "nonce"),
         fetch_one=lambda tn, *a, **k: {},
         latest_status=lambda d: {"bucket": "transit", "text": "In transit"},
+        # already-landed fixture — the deadline fetch is arrival-gated (see
+        # test_gaash_deadline_gate.py); a stub that omits this fails closed
+        arrival_signal=lambda **k: ("arrived", "test-fixture"),
+        parcel_arrived=lambda **k: True,
+        arrival_from_events=lambda evs: {"code": "K3", "at": "2026-07-01"},
+        _load_cache=lambda: {},
         ops_deadline=lambda tn, **k: "2026-08-01")
     gstub = types.SimpleNamespace(
         track=lambda tn, **k: {"label": "Ready for pickup", "status": "r",
@@ -525,6 +531,14 @@ def _trk_stubs(calls, fetch_raises=False, deadline="2026-08-01",
         get_session=lambda **k: ("api", "nonce"),
         fetch_one=fetch,
         latest_status=latest,
+        # These fixtures are parcels that have ALREADY LANDED — declared
+        # explicitly, because the deadline fetch is arrival-gated since
+        # 2026-08-18 (reading GAASH's ops page mints the 35-day upload link).
+        # The gate itself is covered by test_gaash_deadline_gate.py.
+        arrival_signal=lambda **k: ("arrived", "test-fixture"),
+        parcel_arrived=lambda **k: True,
+        arrival_from_events=lambda evs: {"code": "K3", "at": "2026-07-01"},
+        _load_cache=lambda: {},
         ops_deadline=lambda tn, **k: deadline)
     gstub = types.SimpleNamespace(track=gz_track or (lambda tn, **k: None))
     return tstub, gstub

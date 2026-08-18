@@ -327,6 +327,8 @@ def _norm_packages(packages):
             "gaash_docs_at": p.get("gaash_docs_at"),         # owner opened the GAASH doc-upload page
             "gaash_docs_types": p.get("gaash_docs_types"),   # which doc types were picked
             "gaash_cd_at": p.get("gaash_cd_at"),             # GAASH's latest "docs required" event
+            "gaash_arrival": p.get("gaash_arrival"),         # the day it landed (K3/K2/D1) — gates the
+            "gaash_arrival_code": p.get("gaash_arrival_code"),  # deadline fetch; see tracking.parcel_arrived
             "gaash_deadline": p.get("gaash_deadline"),       # GAASH link expiry — lost past this date
             "gaash_deadline_checked": p.get("gaash_deadline_checked"),  # own cadence (~2-week re-check)
             "docs_state": p.get("docs_state"),               # GAASH docs banner (action/info/…) — see tracking.docs_status
@@ -509,6 +511,15 @@ def refresh_tracking(only=None, force=False, batch=5):
     old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
     dl_cap = 10                                   # bound the first-load deadline backfill
     docs_cap = 3                                  # docs page is SLOW (~10-25s) — keep the batch inside gunicorn's 120s
+    # read once per sweep — the arrival gate needs a timeline at QUEUE-BUILD
+    # time, before any fetch has happened
+    try:
+        trk_cache = tracking._load_cache()
+    except Exception:  # noqa: BLE001 — a cache hiccup must not stall the sweep
+        trk_cache = {}
+    arrived_tn = set()
+    dl_due_tn = set()           # the 14-day cadence wants one, arrival aside
+    dl_why = {}                 # why we are NOT asking (surfaced to the UI)
     # work[gwd] = list of (po, pk, need_track, need_dl, need_docs)
     work = {}
     for po in pdb["purchase_orders"]:
@@ -536,15 +547,49 @@ def refresh_tracking(only=None, force=False, batch=5):
             # The deadline scrape rides its OWN cadence, not the 30-min tracking TTL
             # (the Mac sync keeps tracking_checked fresh, which used to starve it).
             # `gz` is `... or {}`, so test truthiness — an empty {} means "no Gerizim".
-            eligible = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
+            not_finished = (ts.get("bucket") if isinstance(ts, dict) else None) not in ("cleared", "delivered") \
                 and not gz
+            # The LOWER bound (2026-08-18): reading GAASH's ops page CREATES the
+            # upload link and starts its 35-day clock, so the deadline must never
+            # be asked for before the box has landed. `force` bypasses the 14-day
+            # cadence below, never this. Packages carry no GASH STATUS dropdown,
+            # so there is no gash_rank to pass here.
+            verdict, why = tracking.arrival_signal(
+                stored_arrival=pk.get("gaash_arrival"),
+                events=(trk_cache.get(tn) or {}).get("events"),
+                docs_state=pk.get("docs_state"),
+                gerizim_arrived=isinstance(gz, dict) and bool(gz.get("bucket")))
+            arrived = verdict == "arrived"
+            if arrived:
+                arrived_tn.add(tn)
+            else:
+                dl_why.setdefault(tn, why)
             need_dl = need_docs = False
-            if eligible:
+            due_dl = False
+            if not_finished:
                 try:
-                    need_dl = force or not pk.get("gaash_deadline") \
+                    due_dl = force or not pk.get("gaash_deadline") \
                         or datetime.fromisoformat(pk.get("gaash_deadline_checked") or "") <= dl_cutoff
                 except (ValueError, TypeError):
-                    need_dl = True        # never scraped → fetch once
+                    due_dl = True         # never scraped → fetch once
+            # cadence remembered apart from the gate, so a parcel already queued
+            # for TRACKING can be promoted at the call site the moment its fresh
+            # timeline shows a K3 — instead of waiting a whole sweep
+            if due_dl:
+                dl_due_tn.add(tn)
+            # A deadline scraped BEFORE the parcel landed is a ROLLING number, not
+            # the real expiry: measured over 30 live snapshots, a pre-arrival
+            # scrape returns that scrape + 35 every single time (58/58), and GAASH
+            # only pins it to arrival + 35 once the box is actually here. So
+            # arrival invalidates whatever we cached, whatever the 14-day cadence
+            # says — otherwise the board keeps showing a date that is too EARLY
+            # (27 of 59 arrived parcels were reading 20-34 days instead of 35).
+            stale_dl = bool(pk.get("gaash_arrival") and pk.get("gaash_deadline_checked")
+                            and str(pk["gaash_deadline_checked"])[:10] < pk["gaash_arrival"])
+            if stale_dl and not_finished:
+                dl_due_tn.add(tn)
+            need_dl = (due_dl or stale_dl) and arrived
+            if not_finished:
                 try:
                     need_docs = force or \
                         datetime.fromisoformat(pk.get("docs_checked") or "") <= docs_cutoff
@@ -568,7 +613,7 @@ def refresh_tracking(only=None, force=False, batch=5):
             want_track = any(nt for _, _, nt, _, _ in rows)   # a tracking refresh is due
             want_dl = any(nd for _, _, _, nd, _ in rows) and dl_done < dl_cap
             want_docs = any(nc for _, _, _, _, nc in rows) and docs_done < docs_cap
-            st, cd_at = None, None
+            st, cd_at, arr_new = None, None, None
             if want_track:
                 if session is None:
                     try:
@@ -589,11 +634,27 @@ def refresh_tracking(only=None, force=False, batch=5):
                                  if (s.get("MappedStatusCode") or "").strip().upper() == "CD"
                                  or (s.get("StatusDescription") or "").strip().lower() == "required customer id"),
                                 default=None) or None
+                    # arrival marker: write-once, monotonic. The gate runs before
+                    # any fetch, and the shared cache covers only part of the
+                    # board — the row's own stamp is the source always present.
+                    arr_new = tracking.arrival_from_events(
+                        tracking.events_from_raw(data))
             gz = gerizim.track(tn) if want_track else None
             gz_new = gz if isinstance(gz, dict) else None
             # GAASH's lost-forever deadline (doc-link expiry) — own cadence, fetched
             # once then re-checked every ~2 weeks; never re-hammered per page load.
             deadline, dl_stamp = None, None
+            dl_skipped = None if want_dl else dl_why.get(tn)
+            if want_track:
+                # fresh evidence overrides the queue-time verdict in BOTH
+                # directions — a same-round K3 promotes a parcel queued only for
+                # tracking, a timeline showing no arrival demotes a stale-cache one
+                if want_dl and not (arr_new or tn in arrived_tn):
+                    want_dl = False
+                    dl_skipped = "timeline:no-arrival-code"
+                elif not want_dl and arr_new and tn in dl_due_tn:
+                    want_dl = True
+                    dl_skipped = None
             if want_dl:
                 dl_done += 1
                 dl_stamp = db.now_iso()   # stamp the attempt even if it returns None
@@ -632,6 +693,10 @@ def refresh_tracking(only=None, force=False, batch=5):
                         t["tracking_status"] = st
                     if cd_at:
                         t["gaash_cd_at"] = cd_at
+                    if arr_new and (not t.get("gaash_arrival")
+                                    or (arr_new["at"] and arr_new["at"] < t["gaash_arrival"])):
+                        t["gaash_arrival"] = arr_new["at"]
+                        t["gaash_arrival_code"] = arr_new["code"]
                     if gz_new:
                         t["gerizim_status"] = gz_new
                     if nd and dl_stamp:
@@ -647,7 +712,7 @@ def refresh_tracking(only=None, force=False, batch=5):
                 updated += 1
                 cur = st or old
                 changes.append({"po_id": po.get("po_id"), "package_no": pk.get("package_no"),
-                                "tracking": tn,
+                                "tracking": tn, "deadline_skipped": dl_skipped,
                                 "name": _pkg_label(po, pk),
                                 "old": {"bucket": (old or {}).get("bucket"),
                                         "text": activity.gaash_text(old)},
