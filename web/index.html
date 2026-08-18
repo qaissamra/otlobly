@@ -278,11 +278,11 @@
   th,td{text-align:left;padding:9px 11px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top}
   th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;background:var(--bg2);cursor:pointer}
   tr.row:hover{background:var(--bg2)}
-  .gmd-row:hover{background:var(--bg2)}   /* 📄 Docs queue rows — same hover as every other table */
-  /* every pill in the Docs table sits flush with its column header (.pill's own
+  .gmd-row:hover,.gmf-row:hover{background:var(--bg2)}   /* 📄 Docs + 🔮 Forecast rows — same hover as every other table */
+  /* every pill in these tables sits flush with its column header (.pill's own
      margin-left would push it 6px right); a 2nd pill in one cell keeps its gap */
-  .gmd-row .pill,.gmd-grp .pill{margin-left:0}
-  .gmd-row .pill+.pill,.gmd-grp .pill+.pill{margin-left:6px}
+  .gmd-row .pill,.gmd-grp .pill,.gmf-row .pill{margin-left:0}
+  .gmd-row .pill+.pill,.gmd-grp .pill+.pill,.gmf-row .pill+.pill{margin-left:6px}
   .amt{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
   .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
     font-size:11px;font-weight:700;white-space:nowrap;border:1px solid transparent}
@@ -1775,6 +1775,7 @@
       <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="⚙️ Workflows" data-ar="⚙️ الأتمتة">⚙️ Workflows</button>
       <button class="minibtn" id="gmTabReady" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ready')" data-en="🩺 Readiness" data-ar="🩺 الجاهزية">🩺 Readiness</button>
       <button class="minibtn" id="gmTabDocs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('docs')" data-en="📄 Docs" data-ar="📄 المستندات">📄 Docs</button>
+      <button class="minibtn" id="gmTabFcast" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('fcast')" data-en="🔮 Forecast" data-ar="🔮 التوقعات">🔮 Forecast</button>
       <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
       <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
     </div>
@@ -1789,6 +1790,7 @@
     <div id="gmTplPane" class="hidden"></div>
     <div id="gmReadyPane" class="hidden"></div>
     <div id="gmDocsPane" class="hidden"></div>
+    <div id="gmFcastPane" class="hidden"></div>
     <div id="gmDashPane" class="hidden"></div>
   </div>
 </div>
@@ -11471,7 +11473,7 @@ function bsRender(){
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
 let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null, wfOpen:new Set()};
 try{ const t=localStorage.getItem("gm_tab");                     // reopen on the tab the user was on
-  if(["conv","ov","seq","tpl","ready","docs","dash"].includes(t)) GM.tab=t; }catch(e){}
+  if(["conv","ov","seq","tpl","ready","docs","fcast","dash"].includes(t)) GM.tab=t; }catch(e){}
 const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
   missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
   cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
@@ -11483,7 +11485,7 @@ function gmTab(t){
   [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
    ["seq","gmTabSeq","gmSeqPane"],
    ["tpl","gmTabTpl","gmTplPane"],["ready","gmTabReady","gmReadyPane"],
-   ["docs","gmTabDocs","gmDocsPane"],
+   ["docs","gmTabDocs","gmDocsPane"],["fcast","gmTabFcast","gmFcastPane"],
    ["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
     $(b).classList.toggle("accent",k===t);
     $(p).classList.toggle("hidden",k!==t);
@@ -11493,6 +11495,7 @@ function gmTab(t){
   if(t==="tpl") gmRenderTpl();
   if(t==="ready") gmRenderReady();
   if(t==="docs") gmDocsRender();
+  if(t==="fcast") gmFcastRender();
   if(t==="dash") gmDashLoad();
 }
 function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
@@ -12409,7 +12412,7 @@ function gmSeqPill(t,gwd){
   const jump=`onclick="event.stopPropagation();bulkClose();gmTab('conv');gmOpen('${poEsc(gwd)}')"`;
   const stp=t.step||0;
   if(t.state==="proposed")
-    return tonePill("amber","💡 "+T("مقترح · suggested"),T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real"),{style:"font-size:10.5px"});
+    return tonePill("amber","💡 "+T("مقترح · suggested"),T("اقتراح تلقائي — اختياره هنا يجعله حقيقياً · an auto suggestion — selecting it here makes it real"));
   // enrolled, but nothing ever left: say so plainly rather than showing a
   // reassuring "running · 0" for a parcel GAASH has never heard about
   if(gmSeqRedo(t))
@@ -12515,7 +12518,7 @@ function gmEnrollRender(){
       status:gmOrderPill(c),
       gash:gmGashPill(c),
       seq:gmSeqPill(c.thread,c.gwd),
-      found:tonePill("gray",({leluxe:"⌚ Leluxe",purchases:"📦 Purchases",manual:T("ملصوق · pasted")})[c.source]||c.source||"—",null,{style:"font-size:10.5px"}),
+      found:tonePill("gray",({leluxe:"⌚ Leluxe",purchases:"📦 Purchases",manual:T("ملصوق · pasted")})[c.source]||c.source||"—",null),
       cust:`<span style="font-size:11.5px" title="${poEsc(c.customers||c.po_id||c.name||"")}">${
         poEsc(c.customers||c.po_id||c.name||"—")}</span>`,
     })}</div>`;
@@ -12540,7 +12543,7 @@ function gmOrderPill(c){
 // always undefined and would keep every pill grey forever
 function gmLxReady(){ return typeof LX!=="undefined" && !!(LX&&LX.schema); }
 function gmPlainPill(txt){
-  return tonePill("gray",txt,txt,{style:"font-size:10.5px"});
+  return tonePill("gray",txt,txt);
 }
 // Where customs has got to. Leluxe stores it as a ClickUp field; Purchases has no
 // such field, so it comes from the STORED tracking status — no carrier is asked.
@@ -13523,6 +13526,172 @@ async function gmDocsRender(){
   if(GM_DOCS.mode==="action"&&!GM.docs.some(r=>r.state==="action"||r.state==="stopped")) GM_DOCS.mode="all";
   gmDocsDraw();
 }
+// ═══ 🔮 Forecast: what happens next to a parcel that has cleared customs ═══
+// The dates come from OUR OWN tracking history (forecast.py) — an empirical
+// "cleared → next status" table measured on a WORKING-DAY clock, because the
+// entire weekday spread in the raw data is the Fri/Sat weekend and nothing
+// else. Nothing here recomputes any of that; the server ships finished dates.
+let GM_FC={mode:"all", data:null};
+function gmFcMode(m){ GM_FC.mode=m; gmFcastDraw(); }
+const GM_FC_REASON={
+  thin_history:["gray","❔ "+"لا تاريخ كافٍ · not enough history",
+    "لم نجمع بعد ما يكفي من الطرود لنتوقع · we haven't seen enough parcels clear yet to predict"],
+  no_history:["gray","❔ "+"لا سجل تتبع · no tracking history",
+    "لا يوجد خط زمني محفوظ لهذا الطرد — اضغط فحص · no cached timeline for this parcel — press Check"],
+  no_clearance_time:["amber","⚠ "+"بلا وقت تخليص · no clearance time",
+    "غاش سجّل التخليص بدون وقت — لا يمكن حساب موعد · GAASH stamped the clearance with no time, so no date can be computed"],
+  not_cleared:["blue","↷ "+"تحرّك أصلاً · already moved",
+    "التتبع يقول إنه تجاوز التخليص — اللوحة متأخرة · tracking says it is past clearance; the board is behind"]};
+function gmFcReasonPill(r){
+  const [tone,lab,tip]=GM_FC_REASON[r.reason]||["gray","❔ "+(r.reason||"?"),""];
+  return tonePill(tone,T(lab),T(tip)+(r.last_label?" — "+r.last_label:""));
+}
+async function gmFcastRender(){
+  const p=$("gmFcastPane"); if(!p) return;
+  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/forecast")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  // product photos come from the boards themselves, exactly as the Docs tab
+  try{ await bsEnsureData(); }catch(e){}
+  GM_FC.data=d;
+  gmFcastDraw();
+}
+// GAASH's own wording is too long for a column cell ("Picked up by Gerizim
+// courier" clipped the pill and pushed the % onto a second line), so the pill
+// carries a short form and the tooltip keeps the full label + every alternative.
+// English like gaashBucketPill's SHORT map — carrier vocabulary isn't translated.
+const GM_FC_SHORT={AJ:"Gerizim pickup", D1:"Delivered", O1:"Entered w/h",
+  X4:"Received in branch", OD:"Out for delivery", SH:"In w/h",
+  CD:"Docs asked again", SD:"Docs asked again"};
+function gmFcNextPill(r,tip){
+  const full=r.next_label||r.next_text||"?";
+  const txt=GM_FC_SHORT[r.next_code]||full;
+  tip=(txt===full?"":full+"\n")+tip;
+  if(r.next_code==="D1") return tonePill("green",txt,tip);
+  // AJ is reused for the pre-clearance MOC step — if that ever shows up as the
+  // prediction it must not wear the pickup wording
+  if(r.next_code==="AJ"&&!/gerizim/i.test(full)) return hexPill("#f76808",full,tip);
+  // a customs code after clearance means the parcel got pulled BACK — warn
+  const HEX={AJ:"#0f9d9f", CD:"#f76808", SD:"#f76808"};
+  return hexPill(HEX[r.next_code]||"#4466ff",txt,tip);
+}
+function gmFcastDraw(){
+  const p=$("gmFcastPane"); if(!p) return;
+  const d=GM_FC.data; if(!d) return;
+  const rows=d.rows||[], m=d.model||{};
+  const M={all:()=>true, overdue:r=>!!r.overdue, unknown:r=>!r.ok};
+  const list=rows.filter(M[GM_FC.mode]||M.all);
+  const n=k=>rows.filter(M[k]).length;
+  const chip=(k,lab,c)=>`<button class="minibtn${GM_FC.mode===k?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="gmFcMode('${k}')">${lab} <b>${c}</b></button>`;
+  const badge=b=>b==="leluxe"?"⌚":"📦";
+  const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  const hitOf=new Map();
+  rows.forEach(r=>{
+    let po=null,lx=null;
+    try{
+      if(r.board==="purchases") po=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]||null:null;
+      else lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+    }catch(e){}
+    hitOf.set(r.gwd,{po,lx});
+  });
+  const thumbs=r=>{
+    try{
+      const h=hitOf.get(r.gwd)||{};
+      if(r.board==="purchases") return h.po?poThumbStrip(h.po.pk.items,3):"";
+      return h.lx?lxThumbs(h.lx.items,3):"";
+    }catch(e){ return ""; }
+  };
+  const dayTxt=v=>{ const x=Number(v||0); return (x<10?x.toFixed(1):Math.round(x))+"d"; };
+  const clearedCell=r=>{
+    if(!r.cleared_at) return '<span class="muted2">—</span>';
+    const dt=String(r.cleared_at).slice(0,10);
+    return `<span class="mono" style="font-size:11px">${poEsc(dt)}</span> <span class="muted2" style="font-size:10px">${poEsc(r.cleared_weekday||"")}</span>`;
+  };
+  // how long it has been sitting, in WORKING days — a weekend adds nothing, so
+  // a parcel never looks stuck just because it cleared on a Thursday
+  const waitCell=r=>{
+    if(r.dwell_work_days==null) return '<span class="muted2">—</span>';
+    const tip=T("أيام عمل منذ التخليص (الجمعة والسبت لا تُحسب) · working days since clearance — Fri/Sat don't count")
+      +` · ${T("تقويمياً · calendar")} ${dayTxt(r.dwell_days)}`;
+    return r.overdue
+      ? `<b style="color:#dc2626" title="${poEsc(tip+" · "+T("تجاوز ٩٠٪ من السجل · past the historical p90"))}">⏳ ${dayTxt(r.dwell_work_days)}</b>`
+      : `<span title="${poEsc(tip)}">⏳ ${dayTxt(r.dwell_work_days)}</span>`;
+  };
+  const nextCell=r=>{
+    if(!r.ok) return gmFcReasonPill(r);
+    const alts=(r.alternatives||[]).slice(0,5)
+      .map(a=>`${Math.round(100*a.p)}% ${a.label} (n=${a.n})`).join("\n");
+    const pct=Math.round(100*(r.next_p||0));
+    return gmFcNextPill(r,T("الأكثر احتمالاً · most likely")+"\n"+alts)
+      +` <span class="muted2 mono" style="font-size:10px" title="${poEsc(T("من أصل · out of")+" n="+r.basis_n+" "+T("طرد مخلَّص · cleared parcels"))}">${pct}%</span>`;
+  };
+  const etaCell=r=>{
+    if(!r.ok) return '<span class="muted2">—</span>';
+    const tip=`${T("المدى · range")} ${r.eta_early} → ${r.eta_late}\n`
+      +`${T("الوسيط · median")} ${r.gap_work_days} ${T("يوم عمل · working days")}\n`
+      +`${T("مبني على · based on")} n=${r.basis_n} (${r.basis_sweeps} ${T("دفعة استلام · pickup runs")})`;
+    return `<b class="mono" style="font-size:11.5px" title="${poEsc(tip)}">${poEsc(r.eta)}</b>`
+      +` <span class="muted2" style="font-size:10px">${poEsc(r.eta_weekday||"")}</span>`;
+  };
+  const row=r=>{
+    const st=r.stale?tonePill("gray",T("قديم · stale"),
+      T("لم نفحص التتبع منذ فترة — قد يكون تحرّك · we haven't refreshed tracking in a while — it may already have moved"),
+      {style:"border-style:dashed"}):"";
+    return `<div id="gmfr_${poEsc(r.gwd)}" class="gmf-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px${r.overdue?";background:#dc26260a":""}">
+      <span style="flex:none;width:14px" title="${r.board==="leluxe"?"Leluxe":"Purchases"}">${badge(r.board)}</span>
+      <b class="mono" style="font-size:11.5px;flex:none;width:104px;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
+      <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
+      <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.name||"")}</span>
+      <span style="width:118px;flex:none">${clearedCell(r)}</span>
+      <span style="width:96px;flex:none">${waitCell(r)}</span>
+      <span style="width:168px;flex:none;overflow:hidden">${nextCell(r)}</span>
+      <span style="width:120px;flex:none">${etaCell(r)}</span>
+      ${st}
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
+      <button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("المحادثة · conversation")}">💬</button>
+    </div>`;
+  };
+  // The basis strip. When the model isn't ready this REPLACES the numbers with
+  // the honest reason — never a confident-looking date on thin evidence.
+  const top=(m.next||[])[0];
+  const basis=m.ready
+    ? `🔮 ${T("مبني على · learned from")} <b>${m.n}</b> ${T("انتقال · transitions")} · <b>${m.parcels}</b> ${T("طرد · parcels")} · <b>${m.sweeps}</b> ${T("دفعة استلام · pickup runs")}
+       · ${T("الوسيط · median")} <b>${(m.p50||0).toFixed(1)}</b> ${T("يوم عمل · working days")}
+       ${top?`· <b>${Math.round(100*top.p)}%</b> ${poEsc(top.label)}`:""}`
+    : `⚠ ${T("لا يوجد تاريخ كافٍ بعد · not enough history yet")} — <b>${m.n||0}</b> ${T("انتقال من · transitions from")} <b>${m.parcels||0}</b> ${T("طرد · parcels")}
+       (${T("نحتاج · we need")} ${(m.thresholds||{}).model_n||12}+)`;
+
+  p.innerHTML=`<div class="panel" style="padding:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <b style="font-size:13px">🔮 ${T("ما التالي بعد التخليص · what happens next")}</b>
+      <span class="spacer"></span>
+      ${chip("all",T("الكل · All"),rows.length)}
+      ${n("overdue")?chip("overdue","🔴 "+T("متأخر · overdue"),n("overdue")):""}
+      ${n("unknown")?chip("unknown","❔ "+T("غير معروف · unknown"),n("unknown")):""}
+      <button class="minibtn" onclick="gmFcastRender()" title="${T("أعد الحساب · recompute")}">↻</button>
+    </div>
+    <div class="muted2" style="font-size:10.5px;margin-bottom:8px;line-height:1.7">${basis}
+      <span style="opacity:.8"> · ${T("الجمعة والسبت عطلة — لا استلام فيهما أبداً · Fri/Sat are the weekend — a pickup has never landed on one")}</span>
+    </div>
+    <div style="overflow-x:auto">
+      <div style="min-width:1064px">
+        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+          <span style="flex:none;width:14px"></span>
+          <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
+          <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
+          <span style="flex:none;width:132px">${T("الاسم · name")}</span>
+          <span style="flex:none;width:118px">${T("تخلّص في · cleared")}</span>
+          <span style="flex:none;width:96px">${T("ينتظر · waiting")}</span>
+          <span style="flex:none;width:168px">${T("التالي المتوقع · predicted next")}</span>
+          <span style="flex:none;width:120px">${T("متوقع في · expected")}</span>
+          <span class="spacer"></span>
+        </div>
+        ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا طرود بانتظار الاستلام 🎉 · nothing waiting after clearance 🎉")}</div>`}
+      </div>
+    </div>
+  </div>`;
+}
 // UI_AUDIT: no hand-rolled pills — these all go through the helper family above,
 // so they inherit .pill's own 10px and match the ORDER STATUS + GAASH STATUS
 // columns beside them. The hex handed to hexPill is the old markup's TEXT
@@ -13601,7 +13770,7 @@ function gmDocsDraw(){
       if(!lx) return '<span class="muted2">—</span>';
       const u=lx.sts||[];
       if(u.length===1) return gmOrderPill({source:"leluxe",status:u[0]});
-      if(u.length>1) return tonePill("gray",T("متعدد · mixed"),u.join(" · "),{style:"font-size:10.5px"});
+      if(u.length>1) return tonePill("gray",T("متعدد · mixed"),u.join(" · "));
       const eff=(typeof lxKEffStatus==="function")?lxKEffStatus(lx.items,lx.pkgRow):"";
       return eff?gmOrderPill({source:"leluxe",status:eff}):'<span class="muted2">—</span>';
     }catch(e){ return '<span class="muted2">—</span>'; }
