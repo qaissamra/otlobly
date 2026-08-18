@@ -50,6 +50,7 @@ import cfg
 import customers as cust_mod
 import db
 import estimate
+import forecast
 import settings as settings_mod
 import goals
 import google_login
@@ -3601,6 +3602,16 @@ def api_gaash_docs_queue():
     """📄 the docs-upload queue: every open parcel (both boards) with its GAASH
     docs banner — yellow upload-asked first, with GAASH's own upload links."""
     return jsonify(gaash_mail.docs_queue())
+
+
+@app.route("/api/gaash/forecast")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_forecast():
+    """🔮 the forecast queue: every parcel sitting at "Cleared customs" with its
+    predicted next GAASH status + expected date, learned from our own cached
+    tracking history. Read-only and cache-only — no carrier calls."""
+    return jsonify(forecast.forecast_queue())
 
 
 @app.route("/api/gaash/send", methods=["POST"])
