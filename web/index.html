@@ -3423,6 +3423,14 @@ function docsActionPill(ds){
   const inner=`<span class="pill" style="background:#d9770614;color:#b45309;border:1px solid #d9770655;font-size:10px;cursor:${lk?"pointer":"default"}" title="${poEsc(tip)}">📄 ارفع المستندات · upload docs${n>1?` ×${n}`:""}</span>`;
   return lk?`<a href="${poEsc(lk)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="text-decoration:none">${inner}</a>`:inner;
 }
+// ⚠ the last docs check FAILED — the pill keeps the last-known answer, this
+// chip says so instead of letting a dead check masquerade as fresh. Works on
+// any object carrying docs_checked/docs_error (lx row.data, pkg, queue row).
+function docsErrChip(d){
+  const err=d&&d.docs_error; if(!err||((d.docs_checked||"")>=err)) return "";
+  const ago=agoTxt(err)||"";
+  return `<span class="pill" style="background:#d9770614;color:#b45309;border:1px dashed #d9770655;font-size:9.5px" title="${poEsc("آخر فحص فشل "+ago+" — المعروض آخر جواب ناجح · last docs check failed "+ago+" — showing the last successful answer")}">⚠</span>`;
+}
 // blue — a parcel with no status cards still gets the page's DEFAULT teal
 // "in the customs process, expected release soon" card, so "plain" ≠ nothing.
 function lxDocsPill(pk){
@@ -3431,11 +3439,12 @@ function lxDocsPill(pk){
   // Gerizim has it ⇒ past customs (they only get it after GAASH hands it off,
   // and "notfound" is stored as a bare STRING so it can't match) — docs moot
   const gz=pk.data&&pk.data.gerizim_status; if(gz&&typeof gz==="object") return "";
-  if(ds.state==="action") return docsActionPill(ds);
+  const err=docsErrChip(pk.data);
+  if(ds.state==="action") return docsActionPill(ds)+err;
   if(ds.state==="stopped")
-    return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`;
+    return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`+err;
   if(ds.state==="info"||(ds.state==="plain"&&ds.arrived))
-    return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="GAASH's page shows no document request — customs processing · لا طلب مستندات، قيد المعالجة">📄 بالجمارك · in customs</span>`;
+    return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="GAASH's page shows no document request — customs processing · لا طلب مستندات، قيد المعالجة">📄 بالجمارك · in customs</span>`+err;
   return "";   // cleared → the gash pill already says it; plain pre-arrival → docs machinery not started
 }
 function lxThumb(url,size){ size=size||44;
@@ -5729,7 +5738,7 @@ async function lxCheckDocs(gwd){
   if(!r.ok){
     pr.innerHTML=`⚠ <b>${poEsc(gwd)}</b> — فشل الفحص · check failed: ${poEsc(r.error||"?")}`;
   }else if(!ds){
-    pr.innerHTML=`❔ <b>${poEsc(gwd)}</b> — صفحة غاش لا تجيب لهذا الرقم · GAASH's status page has no answer for this number`;
+    pr.innerHTML=`⚠ <b>${poEsc(gwd)}</b> — فشل الفحص (تعذّر الوصول لغاش) — تظهر آخر حالة معروفة · check failed (GAASH unreachable) — showing the last known state`;
   }else if(ds.state==="action"){
     const lk=docsUploadLink(ds);
     pr.innerHTML=`🟡 <b>${poEsc(gwd)}</b> — غاش يطلب مستندات · GAASH is asking for documents`
@@ -9974,11 +9983,12 @@ function pkgDocsPill(p,pk,pi){
   const bucket=((pk&&pk.tracking_status)||{}).bucket||"";
   const pgz=pk&&pk.gerizim_status;   // dict ⇒ Gerizim has it ⇒ past customs
   if(ds&&ds.state&&bucket!=="delivered"&&bucket!=="cleared"&&!(pgz&&typeof pgz==="object")){
-    if(ds.state==="action") return docsActionPill(ds);
+    const err=docsErrChip(pk);
+    if(ds.state==="action") return docsActionPill(ds)+err;
     if(ds.state==="stopped")
-      return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`;
+      return `<span class="pill" style="background:#dc26261a;color:#dc2626;border:1px solid #dc262655;font-size:10px" title="GAASH's page shows a final clearance-stopped status — contact GAASH">⛔ توقف التخليص · clearance stopped</span>`+err;
     if(ds.state==="info"||(ds.state==="plain"&&ds.arrived))
-      return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="GAASH's page shows no document request — customs processing · لا طلب مستندات، قيد المعالجة">📄 بالجمارك · in customs</span>`;
+      return `<span class="pill" style="background:#0d94881a;color:#0f766e;border:1px solid #0d948855;font-size:10px" title="GAASH's page shows no document request — customs processing · لا طلب مستندات، قيد المعالجة">📄 بالجمارك · in customs</span>`+err;
     return '';
   }
   const up=pk&&pk.gaash_docs_at, cd=pk&&pk.gaash_cd_at;
@@ -13796,6 +13806,7 @@ function gmDocsDraw(){
     const dl=`<span class="muted2 mono" style="font-size:10.5px;flex:none;width:74px;white-space:nowrap;overflow:hidden" title="${r.gaash_deadline?"GAASH deadline "+poEsc(r.gaash_deadline):""}">${r.gaash_deadline?`⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${-r.days_left}d ${T("متأخر · late")}</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}`:""}</span>`;
     const chk=`<span class="muted2" style="font-size:10px;flex:none;width:52px">${r.docs_checked?agoTxt(r.docs_checked):""}</span>`;
     const stale=r.stale&&r.state!=="unchecked"?tonePill("gray",T("قديم · stale"),T("آخر فحص قديم — أعد الفحص · last check is old — re-check"),{style:"font-size:9.5px;flex:none"}):"";
+    const derr=docsErrChip(r);
     // WHICH papers, spelled out. Triage is the whole point of the 📄 tab, and
     // "upload asked" alone never said whether that's one document or three.
     // Its own line under the row: the column strip is already full at 1280px,
@@ -13816,7 +13827,7 @@ function gmDocsDraw(){
       <span style="width:130px;flex:none">${gmDocsStatePill(r)}</span>
       <span style="width:120px;flex:none;overflow:hidden" title="${T("حالتك على اللوحة · your own board status")}">${boardStatus(r)}</span>
       <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:10px"})}</span>
-      ${dl}${chk}${stale}
+      ${dl}${chk}${stale}${derr}
       <span class="spacer"></span>
       ${lk?`<button class="minibtn" onclick="guOpen('${poEsc(r.gwd)}')" title="${T("اختر المستندات وراجعها ثم ارفعها لغاش · pick the documents, review them, then upload to GAASH")}">⬆ ${T("رفع · Upload")}</button>`:""}
       <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
@@ -14213,11 +14224,11 @@ async function gmDocsCheckAll(){
   if(!gwds.length) return;
   GM_DOCS.busy=true; GM_DOCS.stop=false; GM_DOCS.done=0; GM_DOCS.total=gwds.length;
   gmDocsDraw();
-  let i=0;
+  let i=0, fails=0;
   const worker=async()=>{
     while(!GM_DOCS.stop&&i<gwds.length){
       const g=gwds[i++];
-      await gmDocsCheck(g,null,true);
+      if(await gmDocsCheck(g,null,true)===false) fails++;
       GM_DOCS.done++;
       gmDocsDraw();
     }
@@ -14226,38 +14237,35 @@ async function gmDocsCheckAll(){
   const stopped=GM_DOCS.stop;
   GM_DOCS.busy=false; GM_DOCS.stop=false;
   gmDocsDraw();
-  toast(stopped?`■ ${T("أُوقف · stopped")} — ${GM_DOCS.done}/${GM_DOCS.total}`
-               :`✓ ${T("انتهى الفحص · checked")} ${GM_DOCS.done}/${GM_DOCS.total}`);
+  const failTxt=fails?` · ⚠ ${fails} ${T("فشل · failed")}`:"";
+  toast(stopped?`■ ${T("أُوقف · stopped")} — ${GM_DOCS.done}/${GM_DOCS.total}${failTxt}`
+               :`✓ ${T("انتهى الفحص · checked")} ${GM_DOCS.done}/${GM_DOCS.total}${failTxt}`);
 }
 async function gmDocsCheck(gwd,btn,quiet){
   if(btn){ btn.disabled=true; btn.textContent="⏳"; }
   let r=null;
   try{ r=await post("/api/gaash/docs_check",{tracking:gwd}); }catch(e){ r=null; }
   const row=(GM.docs||[]).find(x=>x.gwd===gwd);
-  if(!r||!r.ok){
-    // the lookup itself failed — mark the attempt so the row stops reading
-    // "never checked", but keep whatever state we already knew
-    if(row){ row.docs_checked=new Date().toISOString(); row.stale=false;
+  const ds=(r&&r.ok)?r.docs:null;
+  if(!ds){
+    // the lookup FAILED — do NOT touch docs_checked/stale (the last answer
+    // keeps its real age); record the attempt so the row wears the ⚠ chip
+    if(row){ row.docs_error=new Date().toISOString();
              if(row.state==="unchecked") row.state="error"; }
-    if(!quiet) toast("⚠ "+T("فشل الفحص · check failed"));
-    if(!quiet) gmDocsDraw();
-    return;
+    if(!quiet){ toast("⚠ "+gwd+" — "+T("فشل الفحص — تظهر آخر حالة معروفة · check failed — showing last known state")); gmDocsDraw(); }
+    return false;
   }
-  const ds=r.docs;
-  if(row){
-    if(ds){ row.state=ds.state; row.links=ds.links||[]; row.codes=ds.codes||[];
-            row.arrived=!!ds.arrived; row.docs_checked=ds.checked||new Date().toISOString(); row.stale=false; }
-    else{ row.docs_checked=new Date().toISOString(); row.stale=false;
-          if(row.state==="unchecked") row.state="error"; }
-  }
+  if(row){ row.state=ds.state; row.links=ds.links||[]; row.codes=ds.codes||[];
+           row.arrived=!!ds.arrived; row.docs_checked=ds.checked||new Date().toISOString();
+           row.stale=false; row.docs_error=""; }
   if(!quiet){
-    toast(!ds?"⚠ "+T("تعذّر الوصول لغاش · couldn't reach GAASH")
-      :ds.state==="action"?"🟡 "+gwd+" — "+T("مطلوب رفع · upload asked")
+    toast(ds.state==="action"?"🟡 "+gwd+" — "+T("مطلوب رفع · upload asked")
       :ds.state==="stopped"?"⛔ "+gwd+" — "+T("توقف التخليص · stopped")
       :ds.state==="noanswer"?"🚫 "+gwd+" — "+T("غاش لا سجل لهذا الرقم · GAASH has no record")
       :"🔵 "+gwd+" — "+T("بالجمارك · in customs"));
     gmDocsDraw();
   }
+  return true;
 }
 // ── ⚙ Accounts + templates + behavior ──
 // ── 🚩 Flag machine — watched inboxes → Telegram nag until «done» ─────────────

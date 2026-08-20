@@ -4589,6 +4589,7 @@ def docs_queue(names=True):
             "codes": (ds or {}).get("codes") or [],
             "arrived": bool((ds or {}).get("arrived")),
             "docs_checked": d.get("docs_checked") or "",
+            "docs_error": d.get("docs_error") or "",
             "stale": _stale(d.get("docs_checked")),
             "bucket": _bucket(ts) or None,
             "label": (ts.get("label") if isinstance(ts, dict)

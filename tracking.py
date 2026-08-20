@@ -338,47 +338,58 @@ def _docs_result(state, **extra):
 
 def docs_status(tn, timeout=25):
     """The status page's docs banner for one parcel, classified:
-    action   — a status row carries Links (yellow card: upload/update/pay asked)
+    action   — a status row carries Links (yellow card: upload/update/pay asked);
+               links outrank IsClearance/FinalStatuses — a parcel can be in
+               clearance AND asked for papers, and 'cleared' would hide the ask
+               (and docs_queue drops cleared rows entirely)
     info     — status rows without links (teal card: docs in, customs working)
     cleared / stopped / plain — IsClearance / FinalStatuses / nothing shown
     noanswer — GAASH has NO RECORD of the number (their 404 + code=no_data);
                almost always a wrong/typo'd tracking number, and a real answer
                the UI must show rather than leaving the row 'unchecked'.
-    Returns None only when the lookup itself failed (network / their site down),
-    so a caller can tell 'no such parcel' from 'ask again later'."""
+    Returns None only when the lookup itself failed (network / their site down)
+    — callers record that as docs_error, never as a fresh docs_checked."""
     tn = clean_tracking(tn)
     if not tn:
         return None
-    try:
-        api, nonce = status_session()
-        url = f"{api}/parcel-status-data?parcel_id={quote(tn)}&lang=he"
-        req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})
-        with request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode() or "null")
-    except error.HTTPError as e:
-        # 404 + {"code":"no_data"} is GAASH ANSWERING "we don't have this
-        # number" — not a failure. Any other HTTP status is a real failure.
+    d = None
+    for attempt in (0, 1):
         try:
-            body = json.loads(e.read().decode() or "null")
-        except Exception:  # noqa: BLE001
-            body = None
-        if e.code == 404 and isinstance(body, dict) and body.get("code") == "no_data":
-            return _docs_result("noanswer")
-        return None
-    except Exception:  # noqa: BLE001 - status page down ≠ tracking broken
-        return None
+            api, nonce = status_session()
+            url = f"{api}/parcel-status-data?parcel_id={quote(tn)}&lang=he"
+            req = request.Request(url, headers={"User-Agent": UA, "X-WP-Nonce": nonce})
+            with request.urlopen(req, timeout=timeout) as r:
+                d = json.loads(r.read().decode() or "null")
+            break
+        except error.HTTPError as e:
+            # 404 + {"code":"no_data"} is GAASH ANSWERING "we don't have this
+            # number" — not a failure. Any other HTTP status is a real failure.
+            try:
+                body = json.loads(e.read().decode() or "null")
+            except Exception:  # noqa: BLE001
+                body = None
+            if e.code == 404 and isinstance(body, dict) and body.get("code") == "no_data":
+                return _docs_result("noanswer")
+            if e.code in (401, 403) and attempt == 0:
+                # the cached WP nonce expired mid-window — drop it and re-scrape
+                # once, instead of failing every check for the next 10 minutes
+                _STATUS_SESSION_CACHE.update(at=0.0, val=None)
+                continue
+            return None
+        except Exception:  # noqa: BLE001 - status page down ≠ tracking broken
+            return None
     if not isinstance(d, dict):
         return None
     if d.get("code"):
         return _docs_result("noanswer") if d.get("code") == "no_data" else None
     extra = [s for s in (d.get("AdditionalStatuses") or []) if isinstance(s, dict)]
     linked = [s for s in extra if s.get("Links")]
-    if d.get("IsClearance"):
+    if linked:
+        state = "action"
+    elif d.get("IsClearance"):
         state = "cleared"
     elif d.get("FinalStatuses"):
         state = "stopped"
-    elif linked:
-        state = "action"
     elif extra:
         state = "info"
     else:
@@ -391,7 +402,6 @@ def docs_status(tn, timeout=25):
             "links": links,
             "arrived": bool(d.get("IsArrived")),
             "checked": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")}
-
 
 def fetch_one(tn, api_url, nonce, lang="en"):
     url = f"{api_url}/parcel-tracking-data?parcel_id={quote(clean_tracking(tn))}&lang={lang}"
