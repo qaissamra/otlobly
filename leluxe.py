@@ -4045,10 +4045,10 @@ def store_docs_state(tn, docs):
     GWD (same effective-number fan-out as refresh_tracking), so a manual ⋯
     re-check survives the next board reload.
 
-    docs=None means the LOOKUP FAILED: stamp the attempt only and keep the last
-    known state — a network hiccup must never erase a real 'upload asked'. The
-    stamp still matters: an unstamped attempt made a pressed button look like
-    nothing happened."""
+    docs=None means the LOOKUP FAILED: keep the last known state AND its
+    docs_checked age (a network hiccup must never erase a real 'upload asked',
+    nor make a stale answer look freshly confirmed) and stamp docs_error so
+    the UI can say the check failed and the sweep retries it."""
     import tracking
     tn = tracking.clean_tracking(tn or "")
     if not tn:
@@ -4066,7 +4066,10 @@ def store_docs_state(tn, docs):
             d = row["data"]
             if isinstance(docs, dict):
                 d["docs_state"] = docs
-            d["docs_checked"] = stamp
+                d["docs_checked"] = stamp
+                d.pop("docs_error", None)
+            else:
+                d["docs_error"] = stamp
             c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                       (json.dumps(d, ensure_ascii=False), row["id"]))
             hit += 1
@@ -4091,6 +4094,7 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
     cutoff = now - timedelta(minutes=30)
     dl_cutoff = now - timedelta(days=14)
     docs_cutoff = now - timedelta(days=1)   # yellow→blue flips fast once docs land
+    docs_retry = now - timedelta(hours=1)    # a FAILED check retries hourly, not daily
     with db.connect() as c:
         rows = [_row(r) for r in c.execute(
             "SELECT * FROM leluxe_orders WHERE deleted=0")]
@@ -4174,12 +4178,21 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
         if stale_dl and not_finished:
             dl_due_tn.add(tn)
         need_dl = (due_dl or stale_dl) and arrived
-        if not_finished:
-            try:
-                need_docs = force or \
-                    datetime.fromisoformat(d.get("docs_checked") or "") <= docs_cutoff
+        if force:
+            need_docs = True        # an explicit ⋯ Check is never silently
+                                    # skipped, even for cleared/Gerizim rows
+        elif not_finished:
+            try:                    # docs_checked = last SUCCESS → answer age
+                need_docs = datetime.fromisoformat(
+                    d.get("docs_checked") or "") <= docs_cutoff
             except (ValueError, TypeError):
                 need_docs = True
+            try:                    # a failure < 1h ago backs off (no hot loop)
+                if need_docs and datetime.fromisoformat(
+                        d.get("docs_error") or "") > docs_retry:
+                    need_docs = False
+            except (ValueError, TypeError):
+                pass
         if need or need_dl or need_docs:
             work.setdefault(tn, []).append((row["id"], need, need_dl, need_docs))
     todo = list(work.items())[:batch]
@@ -4306,9 +4319,14 @@ def refresh_tracking(batch=5, only=None, force=False, config=None):
                     if deadline:
                         d["gaash_deadline"] = deadline
                 if want_docs:
-                    d["docs_checked"] = stamp
                     if docs:
                         d["docs_state"] = docs
+                        d["docs_checked"] = stamp      # last SUCCESSFUL answer
+                        d.pop("docs_error", None)
+                    else:
+                        # lookup FAILED — keep the last answer AND its true
+                        # age; docs_error is the attempt record the UI shows
+                        d["docs_error"] = stamp
                 c.execute("UPDATE leluxe_orders SET data_json=? WHERE id=?",
                           (json.dumps(d, ensure_ascii=False), row_id))
         time.sleep(_pace())

@@ -332,7 +332,8 @@ def _norm_packages(packages):
             "gaash_deadline": p.get("gaash_deadline"),       # GAASH link expiry — lost past this date
             "gaash_deadline_checked": p.get("gaash_deadline_checked"),  # own cadence (~2-week re-check)
             "docs_state": p.get("docs_state"),               # GAASH docs banner (action/info/…) — see tracking.docs_status
-            "docs_checked": p.get("docs_checked"),           # last docs-banner check (~daily cadence)
+            "docs_checked": p.get("docs_checked"),           # last SUCCESSFUL docs-banner answer
+            "docs_error": p.get("docs_error"),               # last FAILED docs check (cleared on success)
             "due_date": (p.get("due_date") or "").strip() or None,  # owner-set package due date
             "rd_number": (p.get("rd_number") or "").strip() or None,  # owner-typed RD (refund) number
             # 📷 photos pasted onto THIS package (filenames in po_images/) —
@@ -508,6 +509,7 @@ def refresh_tracking(only=None, force=False, batch=5):
     cutoff = now - timedelta(minutes=ttl_min)
     dl_cutoff = now - timedelta(days=14)          # the GAASH deadline is near-fixed: fetch
     docs_cutoff = now - timedelta(days=1)         # docs banner flips fast once docs land
+    docs_retry = now - timedelta(hours=1)         # a FAILED docs check retries hourly, not daily
     old_gaash_cut = (now - timedelta(days=30)).isoformat()  # once, re-check only every ~2 weeks
     dl_cap = 10                                   # bound the first-load deadline backfill
     docs_cap = 3                                  # docs page is SLOW (~10-25s) — keep the batch inside gunicorn's 120s
@@ -589,12 +591,21 @@ def refresh_tracking(only=None, force=False, batch=5):
             if stale_dl and not_finished:
                 dl_due_tn.add(tn)
             need_dl = (due_dl or stale_dl) and arrived
-            if not_finished:
-                try:
-                    need_docs = force or \
-                        datetime.fromisoformat(pk.get("docs_checked") or "") <= docs_cutoff
+            if force:
+                need_docs = True      # an explicit Check is never silently
+                                      # skipped, even for cleared/Gerizim rows
+            elif not_finished:
+                try:                  # docs_checked = last SUCCESS → answer age
+                    need_docs = datetime.fromisoformat(
+                        pk.get("docs_checked") or "") <= docs_cutoff
                 except (ValueError, TypeError):
                     need_docs = True      # never checked → fetch once
+                try:                  # a failure < 1h ago backs off (no hot loop)
+                    if need_docs and datetime.fromisoformat(
+                            pk.get("docs_error") or "") > docs_retry:
+                        need_docs = False
+                except (ValueError, TypeError):
+                    pass
             if need_track or need_dl or need_docs:
                 work.setdefault(tn, []).append((po, pk, need_track, need_dl, need_docs))
     # Each GWD costs ~10s of live scraping; doing all ~13 in one request blows past
@@ -704,9 +715,14 @@ def refresh_tracking(only=None, force=False, batch=5):
                         if deadline:
                             t["gaash_deadline"] = deadline
                     if nc and docs_stamp:
-                        t["docs_checked"] = docs_stamp
                         if docs:
                             t["docs_state"] = docs
+                            t["docs_checked"] = docs_stamp   # last SUCCESSFUL answer
+                            t.pop("docs_error", None)
+                        else:
+                            # lookup FAILED — keep the last answer AND its true
+                            # age; docs_error is the attempt record the UI shows
+                            t["docs_error"] = docs_stamp
                     if nt:
                         t["tracking_checked"] = stamp
                 updated += 1
@@ -752,8 +768,10 @@ def store_docs_state(tn, docs):
     writer owns only the two docs keys (see refresh_tracking's clobber note).
     No-op 0 when no package carries the number.
 
-    docs=None means the lookup failed: stamp the attempt, keep the last known
-    state (a hiccup must not erase a real 'upload asked')."""
+    docs=None means the lookup failed: keep the last known state AND its
+    docs_checked age (a hiccup must not erase a real 'upload asked', nor make
+    a stale answer look freshly confirmed) and stamp docs_error so the UI can
+    say the check failed and the sweep retries it."""
     import tracking
     tn = tracking.clean_tracking(tn or "")
     if not tn:
@@ -767,7 +785,10 @@ def store_docs_state(tn, docs):
                 continue
             if isinstance(docs, dict):
                 pk["docs_state"] = docs
-            pk["docs_checked"] = stamp
+                pk["docs_checked"] = stamp
+                pk.pop("docs_error", None)
+            else:
+                pk["docs_error"] = stamp
             hit += 1
     if hit:
         save(fresh)

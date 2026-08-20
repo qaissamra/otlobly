@@ -2775,14 +2775,16 @@ def _docs_check_one(tn):
     """Fresh GAASH docs-banner check for one parcel, persisted to WHICHEVER
     board(s) carry the number (each store call is a no-op elsewhere).
 
-    A None result means the LOOKUP failed (their site down / network) — we still
-    stamp the attempt, because leaving the row looking never-checked is what made
-    a pressed button read as "nothing happened". A 'noanswer' state (GAASH has no
-    such number) is a real verdict and is stored like any other."""
+    A None result means the LOOKUP failed (their site down / network) — the
+    stores record docs_error and leave docs_checked (the last success) and
+    docs_state untouched, so a dead check can't masquerade as a fresh answer.
+    A 'noanswer' state (GAASH has no such number) is a real verdict and is
+    stored like any other."""
     import tracking
     docs = tracking.docs_status(tn)
-    # docs=None → the store stamps the ATTEMPT only, keeping the last known
-    # state: a transient failure must never erase a real yellow.
+    # docs=None → the stores stamp docs_error only, keeping the last known
+    # state AND its true age: a transient failure must never erase a real
+    # yellow, nor re-freshen a stale blue.
     leluxe_mod.store_docs_state(tn, docs)
     try:
         import purchases as purchases_mod
@@ -4544,9 +4546,15 @@ def worker_docs_sweep():
             hours = max(1, min(int(b.get("max_age_hours") or 20), 24 * 30))
             cutoff = (datetime.now().astimezone()
                       - timedelta(hours=hours)).isoformat()
+        # a failed attempt < 1h old is left alone this round — a GAASH outage
+        # must not make the nightly loop re-hammer the same 3 parcels 60 times
+        retry_floor = (datetime.now().astimezone()
+                       - timedelta(hours=1)).isoformat()
         todo = [r for r in q["rows"]
-                if r["state"] in ("unchecked", "error")
-                or (cutoff and (r["docs_checked"] or "") < cutoff)]
+                if ((r["state"] in ("unchecked", "error")
+                     or (r.get("docs_error") or "") > (r["docs_checked"] or "")
+                     or (cutoff and (r["docs_checked"] or "") < cutoff))
+                    and (r.get("docs_error") or "") <= retry_floor)]
     batch = max(1, min(int(b.get("batch") or 3), 3))
     picked, results = todo[:batch], []
     for r in picked:
