@@ -336,6 +336,110 @@ def main():
         settings_mod.apply({"gaash_mail": {"dry_run": True}})
         _del_thread("GWD700")
 
+    print("— a DAMAGED account table: read what you can, rebuild, restore —")
+    with db.connect() as c:
+        keep = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
+        cols = [x[1] for x in c.execute("PRAGMA table_info(gaash_accounts)")]
+    real_rows = gm._acct_rows
+    try:
+        # 1. a table that stops dead partway, the way a corrupt B-tree does
+        class _Wall:
+            def __init__(self, rows):
+                self.rows = list(rows)
+
+            def execute(self, sql, *a):
+                outer = self
+
+                class Cur:
+                    def fetchone(self):
+                        if not outer.rows:
+                            raise gm.sqlite3.DatabaseError(
+                                "database disk image is malformed")
+                        return outer.rows.pop(0)
+                return Cur()
+        wall = [{"id": "acct_1", "email": "a@b.com", "added_at": "2026-01-02"},
+                {"id": "acct_0", "email": "z@b.com", "added_at": "2026-01-01"},
+                # what the live table really handed back: cells belonging to
+                # OTHER tables entirely — a sqlite_sequence row, half a package
+                {"id": "users", "email": 4},
+                {"id": 580, "email": "86cawupkd"}]
+        got, err = gm._acct_rows(_Wall(list(wall)))
+        check("a read that hits corruption keeps the rows it already got",
+              [r["id"] for r in got] == ["acct_0", "acct_1"]
+              and "malformed" in (err or ""))
+        check("cells belonging to other tables are never offered as mailboxes",
+              len(gm._acct_rows(_Wall(list(wall)), keep_junk=True)[0]) == 4)
+
+        # 2. junk that survives a normal write is counted, not shown
+        with db.connect() as c:
+            c.execute("INSERT INTO gaash_accounts (id,email) VALUES (?,?)",
+                      ("junk_row", "4"))        # no @ — not an address
+        h = gm.accounts_health()
+        check("junk rows are counted, never offered as mailboxes",
+              h["junk"] == 1 and not h["ok"]
+              and not any(a["email"] == "4" for a in gm.accounts()))
+        check("the mail room still LOADS with a damaged list",
+              isinstance(gm.overview().get("accounts"), list))
+
+        # 3. unreadable + nothing to rescue: rebuild anyway. Refusing there was
+        #    the dead end — every write to the table raises too, so the owner
+        #    could not even re-add the mailboxes the damage had swallowed.
+        def _flaky(c, keep_junk=False):
+            rows, e = real_rows(c, keep_junk=True)
+            stuck = any(r.get("id") == "junk_row" for r in rows)
+            if not keep_junk:
+                rows = [r for r in rows if gm._is_mailbox(r)]
+            return ([] if stuck else rows,
+                    "database disk image is malformed" if stuck else e)
+        gm._acct_rows = _flaky
+        rep = gm.repair_accounts()
+        gm._acct_rows = real_rows
+        with db.connect() as c:
+            left = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
+            newcols = [x[1] for x in c.execute(
+                "PRAGMA table_info(gaash_accounts)")]
+        check("an unreadable list is rebuilt empty instead of staying stuck",
+              rep["ok"] and rep["emptied"] and not left
+              and rep["after"]["ok"])
+        check("the rebuild keeps every column the database really has",
+              newcols == cols)
+
+        # 4. …and the mailboxes come back from a backup: same ids (so the
+        #    conversations pinned to them keep their sender), same passwords
+        src = _TMP / "backup.db"
+        b = gm.sqlite3.connect(str(src))
+        b.execute("CREATE TABLE gaash_accounts (%s)"
+                  % ",".join(f"{k} TEXT" for k in cols))
+        for row in (("acct_old1", "one@test.com", "pw-one"),
+                    ("acct_old2", "two@test.com", "pw-two")):
+            b.execute("INSERT INTO gaash_accounts (id,email,app_password,"
+                      "added_at) VALUES (?,?,?,?)", row + (db.now_iso(),))
+        b.execute("INSERT INTO gaash_accounts (id,email) VALUES ('x','no-pw')")
+        b.commit()
+        b.close()
+        res = gm.restore_accounts(src)
+        back = {a["id"]: a for a in gm.accounts()}
+        check("a backup puts the mailboxes back under their original ids",
+              res["ok"] and res["restored"] == ["one@test.com", "two@test.com"]
+              and back["acct_old1"]["has_password"]
+              and res["health"]["ok"])
+        again = gm.restore_accounts(src)
+        check("restoring twice changes nothing — live always wins",
+              again["ok"] and not again["restored"]
+              and len(again["already_live"]) == 2)
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_accounts")
+        check("a backup with no usable mailbox is refused, not obeyed",
+              not gm.restore_accounts(_TMP / "nope.db")["ok"])
+    finally:
+        gm._acct_rows = real_rows
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_accounts")
+            for row in keep:
+                c.execute("INSERT INTO gaash_accounts (%s) VALUES (%s)"
+                          % (",".join(cols), ",".join("?" * len(cols))),
+                          [row.get(k) for k in cols])
+
     print("— declaration contents: blank titles resolve, regrouped packages —")
     import purchases as purch
     with db.connect() as c:

@@ -14593,20 +14593,33 @@ async function gmAcctHealthDraw(){
   try{ h=await (await fetch("/api/gaash/accounts/health")).json(); }catch(e){ return; }
   if(!h||h.ok){ box.innerHTML=""; return; }
   const n=(h.mismatched||[]).length;
+  // two different damages, and telling them apart is the whole point: an index
+  // that answers with the WRONG row (passwords intact, rebuild fixes it), or a
+  // table too damaged to read at all — where the mailboxes themselves are gone
+  // and only a backup brings them back. Saying "your passwords are fine" in the
+  // second case sends the owner looking for a problem that isn't there.
+  const gone=!!h.unreadable;
   box.innerHTML=`<div class="en-warn live" style="margin:6px 0;font-size:12px">
-    <b>⚠ ${T("قائمة الحسابات تالفة · this account list is damaged")}</b>
-    <div style="margin-top:3px">${T("البحث عن حساب يُرجع حساباً آخر بلا كلمة مرور — لذلك يرفض Gmail كل إرسال. كلمات المرور سليمة · looking an account up returns a DIFFERENT row with no password — which is why Gmail refuses every send. Your passwords are fine.")}</div>
-    <div class="muted2" style="margin-top:3px">${n} ${T("حساب لا يُقرأ · unreadable")}${h.junk?` · ${h.junk} ${T("صف غريب · junk row(s)")}`:""}</div>
-    ${CAN_ADMIN?`<button class="minibtn" style="margin-top:6px" onclick="gmAcctRepair(this)"
-      title="${T("يعيد بناء الجدول ويُبقي كل صندوق بريد وكلمة مروره · rebuilds the table, keeping every mailbox and its password")}">🔧 ${T("أصلح القائمة · Rebuild the list")}</button>`:""}</div>`;
+    <b>⚠ ${gone?T("قائمة الحسابات لا تُقرأ · this account list cannot be read"):T("قائمة الحسابات تالفة · this account list is damaged")}</b>
+    <div style="margin-top:3px">${gone
+      ?T("تلف في قاعدة البيانات أوقف قراءة الجدول، وقد تكون صناديق البريد نفسها ضاعت. أعد بناء القائمة، ثم استرجعها من النسخة الاحتياطية (restore_mail_accounts.py) لتعود بنفس المعرّفات وكلمات المرور — أو أضفها يدوياً · database damage stopped the table mid-read, and the mailboxes themselves may be gone with it. Rebuild the list, then restore it from a backup (restore_mail_accounts.py) to get the same ids and passwords back — or add them again by hand.")
+      :T("البحث عن حساب يُرجع حساباً آخر بلا كلمة مرور — لذلك يرفض Gmail كل إرسال. كلمات المرور سليمة · looking an account up returns a DIFFERENT row with no password — which is why Gmail refuses every send. Your passwords are fine.")}</div>
+    <div class="muted2" style="margin-top:3px">${gone?`${h.total||0} ${T("صندوق بريد يمكن قراءته · mailbox(es) still readable")}`:`${n} ${T("حساب لا يُقرأ · unreadable")}`}${h.junk?` · ${h.junk} ${T("صف غريب · junk row(s)")}`:""}</div>
+    ${CAN_ADMIN?`<button class="minibtn" style="margin-top:6px" onclick="gmAcctRepair(this,${gone?1:0})"
+      title="${gone?T("يعيد بناء الجدول — ما لا يمكن قراءته لا يمكن إنقاذه · rebuilds the table — what cannot be read cannot be kept"):T("يعيد بناء الجدول ويُبقي كل صندوق بريد وكلمة مروره · rebuilds the table, keeping every mailbox and its password")}">🔧 ${T("أصلح القائمة · Rebuild the list")}</button>`:""}</div>`;
 }
-async function gmAcctRepair(btn){
-  if(!confirm(T("يعيد بناء قائمة الحسابات ويحذف الصفوف غير المقروءة. كل صندوق بريد وكلمة مروره تبقى · Rebuilds the account list and drops the unreadable rows. Every mailbox and its password is kept."))) return;
+async function gmAcctRepair(btn, gone){
+  // promise only what the rebuild can deliver: it keeps every mailbox it can
+  // still READ, and when the table is unreadable that is none of them
+  if(!confirm(gone
+    ?T("الجدول لا يُقرأ، لذا سيُعاد بناؤه فارغاً — ثم استرجع صناديق البريد من نسخة احتياطية أو أضفها من جديد · The table cannot be read, so it will be rebuilt EMPTY — then restore the mailboxes from a backup, or add them again.")
+    :T("يعيد بناء قائمة الحسابات ويحذف الصفوف غير المقروءة. كل صندوق بريد وكلمة مروره تبقى · Rebuilds the account list and drops the unreadable rows. Every mailbox and its password is kept."))) return;
   btn.disabled=true; btn.textContent="…";
   const r=await post("/api/gaash/accounts/repair",{});
   btn.disabled=false;
   if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر الإصلاح · repair failed")); gmAcctHealthDraw(); return; }
-  toast("🔧 "+T("أُصلحت · repaired")+" — "+(r.kept||[]).length+" "+T("صندوق بريد · mailbox(es)"));
+  toast(r.emptied?("🔧 "+T("أُعيد بناء القائمة فارغة — استرجع صناديق البريد · rebuilt empty — restore the mailboxes"))
+                 :("🔧 "+T("أُصلحت · repaired")+" — "+(r.kept||[]).length+" "+T("صندوق بريد · mailbox(es)")));
   await gmLoad(); gmSettingsOpen();
 }
 async function gmAcctAdd(btn){

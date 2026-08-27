@@ -4760,6 +4760,46 @@ def api_restore():
     return jsonify({"ok": True, "restored_at": db.now_iso(), "counts": counts})
 
 
+@app.route("/api/gaash/accounts/restore", methods=["POST"])
+def api_gaash_accounts_restore():
+    """Put the sending mailboxes back from a backup zip — same auth and same
+    streaming shape as /api/restore, but it touches ONE table: the live DB, its
+    orders and its money keep today's data. For when corruption has eaten the
+    account rows themselves, where a rebuild alone leaves an empty list and
+    three app passwords to re-fetch from Google."""
+    if not _backup_ok():
+        abort(401)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    staging = db.DB_FILE.with_name(db.DB_FILE.name + f".acctsrc-{stamp}")
+    up = tempfile.NamedTemporaryFile(prefix="otlobly-acctrestore-",
+                                     suffix=".zip", delete=False)
+    try:
+        # stream, like /api/backup: the zip is ~100 MB and the instance is 512
+        shutil.copyfileobj(request.stream, up, length=1024 * 1024)
+        up.close()
+        if not os.path.getsize(up.name):
+            abort(400, "empty body — POST the backup zip as the raw body")
+        try:
+            with zipfile.ZipFile(up.name) as z, z.open("otlobly.db") as src, \
+                    open(staging, "wb") as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+        except Exception as e:        # noqa: BLE001
+            abort(400, f"could not read otlobly.db from the zip: {e}")
+        res = gaash_mail.restore_accounts(staging)
+    finally:
+        for f in (up.name, staging):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+    if res.get("ok"):
+        db.audit(auth.actor() or {"username": "worker"},   # same shape /api/backup logs
+                 "gaash_accounts_restore", "gaash",
+                 ",".join(res.get("restored") or []),
+                 "from backup" + (" (rebuilt first)" if res.get("repaired") else ""))
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
 @app.route("/api/worker/seed", methods=["POST"])
 def worker_seed():
     """One-time data import from the Mac → server (orders / customers / purchases).
