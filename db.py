@@ -439,8 +439,15 @@ def _quarantine_corrupt_db(exc):
     POST /api/restore (worker token) swaps in a good backup DB. Only fires on
     real corruption, never on a lock/busy. Returns True if it quarantined."""
     msg = str(exc).lower()
-    if not any(m in msg for m in _CORRUPT_MARKERS) or not DB_FILE.exists():
+    if not any(m in msg for m in _CORRUPT_MARKERS):
         return False
+    if not DB_FILE.exists():
+        # gunicorn imports app.py in BOTH workers, so both can meet the corruption
+        # in the same instant. The loser finds the file already renamed — that is
+        # the other worker's quarantine having succeeded, not a failure of ours.
+        # Reporting False here made the loser re-raise and take the deploy down
+        # anyway, which defeats the whole guard.
+        return True
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
         DB_FILE.rename(DB_FILE.with_name(DB_FILE.name + f".corrupt-{ts}"))
@@ -1072,17 +1079,41 @@ def set_setting(key, value):
                   (key, json.dumps(value, ensure_ascii=False)))
 
 
-def claim_once(key):
-    """Atomically claim a one-time task. Returns True for EXACTLY ONE caller — even
-    across the two gunicorn workers both importing app.py at boot — and False for
-    everyone after. The settings PK makes the first INSERT win and the rest raise
-    IntegrityError. Used to run the legacy backfills once per deploy, not per worker."""
+def _claim_once(key):
     with connect() as c:
         try:
             c.execute("INSERT INTO settings (key, value) VALUES (?,?)",
                       (key, json.dumps(now_iso())))
             return True
         except sqlite3.IntegrityError:
+            return False
+
+
+def claim_once(key):
+    """Atomically claim a one-time task. Returns True for EXACTLY ONE caller — even
+    across the two gunicorn workers both importing app.py at boot — and False for
+    everyone after. The settings PK makes the first INSERT win and the rest raise
+    IntegrityError. Used to run the legacy backfills once per deploy, not per worker.
+
+    🛑 IT NEVER RAISES, AND THAT IS THE POINT. Every caller runs at MODULE level in
+    app.py, so an exception here is not a skipped backfill — it is gunicorn with no
+    app object: no process, 502 on every route, and POST /api/restore unreachable.
+    On 2026-09-04 a page-level corruption that init_db()'s guard never saw (the
+    schema read fine; only the `settings` b-tree was destroyed) raised out of the
+    first of these and took the live site down for hours. A skipped one-time,
+    idempotent backfill costs nothing by comparison.
+
+    Corruption is quarantined and retried once on the fresh schema. Anything else —
+    a lock, a busy DB — simply answers False and lets boot continue."""
+    try:
+        return _claim_once(key)
+    except sqlite3.DatabaseError as e:
+        if not _quarantine_corrupt_db(e):
+            return False
+        try:
+            init_db()
+            return _claim_once(key)
+        except sqlite3.DatabaseError:
             return False
 
 
