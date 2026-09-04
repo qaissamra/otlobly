@@ -379,6 +379,50 @@ def _mem_after(resp):
     return resp
 
 
+def _boot_once(key):
+    """db.claim_once for the module-level boot backfills, with a hard guarantee.
+
+    🛑 THESE RUN AT IMPORT. An exception in any of them is not a failed backfill —
+    it is gunicorn with no app object: no process, 502 on every route including
+    /healthz, and POST /api/restore unreachable. That is precisely the 2026-09-04
+    outage: a corruption in the `settings` b-tree that init_db()'s guard never saw
+    (the schema read fine) raised out of the first claim_once below, so the one
+    endpoint that could have repaired the database was locked away behind the
+    database being broken.
+
+    db.claim_once now refuses to raise on its own, so this is the second of two
+    layers. Keep both: the guard that gets forgotten is always the outer one, and
+    a boot path is exactly where a single point of failure must not exist.
+    """
+    try:
+        return db.claim_once(key)
+    except Exception as e:                       # noqa: BLE001 — nothing may stop the import
+        print(f"[boot] claim {key} skipped: {e}", flush=True)
+        return False
+
+
+@app.route("/api/health/db")
+def health_db():
+    """Is the database actually readable? Answered honestly, in one boolean.
+
+    /healthz deliberately cannot tell you this — it is always-200 so the platform
+    never restart-loops mid-boot — which is why the 2026-09-04 corruption sat
+    unnoticed from 12:17 to 15:02 with a green health check the whole time. This is
+    the probe a watchdog OFF this host polls, so the next one is caught in minutes.
+
+    quick_check, not integrity_check: it is a page-level scan that answers in
+    milliseconds on a 30 MB file, where the full check walks every index and would
+    be far too heavy to poll. Unauthenticated on purpose — it discloses nothing but
+    whether the database is well."""
+    try:
+        with db.connect() as c:
+            res = (c.execute("PRAGMA quick_check(1)").fetchone() or ["unknown"])[0]
+        ok = str(res).lower() == "ok"
+        return jsonify({"ok": ok, "error": "" if ok else str(res)[:300]}), 200 if ok else 503
+    except Exception as e:                       # noqa: BLE001 — the answer IS the error
+        return jsonify({"ok": False, "error": str(e)[:300]}), 503
+
+
 @app.route("/healthz")
 def healthz():
     """Always-200 health check for the host (independent of login/setup state) so
@@ -4714,6 +4758,67 @@ def api_backup():
                      download_name=f"otlobly-backup-{stamp}.zip")
 
 
+# Quarantined-database recovery. When a corruption is detected the bad file is not
+# deleted — db._quarantine_corrupt_db renames it to otlobly.db.corrupt-<ts> and a
+# restore leaves otlobly.db.pre-restore-<ts> behind. SQLite corruption is usually
+# page-level, so most tables in that file still read, and it is the ONLY copy of
+# everything written since the last nightly backup. These two routes exist to get it
+# off the disk and into a salvage run, because there is otherwise no way to reach it
+# without a shell on the host.
+_QUARANTINE_PREFIXES = ("otlobly.db.corrupt-", "otlobly.db.pre-restore-")
+
+
+def _quarantined_path(name):
+    """Resolve `name` to a quarantined file, or None. Fail-closed by construction.
+
+    🛑 Two independent gates, because one is how a file-serving route becomes an
+    arbitrary-read: the name must carry no path separators AND, after resolution,
+    must still sit directly inside DATA_DIR. A prefix check alone would happily
+    accept `otlobly.db.corrupt-../../../etc/passwd`. Never widen the prefixes to
+    include the LIVE database — this endpoint may only ever serve dead files."""
+    from paths import DATA_DIR
+    name = str(name or "")
+    if "/" in name or "\\" in name or not name.startswith(_QUARANTINE_PREFIXES):
+        return None
+    root = Path(DATA_DIR).resolve()
+    p = (root / name).resolve()
+    if p.parent != root or not p.is_file():
+        return None
+    return p
+
+
+@app.route("/api/quarantined")
+def api_quarantined_list():
+    """What damaged databases are still on the disk, newest first."""
+    if not _backup_ok():
+        abort(401)
+    from paths import DATA_DIR
+    rows = []
+    for p in sorted(Path(DATA_DIR).glob("otlobly.db.*"), reverse=True):
+        if p.is_file() and p.name.startswith(_QUARANTINE_PREFIXES):
+            st = p.stat()
+            rows.append({"name": p.name, "bytes": st.st_size,
+                         "mb": round(st.st_size / 1048576, 1),
+                         "at": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
+    return jsonify({"ok": True, "files": rows})
+
+
+@app.route("/api/quarantined/<path:name>")
+def api_quarantined_get(name):
+    """Stream one quarantined database so it can be salvaged off-host.
+
+    Sent as-is, corruption included: repairing it here would need the whole SQLite
+    recovery machinery on a 512 MB instance, and the salvage wants the raw bytes
+    anyway."""
+    if not _backup_ok():
+        abort(401)
+    p = _quarantined_path(name)
+    if p is None:
+        abort(404)
+    return send_file(p, as_attachment=True, download_name=p.name,
+                     mimetype="application/octet-stream")
+
+
 @app.route("/api/restore", methods=["POST"])
 def api_restore():
     """Disaster recovery: replace the live SQLite DB with the otlobly.db inside
@@ -6665,7 +6770,7 @@ def _reconcile_pos_to_orders():
         purchases.save(pdb)
 
 
-if db.claim_once("boot:reconcile_v1"):
+if _boot_once("boot:reconcile_v1"):
     for _fn, _label in ((_link_unlinked_deposits, "deposit backfill"),
                         (_backfill_customers_from_orders, "customer backfill"),
                         (_reconcile_pos_to_orders, "PO reconcile")):
@@ -6700,7 +6805,7 @@ def _patch_customer_status_map():
         cfg.save(cfgd)
 
 
-if db.claim_once("boot:customer_map_v1"):
+if _boot_once("boot:customer_map_v1"):
     try:
         _patch_customer_status_map()
     except Exception as _e:                      # noqa: BLE001 — never block boot
@@ -6737,7 +6842,7 @@ def _patch_k3_customs():
         cfg.save(cfgd)
 
 
-if db.claim_once("boot:k3_customs_v1"):
+if _boot_once("boot:k3_customs_v1"):
     try:
         _patch_k3_customs()
     except Exception as _e:                      # noqa: BLE001 — never block boot
@@ -6761,7 +6866,7 @@ def _patch_cleared_stage():
     cfg.save(cfgd)
 
 
-if db.claim_once("boot:cleared_stage_v1"):
+if _boot_once("boot:cleared_stage_v1"):
     try:
         _patch_cleared_stage()
     except Exception as _e:                      # noqa: BLE001 — never block boot
@@ -6790,7 +6895,7 @@ def _patch_customs_codes():
     cfg.save(cfgd)
 
 
-if db.claim_once("boot:customs_codes_v1"):
+if _boot_once("boot:customs_codes_v1"):
     try:
         _patch_customs_codes()
     except Exception as _e:                      # noqa: BLE001 — never block boot
@@ -6809,7 +6914,7 @@ def _bump_delivery_buffer():
     cfg.save(cfgd)
 
 
-if db.claim_once("boot:delivery_buffer_10_v1"):
+if _boot_once("boot:delivery_buffer_10_v1"):
     try:
         _bump_delivery_buffer()
     except Exception as _e:                      # noqa: BLE001 — never block boot
