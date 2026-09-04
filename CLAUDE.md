@@ -37,6 +37,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
   each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,
   loops until done, logs to docs_sweep.log)
+- db_watch.py / com.otlobly.dbwatch.plist — every 10 min: asks the live app whether
+  its DB still reads (`/api/health/db`) and Telegrams the owner the first time it
+  does not. Deliberately OFF Render: it watches for the app dying, so anything
+  in-process (alerts.py) is the wrong host — on 2026-09-04 a corruption at 12:17
+  went unnoticed until 15:02 behind an always-200 /healthz
+- account_rd.py — per-account RD history for AZ Studio's Accounts Tool
+  (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
 - flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →
   dedicated flags-bot Telegram nag every minute until the owner replies done);
   daemon gated by env FLAG_MACHINE=1, set ONLY in the Render dashboard (like

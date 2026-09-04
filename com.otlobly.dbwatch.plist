@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Every 10 min: ask the LIVE app whether its database still reads (db_watch.py),
+     and Telegram the owner the first time it does not.
+
+     WHY IT IS HERE AND NOT ON RENDER: this watches for the app dying, so anything
+     running inside the app is the wrong host — alerts.py is in-process and went
+     down with it on 2026-09-04, when a corruption at 12:17 UTC went unnoticed until
+     15:02 behind an always-200 /healthz.
+
+     The Mac sleeps, so this is good cover for the working day, not a guarantee.
+     Better home once it is reachable: the always-on droplet (azstudio.otlobly.co).
+
+     Install:  cp com.otlobly.dbwatch.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.otlobly.dbwatch.plist
+     Remove:   launchctl unload ~/Library/LaunchAgents/com.otlobly.dbwatch.plist
+     Run now:  python3 db_watch.py -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.otlobly.dbwatch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/leluxegroup2/projects/otlobly-orders/db_watch.py</string>
+    <string>--quiet-ok</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <!-- RunAtLoad so a Mac waking up checks immediately rather than waiting 10 min:
+       the interesting moment is usually the one you just missed. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders</string>
+  <key>StandardOutPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/db_watch.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/leluxegroup2/projects/otlobly-orders/db_watch.log</string>
+</dict>
+</plist>

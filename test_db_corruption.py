@@ -240,6 +240,44 @@ def the_db_probe_tells_the_truth():
         db.DB_FILE = old
 
 
+def the_watchdog_reads_the_probe_correctly():
+    """The watchdog is the only thing that would have caught 2026-09-04 early, so its
+    verdicts have to be right — especially the difference between 'the database is
+    rotten' and 'the whole site is down', which call for different reactions."""
+    import db_watch
+
+    calls = {}
+
+    def fake(url, timeout=25):
+        calls["url"] = url
+        return fake.reply
+    db_watch._get = fake
+
+    fake.reply = (200, '{"ok": true, "error": ""}')
+    ok, why = db_watch.check("https://otlobly.co")
+    check("a clean database reads healthy", ok is True)
+    check("it asks the probe, not /healthz", calls["url"].endswith("/api/health/db"))
+
+    fake.reply = (503, '{"ok": false, "error": "database disk image is malformed"}')
+    ok, why = db_watch.check("https://otlobly.co")
+    check("a corrupt database reads unhealthy", ok is False)
+    check("and the reason names the corruption", "malformed" in why)
+
+    fake.reply = (0, "connection refused")
+    ok, why = db_watch.check("https://otlobly.co")
+    check("an unreachable site is unhealthy", ok is False)
+    check("and says it could not reach it, not that data is corrupt",
+          "cannot reach" in why and "CORRUPT" not in why)
+
+    fake.reply = (404, "<html>not found</html>")
+    ok, why = db_watch.check("https://otlobly.co")
+    check("an older build without the probe is not called corrupt", ok is True)
+
+    fake.reply = (200, "not json at all")
+    ok, why = db_watch.check("https://otlobly.co")
+    check("an unreadable answer is unhealthy, never assumed fine", ok is False)
+
+
 def main():
     print("the corruption shape:");   the_corruption_is_the_one_that_happened()
     print("claim_once survives:");    claim_once_never_raises()
@@ -248,6 +286,7 @@ def main():
     print("the app still boots:");    the_app_still_boots()
     print("salvage route is safe:"); the_salvage_route_is_fail_closed()
     print("the DB probe:");          the_db_probe_tells_the_truth()
+    print("the watchdog:");          the_watchdog_reads_the_probe_correctly()
     print()
     if fails:
         raise SystemExit(f"{len(fails)} check(s) failed: {fails}")
