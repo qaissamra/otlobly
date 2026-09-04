@@ -424,6 +424,25 @@ def board_age_is_the_data_not_the_run():
     check("and the date it was seen is reported", res["board_seen_at"] != "")
 
 
+def the_auto_pull_switch_turns_off_as_well_as_on():
+    """⚠️ The one time you need this switch is when the timer is the suspect in
+    something and you want it stopped in seconds. A falsy enable_auto that means
+    "leave it alone" is a switch that only points one way."""
+    os.environ["OTLOBLY_WORKER_TOKEN"] = "sekret"
+    import app as app_mod
+    cl = app_mod.app.test_client()
+    hdr = {"Authorization": "Bearer sekret"}
+    cl.post("/api/worker/board_pull", json={"enable_auto": True, "minutes": 30}, headers=hdr)
+    check("it turns on", (db.get_setting("leluxe:auto_pull") or {}).get("enabled") is True)
+    cl.post("/api/worker/board_pull", json={"enable_auto": False}, headers=hdr)
+    check("and it turns OFF", (db.get_setting("leluxe:auto_pull") or {}).get("enabled") is False)
+    cl.post("/api/worker/board_pull", json={}, headers=hdr)
+    check("omitting it leaves the setting alone",
+          (db.get_setting("leluxe:auto_pull") or {}).get("enabled") is False)
+    check("and the route still needs the token",
+          cl.post("/api/worker/board_pull", json={}).status_code == 401)
+
+
 def main():
     db.init_db()
     _setup_schema()
@@ -451,6 +470,7 @@ def main():
     print("verdict-bearing package:"); a_non_item_carrying_a_verdict_is_still_emitted()
     print("board age:");              board_age_is_the_data_not_the_run()
     print("endpoint gated:");         endpoint_needs_the_worker_token()
+    print("auto-pull switch:");       the_auto_pull_switch_turns_off_as_well_as_on()
     print()
     if fails:
         raise SystemExit(f"{len(fails)} check(s) failed: {fails}")

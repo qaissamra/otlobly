@@ -4650,15 +4650,21 @@ def worker_board_pull():
     Worker bearer token, like the other /api/worker/* routes, so AZ Studio (which
     has no Otlobly session) can refresh the board it depends on before answering.
 
-    Body: {enable_auto: bool — turn the ⏱ auto-sync timer on for THIS instance,
+    Body: {enable_auto: bool — turn the ⏱ auto-sync timer on or OFF for THIS
+             instance (omit to leave it as it is),
            minutes: int — its interval, default 30,
            force: bool — run a pass now even if one ran within the interval}"""
     if not _worker_ok():
         abort(401)
     b = request.get_json(force=True, silent=True) or {}
-    if b.get("enable_auto"):
+    # ⚠️ enable_auto must be able to say NO. Written as an explicit `is not None`
+    # test because a falsy value here is a deliberate "turn it off", not "leave it
+    # alone" — and the one time you need that switch is when the timer is the
+    # suspect in something and you want it stopped in seconds, not in a deploy.
+    if b.get("enable_auto") is not None:
         db.set_setting("leluxe:auto_pull", {
-            "enabled": True, "minutes": max(5, int(b.get("minutes") or 30))})
+            "enabled": bool(b.get("enable_auto")),
+            "minutes": max(5, int(b.get("minutes") or 30))})
     if b.get("force"):
         db.set_setting("leluxe:auto_pull_last", None)
     res = leluxe_mod.run_pull_pass()
