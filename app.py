@@ -42,6 +42,7 @@ from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import account_rd
 import activity
 import amazon_import
 import auth
@@ -4565,6 +4566,29 @@ def worker_docs_sweep():
     return jsonify({"ok": True, "checked": len(picked),
                     "remaining": max(0, len(todo) - len(picked)),
                     "counts": q["counts"], "results": results})
+
+
+@app.route("/api/worker/account_rd")
+def worker_account_rd():
+    """Per-account RD history, for AZ Studio's Accounts Tool.
+
+    The studio decides which buying accounts can still take a big order, but it
+    cannot see this board: az-tool holds no ClickUp token and never calls here.
+    So each side ships what it owns — Otlobly the board history, az-tool the
+    Multilogin fleet — and the studio joins them on the account code.
+
+    Worker bearer token rather than a session, because the caller is another
+    service on another host, not a person with a login. Read-only by design:
+    nothing here writes to ClickUp.
+
+    The payload is ~170 small rows; there is no paging and none is needed."""
+    if not _worker_ok():
+        abort(401)
+    res = account_rd.rollup()
+    return jsonify({"ok": True, **res,
+                    "list_id": leluxe_mod.list_id(),
+                    "source_list_id": leluxe_mod.source_list_id(),
+                    "board_synced_at": (db.get_setting("leluxe:auto_pull_last") or {}).get("at", "")})
 
 
 @app.route("/api/worker/tracking", methods=["POST"])
