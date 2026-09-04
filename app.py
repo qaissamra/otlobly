@@ -4632,7 +4632,39 @@ def worker_account_rd():
     return jsonify({"ok": True, **res,
                     "list_id": leluxe_mod.list_id(),
                     "source_list_id": leluxe_mod.source_list_id(),
+                    "auto_pull": leluxe_mod.auto_pull_settings(),
                     "board_synced_at": (db.get_setting("leluxe:auto_pull_last") or {}).get("at", "")})
+
+
+@app.route("/api/worker/board_pull", methods=["POST"])
+def worker_board_pull():
+    """Keep the Le Luxe board mirror fresh, headlessly — and switch the timer on.
+
+    WHY THIS EXISTS: on 2026-09-04 the mirror had not synced since 13 August,
+    because leluxe:auto_pull was never set and the only way to sync was a human
+    clicking the button on an admin-only page. The Accounts Tool was therefore
+    answering "this account is safe to order from" off 22-day-old data, in which
+    an RD filed since then is invisible. That is the one error direction that
+    costs money.
+
+    Worker bearer token, like the other /api/worker/* routes, so AZ Studio (which
+    has no Otlobly session) can refresh the board it depends on before answering.
+
+    Body: {enable_auto: bool — turn the ⏱ auto-sync timer on for THIS instance,
+           minutes: int — its interval, default 30,
+           force: bool — run a pass now even if one ran within the interval}"""
+    if not _worker_ok():
+        abort(401)
+    b = request.get_json(force=True, silent=True) or {}
+    if b.get("enable_auto"):
+        db.set_setting("leluxe:auto_pull", {
+            "enabled": True, "minutes": max(5, int(b.get("minutes") or 30))})
+    if b.get("force"):
+        db.set_setting("leluxe:auto_pull_last", None)
+    res = leluxe_mod.run_pull_pass()
+    return jsonify({"ok": True, "result": res,
+                    "auto_pull": leluxe_mod.auto_pull_settings(),
+                    "last": db.get_setting("leluxe:auto_pull_last") or {}})
 
 
 @app.route("/api/worker/tracking", methods=["POST"])
