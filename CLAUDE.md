@@ -68,6 +68,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   `otlobly.db.pending-restore` + requests a repair; the master applies it with no
   worker alive (old file kept as `otlobly.db.pre-restore-<ts>`). `/api/notifications`
   carries `db:{ok,repairing,maintenance}` from health.json for the UI banner
+- web/index.html "honest failures": the global fetch wrapper (next to setOffline)
+  reads every failed /api/* JSON answer once, records the reason (apiFailReason —
+  session expired / no permission / database repairing / server error) for the
+  "couldn't load" panes, and drives the 🩹 #dbBanner (setDbState) from the reply and
+  from the 60 s bell poll's db:{…}. app.py answers /api/* 401/403/404/500 as JSON;
+  pages keep their redirects. Never add a new "couldn't load" without ${apiFailReason()}
 - account_rd.py — per-account RD history for AZ Studio's Accounts Tool
   (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
 - flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →
