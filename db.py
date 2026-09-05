@@ -421,48 +421,220 @@ def now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+# --------------------------------------------------------------------------- #
+# Connections — every one passes through ONE corruption chokepoint.
+# --------------------------------------------------------------------------- #
+# otlobly.db corrupted nine times between 2026-07-18 and 2026-09-05. Each time the
+# app kept writing into the broken file for hours (every daemon loop catches
+# Exception and carries on), which is how one damaged page becomes several. The
+# fix is not sixty try/excepts: every connection is a _Conn, every cursor a
+# _Cursor, and any sqlite3.DatabaseError they see is shown to report_corruption()
+# before it propagates. That function confirms with PRAGMA quick_check(1), files a
+# repair request the gunicorn MASTER acts on with no worker alive (dbrepair.py),
+# and lets this worker step aside. Nothing here ever renames, deletes or
+# recreates the live file — that was the old quarantine, and starting an empty
+# schema restarted order numbering at OTL-0001.
+
+
+class _Cursor(sqlite3.Cursor):
+    def execute(self, *a, **k):
+        try:
+            return super().execute(*a, **k)
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def executemany(self, *a, **k):
+        try:
+            return super().executemany(*a, **k)
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def executescript(self, *a, **k):
+        try:
+            return super().executescript(*a, **k)
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def fetchone(self):
+        try:
+            return super().fetchone()
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def fetchmany(self, *a, **k):
+        try:
+            return super().fetchmany(*a, **k)
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def fetchall(self):
+        try:
+            return super().fetchall()
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+    def __next__(self):
+        try:
+            return super().__next__()
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+
+class _Conn(sqlite3.Connection):
+    def cursor(self, factory=_Cursor):
+        return super().cursor(factory)
+
+    def commit(self):
+        try:
+            return super().commit()
+        except sqlite3.DatabaseError as e:
+            report_corruption(e)
+            raise
+
+
 def connect():
-    conn = sqlite3.connect(DB_FILE, timeout=30)
+    conn = sqlite3.connect(DB_FILE, timeout=30, factory=_Conn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
-_CORRUPT_MARKERS = ("file is not a database", "not a database",
-                    "database disk image is malformed", "malformed")
+# --------------------------------------------------------------------------- #
+# Corruption reporting
+# --------------------------------------------------------------------------- #
+def repair_marker_path():
+    """A worker saw corruption; the master repairs before the next fork (gunicorn.conf.py)."""
+    return DB_FILE.with_name(DB_FILE.name + ".repair-requested")
 
 
-def _quarantine_corrupt_db(exc):
-    """A corrupt otlobly.db crashes the app at boot (init_db opens it). Move the
-    bad file aside so a fresh schema can be created and the app can START — then
-    POST /api/restore (worker token) swaps in a good backup DB. Only fires on
-    real corruption, never on a lock/busy. Returns True if it quarantined."""
-    msg = str(exc).lower()
-    if not any(m in msg for m in _CORRUPT_MARKERS):
-        return False
-    if not DB_FILE.exists():
-        # gunicorn imports app.py in BOTH workers, so both can meet the corruption
-        # in the same instant. The loser finds the file already renamed — that is
-        # the other worker's quarantine having succeeded, not a failure of ours.
-        # Reporting False here made the loser re-raise and take the deploy down
-        # anyway, which defeats the whole guard.
-        return True
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+def maintenance_marker_path():
+    """dbrepair gave up (budget spent / rebuild failed): humans only, no more auto-repairs."""
+    return DB_FILE.with_name(DB_FILE.name + ".maintenance")
+
+
+def health_path():
+    return DB_FILE.with_name(DB_FILE.name + ".health.json")
+
+
+HEALTH = {"ok": True, "error": "", "at": None, "repairing": False, "maintenance": False}
+
+
+def write_health(d):
+    from paths import write_json_atomic
+    HEALTH.update(d)
+    write_json_atomic(health_path(), dict(HEALTH))
+
+
+def read_health():
+    """What the UI shows. A FILE read, so it works while the database itself is down."""
     try:
-        DB_FILE.rename(DB_FILE.with_name(DB_FILE.name + f".corrupt-{ts}"))
-    except OSError:
+        d = json.loads(health_path().read_text())
+        if isinstance(d, dict):
+            return d
+    except (OSError, ValueError):
+        pass
+    return dict(HEALTH)
+
+
+# Messages that are NOT corruption even though they arrive as DatabaseError subclasses.
+_NOT_CORRUPTION = ("locked", "busy", "readonly", "read-only", "no such", "syntax",
+                   "has no column", "constraint", "unable to open", "disk i/o",
+                   "disk is full", "database is full", "could not decode", "interrupted",
+                   "cannot start a transaction", "no transaction", "already exists",
+                   "duplicate column", "misuse", "bind", "too big", "out of memory",
+                   "cannot commit", "cannot rollback", "attempt to write", "ambiguous",
+                   "incomplete input", "unrecognized token", "wrong number", "sub-select",
+                   "datatype mismatch", "not an error", "authorization", "unsupported")
+_CORRUPTION_CUES = ("malformed", "not a database", "corrupt", "out of order")
+_last_verdict = {"t": 0.0, "v": "ok"}
+_reported = {"done": False}
+
+
+def is_corruption(exc):
+    """Cheap pre-filter. SQLITE_CORRUPT/NOTADB surface as PLAIN sqlite3.DatabaseError
+    (not Operational/Integrity/Programming); everything else needs a cue in the text."""
+    if isinstance(exc, (sqlite3.IntegrityError, sqlite3.ProgrammingError,
+                        sqlite3.InterfaceError, sqlite3.NotSupportedError)):
         return False
-    for ext in ("-wal", "-shm"):
-        p = DB_FILE.with_name(DB_FILE.name + ext)
+    msg = str(exc).lower()
+    if any(m in msg for m in _NOT_CORRUPTION) and not any(c in msg for c in _CORRUPTION_CUES):
+        return False
+    return type(exc) is sqlite3.DatabaseError or any(c in msg for c in _CORRUPTION_CUES)
+
+
+def _confirm_verdict():
+    """PRAGMA quick_check(1) on a PLAIN connection, at most once a minute per process."""
+    now = time.time()
+    if now - _last_verdict["t"] < 60:
+        return _last_verdict["v"]
+    try:
+        raw = sqlite3.connect(DB_FILE, timeout=5)
         try:
-            p.unlink()
-        except OSError:
-            pass
-    print(f"[db] CORRUPT {DB_FILE.name} quarantined (.corrupt-{ts}); starting "
-          f"with an empty schema — restore a backup via POST /api/restore",
-          flush=True)
-    return True
+            v = str((raw.execute("PRAGMA quick_check(1)").fetchone() or ["unknown"])[0])
+        finally:
+            raw.close()
+    except sqlite3.DatabaseError as e:
+        v = str(e)
+    if "locked" in v.lower() or "busy" in v.lower():
+        v = "ok"                                   # a lock is not a verdict
+    _last_verdict.update(t=now, v=v)
+    return v
+
+
+def report_corruption(exc):
+    """The single place a worker admits the database is broken.
+
+    Confirms with quick_check (only a structural verdict counts — a lock, a full
+    disk or a bad query never trigger a repair), then: files the repair-request
+    marker (first writer wins; the second worker is a no-op), writes health.json
+    for the UI banner, and — under gunicorn — asks THIS worker to exit gracefully
+    one second later, after the caller's 503 has gone out. The master notices the
+    marker in pre_fork, stops the other worker too, runs dbrepair.py preflight with
+    nobody holding the file, and forks fresh workers. Never raises."""
+    try:
+        if os.environ.get("OTLOBLY_DBREPAIR"):     # the repair subprocess reads bad pages on purpose
+            return
+        if not is_corruption(exc):
+            return
+        verdict = _confirm_verdict()
+        if verdict.strip().lower() == "ok":
+            print(f"[db] DatabaseError but quick_check is clean — not corruption: {exc}", flush=True)
+            return
+        if maintenance_marker_path().exists():     # humans-only mode: answer 503s, no restarts
+            return
+        if _reported["done"]:
+            return
+        _reported["done"] = True
+        body = json.dumps({"verdict": verdict[:300], "error": str(exc)[:200],
+                           "pid": os.getpid(), "at": now_iso()})
+        try:
+            fd = os.open(repair_marker_path(), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            with os.fdopen(fd, "w") as f:
+                f.write(body)
+            first = True
+        except FileExistsError:
+            first = False
+        try:
+            write_health({"ok": False, "error": verdict[:300], "at": now_iso(),
+                          "repairing": True, "maintenance": False})
+        except Exception as e:                   # noqa: BLE001
+            print(f"[db] health.json not written: {e}", flush=True)
+        print(f"[db] CORRUPTION CONFIRMED ({verdict[:120]}) — repair "
+              f"{'requested' if first else 'already requested'}; this worker steps aside", flush=True)
+        if os.environ.get("OTLOBLY_GUNICORN_MASTER"):
+            import signal
+            import threading
+            threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
+    except Exception as e:                       # noqa: BLE001 — reporting must never make it worse
+        print(f"[db] report_corruption failed: {e}", flush=True)
 
 
 def init_db():
@@ -472,29 +644,29 @@ def init_db():
     # timeout — which kills the worker and fails the whole deploy. The loser
     # simply retries after the winner commits; every statement is guarded
     # (IF NOT EXISTS / _columns), so a re-run is a no-op.
+    #
+    # A CORRUPT file never stops the boot: the guarded connection has already
+    # filed the repair request, the schema (readable or not) is left exactly as
+    # it is, and the process lives so the master can repair and /api stays up.
     last = None
     for attempt in range(6):
         if attempt:
             time.sleep(0.5 * attempt)
         try:
-            # executescript AND migrate both run under the corruption guard: a
-            # malformed table (e.g. leluxe_orders) raised by migrate's ALTER/PRAGMA
-            # is quarantined + rebuilt too, instead of crashing every worker at boot.
-            try:
-                with connect() as c:
-                    c.executescript(SCHEMA)
-                migrate()
-            except sqlite3.DatabaseError as e:
-                if not _quarantine_corrupt_db(e):
-                    raise
-                with connect() as c:
-                    c.executescript(SCHEMA)
-                migrate()
+            with connect() as c:
+                c.executescript(SCHEMA)
+            migrate()
             return
         except sqlite3.OperationalError as e:
             if not any(m in str(e).lower() for m in ("locked", "busy", "duplicate column")):
+                if is_corruption(e):
+                    print(f"[db] init_db: {e} — schema left as-is, repair requested", flush=True)
+                    return
                 raise
             last = e
+        except sqlite3.DatabaseError as e:
+            print(f"[db] init_db: {e} — schema left as-is, repair requested", flush=True)
+            return
     raise last
 
 
@@ -1097,24 +1269,15 @@ def claim_once(key):
 
     🛑 IT NEVER RAISES, AND THAT IS THE POINT. Every caller runs at MODULE level in
     app.py, so an exception here is not a skipped backfill — it is gunicorn with no
-    app object: no process, 502 on every route, and POST /api/restore unreachable.
-    On 2026-09-04 a page-level corruption that init_db()'s guard never saw (the
-    schema read fine; only the `settings` b-tree was destroyed) raised out of the
-    first of these and took the live site down for hours. A skipped one-time,
-    idempotent backfill costs nothing by comparison.
-
-    Corruption is quarantined and retried once on the fresh schema. Anything else —
-    a lock, a busy DB — simply answers False and lets boot continue."""
+    app object: no process, 502 on every route. On 2026-09-04 a page-level
+    corruption raised out of the first of these and took the live site down for
+    hours. A corrupt file is reported by the connection itself (report_corruption)
+    and repaired by the master; here it simply answers False — as does a lock."""
     try:
         return _claim_once(key)
     except sqlite3.DatabaseError as e:
-        if not _quarantine_corrupt_db(e):
-            return False
-        try:
-            init_db()
-            return _claim_once(key)
-        except sqlite3.DatabaseError:
-            return False
+        print(f"[db] claim_once({key}) skipped: {e}", flush=True)
+        return False
 
 
 def log_leluxe_status(row_id, old, new, source="app", c=None):

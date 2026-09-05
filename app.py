@@ -413,14 +413,37 @@ def health_db():
     quick_check, not integrity_check: it is a page-level scan that answers in
     milliseconds on a 30 MB file, where the full check walks every index and would
     be far too heavy to poll. Unauthenticated on purpose — it discloses nothing but
-    whether the database is well."""
+    whether the database is well. `repairing`/`maintenance` come from health.json,
+    which dbrepair.py and the workers write — a file, so it reads while the DB is down."""
+    h = db.read_health()
+    extra = {"sqlite_version": sqlite3.sqlite_version,
+             "repairing": bool(h.get("repairing")), "maintenance": bool(h.get("maintenance")),
+             "last_repair": h.get("last_repair")}
     try:
-        with db.connect() as c:
-            res = (c.execute("PRAGMA quick_check(1)").fetchone() or ["unknown"])[0]
+        raw = sqlite3.connect(db.DB_FILE, timeout=5)        # plain: a probe must not file a repair
+        try:
+            res = (raw.execute("PRAGMA quick_check(1)").fetchone() or ["unknown"])[0]
+        finally:
+            raw.close()
         ok = str(res).lower() == "ok"
-        return jsonify({"ok": ok, "error": "" if ok else str(res)[:300]}), 200 if ok else 503
+        return jsonify({"ok": ok, "error": "" if ok else str(res)[:300], **extra}), 200 if ok else 503
     except Exception as e:                       # noqa: BLE001 — the answer IS the error
-        return jsonify({"ok": False, "error": str(e)[:300]}), 503
+        return jsonify({"ok": False, "error": str(e)[:300], **extra}), 503
+
+
+@app.errorhandler(sqlite3.DatabaseError)
+def _api_db_error(e):
+    """A corrupt page reached a request. The connection already filed the repair
+    (db.report_corruption); this only shapes the answer so the UI can say WHY —
+    'database is being repaired, retrying' instead of an orange 'couldn't load'.
+    HTML pages keep a plain page so login redirects elsewhere behave as before."""
+    if not request.path.startswith("/api/"):
+        return ("<h1>Database unavailable</h1><p>The database is being repaired — "
+                "reload in a minute. · قاعدة البيانات تُصلَّح الآن</p>"), 503
+    h = db.read_health()
+    return jsonify({"ok": False, "db_error": True, "error": str(e)[:200],
+                    "repairing": bool(h.get("repairing")),
+                    "maintenance": bool(h.get("maintenance")), "retry_in": 30}), 503
 
 
 @app.route("/healthz")

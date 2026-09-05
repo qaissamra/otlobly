@@ -42,6 +42,21 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   does not. Deliberately OFF Render: it watches for the app dying, so anything
   in-process (alerts.py) is the wrong host — on 2026-09-04 a corruption at 12:17
   went unnoticed until 15:02 behind an always-200 /healthz
+- dbrepair.py / gunicorn.conf.py — the database HEALS ITSELF. gunicorn's master
+  runs `dbrepair.py preflight` before any worker exists (on_starting) and again in
+  pre_fork whenever a worker left `otlobly.db.repair-requested` (it stops every
+  worker first, so nobody holds the file). Preflight: quick_check → if corrupt,
+  BUILD a clean file (db.init_db schema + table-by-table copy, rows past a dead
+  page reached by reverse scan / rowid probes / intact indexes, missing core rows
+  filled from the newest verified snapshot) → integrity_check → ONE os.replace;
+  the damaged file stays as otlobly.db.corrupt-<ts> (+ -wal, + .report.json, all
+  via /api/quarantined); one Telegram. Budget: 2 rebuilds/hour, then
+  `otlobly.db.maintenance` (humans only). Workers detect corruption in ONE place —
+  db.connect() returns a guarded connection whose errors go through
+  db.report_corruption (quick_check confirms; a lock/full disk never triggers) —
+  answer JSON 503 `{db_error:true}` on /api/*, and step aside. 🛑 RULE: never
+  DROP/ALTER/REINDEX or rename/replace the live file on a corrupt DB — request a
+  repair (that in-place surgery is how one damaged page became nine outages)
 - account_rd.py — per-account RD history for AZ Studio's Accounts Tool
   (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
 - flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →
