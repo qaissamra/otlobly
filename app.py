@@ -4785,11 +4785,21 @@ def api_backup():
             dbtmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
             dbtmp.close()
             try:
-                src, dst = db.connect(), sqlite3.connect(dbtmp.name)
-                with dst:
-                    src.backup(dst)
-                dst.close()
-                src.close()
+                src, dst = sqlite3.connect(db.DB_FILE, timeout=30), sqlite3.connect(dbtmp.name)
+                try:
+                    with dst:
+                        src.backup(dst)
+                finally:
+                    dst.close()
+                    src.close()
+                # The backup API copies pages VERBATIM — corruption included — and until
+                # 2026-09-05 nothing ever checked a backup, so a damaged night was filed as
+                # "✅ OK" and a damaged file could be restored. Say what the snapshot is.
+                v = sqlite3.connect(f"file:{dbtmp.name}?mode=ro&immutable=1", uri=True)
+                try:
+                    integrity = "\n".join(str(r[0]) for r in v.execute("PRAGMA integrity_check").fetchall())
+                finally:
+                    v.close()
                 z.write(dbtmp.name, "otlobly.db")
             finally:
                 os.unlink(dbtmp.name)
@@ -4810,7 +4820,9 @@ def api_backup():
                           for t in ("users", "customers", "orders", "payments",
                                     "meta_leads")}
             z.writestr("manifest.json", json.dumps(
-                {"created_at": db.now_iso(), "counts": counts}, indent=2))
+                {"created_at": db.now_iso(), "counts": counts,
+                 "integrity": "ok" if integrity.strip().lower() == "ok" else integrity[:600],
+                 "sqlite_version": sqlite3.sqlite_version}, indent=2))
         tmp.close()
         f = open(tmp.name, "rb")
         os.unlink(tmp.name)          # POSIX: lives until the handle closes

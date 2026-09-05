@@ -62,6 +62,55 @@ def fail(msg):
     sys.exit(f"Backup FAILED: {msg}")
 
 
+def verify_zip(path):
+    """Counts from the manifest if — and only if — the zip is intact, the manifest
+    shows real rows, the server's own integrity verdict (manifest.integrity, newer
+    builds) is ok, AND the otlobly.db inside passes PRAGMA integrity_check here.
+    Raises ValueError otherwise. The DB is extracted to a temp file and opened
+    read-only + immutable (a backup has no WAL; the Mac's python is 3.9 — no
+    deserialize)."""
+    import sqlite3
+    import tempfile
+    with zipfile.ZipFile(path) as z:
+        bad = z.testzip()
+        names = z.namelist()
+        if bad or "otlobly.db" not in names or "manifest.json" not in names:
+            raise ValueError(f"incomplete zip (first bad file: {bad})")
+        man = json.loads(z.read("manifest.json"))
+        counts = man.get("counts") or {}
+        if not counts.get("orders"):
+            raise ValueError(f"manifest shows no orders: {counts}")
+        srv = str(man.get("integrity") or "ok")
+        if srv.strip().lower() != "ok":
+            raise ValueError(f"server integrity_check: {srv[:200]}")
+        fd, tmpdb = tempfile.mkstemp(prefix="otlobly-verify-", suffix=".db")
+        os.close(fd)
+        try:
+            with z.open("otlobly.db") as src, open(tmpdb, "wb") as dst:
+                while True:
+                    chunk = src.read(1 << 20)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+            try:
+                c = sqlite3.connect(f"file:{tmpdb}?mode=ro&immutable=1", uri=True)
+                try:
+                    rows = c.execute("PRAGMA integrity_check").fetchall()
+                finally:
+                    c.close()
+                verdict = "\n".join(str(r[0]) for r in rows) or "unknown"
+            except sqlite3.DatabaseError as e:      # a destroyed page can make the check itself raise
+                verdict = f"{type(e).__name__}: {e}"
+            if verdict.strip().lower() != "ok":
+                raise ValueError(f"otlobly.db integrity_check: {verdict[:200]}")
+        finally:
+            try:
+                os.unlink(tmpdb)
+            except OSError:
+                pass
+    return counts
+
+
 def main():
     load_env()
     ap = argparse.ArgumentParser(description="Pull an off-site Otlobly backup.")
@@ -116,18 +165,13 @@ def main():
             print(f"attempt {attempt}/{attempts} failed ({e}) — retrying in {30 * attempt}s")
             time.sleep(30 * attempt)
 
-    # Verify before trusting it: intact zip, DB + manifest present, real rows.
+    # Verify before trusting it: intact zip, DB + manifest present, real rows, and —
+    # since 2026-09-05 — the DATABASE ITSELF passes integrity_check. The server's
+    # backup API copies pages verbatim, so until then a damaged night was filed as
+    # "✅ OK" (counts had been frozen at 41/49 for weeks; they prove nothing).
     # Only a verified download earns the final .zip name.
     try:
-        with zipfile.ZipFile(tmp) as z:
-            bad = z.testzip()
-            names = z.namelist()
-            if bad or "otlobly.db" not in names or "manifest.json" not in names:
-                raise ValueError(f"incomplete zip (first bad file: {bad})")
-            man = json.loads(z.read("manifest.json"))
-        counts = man.get("counts") or {}
-        if not counts.get("orders"):
-            raise ValueError(f"manifest shows no orders: {counts}")
+        counts = verify_zip(tmp)
     except Exception as e:  # noqa — any problem means the backup is NOT trustworthy
         tmp.rename(out.with_suffix(".zip.corrupt"))
         notify(f"🚨 Otlobly backup verification FAILED · فشل التحقق\n{e} — kept as {out.name}.corrupt")
