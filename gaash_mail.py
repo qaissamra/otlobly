@@ -422,7 +422,21 @@ def repair_accounts():
     Rescue every row that is really a mailbox (an address with an @, which is
     the only thing add_account will store), recreate the table, put them back,
     and REINDEX. Passwords ride along untouched, so nothing has to be re-entered.
-    Threads keep pointing at the same account ids."""
+    Threads keep pointing at the same account ids.
+
+    🛑 Only on a file that passes integrity_check. ALTER/CREATE/DROP/REINDEX on a
+    database that is already corrupt is how damage SPREADS (sqlite.org) — and it
+    is what this function did on 2026-08-06 and 2026-08-27, each followed by a new
+    corruption within two weeks. When the file is damaged, the whole-file rebuild
+    (dbrepair.py, run by the gunicorn master with no worker alive) is requested
+    instead; it rebuilds this table too, junk rows dropped, ids preserved."""
+    import dbrepair
+    verdict = dbrepair.check(db.DB_FILE, full=True, prefer_rw=True)
+    if verdict != "ok":
+        db.request_repair(verdict, "mailbox repair refused: file is corrupt")
+        return {"ok": False, "repair_requested": True,
+                "error": "database corrupt — automatic whole-file repair requested "
+                         "(seconds); reload and check the mailboxes again"}
     before = accounts_health()
     with db.connect() as c:
         all_rows, unreadable = _acct_rows(c, keep_junk=True)
