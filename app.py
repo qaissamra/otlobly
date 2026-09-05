@@ -128,6 +128,8 @@ gaash_mail.seed_wrong_decl_template()  # "Wrong declaration" correction note, sa
 gaash_mail.seed_group_template()      # one email for a whole order's parcels, same deal
 gaash_mail.repair_name_ids()     # one-time: on-package names filed against a wrong ID
 goals.repair_categories()        # one-time: 🏆 card names + the brand that card claims
+import db_sentinel
+db_sentinel.start()        # 🩺 10-min quick_check + hourly VERIFIED snapshot (see db_sentinel.py)
 gaash_mail.start()         # 📧 clearance-email sequencer — no-op unless env GAASH_MAILER=1
                            # (set ONLY on Render: the live DB is the single truth; the Mac's
                            #  local app has a stale copy and must never send)
@@ -2302,7 +2304,10 @@ def api_notifications():
             out.insert(0, stand)
     needs_quote = sum(1 for o in db.list_orders()
                       if o.get("status") == "REQUESTED" and not o.get("quoted_at"))
-    return jsonify({"ok": True, "needs_quote": needs_quote, "events": out})
+    h = db.read_health()
+    return jsonify({"ok": True, "needs_quote": needs_quote, "events": out,
+                    "db": {"ok": h.get("ok", True) is not False, "repairing": bool(h.get("repairing")),
+                           "maintenance": bool(h.get("maintenance")), "error": (h.get("error") or "")[:160]}})
 
 
 def _safe_seg(v, fallback):
@@ -4882,19 +4887,22 @@ def api_quarantined_get(name):
 
 @app.route("/api/restore", methods=["POST"])
 def api_restore():
-    """Disaster recovery: replace the live SQLite DB with the otlobly.db inside
-    an uploaded backup zip (worker-token only — same auth as /api/backup). For
-    when the live DB is corrupt. ONLY the DB is swapped; JSON stores + images on
-    the disk are left untouched. The uploaded DB is integrity-checked before the
-    swap, and the current file is kept as otlobly.db.pre-restore-<ts>. Because
-    db.connect() opens the file per-operation, the app serves the restored data
-    immediately (no restart needed)."""
+    """Disaster recovery: replace the live SQLite DB with the otlobly.db inside an
+    uploaded backup zip (worker-token only — same auth as /api/backup).
+
+    🛑 The swap does NOT happen here. Until 2026-09-05 this route unlinked the live
+    WAL, renamed the live file and os.replace'd the new one while two workers and
+    a dozen daemon threads had it open. Now it only STAGES: the file is validated
+    (read-only + immutable, full integrity_check, sane counts), written as
+    otlobly.db.pending-restore, and a repair is requested — the gunicorn master
+    stops every worker, dbrepair.py applies the swap with nobody holding the file
+    (the current file is kept as otlobly.db.pre-restore-<ts>), and workers come
+    back within seconds. ONLY the DB is swapped; JSON stores + images stay."""
     if not _backup_ok():
         abort(401)
     # STREAM the upload: a backup zip is ~100 MB and grows with the business, so
     # reading the body (and the decompressed DB) into memory would spike well past
     # what the 512 MB instance can absorb and take the whole service down with it.
-    # Body → temp file → zip entry → staging file, a chunk at a time.
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     staging = db.DB_FILE.with_name(db.DB_FILE.name + f".incoming-{stamp}")
     up = tempfile.NamedTemporaryFile(prefix="otlobly-restore-", suffix=".zip",
@@ -4919,12 +4927,14 @@ def api_restore():
             os.unlink(up.name)
         except OSError:
             pass
-    try:                              # verify it's a real, intact SQLite DB
-        t = sqlite3.connect(str(staging))
-        ok = t.execute("PRAGMA integrity_check").fetchone()[0]
-        counts = {tb: t.execute(f"SELECT COUNT(*) FROM {tb}").fetchone()[0]
-                  for tb in ("users", "customers", "orders", "payments")}
-        t.close()
+    try:                              # verify it's a real, intact SQLite DB — read-only, no -wal/-shm
+        t = sqlite3.connect(f"file:{staging}?mode=ro&immutable=1", uri=True)
+        try:
+            ok = t.execute("PRAGMA integrity_check").fetchone()[0]
+            counts = {tb: t.execute(f"SELECT COUNT(*) FROM {tb}").fetchone()[0]
+                      for tb in ("users", "customers", "orders", "payments")}
+        finally:
+            t.close()
         if ok != "ok":
             raise ValueError(f"integrity_check={ok}")
     except Exception as e:            # noqa: BLE001
@@ -4933,21 +4943,15 @@ def api_restore():
         except OSError:
             pass
         abort(400, f"uploaded DB failed validation: {e}")
-    for ext in ("-wal", "-shm"):      # drop the corrupt/empty file's WAL sidecars
-        p = db.DB_FILE.with_name(db.DB_FILE.name + ext)
-        try:
-            p.unlink()
-        except OSError:
-            pass
-    if db.DB_FILE.exists():
-        try:
-            db.DB_FILE.rename(db.DB_FILE.with_name(
-                db.DB_FILE.name + f".pre-restore-{stamp}"))
-        except OSError:
-            pass
-    os.replace(staging, db.DB_FILE)   # atomic swap-in
-    db.init_db()                       # idempotent schema/migrate on the restored DB
-    return jsonify({"ok": True, "restored_at": db.now_iso(), "counts": counts})
+    pending = db.DB_FILE.with_name(db.DB_FILE.name + ".pending-restore")
+    os.replace(staging, pending)
+    db.audit(auth.actor() or {"username": "worker"}, "restore_staged", "db", stamp,
+             "counts " + json.dumps(counts))
+    filed = db.request_repair("restore requested", f"pending-restore {stamp}")
+    return jsonify({"ok": True, "staged": True, "counts": counts,
+                    "applied_by": "gunicorn master within seconds" if filed or
+                    os.environ.get("OTLOBLY_GUNICORN_MASTER") else "the next app start",
+                    "note": "the current file is kept as otlobly.db.pre-restore-<ts>"})
 
 
 @app.route("/api/gaash/accounts/restore", methods=["POST"])

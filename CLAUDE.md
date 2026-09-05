@@ -57,6 +57,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   answer JSON 503 `{db_error:true}` on /api/*, and step aside. 🛑 RULE: never
   DROP/ALTER/REINDEX or rename/replace the live file on a corrupt DB — request a
   repair (that in-place surgery is how one damaged page became nine outages)
+- db_sentinel.py — inside every worker: 10-min quick_check + an HOURLY snapshot
+  (`otlobly.snapshot-<YYYYmmdd-HH>.db`, backup API) that gets a FULL integrity_check
+  off the hot file and a `.ok` sidecar; dbrepair fills holes in a rebuilt core table
+  from the newest `.ok` snapshot (≤1 h loss instead of "gone"); a failed check →
+  request_repair. Newest 3 kept. `/api/restore` no longer swaps the file: it stages
+  `otlobly.db.pending-restore` + requests a repair; the master applies it with no
+  worker alive (old file kept as `otlobly.db.pre-restore-<ts>`). `/api/notifications`
+  carries `db:{ok,repairing,maintenance}` from health.json for the UI banner
 - account_rd.py — per-account RD history for AZ Studio's Accounts Tool
   (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
 - flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →

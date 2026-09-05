@@ -593,12 +593,8 @@ def report_corruption(exc):
     """The single place a worker admits the database is broken.
 
     Confirms with quick_check (only a structural verdict counts — a lock, a full
-    disk or a bad query never trigger a repair), then: files the repair-request
-    marker (first writer wins; the second worker is a no-op), writes health.json
-    for the UI banner, and — under gunicorn — asks THIS worker to exit gracefully
-    one second later, after the caller's 503 has gone out. The master notices the
-    marker in pre_fork, stops the other worker too, runs dbrepair.py preflight with
-    nobody holding the file, and forks fresh workers. Never raises."""
+    disk or a bad query never trigger a repair), then hands over to request_repair.
+    Never raises."""
     try:
         if os.environ.get("OTLOBLY_DBREPAIR"):     # the repair subprocess reads bad pages on purpose
             return
@@ -608,12 +604,31 @@ def report_corruption(exc):
         if verdict.strip().lower() == "ok":
             print(f"[db] DatabaseError but quick_check is clean — not corruption: {exc}", flush=True)
             return
+        request_repair(verdict, str(exc))
+    except Exception as e:                       # noqa: BLE001 — reporting must never make it worse
+        print(f"[db] report_corruption failed: {e}", flush=True)
+
+
+def request_repair(verdict, reason=""):
+    """Ask the gunicorn master to run dbrepair.py with no worker alive.
+
+    Files the repair-request marker (first writer wins; the second worker is a
+    no-op), writes health.json for the UI banner, and — under gunicorn — asks THIS
+    worker to exit gracefully one second later, after the caller's reply has gone
+    out. The master notices the marker in pre_fork, stops the other worker too, runs
+    dbrepair.py preflight with nobody holding the file, and forks fresh workers.
+    Callers: report_corruption (a confirmed quick_check verdict), the sentinel (a
+    failed hourly integrity_check on a snapshot), /api/restore (a staged file to
+    apply). Returns True when this call filed the request. Never raises."""
+    try:
+        if os.environ.get("OTLOBLY_DBREPAIR"):
+            return False
         if maintenance_marker_path().exists():     # humans-only mode: answer 503s, no restarts
-            return
+            return False
         if _reported["done"]:
-            return
+            return False
         _reported["done"] = True
-        body = json.dumps({"verdict": verdict[:300], "error": str(exc)[:200],
+        body = json.dumps({"verdict": str(verdict)[:300], "error": str(reason)[:200],
                            "pid": os.getpid(), "at": now_iso()})
         try:
             fd = os.open(repair_marker_path(), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
@@ -623,18 +638,20 @@ def report_corruption(exc):
         except FileExistsError:
             first = False
         try:
-            write_health({"ok": False, "error": verdict[:300], "at": now_iso(),
+            write_health({"ok": False, "error": str(verdict)[:300], "at": now_iso(),
                           "repairing": True, "maintenance": False})
         except Exception as e:                   # noqa: BLE001
             print(f"[db] health.json not written: {e}", flush=True)
-        print(f"[db] CORRUPTION CONFIRMED ({verdict[:120]}) — repair "
-              f"{'requested' if first else 'already requested'}; this worker steps aside", flush=True)
+        print(f"[db] REPAIR {'requested' if first else 'already requested'} "
+              f"({str(verdict)[:120]}); this worker steps aside", flush=True)
         if os.environ.get("OTLOBLY_GUNICORN_MASTER"):
             import signal
             import threading
             threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
-    except Exception as e:                       # noqa: BLE001 — reporting must never make it worse
-        print(f"[db] report_corruption failed: {e}", flush=True)
+        return first
+    except Exception as e:                       # noqa: BLE001
+        print(f"[db] request_repair failed: {e}", flush=True)
+        return False
 
 
 def init_db():

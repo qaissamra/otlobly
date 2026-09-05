@@ -38,10 +38,6 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Tell db.report_corruption() to stay passive in THIS process: reading a corrupt
-# source raises on purpose here, and the repair must never request itself.
-os.environ["OTLOBLY_DBREPAIR"] = "1"
-
 import db          # noqa: E402
 import paths       # noqa: E402
 
@@ -787,6 +783,10 @@ def preflight():
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 def main():
+    # Tell db.report_corruption() to stay passive in THIS process: reading a corrupt
+    # source raises on purpose here, and the repair must never request itself.
+    # (Set here, not at import: app.py imports this module for check().)
+    os.environ["OTLOBLY_DBREPAIR"] = "1"
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("cmd", nargs="?", default="preflight", choices=["preflight"])
     ap.add_argument("--check", metavar="FILE")

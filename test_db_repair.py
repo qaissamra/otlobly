@@ -263,6 +263,35 @@ def a_rebuild_that_would_lose_orders_is_refused():
     check("maintenance marker cleared", not db.maintenance_marker_path().exists())
 
 
+def a_staged_restore_is_applied_by_preflight_only():
+    """/api/restore stages otlobly.db.pending-restore; the swap happens here, with no
+    worker alive. A pending file that fails integrity is rejected, live untouched."""
+    d = fresh_dir("pending")
+    live = make_db(d / "otlobly.db", orders=3)
+    good = make_db(d / "good.db", orders=9)
+    use(live)
+    pend = d / "otlobly.db.pending-restore"
+    shutil.copy2(good, pend)
+    rc = dbrepair.preflight()
+    check("preflight applies the staged file", rc == 0 and count(live, "orders") == 9)
+    check("the previous live file is kept as .pre-restore-<ts>",
+          any(p.name.startswith("otlobly.db.pre-restore-") and not p.name.endswith("-wal")
+              for p in d.iterdir()))
+    check("the pending file is consumed", not pend.exists())
+    check("integrity ok", dbrepair.check(live, full=True) == "ok")
+    # a damaged upload
+    bad = make_db(d / "bad.db", orders=2)
+    smash_page(bad, root_of(bad, "orders"))
+    shutil.copy2(bad, pend)
+    use(live)                                   # make_db re-pointed db.DB_FILE at bad.db
+    before = live.read_bytes()
+    rc = dbrepair.preflight()
+    check("a corrupt pending file is rejected, live untouched", rc == 0 and live.read_bytes() == before)
+    check("…and kept as .pre-restore-rejected-<ts>",
+          any(p.name.startswith("otlobly.db.pre-restore-rejected-") for p in d.iterdir()))
+    check("the pending slot is free again", not pend.exists())
+
+
 def a_build_that_never_swapped_is_harmless():
     d = fresh_dir("crash")
     live = make_db(d / "otlobly.db")
@@ -402,6 +431,7 @@ def main():
     print("preflight:");               preflight_repairs_then_does_nothing_twice()
     print("the budget:");              the_budget_stops_the_third_rebuild()
     print("refusing a lossy rebuild:"); a_rebuild_that_would_lose_orders_is_refused()
+    print("staged restore:");          a_staged_restore_is_applied_by_preflight_only()
     print("build without swap:");      a_build_that_never_swapped_is_harmless()
     print("report_corruption:");       report_corruption_files_one_marker_and_ignores_locks()
     print("the guarded connection:");  the_guarded_connection_reports_by_itself()
