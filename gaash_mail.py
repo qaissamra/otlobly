@@ -1840,6 +1840,265 @@ def member_primary_map():
     return out
 
 
+# --------------------------------------------------------------------------- #
+# 🪪 Clearance record — WHEN a parcel was handed to GAASH and HOW it was papered.
+#
+# Board-agnostic on purpose (gaash_clearance is keyed by GWD, like gaash_picks):
+# a Leluxe parcel and a Purchases parcel are the same thing to GAASH, and the
+# turnaround question is asked of both. Before this, only Purchases parcels ever
+# got a docs-sent stamp — and only from one of the eleven buttons that send
+# documents — so the Leluxe board had no start line to measure from at all.
+# --------------------------------------------------------------------------- #
+CLEARANCE_SRC = ("upload", "link", "email")   # only 'upload' is a real receipt
+
+
+def _clr_dt(s):
+    """An ISO stamp → aware datetime. Stamps reach us in two dialects: db.now_iso()
+    writes a local offset, the browser's toISOString() writes 'Z'. Comparing them
+    as strings would order them wrongly, so everything goes through here first."""
+    return _parse_iso(str(s or "").strip().replace("Z", "+00:00"))
+
+
+def _clr_gwd(gwd):
+    g = (gwd or "").strip().upper()
+    return g if re.match(r"GWD\d+$", g) else ""
+
+
+def clearance_get(gwd):
+    """One parcel's clearance record, or {} — never raises."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return {}
+    try:
+        with db.connect() as c:
+            r = c.execute("SELECT * FROM gaash_clearance WHERE gwd=?", (g,)).fetchone()
+        return dict(r) if r else {}
+    except Exception:  # noqa - a missing record must never break a send
+        return {}
+
+
+def clearance_map(gwds=None):
+    """{gwd: record} in ONE query — the batched twin every report needs."""
+    try:
+        with db.connect() as c:
+            rows = [dict(r) for r in c.execute("SELECT * FROM gaash_clearance")]
+    except Exception:  # noqa
+        return {}
+    want = {_clr_gwd(g) for g in gwds} if gwds is not None else None
+    return {r["gwd"]: r for r in rows if want is None or r["gwd"] in want}
+
+
+def _clr_upsert(gwd, **fields):
+    """Write some columns of one record, creating it if needed. Soft-fail: this
+    is bookkeeping riding on an upload or a send, and must never sink either."""
+    g = _clr_gwd(gwd)
+    if not g or not fields:
+        return False
+    fields["updated_at"] = now_iso()
+    cols = ", ".join(f"{k}=?" for k in fields)
+    try:
+        with db.connect() as c:
+            c.execute("INSERT OR IGNORE INTO gaash_clearance(gwd) VALUES(?)", (g,))
+            c.execute(f"UPDATE gaash_clearance SET {cols} WHERE gwd=?",
+                      (*fields.values(), g))
+        return True
+    except Exception:  # noqa
+        return False
+
+
+def set_case(gwd, name, user=""):
+    """Record how this parcel was papered. A blank name CLEARS the case — the
+    picker offers 'none yet', and unsaying something must be possible."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return {"ok": False, "error": "not a GWD number"}
+    nm = str(name or "").strip()
+    _clr_upsert(g, case_name=nm or None, case_at=now_iso() if nm else None,
+                case_by=(user or "") if nm else None)
+    if nm:
+        enqueue_push(g)
+    return {"ok": True, "gwd": g, "case": nm}
+
+
+def stamp_sent(gwd, at=None, src=""):
+    """Record that this parcel reached GAASH. EARLIEST WINS: a later signal never
+    moves a stamp forward, because the question is when the clock STARTED. A
+    parcel emailed on Sunday and uploaded on Tuesday was handed over on Sunday."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return False
+    at = str(at or now_iso())
+    new = _clr_dt(at)
+    if not new:
+        return False
+    cur = clearance_get(g).get("sent_at")
+    old = _clr_dt(cur)
+    if old and old <= new:
+        return False                      # already stamped earlier — leave it
+    return _clr_upsert(g, sent_at=at,
+                       sent_src=src if src in CLEARANCE_SRC else "")
+
+
+def stamp_docs_sent(gwd, types=None, src="link", at=None, case=None, user=""):
+    """The one place a document send is recorded, whichever button sent it.
+    `src` says how solid the date is: 'upload' means our server really POSTed the
+    files; 'link' means we opened GAASH's page and carried them by hand. GAASH
+    issues no receipt for either, which is why the 'a CD event newer than this
+    stamp means it never registered' inference exists."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return {"ok": False, "error": "not a GWD number"}
+    at = str(at or now_iso())
+    tl = sorted({int(t) for t in (types or []) if str(t).strip().isdigit()})
+    if case is not None:
+        set_case(g, case, user)
+    if tl:
+        _clr_upsert(g, doc_types=json.dumps(tl))
+    stamp_sent(g, at, src if src in CLEARANCE_SRC else "link")
+    enqueue_push(g)
+    return {"ok": True, "gwd": g, "at": at, "types": tl,
+            "case": clearance_get(g).get("case_name") or ""}
+
+
+def enqueue_push(gwd):
+    """Queue this parcel for the ClickUp write. Deliberately NOT the write itself:
+    the callers are an upload request that already spent 10-25s on GAASH's page
+    and an SMTP send — neither can afford a ClickUp round trip, and neither may
+    fail because ClickUp did. leluxe.run_clearance_pass drains this."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return False
+    cur = clearance_get(g)
+    if cur.get("push_state") == "blocked":
+        return False        # the column doesn't exist in ClickUp yet — see leluxe
+    return _clr_upsert(g, push_state="pending", push_error=None)
+
+
+def _po_docs_map():
+    """{gwd: gaash_docs_at} for every Purchases package, in ONE file read.
+    _po_package() reloads purchases.json per call, which is fine for one parcel
+    and ruinous for a whole-board report."""
+    try:
+        import purchases
+        pos = (purchases.load() or {}).get("purchase_orders") or []
+    except Exception:  # noqa
+        return {}
+    out = {}
+    for p in pos:
+        for pk in (p.get("packages") or []):
+            g = str(pk.get("tracking_number") or "").strip().upper()
+            if g and pk.get("gaash_docs_at"):
+                out[g] = pk["gaash_docs_at"]
+    return out
+
+
+def clearance_push_result(gwd, state, error="", case=None, date=None):
+    """Record how the ClickUp write went. `case`/`date` are what we ACTUALLY
+    wrote — the anchor that later tells our own value apart from one a human
+    typed into ClickUp, which we must never overwrite."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return False
+    f = {"push_state": state, "push_error": (error or None)}
+    if case is not None:
+        f["pushed_case"] = case
+    if date is not None:
+        f["pushed_date"] = date
+    ok = _clr_upsert(g, **f)
+    try:
+        with db.connect() as c:
+            c.execute("UPDATE gaash_clearance SET push_attempts=push_attempts+1 "
+                      "WHERE gwd=?", (g,))
+    except Exception:  # noqa
+        pass
+    return ok
+
+
+def clearance_requeue_blocked():
+    """Bring 'blocked' parcels back into the queue. Blocked means one word: the
+    column doesn't exist in ClickUp yet — so the drain stops retrying and waits.
+    Nothing else clears that, which is why creating the columns has to re-arm
+    these explicitly, or the very parcels that prompted the owner to make the
+    column would be the ones that never reached it."""
+    try:
+        with db.connect() as c:
+            cur = c.execute("UPDATE gaash_clearance SET push_state='pending', "
+                            "push_error=NULL WHERE push_state IN ('blocked','error')")
+            return cur.rowcount or 0
+    except Exception:  # noqa
+        return 0
+
+
+def sent_to_gaash(gwd, primary_map=None, clearance=None, po_docs=None):
+    """(iso, src) — when this parcel was handed to GAASH, WHICHEVER CAME FIRST:
+    the first clearance email on its thread, or its documents going in.
+    ("", "") when neither has happened — which callers must render as "—",
+    never as today.
+
+    Grouped orders: messages live only under the PRIMARY gwd, so a member
+    resolves through member_primary_map() first. Documents are per-parcel and
+    need no such hop, so a member can be 'sent' by upload before its group's
+    email goes out. Either way the earlier one wins."""
+    g = _clr_gwd(gwd)
+    if not g:
+        return ("", "")
+    cands = []
+
+    # documents — our own record AND the legacy Purchases stamp. Both, always:
+    # a parcel stamped by this feature today may also carry a hand-made stamp
+    # from months ago, and that older one is the real start of the clock.
+    rec = (clearance or {}).get(g) if clearance is not None else clearance_get(g)
+    if (rec or {}).get("sent_at"):
+        cands.append((rec["sent_at"], rec.get("sent_src") or "link"))
+    try:
+        if po_docs is not None:
+            legacy = po_docs.get(g)
+        else:
+            _po, pk = _po_package(g)
+            legacy = (pk or {}).get("gaash_docs_at")
+        if legacy:
+            cands.append((legacy, "link"))
+    except Exception:  # noqa - a broken purchases.json must not hide an email
+        pass
+
+    # email — the FIRST real outbound message on the thread. 'task'/'task_done'
+    # rows are to-dos the owner wrote, not sends, so they are excluded by kind;
+    # 'gmail' rows are replies typed in Gmail and found later, which legitimately
+    # correct the date backwards.
+    pm = primary_map if primary_map is not None else member_primary_map()
+    try:
+        with db.connect() as c:
+            r = c.execute(
+                "SELECT MIN(at) a FROM gaash_msgs WHERE gwd=? AND dir='out' "
+                "AND kind IN ('sent','resent','gmail')", (pm.get(g, g),)).fetchone()
+        if r and r["a"]:
+            cands.append((r["a"], "email"))
+    except Exception:  # noqa
+        pass
+
+    dated = []
+    for iso, src in cands:
+        d = _clr_dt(iso)
+        if d:
+            dated.append((d, iso, src))
+    if not dated:
+        return ("", "")
+    _d, iso, src = min(dated, key=lambda t: t[0])
+    return (iso, src)
+
+
+def sent_to_gaash_map(gwds=None):
+    """{gwd: (iso, src)} with ONE pass over each store — the batching contract
+    tracking_map() and forecast_queue() keep, so a report never fans out."""
+    pm = member_primary_map()
+    clr = clearance_map()
+    pod = _po_docs_map()
+    keys = ({_clr_gwd(g) for g in gwds} if gwds is not None
+            else set(clr) | set(pm) | set(pod))
+    return {g: sent_to_gaash(g, primary_map=pm, clearance=clr, po_docs=pod)
+            for g in keys if g}
+
+
 def group_terminal(th):
     """True when EVERY member parcel is past customs — the group's goal is met.
     Solo threads short-circuit to the plain per-parcel check (identical cost)."""
@@ -3374,7 +3633,27 @@ def _thread_send(gwd, body, attachments=None, kind="sent", step=None,
                   "WHERE id=?", (mid, json.dumps(atts), mrow))
     _thread_set(gwd, subject=base, last_error=None, last_activity=now)
     _account_clear_smtp_error(acct["id"])   # a working send proves SMTP
+    _clearance_after_send(gwd, now, kind)
     return {"ok": True, "message_id": mid, "msg_row": mrow}
+
+
+def _clearance_after_send(gwd, at, kind):
+    """A clearance email going out is a hand-over — stamp it. Placed AFTER the
+    commit above on purpose: every failure path deletes the row and returns
+    before here, so 'a gaash_msgs row exists' stays the proof of a real send.
+
+    Every MEMBER of a grouped thread is stamped, not just the primary: one email
+    really does clear the whole group, and members carry no messages of their
+    own. Soft-fail throughout — bookkeeping must never sink a sent email."""
+    if kind not in ("sent", "resent"):
+        return                       # 'task'/'task_done' rows are to-dos
+    try:
+        th = thread_get(gwd) or {"gwd": gwd}
+        for m in thread_members(th) or [gwd]:
+            stamp_sent(m, at, "email")
+            enqueue_push(m)
+    except Exception:  # noqa
+        pass
 
 
 _DOC_CTYPE = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
