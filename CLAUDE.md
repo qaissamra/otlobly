@@ -32,7 +32,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
 - com.otlobly.sync.plist — optional launchd ClickUp-sync job (paths point at ~/projects)
 - backup_pull.py / com.otlobly.backup.plist — nightly off-site backup: pulls the
   live app's /api/backup zip (DB snapshot + JSON stores + ID/PO images) into
-  ~/OtloblyBackups (worker-token auth, 30-day retention, logs to backup.log)
+  ~/OtloblyBackups (worker-token auth, 30-day retention, logs to backup.log); since
+  2026-09-05 the zip's DB must pass integrity_check here AND the server's manifest
+  verdict must be ok, else it is filed as .zip.corrupt + Telegram (a damaged night
+  can no longer be banked as ✅)
 - docs_sweep.py / com.otlobly.docssweep.plist — 04:15 daily: asks GAASH per open
   parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
   each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,

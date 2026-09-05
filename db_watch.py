@@ -119,10 +119,10 @@ def main():
     if now - _last_alert() > REPEAT_AFTER_S:
         notify("🚨 Otlobly DATABASE PROBLEM · مشكلة في قاعدة البيانات\n"
                f"{why}\n{args.base}\n\n"
-               "The site may still look up. Restore the newest backup:\n"
-               "  curl -X POST -H \"Authorization: Bearer $OTLOBLY_WORKER_TOKEN\" \\\n"
-               "    --data-binary @<newest ~/OtloblyBackups zip> \\\n"
-               f"    {args.base.rstrip('/')}/api/restore")
+               "The app repairs itself within about a minute (dbrepair.py). If this is still "
+               "red in 10 minutes, do NOT restore last night's backup over today's data — "
+               "check /api/health/db for `maintenance:true` and the evidence files under "
+               "/api/quarantined, then call Qais's assistant.")
         _stamp(now)
     return 1
 
