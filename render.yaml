@@ -13,7 +13,7 @@ services:
     region: frankfurt             # closest to Palestine/Israel; change if you like
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --timeout 120 --graceful-timeout 30 --max-requests 400 --max-requests-jitter 100
+    startCommand: gunicorn app:app -c gunicorn.conf.py --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --timeout 120 --graceful-timeout 30 --max-requests 400 --max-requests-jitter 100
     healthCheckPath: /healthz
     autoDeploy: true
     # Custom domain (registrar: GoDaddy). Render issues TLS automatically once DNS points here:

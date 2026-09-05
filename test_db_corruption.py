@@ -106,54 +106,49 @@ def the_corruption_is_the_one_that_happened():
 
 
 def claim_once_never_raises():
-    """🛑 THE REGRESSION. Before the fix this raised and took the whole app with it."""
+    """🛑 THE REGRESSION. Before the fix this raised and took the whole app with it.
+    Since dbrepair.py the answer is simply False: the connection files a repair
+    request for the master, and the live file is NEVER renamed or replaced here —
+    the old quarantine started an empty schema, which restarts order numbering."""
     path = _fresh("claim")
     old = db.DB_FILE
     db.DB_FILE = Path(path)
+    db._reported["done"] = False
+    db._last_verdict.update(t=0.0, v="ok")
+    os.environ.pop("OTLOBLY_DBREPAIR", None)
     try:
         db.init_db()
         raised = None
         try:
-            db.claim_once("boot:reconcile_v1")
+            got = db.claim_once("boot:reconcile_v1")
         except Exception as e:
             raised = e
         check("claim_once() does not raise on a corrupt DB", raised is None)
-        check("the bad file is preserved for salvage, not deleted",
-              any(p.name.startswith("otlobly.db.corrupt-") for p in Path(path).parent.iterdir()))
-        # and the app can carry on: the replacement DB is writable
-        works = False
-        try:
-            works = db.claim_once("boot:after_quarantine") is True
-        except Exception:
-            works = False
-        check("the app keeps working on the fresh schema", works)
+        check("it answers False", got is False)
+        check("the live file is left in place — never renamed, never an empty schema",
+              Path(path).exists() and not any(p.name.startswith("otlobly.db.corrupt-")
+                                             for p in Path(path).parent.iterdir()))
+        check("a repair request was filed for the master", db.repair_marker_path().exists())
     finally:
         db.DB_FILE = old
 
 
-def a_missing_file_means_the_other_worker_won():
-    """gunicorn imports app.py in BOTH workers. They can hit the corruption at the
-    same moment; the loser finds the file already renamed. That is success, not
-    failure — treating it as failure is how one worker still kills the deploy."""
-    old = db.DB_FILE
-    db.DB_FILE = _TMP / "definitely-not-here.db"
-    try:
-        err = sqlite3.DatabaseError("database disk image is malformed")
-        check("a missing file reads as already-quarantined",
-              db._quarantine_corrupt_db(err) is True)
-    finally:
-        db.DB_FILE = old
-
-
-def only_corruption_is_quarantined():
-    """A lock or a busy DB must never move the live database aside."""
+def only_corruption_is_reported():
+    """A lock or a busy DB must never request a repair (that would restart workers)."""
     path = _fresh("lock")
     old = db.DB_FILE
     db.DB_FILE = Path(path)
+    db._reported["done"] = False
+    db._last_verdict.update(t=0.0, v="ok")
     try:
         check("a 'database is locked' error is not corruption",
-              db._quarantine_corrupt_db(sqlite3.OperationalError("database is locked")) is False)
-        check("and the file is left exactly where it was", Path(path).exists())
+              db.is_corruption(sqlite3.OperationalError("database is locked")) is False)
+        check("a constraint failure is not corruption",
+              db.is_corruption(sqlite3.IntegrityError("UNIQUE constraint failed")) is False)
+        check("SQLITE_CORRUPT (plain DatabaseError) is",
+              db.is_corruption(sqlite3.DatabaseError("database disk image is malformed")) is True)
+        db.report_corruption(sqlite3.OperationalError("database is locked"))
+        check("and a lock files no request", not db.repair_marker_path().exists())
     finally:
         db.DB_FILE = old
 
@@ -281,8 +276,7 @@ def the_watchdog_reads_the_probe_correctly():
 def main():
     print("the corruption shape:");   the_corruption_is_the_one_that_happened()
     print("claim_once survives:");    claim_once_never_raises()
-    print("two-worker race:");        a_missing_file_means_the_other_worker_won()
-    print("only corruption moves it:"); only_corruption_is_quarantined()
+    print("only corruption reports:"); only_corruption_is_reported()
     print("the app still boots:");    the_app_still_boots()
     print("salvage route is safe:"); the_salvage_route_is_fail_closed()
     print("the DB probe:");          the_db_probe_tells_the_truth()

@@ -41,3 +41,7 @@ tracking_cache.json
 forecast_history.json
 leluxe_sync_report.json
 leluxe_presync_*.json
+
+# dbrepair.py / db_sentinel artefacts beside the live DB (evidence, health, budget, snapshots)
+otlobly.db.*
+otlobly.snapshot-*
