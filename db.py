@@ -528,8 +528,12 @@ HEALTH = {"ok": True, "error": "", "at": None, "repairing": False, "maintenance"
 
 
 def write_health(d):
+    """Merge into health.json (never clobber what another process wrote — e.g. the
+    master's last_repair stamp survives the sentinel's ok/error updates)."""
     from paths import write_json_atomic
-    HEALTH.update(d)
+    cur = read_health()
+    cur.update(d)
+    HEALTH.update(cur)
     write_json_atomic(health_path(), dict(HEALTH))
 
 

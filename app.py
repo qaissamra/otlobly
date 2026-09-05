@@ -433,6 +433,22 @@ def health_db():
         return jsonify({"ok": False, "error": str(e)[:300], **extra}), 503
 
 
+def _api_http_error(e):
+    """/api/* failures answer JSON so the UI can say WHY (session expired, no
+    permission, unknown endpoint, server error) instead of one orange 'retry'.
+    Pages keep Flask's defaults — /login redirects and error pages are unchanged."""
+    if not request.path.startswith("/api/"):
+        return e
+    code = getattr(e, "code", 500) or 500
+    text = {401: "session expired — sign in again", 403: "no permission for this section",
+            404: "unknown endpoint on this build", 500: "server error"}.get(code, getattr(e, "name", "error"))
+    return jsonify({"ok": False, "error": text, "status": code, "auth": code in (401, 403)}), code
+
+
+for _code in (401, 403, 404, 500):
+    app.register_error_handler(_code, _api_http_error)
+
+
 @app.errorhandler(sqlite3.DatabaseError)
 def _api_db_error(e):
     """A corrupt page reached a request. The connection already filed the repair

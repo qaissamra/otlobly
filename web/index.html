@@ -313,6 +313,10 @@
   #offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;
     text-align:center;font-size:12.5px;font-weight:700;padding:6px 12px;box-shadow:0 2px 8px rgba(16,24,40,.25)}
   #offBanner.show{display:block}
+  #dbBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#92400e;color:#fff;
+    text-align:center;padding:8px 14px;font-size:13px;font-weight:600}
+  #dbBanner.show{display:block}
+  #dbBanner.hard{background:#7f1d1d}
   @media(max-width:860px){.cards{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:1fr}}
   @media print{
     body{background:#fff}.cards,.grid3,.toolbar,#sidebar,.topbar,#ordersView,.no-print{display:none!important}
@@ -2025,6 +2029,7 @@
 
 <div id="toast"></div>
 <div id="offBanner" dir="auto">⚠ لا يوجد إنترنت — تُعرض آخر بيانات محفوظة، وأي تعديل لن يُحفَظ · No internet — showing last saved data; edits will NOT be saved</div>
+<div id="dbBanner" dir="auto"></div>
 </div></div></div><!-- /.wrap /.main /.app -->
 
 <script>
@@ -2069,13 +2074,62 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
 let OFFLINE=false;
 function setOffline(on){ on=!!on; if(on===OFFLINE) return; OFFLINE=on;
   const b=$("offBanner"); if(b) b.classList.toggle("show",on); }
+// ═══ Honest failures ═══════════════════════════════════════════════════════
+// Until 2026-09-05 a corrupt database, an expired session and a network blip all
+// rendered as the same orange "couldn't load — retry" (a 3-hour corruption went
+// unreported by staff for exactly that reason). The server now answers /api/*
+// failures as JSON ({ok:false, error, db_error?}); this wrapper reads them ONCE,
+// keeps the last reason for the panes to show (apiFailReason), and drives the
+// 🩹 database banner (setDbState) — from the reply itself and from the 60 s bell
+// poll, which carries db:{ok,repairing,maintenance} read off health.json.
+let LAST_API_FAIL=null;                          // {at,status,reason,db}
+let DB_STATE={ok:true};
+function setDbState(d){
+  d=d||{ok:true}; DB_STATE=d;
+  const b=$("dbBanner"); if(!b) return;
+  const bad=d.ok===false||d.repairing||d.maintenance;
+  b.classList.toggle("show",!!bad); b.classList.toggle("hard",!!d.maintenance);
+  if(!bad) return;
+  b.textContent=d.maintenance
+    ?T("🚨 قاعدة البيانات متوقفة وتحتاج شخصاً — التصليح التلقائي توقف · Database needs a human — automatic repair has stopped; some pages will not load")
+    :T("🩹 قاعدة البيانات تُصلَّح تلقائياً الآن — ثوانٍ، وستُحمَّل الصفحات وحدها · Database is repairing itself — seconds; pages reload on their own");
+}
+function apiFailReason(){                        // " — why", if an API call just failed
+  const f=LAST_API_FAIL; if(!f||Date.now()-f.at>15000) return "";
+  return " — "+f.reason;
+}
+function _apiNote(url,r,body){
+  let reason;
+  if(body&&body.db_error) reason=body.maintenance
+      ?T("قاعدة البيانات متوقفة — تحتاج شخصاً · database unavailable — needs a human")
+      :T("قاعدة البيانات تُصلَّح الآن — سنعيد المحاولة · database is being repaired — retrying");
+  else if(r.status===401) reason=T("انتهت الجلسة — أعد تسجيل الدخول · session expired — sign in again");
+  else if(r.status===403) reason=T("لا صلاحية لهذا القسم · no permission for this section");
+  else if(r.status===404) reason=T("هذه النسخة لا تعرف الطلب · this build lacks that endpoint");
+  else if(r.status>=500) reason=(body&&body.error)?String(body.error).slice(0,140):T("خطأ في الخادم · server error")+" "+r.status;
+  else reason=(body&&body.error)?String(body.error).slice(0,140):"HTTP "+r.status;
+  LAST_API_FAIL={at:Date.now(),status:r.status,reason,db:!!(body&&body.db_error)};
+  if(body&&body.db_error) setDbState({ok:false,repairing:!body.maintenance,maintenance:!!body.maintenance});
+  if(r.status===401&&!/\/api\/me$/.test(url)&&(!window._lastAuthToast||Date.now()-window._lastAuthToast>60000)){
+    window._lastAuthToast=Date.now(); toast("🔒 "+reason); }
+}
 const _fetch=window.fetch.bind(window);
 window.fetch=function(input,init){
   const method=((init&&init.method)||(input&&input.method)||"GET").toUpperCase();
-  return _fetch(input,init).then(r=>{
+  const url=String((input&&input.url)||input||"");
+  return _fetch(input,init).then(async r=>{
     try{ setOffline(!!r.headers.get("X-Otl-Cache")); }catch(e){}
+    if(!r.ok&&url.indexOf("/api/")===0){
+      // read the failed body HERE, before the caller sees the response, so the reason
+      // is already recorded when its own `.json()` resolves and it paints "couldn't load"
+      let text="", body=null;
+      try{ text=await r.text(); body=JSON.parse(text); }catch(e){}
+      _apiNote(url,r,body);
+      try{ return new Response(text,{status:r.status,statusText:r.statusText,headers:r.headers}); }catch(e){ return r; }
+    }
     return r;
   }).catch(err=>{
+    LAST_API_FAIL={at:Date.now(),status:0,reason:T("لا اتصال بالخادم · no connection to the server"),db:false};
     setOffline(true);
     if(method!=="GET") toast("⚠ لم يُحفَظ — لا يوجد إنترنت · Not saved — no internet");
     throw err;                                     // callers' own error paths behave exactly as today
@@ -2247,6 +2301,7 @@ async function notifPoll(){
   let d; try{ d=await (await fetch("/api/notifications")).json(); }catch(e){ return; }
   if(!d||!d.ok) return;
   NOTIF=d;
+  if(d.db) setDbState(d.db);
   const top=((d.events||[])[0]||{}).ts||"";
   const fresh=(NOTIF_TOP!==null&&top>NOTIF_TOP)?d.events.filter(e=>e.ts>NOTIF_TOP):[];
   NOTIF_TOP=top;
@@ -7288,7 +7343,7 @@ function neRowToggle(id){
 async function loadNeedOrder(){
   let d;
   try{ const r=await fetch("/api/needorder"); if(!r.ok) throw new Error("HTTP "+r.status); d=await r.json(); }
-  catch(e){ $("needSub").textContent=""; $("needList").innerHTML=`<div class="empty">تعذّر تحميل القائمة · couldn't load — <a style="cursor:pointer;color:var(--accent)" onclick="loadNeedOrder()">إعادة المحاولة · retry</a></div>`; return; }
+  catch(e){ $("needSub").textContent=""; $("needList").innerHTML=`<div class="empty">تعذّر تحميل القائمة · couldn't load${poEsc(apiFailReason())} — <a style="cursor:pointer;color:var(--accent)" onclick="loadNeedOrder()">إعادة المحاولة · retry</a></div>`; return; }
   NE_DATA=d; NEED_ORDERS=d.orders||[];
   renderNeedOrder();
 }
@@ -11522,9 +11577,10 @@ async function gmLoad(){
     // One blipped request must not strand the pane (the view now loads at BOOT via
     // the restored-page feature, right when a fresh deploy/reconnect is coldest):
     // offer a retry link AND arm the same 60s timer the success path uses.
-    $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")} — <a href="#" onclick="gmLoad();return false" style="color:var(--accent);font-weight:700">${T("إعادة المحاولة · retry")}</a></div>`;
+    $("gmList").innerHTML=`<div class="muted2" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())} — <a href="#" onclick="gmLoad();return false" style="color:var(--accent);font-weight:700">${T("إعادة المحاولة · retry")}</a></div>`;
     clearInterval(GM.timer);
-    GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
+    const wait=(LAST_API_FAIL&&LAST_API_FAIL.db)?30000:60000;    // a repair takes seconds
+    GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },wait);
     return; }
   GM.ov=d;
   GM.stats=null; GM.matches=null;      // workflow stats + ⚡ match counts refetch lazily
@@ -13446,7 +13502,7 @@ async function gmRenderReady(){
   const p=$("gmReadyPane"); if(!p) return;
   p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/readiness")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
   GM.ready=d.rows||[];
   gmReadyDraw();
 }
@@ -13528,7 +13584,7 @@ async function gmDocsRender(){
   const p=$("gmDocsPane"); if(!p) return;
   p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/docs_queue")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
   // product photos come from the boards themselves (same source as Bulk search /
   // the Workflows expansion) — a role without Leluxe access just gets no ⌚ thumbs
   try{ await bsEnsureData(); }catch(e){}
@@ -13560,7 +13616,7 @@ async function gmFcastRender(){
   const p=$("gmFcastPane"); if(!p) return;
   p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/forecast")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
   // product photos come from the boards themselves, exactly as the Docs tab
   try{ await bsEnsureData(); }catch(e){}
   GM_FC.data=d;
@@ -15399,7 +15455,7 @@ async function gmTplDelete(id){
 async function gmDashLoad(){
   $("gmDashPane").innerHTML=`<div class="muted2" style="padding:20px">${T("جارِ التحميل… · loading…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/stats")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ $("gmDashPane").innerHTML=`<div class="muted2 panel">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){ $("gmDashPane").innerHTML=`<div class="muted2 panel">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
   GM.stats=d;
   const o=d.overall, pct=(a,b)=>b?Math.round(a/b*100)+"%":"—";
   const tile=(v,l,tip)=>`<div class="gm-tile" ${tip?`title="${poEsc(tip)}"`:""}><b>${v}</b><span>${l}</span></div>`;
