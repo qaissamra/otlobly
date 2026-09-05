@@ -411,6 +411,49 @@ def case_report():
     check("the ready case leads the comparison", d["cases"][0]["case"] == "wrong id")
 
 
+# The REAL definitions the owner created on AZ (2) on 2026-09-05. Two option
+# names carry a TRAILING SPACE — this board has form for that ("Quantity ordered ")
+# and it is invisible in ClickUp's UI, so it gets pinned here rather than trusted.
+REAL_CASE = {"id": "b0b18f1e-4b32-43d2-bd98-2334d2e41452", "type": "drop_down",
+             "options": [
+                 {"id": "3f993189-bae5-470a-9975-61a8429e900e",
+                  "name": "Normal", "color": "#30a46c"},
+                 {"id": "0615ece2-4251-451f-bc2f-599d252ee0d9",
+                  "name": "Wrong ID on declaration ", "color": "#f76808"},
+                 {"id": "c51a1391-8882-4ea8-a5e0-67185a5f1657",
+                  "name": "Wrong ID on upload ", "color": "#ffc53d"}]}
+
+
+def real_option_names():
+    import cfg
+    conf = cfg.load()
+    cfg.set_path(conf, "leluxe.schema_source",
+                 {"fields": {"Gaash Case": REAL_CASE,
+                             "Sent to Gaash": {"id": "639164b2", "type": "date",
+                                               "options": []}},
+                  "fetched_at": "2099-01-01T00:00:00+00:00"})
+    cfg.save(conf)
+
+    opts = leluxe.case_options(refresh=False)
+    check("the picker shows all three real case types", len(opts) == 3)
+    check("and shows them WITHOUT the trailing spaces",
+          [o["name"] for o in opts] ==
+          ["Normal", "Wrong ID on declaration", "Wrong ID on upload"])
+    check("with the owner's own colours",
+          [o["color"] for o in opts] == ["#30a46c", "#f76808", "#ffc53d"])
+
+    # the name the picker hands back is the STRIPPED one; ClickUp's is not
+    for typed, want in [("Normal", "3f993189-bae5-470a-9975-61a8429e900e"),
+                        ("Wrong ID on declaration",
+                         "0615ece2-4251-451f-bc2f-599d252ee0d9"),
+                        ("wrong id on upload",
+                         "c51a1391-8882-4ea8-a5e0-67185a5f1657")]:
+        ok, enc = leluxe.encode_value(REAL_CASE, typed)
+        check(f"{typed!r} still resolves past the trailing space", ok and enc == want)
+    ok, _ = leluxe.encode_value(REAL_CASE, "straight")
+    check("a case type that no longer exists is refused, not invented", not ok)
+
+
 def routes_exist():
     src = (HERE / "app.py").read_text(encoding="utf-8")
     for r in ("/api/gaash/docs_sent", "/api/gaash/case_report",
@@ -430,6 +473,7 @@ def main():
     print("az2 write:");           az2_write()
     print("az2 undo (date):");     az2_undo_date()
     print("case report:");         case_report()
+    print("real ClickUp options:"); real_option_names()
     print("routes:");              routes_exist()
     print()
     if fails:
