@@ -365,11 +365,14 @@ def _copy_table(conn, t, rep, snap_attached):
                 if row is not None:
                     insert_row(row)
     r["dst"] = conn.execute(f"SELECT COUNT(*) FROM main.{q(t)}").fetchone()[0]
-    # a core table that lost rows (or whose source count is unknowable) → the rows
-    # it is MISSING, by primary key, from the newest verified snapshot (≤1 h old).
-    # Never the whole table: today's rows stay, only holes are filled. A row deleted
-    # since the snapshot can come back for an hour — reported, so the owner knows.
-    if t in CORE_TABLES and snap_attached and (r["src"] is None or r["dst"] < r["src"]):
+    # a table that lost rows (or whose source count is unknowable) → the rows it is
+    # MISSING, by primary key, from the newest verified snapshot (≤1 h old). EVERY
+    # table, not just the core ones: on 2026-09-05 a destroyed gaash_threads root
+    # (the clearance email threads) came back empty while the snapshot had all of
+    # them. Never the whole table: today's rows stay, only holes are filled. A row
+    # deleted since the snapshot can come back for an hour — reported, so the owner
+    # knows (queues re-process idempotently; settings/audit rows are harmless).
+    if snap_attached and (r["src"] is None or r["dst"] < r["src"]):
         try:
             snap_cols = _table_meta(conn, "snap", t)[0]
             cc = ", ".join(q(c) for c in cols_dst if c in snap_cols)
@@ -540,7 +543,10 @@ def summary_line(rep):
         core.append(f"{t} {r.get('dst', '?')}" + (f"/{r['src']}" if r.get("src") is not None else "")
                     + (f" (+{r['from_snapshot']} from snapshot)" if r.get("from_snapshot") else ""))
     lost = [t for t, r in rep["tables"].items() if r.get("strategy") == "LOST"]
-    return " · ".join(core) + (f" · LOST: {', '.join(lost)}" if lost else "")
+    filled = [f"{t} +{r['from_snapshot']}" for t, r in rep["tables"].items()
+              if r.get("from_snapshot") and t not in CORE_TABLES]
+    return (" · ".join(core) + (f" · LOST: {', '.join(lost)}" if lost else "")
+            + (f" · from snapshot: {', '.join(filled)}" if filled else ""))
 
 
 def unacceptable_losses(rep):

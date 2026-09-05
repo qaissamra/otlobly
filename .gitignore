@@ -45,3 +45,6 @@ leluxe_presync_*.json
 # dbrepair.py / db_sentinel artefacts beside the live DB (evidence, health, budget, snapshots)
 otlobly.db.*
 otlobly.snapshot-*
+wt.db*
+db_watch.log
+db_watch.state

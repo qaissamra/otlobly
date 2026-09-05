@@ -263,6 +263,33 @@ def a_rebuild_that_would_lose_orders_is_refused():
     check("maintenance marker cleared", not db.maintenance_marker_path().exists())
 
 
+def a_non_core_table_is_filled_from_the_snapshot_too():
+    """gaash_threads / gaash_ids are not money, but losing them silently while an
+    hour-old verified snapshot holds every row is not acceptable either."""
+    d = fresh_dir("noncore")
+    live = make_db(d / "otlobly.db", orders=2, customers=5, settings=5)
+    with db.connect() as c:
+        for i in range(120):
+            c.execute("INSERT INTO gaash_ids (id, name, filename, uploaded_at) VALUES (?,?,?,?)",
+                      (f"id_{i:04d}", f"Passport {i} " + "x" * 120, f"p{i}.pdf", db.now_iso()))
+    raw = sqlite3.connect(live)
+    raw.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    raw.close()
+    for ext in ("-wal", "-shm"):
+        Path(str(live) + ext).unlink(missing_ok=True)
+    snap = d / "otlobly.snapshot-20260905-120000.db"
+    shutil.copy2(live, snap)
+    snap.with_name(snap.name + ".ok").write_text("ok")
+    smash_page(live, root_of(live, "gaash_ids"))
+    use(live)
+    rc = dbrepair.preflight()
+    check("preflight repairs", rc == 0)
+    check("all 120 ID documents are back from the verified snapshot", count(live, "gaash_ids") == 120)
+    rep = json.loads(sorted(d.glob("otlobly.db.corrupt-*.report.json"))[-1].read_text())
+    check("the report says where they came from",
+          rep["tables"]["gaash_ids"].get("from_snapshot") == 120 and "+snapshot" in rep["tables"]["gaash_ids"]["strategy"])
+
+
 def a_staged_restore_is_applied_by_preflight_only():
     """/api/restore stages otlobly.db.pending-restore; the swap happens here, with no
     worker alive. A pending file that fails integrity is rejected, live untouched."""
@@ -431,6 +458,7 @@ def main():
     print("preflight:");               preflight_repairs_then_does_nothing_twice()
     print("the budget:");              the_budget_stops_the_third_rebuild()
     print("refusing a lossy rebuild:"); a_rebuild_that_would_lose_orders_is_refused()
+    print("non-core fill:");           a_non_core_table_is_filled_from_the_snapshot_too()
     print("staged restore:");          a_staged_restore_is_applied_by_preflight_only()
     print("build without swap:");      a_build_that_never_swapped_is_harmless()
     print("report_corruption:");       report_corruption_files_one_marker_and_ignores_locks()
