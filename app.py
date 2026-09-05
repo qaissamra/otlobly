@@ -2872,10 +2872,44 @@ def api_gaash_upload_link():
     tn = (request.args.get("gwd") or "").strip().upper()
     if not re.match(r"GWD\d+$", tn):
         return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    rec = gaash_mail.clearance_get(tn)
+    sent_at, sent_src = gaash_mail.sent_to_gaash(tn)
     return jsonify({"ok": True, "gwd": tn,
                     "asked_types": gaash_mail.docs_asked_types(tn),
                     "fallback": gaash_mail.UPLOAD_TYPE_FALLBACK,
-                    "url": gaash_mail.upload_link_for(tn)})
+                    "url": gaash_mail.upload_link_for(tn),
+                    # 🪪 the clearance columns — the popup and the wizard both
+                    # render their picker from this, so there is ONE definition
+                    "gaash_case": {"options": _case_options(),
+                                   "current": rec.get("case_name") or "",
+                                   "sent_at": sent_at, "sent_src": sent_src}})
+
+
+def _case_options():
+    """The Gaash Case options as ClickUp defines them — [] when the owner hasn't
+    created the column yet, which the picker renders as a one-line hint."""
+    try:
+        return leluxe_mod.case_options()
+    except Exception:  # noqa - ClickUp down must not stop a document going out
+        return []
+
+
+@app.route("/api/leluxe/discover_source", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_leluxe_discover_source():
+    """Re-read the REAL AZ (2)'s field definitions. Separate from /discover on
+    purpose: that one also rewrites leluxe.list_id, which must never point at
+    the real board."""
+    sch, err = leluxe_mod.discover_source(force=True)
+    fields = (sch or {}).get("fields") or {}
+    # parcels parked because the column didn't exist get another go — otherwise
+    # the ones that prompted the owner to create it are the ones left behind
+    requeued = gaash_mail.clearance_requeue_blocked() if not err else 0
+    if requeued:
+        leluxe_mod.kick()
+    return jsonify({"ok": not err, "error": err or "", "fields": len(fields),
+                    "requeued": requeued, "case_options": _case_options()})
 
 
 @app.route("/api/gaash/upload/plan")
@@ -2934,6 +2968,12 @@ def api_gaash_upload_plan():
         "declaration": {"ok": decl_ok, "why": decl_why,
                         "name": gaash_mail.parcel_name(tn),
                         "id_number": gaash_mail.id_number_for_email(tn)},
+        # 🪪 the same clearance block /upload_link returns, so the wizard and the
+        # link popup render ONE picker from one definition
+        "gaash_case": {"options": _case_options(),
+                       "current": (gaash_mail.clearance_get(tn).get("case_name")
+                                   or ""),
+                       "sent_at": gaash_mail.sent_to_gaash(tn)[0]},
     })
 
 
@@ -2967,9 +3007,19 @@ def api_gaash_upload():
     except Exception as e:  # noqa
         return jsonify({"ok": False, "error": f"upload failed: {e}"}), 500
     res["labels"] = {str(d["type"]): d.get("label") or "" for d in docs}
+    # The case is a LOCAL classification of how we papered this parcel, so it is
+    # saved even on a dry run (which is the default). The DATE claims something
+    # reached GAASH, so it is stamped only when something actually did.
+    case = (b.get("gaash_case") or "").strip()
+    if case:
+        try:
+            gaash_mail.set_case(tn, case, _user())
+        except Exception:  # noqa
+            pass
+    res["gaash_case"] = case
     if res.get("ok") and not dry:
         types = sorted({int(d["type"]) for d in docs})
-        _stamp_docs_sent(tn, types)
+        _stamp_docs_sent(tn, types, src="upload", user=_user())
         try:
             res["docs_state"] = _docs_check_one(tn)      # 🟡 → 🔵 without a manual re-check
         except Exception:  # noqa
@@ -2979,10 +3029,20 @@ def api_gaash_upload():
     return jsonify(res)
 
 
-def _stamp_docs_sent(tn, types):
-    """Record the send on whichever Purchases package carries this GWD — the
-    same fields the manual flow writes, so the red 'docs not received' chip
-    keeps working."""
+def _stamp_docs_sent(tn, types, src="upload", case=None, user=""):
+    """The ONE place a document send is recorded, whichever of the eleven buttons
+    sent it. `src` says how solid the date is: 'upload' means our server really
+    POSTed the files, 'link' means we opened GAASH's page and carried them.
+
+    Two INDEPENDENT stamps, each in its own try. The clearance record is
+    board-agnostic and is the only witness a Leluxe parcel ever gets; the
+    Purchases package fields are what the red 'docs not received' chip reads.
+    One shared `except` used to wrap both, so a broken purchases.json could
+    silently cost the clearance stamp — the very stamp this feature is for."""
+    try:
+        gaash_mail.stamp_docs_sent(tn, types=types, src=src, case=case, user=user)
+    except Exception:  # noqa - the documents are already gone; a stamp miss is minor
+        pass
     try:
         import purchases as pm
         pdb = pm.load()
@@ -2996,8 +3056,31 @@ def _stamp_docs_sent(tn, types):
                     hit = True
         if hit:
             pm.save(pdb)
-    except Exception:  # noqa - the upload already succeeded; a stamp miss is minor
+    except Exception:  # noqa - a Leluxe parcel simply isn't in this store
         pass
+
+
+@app.route("/api/gaash/docs_sent", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_docs_sent():
+    """Documents went to GAASH by hand — the owner opened or copied GAASH's own
+    upload page. Called from the shared popup, so EVERY button that reaches that
+    popup stamps, on both boards, with nothing to remember per button."""
+    b = request.get_json(force=True, silent=True) or {}
+    tn = (b.get("gwd") or "").strip().upper()
+    if not re.match(r"GWD\d+$", tn):
+        return jsonify({"ok": False, "error": "not a GWD number"}), 400
+    src = (b.get("src") or "link").strip()
+    types = [t for t in (b.get("types") or []) if str(t).strip().isdigit()]
+    case = b.get("case")
+    _stamp_docs_sent(tn, types, src=src if src in ("link", "upload") else "link",
+                     case=case, user=_user())
+    activity.log("uploaded", "purchase", tn, tn,
+                 detail="opened GAASH's upload page", user=_user())
+    rec = gaash_mail.clearance_get(tn)
+    return jsonify({"ok": True, "gwd": tn, "sent_at": rec.get("sent_at") or "",
+                    "case": rec.get("case_name") or ""})
 
 
 @app.route("/api/leluxe/item_image", methods=["POST"])
@@ -3614,6 +3697,15 @@ def api_gaash_forecast():
     predicted next GAASH status + expected date, learned from our own cached
     tracking history. Read-only and cache-only — no carrier calls."""
     return jsonify(forecast.forecast_queue())
+
+
+@app.route("/api/gaash/case_report")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_case_report():
+    """📊 how long GAASH took per parcel, grouped by how we papered it.
+    CALENDAR days — sent today, released 14 days later is 14."""
+    return jsonify(forecast.case_report())
 
 
 @app.route("/api/gaash/send", methods=["POST"])

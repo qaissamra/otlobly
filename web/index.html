@@ -9579,16 +9579,34 @@ function gaashUploadUrl(){ const gwd=$("bulkBody").dataset.gwd||'';
   return `https://ops.gaashwd.com/fileUpload?packageId=${encodeURIComponent(gwd)}`+
     [...document.querySelectorAll('.gud:checked')].map(c=>`&type=${c.value}`).join(''); }
 function gaashUploadSync(){ const el=$("gudLink"); if(el){ const u=gaashUploadUrl(); el.textContent=u; el.href=u; } }
-// GWD-first core — any page can use it (Leluxe rows only have a GWD). stampCb
-// (optional) runs on open/copy; the Purchases wrapper uses it to stamp the attempt.
-let GUD_STAMP=null;
-function gaashUploadOpenGwd(gwd,stampCb){
+// 🪪 The clearance record lives in THIS shared popup, never in a per-board
+// wrapper. Eleven buttons across Leluxe, Purchases, the Docs tab and the info
+// panels open this one function; before, only the four Purchases ones stamped
+// anything, so every Leluxe parcel went to GAASH unrecorded. Putting the case
+// picker and the stamp in the funnel means a button added later inherits both —
+// there is nowhere left to forget them.
+let GUD_CASE="", GUD_CASE_OPTS=[];
+function gudCaseRow(){
+  const el=$("gudCase"); if(!el) return;
+  if(!GUD_CASE_OPTS.length){
+    el.innerHTML=`<span class="muted2" style="font-size:11px">${T("أضف عمود Gaash Case في ClickUp ليظهر هنا · add the Gaash Case column in ClickUp to pick one here")}</span>`;
+    return; }
+  el.innerHTML=`<div class="muted2" style="font-size:12px;margin-bottom:5px">${T("نوع الملف عند غاش · Gaash case")}</div>`
+    +`<div style="display:flex;gap:6px;flex-wrap:wrap">`
+    +GUD_CASE_OPTS.map((o,i)=>`<button class="minibtn" title="${poEsc(o.name)}" style="padding:2px;border:0;background:none;border-radius:999px;${GUD_CASE===o.name?"outline:2px solid var(--accent);outline-offset:1px":"opacity:.62"}" onclick="gudCase(${i})">${hexPill(o.color||"#6b7280",o.name)}</button>`).join("")
+    +`</div>`;
+}
+function gudCase(i){ const o=GUD_CASE_OPTS[i]; if(!o) return;
+  GUD_CASE=(GUD_CASE===o.name?"":o.name); gudCaseRow(); }
+// GWD-first core — any page can use it (Leluxe rows only have a GWD).
+function gaashUploadOpenGwd(gwd){
   gwd=(gwd||'').trim();
   if(!gwd){ toast("Add the GWD tracking number first"); return; }
-  GUD_STAMP=stampCb||null;
+  GUD_CASE=""; GUD_CASE_OPTS=[];
   bulkOpen("🪪 رفع مستندات لغاش · Upload docs to GAASH");
   $("bulkBody").dataset.gwd=gwd;
-  $("bulkBody").innerHTML=`<div class="muted2" style="font-size:12px;margin:4px 0 8px">
+  $("bulkBody").innerHTML=`<div id="gudCase" style="padding:2px 0 9px;border-bottom:1px solid var(--line)"></div>
+    <div class="muted2" style="font-size:12px;margin:8px 0">
       اختر المستندات التي طلبتها غاش لـ <b class="mono">${poEsc(gwd)}</b> — كل نوع يضيف خانة رفع في صفحتهم · pick the documents GAASH asked for; each adds an upload slot on their page</div>`+
     GAASH_DOCS.map(([t,l])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer">
       <input type="checkbox" class="gud" value="${t}" ${t===8?'checked':''} onchange="gaashUploadSync()"> ${l}
@@ -9599,34 +9617,55 @@ function gaashUploadOpenGwd(gwd,stampCb){
       <button class="accent" onclick="gaashUploadGo(false)">⤴ فتح صفحة الرفع · Open upload page</button>
       <button class="minibtn" onclick="gaashUploadGo(true)">📋 نسخ الرابط · Copy link</button>
     </div></div>`;
+  gudCaseRow();
   gaashUploadSync();
   // The boxes above open pre-ticked with the passport slot — our best guess. Now
-  // ask what GAASH ACTUALLY asked for and re-tick to match (they often name two).
-  // This can't be awaited up front: eight onclick handlers open this modal.
+  // ask what GAASH ACTUALLY asked for and re-tick to match (they often name two),
+  // and fetch the case options ClickUp defines. This can't be awaited up front:
+  // eleven onclick handlers open this modal.
   gaashUploadLink(gwd).then(d=>{
-    const at=((d&&d.asked_types)||[]).map(String), bb=$("bulkBody");
-    if(!at.length||!bb||bb.dataset.gwd!==gwd) return;   // GAASH silent, or the modal moved on
+    const bb=$("bulkBody");
+    if(!bb||bb.dataset.gwd!==gwd) return;              // the modal moved on
+    const gc=(d&&d.gaash_case)||{};
+    GUD_CASE_OPTS=gc.options||[]; GUD_CASE=gc.current||""; gudCaseRow();
+    const at=((d&&d.asked_types)||[]).map(String);
+    if(!at.length) return;                             // GAASH hasn't said
     document.querySelectorAll('.gud').forEach(c=>{ c.checked=at.includes(c.value); });
     gaashUploadSync();
   });
 }
-// Purchases wrapper — keeps the docs-attempt stamp: GAASH gives no upload receipt,
-// but it RE-ASKS (a new CD event) while docs are missing — a CD newer than this
-// stamp means the upload never registered, which pkgDocsPill turns into a red warning.
+// Purchases entry — now only a GWD lookup. The stamp it used to carry moved into
+// the funnel above, which is what wired the seven Leluxe buttons that had none.
 function gaashUploadOpen(id,pi){
   const p=poFind(id), pk=p&&p.packages[pi];
-  gaashUploadOpenGwd((pk&&pk.tracking_number)||'', ()=>{
-    const p2=poFind(id), pk2=p2&&p2.packages[pi];
-    if(pk2){ pk2.gaash_docs_at=new Date().toISOString();
-      pk2.gaash_docs_types=[...document.querySelectorAll('.gud:checked')].map(c=>+c.value);
-      poSave(p2); renderPurchases(); }
-  });
+  gaashUploadOpenGwd((pk&&pk.tracking_number)||'');
 }
-function gaashUploadGo(copy){
-  const url=gaashUploadUrl();
-  if(GUD_STAMP) GUD_STAMP();
+async function gaashUploadGo(copy){
+  const gwd=$("bulkBody").dataset.gwd||'', url=gaashUploadUrl();
+  const types=[...document.querySelectorAll('.gud:checked')].map(c=>+c.value);
   if(copy){ navigator.clipboard.writeText(url); toast("Link copied ✓"); }
   else window.open(url,'_blank','noopener');
+  // Stamped AFTER the page is open, and on the SERVER: the browser is not the
+  // witness, and both boards must get the record. GAASH issues no upload receipt,
+  // so this is "we handed it over" — a CD event newer than it still means the
+  // documents never registered, which is what the red chip reads.
+  try{
+    const r=await post("/api/gaash/docs_sent",{gwd,types,src:"link",case:GUD_CASE});
+    if(r&&r.ok) gudMirror(gwd,types,r);
+    else toast("Couldn't record the send — reopen and try again");
+  }catch(e){ toast("Couldn't record the send — reopen and try again"); }
+}
+function gudMirror(gwd,types,r){
+  // The server already wrote both stores. Mirror it into the loaded Purchases
+  // model so the docs chip updates now — deliberately WITHOUT poSave, which
+  // would push this stale copy back over the write that just landed.
+  let touched=false;
+  (POS||[]).forEach(p=>(p.packages||[]).forEach(pk=>{
+    if(String(pk.tracking_number||'').trim().toUpperCase()===gwd){
+      pk.gaash_docs_at=r.sent_at||new Date().toISOString();
+      pk.gaash_docs_types=types; touched=true; }
+  }));
+  if(touched&&typeof renderPurchases==="function") renderPurchases();
 }
 // ── ✓ "registered at Gerizim" sign — durable, shows everywhere ───────────────
 // The registration truth lives in the owner's local GAASH tool (127.0.0.1:8787,
@@ -13541,8 +13580,20 @@ async function gmDocsRender(){
 // "cleared → next status" table measured on a WORKING-DAY clock, because the
 // entire weekday spread in the raw data is the Fri/Sat weekend and nothing
 // else. Nothing here recomputes any of that; the server ships finished dates.
-let GM_FC={mode:"all", data:null};
+let GM_FC={mode:"all", data:null, view:"queue", cases:null};
 function gmFcMode(m){ GM_FC.mode=m; gmFcastDraw(); }
+// 📊 A sub-view of the SAME pane, not a ninth tab (#gmTabs already carries
+// eight). The queue asks "what happens next to a parcel that has cleared";
+// this asks "how long did GAASH hold it, and which way of papering it wins".
+// Opposite populations, one question, one home.
+function gmFcView(v){
+  GM_FC.view=v;
+  if(v==="cases"){ GM_FC.cases?gmCasesDraw():gmCasesRender(); } else gmFcastDraw();
+}
+function gmFcViewChips(){
+  const b=(v,lab)=>`<button class="minibtn${GM_FC.view===v?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="gmFcView('${v}')">${lab}</button>`;
+  return b("queue","🔮 "+T("التالي · next"))+b("cases","📊 "+T("كم استغرقت · how long"));
+}
 const GM_FC_REASON={
   thin_history:["gray","❔ "+"لا تاريخ كافٍ · not enough history",
     "لم نجمع بعد ما يكفي من الطرود لنتوقع · we haven't seen enough parcels clear yet to predict"],
@@ -13679,6 +13730,7 @@ function gmFcastDraw(){
       ${chip("all",T("الكل · All"),rows.length)}
       ${n("overdue")?chip("overdue","🔴 "+T("متأخر · overdue"),n("overdue")):""}
       ${n("unknown")?chip("unknown","❔ "+T("غير معروف · unknown"),n("unknown")):""}
+      ${gmFcViewChips()}
       <button class="minibtn" onclick="gmFcastRender()" title="${T("أعد الحساب · recompute")}">↻</button>
     </div>
     <div class="muted2" style="font-size:10.5px;margin-bottom:8px;line-height:1.7">${basis}
@@ -13701,6 +13753,94 @@ function gmFcastDraw(){
       </div>
     </div>
   </div>`;
+}
+async function gmCasesRender(){
+  const p=$("gmFcastPane"); if(!p) return;
+  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/case_report")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  GM_FC.cases=d; gmCasesDraw();
+}
+function gmCasesDraw(){
+  const p=$("gmFcastPane"); if(!p) return;
+  const d=GM_FC.cases; if(!d) return;
+  const badge=b=>b==="leluxe"?"⌚":"📦";
+  const SRC={upload:["أُرسلت من التطبيق · uploaded by the app","✅"],
+             link:["فُتحت صفحة غاش ورُفعت يدوياً · GAASH's page was opened and the files carried by hand","🔗"],
+             email:["إيميل التخليص · the clearance email","📧"]};
+  const dayCell=r=>{
+    if(r.days==null) return `<span class="muted2" title="${poEsc(T(r.reason||""))}">— ${poEsc(r.reason||"")}</span>`;
+    const tip=`${T("أُرسلت · sent")} ${String(r.sent_at).slice(0,10)} → ${T("أُفرج عنها · released")} ${String(r.released_at).slice(0,10)}`;
+    return `<b title="${poEsc(tip)}">${r.days}</b> <span class="muted2" style="font-size:10px">${T("يوم · d")}</span>`;
+  };
+  const row=r=>{
+    const sm=SRC[r.sent_src]||["",""];
+    return `<div class="gmf-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px">
+      <span style="flex:none;width:14px" title="${r.board==="leluxe"?"Leluxe":"Purchases"}">${badge(r.board)}</span>
+      <b class="mono" style="font-size:11.5px;flex:none;width:104px;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
+      <span style="width:150px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.name||"")}</span>
+      <span style="width:190px;flex:none;overflow:hidden">${r.case&&r.case!=="(no case)"?hexPill(gmCaseColor(r.case),r.case):'<span class="muted2">—</span>'}</span>
+      <span style="width:104px;flex:none" title="${poEsc(T(sm[0]))}"><span class="mono" style="font-size:11px">${poEsc(String(r.sent_at).slice(0,10))}</span> ${sm[1]}</span>
+      <span style="width:96px;flex:none">${r.released_at?`<span class="mono" style="font-size:11px">${poEsc(String(r.released_at).slice(0,10))}</span>`:'<span class="muted2">—</span>'}</span>
+      <span style="width:86px;flex:none">${dayCell(r)}</span>
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("المحادثة · conversation")}">💬</button>
+    </div>`;
+  };
+  const cards=(d.cases||[]).map(c=>`<div class="panel" style="padding:9px 11px;min-width:168px">
+    <div style="margin-bottom:5px">${hexPill(c.color||"#6b7280",c.case)}</div>
+    ${c.ready
+      ? `<div style="font-size:19px;font-weight:800;line-height:1.1">${c.p50}<span style="font-size:11px;font-weight:600" class="muted2"> ${T("يوم · days")}</span></div>
+         <div class="muted2" style="font-size:10.5px;margin-top:2px">${T("الوسيط من · median of")} ${c.n} · ${T("الأبطأ ٩٠٪ · slowest 10%")} ${c.p90}${T("ي · d")} · ${c.fastest}–${c.slowest}${T("ي · d")}</div>`
+      : `<div class="muted2" style="font-size:11.5px;line-height:1.5">n=${c.n} — ${T("قليلة جداً للمقارنة · too few to compare")}<br><span style="font-size:10.5px">${T("نحتاج · we need")} ${d.min_n}+</span></div>`}
+  </div>`).join("");
+  const o=d.overall||{};
+  p.innerHTML=`<div class="panel" style="padding:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <b style="font-size:13px">📊 ${T("كم استغرقت غاش · how long GAASH took")}</b>
+      <span class="spacer"></span>
+      ${gmFcViewChips()}
+      <button class="minibtn" onclick="gmCaseCols(this)" title="${T("اقرأ أعمدة غاش من ClickUp من جديد — اضغط بعد إنشائها · re-read the Gaash columns from ClickUp — press this after creating them")}">⟳ ${T("أعمدة AZ (2) · AZ (2) columns")}</button>
+      <button class="minibtn" onclick="gmCasesRender()" title="${T("أعد الحساب · recompute")}">↻</button>
+    </div>
+    <div class="muted2" style="font-size:10.5px;margin-bottom:9px;line-height:1.7">
+      ${o.n?`${T("الوسيط العام · overall median")} <b>${o.p50}</b> ${T("يوم · days")} ${T("من · over")} <b>${o.n}</b> ${T("طرد مخلَّص · cleared parcels")} · `:""}
+      <b>${(d.counts||{}).waiting||0}</b> ${T("ما زالت عند غاش · still with GAASH")}
+      ${d.weird?` · <b>${d.weird}</b> ${T("أُفرج عنها قبل أن نرسل — غير محسوبة · released before we sent — not counted")}`:""}
+      <span style="opacity:.8"> · ${T("أيام تقويمية كاملة، بما فيها العطل · plain calendar days, holidays included")}</span>
+    </div>
+    ${cards?`<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px">${cards}</div>`:""}
+    <div style="overflow-x:auto"><div style="min-width:900px">
+      <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+        <span style="flex:none;width:14px"></span>
+        <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
+        <span style="flex:none;width:150px">${T("الاسم · name")}</span>
+        <span style="flex:none;width:190px">${T("نوع الملف · case")}</span>
+        <span style="flex:none;width:104px">${T("أُرسلت · sent")}</span>
+        <span style="flex:none;width:96px">${T("أُفرج عنها · released")}</span>
+        <span style="flex:none;width:86px">${T("المدة · took")}</span>
+        <span class="spacer"></span>
+      </div>
+      ${(d.rows||[]).length?(d.rows||[]).map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لم يُسجَّل إرسال بعد · nothing recorded as sent yet")}</div>`}
+    </div></div>
+  </div>`;
+}
+// Re-read the two clearance columns from the real AZ (2). Parcels parked with
+// "the column doesn't exist yet" are re-armed here — pressing this IS the thing
+// the blocked message tells the owner to do, so it has to actually unblock them.
+async function gmCaseCols(btn){
+  if(btn){ btn.disabled=true; btn.textContent="⏳"; }
+  let r; try{ r=await post("/api/leluxe/discover_source",{}); }catch(e){ r={ok:false,error:String(e)}; }
+  if(btn){ btn.disabled=false; btn.textContent="⟳ "+T("أعمدة AZ (2) · AZ (2) columns"); }
+  if(!r||!r.ok){ toast("⚠ "+((r&&r.error)||T("تعذّرت القراءة · couldn't read ClickUp"))); return; }
+  const n=(r.case_options||[]).length;
+  toast(n?`✓ ${n} ${T("نوع ملف · case types")}${r.requeued?` · ${r.requeued} ${T("طرد أُعيد للطابور · parcel(s) re-queued")}`:""}`
+        :"⚠ "+T("لا يوجد عمود Gaash Case في ClickUp بعد · no Gaash Case column in ClickUp yet"));
+  gmCasesRender();
+}
+function gmCaseColor(name){
+  const c=((GM_FC.cases||{}).cases||[]).find(x=>x.case===name);
+  return (c&&c.color)||"#6b7280";
 }
 // UI_AUDIT: no hand-rolled pills — these all go through the helper family above,
 // so they inherit .pill's own 10px and match the ORDER STATUS + GAASH STATUS
@@ -13927,13 +14067,14 @@ function gmDocsDraw(){
    then send. Nothing is posted while dry-run is on; the review says so. */
 let GU=null;
 async function guOpen(gwd){
-  GU={gwd, step:1, fi:0, types:[], picks:{}, plan:null, planTypes:"", busy:false, res:null, up:null, idNum:""};
+  GU={gwd, step:1, fi:0, types:[], picks:{}, plan:null, planTypes:"", busy:false, res:null, up:null, idNum:"", case:""};
   bulkOpen("🪪 "+T("رفع مستندات لغاش · Upload documents to GAASH")+" · "+gwd);
   $("bulkBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ سؤال غاش عن الخانات… · asking GAASH which slots it opens…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
   if(!GU||GU.gwd!==gwd) return;
   if(!d||!d.ok){ $("bulkBody").innerHTML=`<div class="panel" style="padding:14px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر فتح صفحة غاش · couldn't reach GAASH's page"))}</div>`; return; }
   GU.plan=d;
+  GU.case=((d.gaash_case||{}).current)||"";
   // start with exactly what GAASH asked for — ALL of it. They routinely name two
   // in one link (ID + goods-use declaration); pre-picking only the first is how
   // a parcel gets half its papers and waits out the customs deadline.
@@ -14040,6 +14181,20 @@ function guStepTypes(){
   guFoot(0,1);
 }
 function guPick(t,src,id){ GU.picks[String(t)]={source:src,id:id}; guRender(); }
+// 🪪 How this parcel is being papered. It sits on the REVIEW step because that is
+// the page carrying the send button — the classification is made in the same
+// breath as the decision to send, not three screens earlier.
+function guCaseHtml(){
+  const o=((GU.plan||{}).gaash_case||{}).options||[];
+  if(!o.length) return `<div class="muted2" style="font-size:11px;margin:0 0 8px">${T("أضف عمود Gaash Case في ClickUp ليظهر هنا · add the Gaash Case column in ClickUp to pick one here")}</div>`;
+  return `<div style="padding:0 0 9px;margin-bottom:8px;border-bottom:1px solid var(--line)">
+    <div class="muted2" style="font-size:12px;margin-bottom:5px">${T("نوع الملف عند غاش · Gaash case")}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${o.map((c,i)=>
+      `<button class="minibtn" title="${poEsc(c.name)}" style="padding:2px;border:0;background:none;border-radius:999px;${GU.case===c.name?"outline:2px solid var(--accent);outline-offset:1px":"opacity:.62"}" onclick="guCase(${i})">${hexPill(c.color||"#6b7280",c.name)}</button>`
+      ).join("")}</div></div>`;
+}
+function guCase(i){ const o=(((GU.plan||{}).gaash_case||{}).options||[])[i]; if(!o) return;
+  GU.case=(GU.case===o.name?"":o.name); guRender(); }
 // which library folder a slot's upload files under — 6/8 are people (id),
 // 3/7 are declarations, everything else is a standing paper (certificate)
 function guFolderFor(t){ return {"6":"id","8":"id","7":"declaration","3":"declaration"}[String(t)]||"certificate"; }
@@ -14166,7 +14321,8 @@ function guStepReview(){
         ${over?`<span style="font-size:11px;color:#b45309">${poEsc(over)}</span>`:""}
       </div>${view}</div>`;
   }).join("");
-  $("guBody").innerHTML=`<div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("هذا ما سيصل غاش — تأكد أنها الهوية والتصريح الصحيحان · this is exactly what GAASH receives — check it is the right ID and declaration")}</div>${cards}
+  $("guBody").innerHTML=`${guCaseHtml()}
+    <div class="muted2" style="font-size:12.5px;margin:2px 0 8px">${T("هذا ما سيصل غاش — تأكد أنها الهوية والتصريح الصحيحان · this is exactly what GAASH receives — check it is the right ID and declaration")}</div>${cards}
     ${GU.res?guResultHtml():""}`;
   guFoot(1,0);
 }
@@ -14177,7 +14333,8 @@ function guResultHtml(){
     <span class="muted2">${Math.round((d.bytes||0)/1024)} KB${d.note?` · ${poEsc(d.note)}`:""}</span></div>`).join("");
   return `<div class="en-warn ${r.ok?(r.dry_run?"dry":"live"):""}" style="${r.ok?"":"background:#fee2e2;border-color:#fca5a5;color:#b42318"}">
     <b>${r.ok?(r.dry_run?"🧪 "+T("جاهز — لم يُرسل شيء · ready — nothing was sent"):"✅ "+T("تم الرفع · uploaded")):"⚠ "+T("فشل · failed")}</b>
-    <div style="font-size:11.5px;margin-top:3px">${poEsc(r.note||r.error||"")}</div>${rows}</div>`;
+    <div style="font-size:11.5px;margin-top:3px">${poEsc(r.note||r.error||"")}</div>${rows}
+    ${r.ok&&r.dry_run&&r.gaash_case?`<div style="font-size:11px;margin-top:4px">🏷 ${T("الحالة حُفظت — لكن لم يُرسل شيء، فلا تاريخ · case saved — but nothing was sent, so no date was stamped")}</div>`:""}</div>`;
 }
 function guFoot(back,next){
   const dry=GU.plan.dry_run;
@@ -14194,7 +14351,7 @@ async function guSend(btn){
   if(!GU||GU.busy) return;
   const docs=GU.types.map(t=>({type:Number(t),source:(GU.picks[t]||{}).source,id:(GU.picks[t]||{}).id}));
   GU.busy=true; btn.disabled=true; btn.textContent="⏳ "+T("جارٍ… · working…");
-  let r; try{ r=await post("/api/gaash/upload",{gwd:GU.gwd,docs}); }catch(e){ r={ok:false,error:String(e)}; }
+  let r; try{ r=await post("/api/gaash/upload",{gwd:GU.gwd,docs,gaash_case:GU.case||""}); }catch(e){ r={ok:false,error:String(e)}; }
   GU.busy=false; GU.res=r||{ok:false,error:"no answer"};
   guRender();
   if(r&&r.ok&&!r.dry_run){
