@@ -360,6 +360,29 @@ CREATE TABLE IF NOT EXISTS gaash_autoclear (
   gwd TEXT PRIMARY KEY,                 -- in-app ✅ AUTO CLEAR tag (📦 Purchases
   at TEXT                               -- parcels — Leluxe tags live in ClickUp)
 );
+-- 🪪 One row per parcel we handed to GAASH: WHEN we sent, HOW we papered it,
+-- and how the two travel to ClickUp. Keyed by GWD like gaash_picks/gaash_autoclear
+-- above, deliberately: a parcel needs this whether it lives on the Leluxe board or
+-- in Purchases, and whether or not an email thread was ever opened for it.
+CREATE TABLE IF NOT EXISTS gaash_clearance (
+  gwd TEXT PRIMARY KEY,
+  case_name TEXT,                       -- the 'Gaash Case' option NAME, verbatim
+  case_at TEXT,
+  case_by TEXT,
+  doc_types TEXT,                       -- JSON list of the slots we sent
+  sent_at TEXT,                         -- earliest hand-over — see sent_to_gaash()
+  sent_src TEXT,                        -- 'upload' (files really POSTed) | 'link'
+                                        -- (we opened GAASH's page and carried them)
+                                        -- | 'email'. Only 'upload' is a receipt.
+  released_at TEXT,                     -- cached clearance instant, for the report
+  push_state TEXT NOT NULL DEFAULT 'idle',   -- idle|pending|done|blocked|skipped|error
+  push_attempts INTEGER NOT NULL DEFAULT 0,
+  pushed_case TEXT,                     -- what WE last wrote to AZ (2) — the anchor
+  pushed_date TEXT,                     -- that tells our value from a human's
+  push_error TEXT,
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_gaashclr_push ON gaash_clearance(push_state);
 -- 🚩 Flag machine (flag_machine.py): watch Gmail inboxes read-only; an
 -- "action required" subject raises a flag that nags the owner on Telegram
 -- every minute until they reply done. Owner-scoped like gaash_* — no

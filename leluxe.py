@@ -168,6 +168,72 @@ def source_list_id(config=None):
     return str(cfg.get(config, "leluxe.source_list_id", "") or "").strip()
 
 
+# 🪪 The two clearance columns Otlobly fills on the real AZ (2). Matched by NAME
+# (case/whitespace-folded), never by id, so the owner can add case types — or fix
+# a typo in a column name — in ClickUp alone, with no code change here.
+GAASH_SENT_FIELD = "Sent to Gaash"
+GAASH_CASE_FIELD = "Gaash Case"
+_SRC_SCHEMA_TTL = 6 * 3600
+
+
+def source_schema(config=None):
+    """The REAL AZ (2)'s statuses + field defs, cached under leluxe.schema_source.
+
+    Deliberately a SEPARATE cache from schema(), which describes the WORKING copy
+    list. They are not interchangeable, and the route that fills schema() also
+    rewrites leluxe.list_id with whatever list it was pointed at — so pointing
+    that route at AZ (2) to read its fields would aim the ordinary auto-pusher
+    at the real board."""
+    config = config or cfg.load()
+    return cfg.get(config, "leluxe.schema_source", {}) or {}
+
+
+def discover_source(force=False, max_age_sec=_SRC_SCHEMA_TTL):
+    """Refresh the AZ (2) field cache when it is stale. (schema, error).
+    Never touches leluxe.list_id. Returns whatever is cached on failure, so a
+    ClickUp outage degrades the picker to 'no options' instead of an error."""
+    config = cfg.load()
+    cur = cfg.get(config, "leluxe.schema_source", {}) or {}
+    if not force and cur.get("fields"):
+        try:
+            age = (datetime.now(timezone.utc)
+                   - datetime.fromisoformat(cur.get("fetched_at") or "")).total_seconds()
+            if age < max_age_sec:
+                return cur, None
+        except Exception:  # noqa - never fetched, or an unparseable stamp
+            pass
+    sid = source_list_id(config)
+    if not sid:
+        return cur, "no AZ (2) source list configured"
+    if not os.environ.get("CLICKUP_API_TOKEN"):
+        return cur, "CLICKUP_API_TOKEN is not set"
+    sch, err = discover(sid)
+    if err:
+        return cur, err
+    sch["fetched_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cfg.set_path(config, "leluxe.schema_source", sch)
+    cfg.save(config)
+    return sch, None
+
+
+def source_field(name, config=None):
+    """One AZ (2) field definition by name, or {} when the owner hasn't made it."""
+    return _sch_field_def((source_schema(config).get("fields") or {}), name)
+
+
+def case_options(refresh=True):
+    """The 'Gaash Case' dropdown exactly as ClickUp defines it — [] until the
+    column exists. Options added in ClickUp later show up here on their own."""
+    if refresh:
+        try:
+            discover_source()
+        except Exception:  # noqa - the picker must open with or without ClickUp
+            pass
+    return [{"name": (o.get("name") or "").strip(), "color": o.get("color") or ""}
+            for o in (source_field(GAASH_CASE_FIELD).get("options") or [])
+            if (o.get("name") or "").strip()]
+
+
 def ready(config=None):
     """Token + list + discovered schema — the mirror can talk to ClickUp.
     (statuses, not fields: a list can legitimately have zero custom fields.)"""
@@ -3381,6 +3447,187 @@ def az2_organize(order_id, user="", dry_run=False):
     return report, None
 
 
+# --------------------------------------------------------------------------- #
+# 🪪 The clearance columns → AZ (2). Automatic (the owner asked for no click),
+# but still journalled, tagged and undoable, because those cost nothing and are
+# how a wrong write gets taken back.
+# --------------------------------------------------------------------------- #
+def _task_fdef_by_name(task, name):
+    """A field definition off the TASK's own custom_fields, matched by name.
+
+    By name and off the task on purpose. The cached schema describes the WORKING
+    copy list, and these two columns live only on the real AZ (2) — resolving
+    their ids from the cache would find nothing. Reading the task also means the
+    option list is always current, so a case type added in ClickUp this morning
+    works this afternoon with no Discover."""
+    want = " ".join(str(name or "").casefold().split())
+    for cf in (task or {}).get("custom_fields") or []:
+        if " ".join(str(cf.get("name") or "").casefold().split()) != want:
+            continue
+        opts = [{"id": o.get("id"),
+                 "name": o.get("name") if o.get("name") is not None else o.get("label"),
+                 "orderindex": o.get("orderindex"), "color": o.get("color")}
+                for o in (cf.get("type_config") or {}).get("options") or []]
+        return {"id": cf.get("id"), "type": cf.get("type"), "options": opts}
+    return {}
+
+
+def az2_task_for_gwd(gwd):
+    """(task_id, row_id, why) — the AZ (2) task that IS this parcel.
+
+    Same effective-number fan-out store_docs_state uses, so a product inherits
+    its package's GWD. The parcel-level container wins over a product and over
+    the order, because the clearance facts belong to the parcel."""
+    import tracking
+    tn = tracking.clean_tracking(gwd or "")
+    if not tn:
+        return (None, None, "not a parcel number")
+    with db.connect() as c:
+        rows = [_row(r) for r in c.execute(
+            "SELECT * FROM leluxe_orders WHERE deleted=0")]
+    eff = _eff_tn_map(rows)
+    rank = {"package": 0, "item": 1, "parent": 2}
+    best = None
+    for r in rows:
+        if tracking.clean_tracking(eff.get(r["id"]) or "") != tn:
+            continue
+        tid = (r.get("data") or {}).get("source_task_id")
+        if not tid:
+            continue
+        k = rank.get(r.get("kind") or "", 3)
+        if best is None or k < best[0]:
+            best = (k, tid, r["id"])
+    if not best:
+        return (None, None, "this parcel has no linked AZ (2) task "
+                            "(a Purchases parcel never will)")
+    return (best[1], best[2], "")
+
+
+def az2_push_clearance(gwd, user=""):
+    """Write 'Sent to Gaash' and/or 'Gaash Case' onto one parcel's AZ (2) task.
+    (report, error) — never raises. report['blocked'] means the owner hasn't
+    created the column yet, which is a state to report, not an error to retry."""
+    st = _az2_settings()
+    if not st["enabled"]:
+        return None, "AZ (2) push is disabled (leluxe:az2 setting)"
+    import gaash_mail
+    g = (gwd or "").strip().upper()
+    rec = gaash_mail.clearance_get(g)
+    sent_at, _src = gaash_mail.sent_to_gaash(g)
+    case = (rec.get("case_name") or "").strip()
+    if not sent_at and not case:
+        return {"skipped": "nothing recorded for this parcel yet"}, None
+    tid, row_id, why = az2_task_for_gwd(g)
+    if not tid:
+        return {"skipped": why}, None
+    code, task = _http(f"{CLICKUP_API}/task/{tid}")
+    if code != 200 or not isinstance(task, dict):
+        return None, f"couldn't read the AZ (2) task ({code})"
+
+    wrote, notes, blocked = [], [], []
+
+    def _one(fname, want, mine):
+        """Write one field, or say why not. Never overwrites a value a human
+        put there: we only recognise our own last write."""
+        fdef = _task_fdef_by_name(task, fname)
+        fid = fdef.get("id")
+        if not fid:
+            blocked.append(f"the {fname!r} column doesn't exist on AZ (2) yet")
+            return
+        raw = _task_cf(task, fid)
+        if fdef.get("type") in ("drop_down", "labels"):
+            cur = _cf_display(fdef, raw)
+            if cur.strip().casefold() == str(want).strip().casefold():
+                return                                   # already right
+            if cur.strip() and cur.strip().casefold() != str(mine or "").strip().casefold():
+                notes.append(f"ClickUp says {cur!r} for {fname} — a human set it, "
+                             f"left alone")
+                return
+            ok, enc = encode_value(fdef, want)
+            if not ok:
+                notes.append(f"{want!r} is not an option on {fname} — add it in "
+                             f"ClickUp")
+                return
+        else:
+            ms = to_ms(str(want)[:10])
+            if ms is None:
+                notes.append(f"unusable date for {fname}: {want!r}")
+                return
+            cur = str(raw or "").strip()
+            if cur:
+                # WRITE-ONCE. A date already there is either ours (identical) or
+                # a human's; either way the start of the clock never moves.
+                if not _num_eq(cur, ms):
+                    notes.append(f"{fname} already has a date in ClickUp — left alone")
+                return
+            enc = ms
+        time.sleep(_pace())
+        c2, resp = _http(f"{CLICKUP_API}/task/{tid}/field/{fid}", "POST",
+                         {"value": enc})
+        if c2 not in (200, 201):
+            notes.append(f"AZ (2) refused {fname} ({c2}): "
+                         f"{(resp or {}).get('_error') or resp}")
+            return
+        _az2_journal(row_id, tid, f"cf:{fname}", cur, str(want), task, user or "auto")
+        wrote.append(fname)
+
+    if case:
+        _one(GAASH_CASE_FIELD, case, rec.get("pushed_case"))
+    if sent_at:
+        _one(GAASH_SENT_FIELD, sent_at[:10], rec.get("pushed_date"))
+
+    if wrote:
+        time.sleep(_pace())
+        _http(f"{CLICKUP_API}/task/{tid}/tag/{urlquote(st['tag'])}", "POST", {})
+        _az2_comment(tid, "🪪 Otlobly: " + " · ".join(
+            filter(None, [f"Gaash Case '{case}'" if case and GAASH_CASE_FIELD in wrote else "",
+                          f"Sent to Gaash {sent_at[:10]}" if sent_at and GAASH_SENT_FIELD in wrote else ""]))
+            + " (undo available in Otlobly)")
+    return {"task_id": tid, "wrote": wrote, "notes": notes, "blocked": blocked,
+            "case": case, "sent_at": sent_at}, None
+
+
+def run_clearance_pass(limit=10, config=None):
+    """Drain queued clearance records into AZ (2). Bounded and paced, per-row
+    soft-fail — the same shape as run_delete_pass. This is where the HTTP lives:
+    the callers that queue a row are an upload request already 25s deep in
+    GAASH's page and an SMTP send, and neither may wait on ClickUp or fail
+    because of it."""
+    if not os.environ.get("CLICKUP_API_TOKEN"):
+        return {"skipped": "no CLICKUP_API_TOKEN"}
+    import gaash_mail
+    try:
+        with db.connect() as c:
+            todo = [r["gwd"] for r in c.execute(
+                "SELECT gwd FROM gaash_clearance WHERE push_state='pending' "
+                "ORDER BY updated_at LIMIT ?", (int(limit),))]
+    except Exception:  # noqa - table not created yet on an old DB
+        return {"skipped": "no clearance table"}
+    pushed = errors = 0
+    for g in todo:
+        try:
+            rep, err = az2_push_clearance(g)
+        except Exception as e:  # noqa - one bad parcel must not stop the pass
+            rep, err = None, str(e)[:200]
+        if err:
+            gaash_mail.clearance_push_result(g, "error", err)
+            errors += 1
+        elif rep and rep.get("blocked"):
+            gaash_mail.clearance_push_result(
+                g, "blocked", "; ".join(rep["blocked"]) +
+                " — add it in ClickUp, then press ⟳ AZ (2) columns")
+        elif rep and rep.get("skipped"):
+            gaash_mail.clearance_push_result(g, "skipped", rep["skipped"])
+        else:
+            rep = rep or {}
+            gaash_mail.clearance_push_result(
+                g, "done", "; ".join(rep.get("notes") or []),
+                case=rep.get("case") or "",
+                date=(rep.get("sent_at") or "")[:10])
+            pushed += 1
+    return {"pushed": pushed, "errors": errors, "seen": len(todo)}
+
+
 def az2_undo(push_id, user=""):
     """Revert one journalled push — CAS-guarded: AZ (2) must still hold the
     value we wrote, else the undo aborts untouched. Handles every write kind
@@ -3484,6 +3731,11 @@ def az2_undo(push_id, user=""):
         fdef = _sch_field_def(schema(None).get("fields") or {}, field[3:])
         fid = fdef.get("id")
         if not fid:
+            # the working schema describes the COPY list; a column that lives
+            # only on the real AZ (2) (the clearance ones) is found on the task
+            fdef = _task_fdef_by_name(task, field[3:])
+            fid = fdef.get("id")
+        if not fid:
             return None, f"the {field[3:]!r} field is gone from the schema"
         fdef = _inline_fdef(task, fid, fdef)     # live options beat the cache
         raw = _task_cf(task, fid)
@@ -3500,7 +3752,10 @@ def az2_undo(push_id, user=""):
             if not okv:
                 return None, f"the old option {p['old_value']!r} no longer exists"
         else:
-            back = p["old_value"] or ""
+            # None, not "": ClickUp clears a DATE field with null and rejects an
+            # empty string. 'Sent to Gaash' is the first date to travel this
+            # path, so undoing one used to 400.
+            back = p["old_value"] or None
         time.sleep(_pace())
         code, resp = _http(f"{CLICKUP_API}/task/{p['task_id']}/field/{fid}",
                            "POST", {"value": back})
@@ -4943,6 +5198,13 @@ def _loop():
                 print(f"leluxe: cu-delete queue {d}")
         except Exception as e:  # noqa: BLE001 - never let the thread die
             print(f"leluxe: delete pass failed ({e})")
+        try:
+            with memlog.watch("leluxe.clearance"):
+                cl = run_clearance_pass()
+            if cl.get("pushed") or cl.get("errors"):
+                print(f"leluxe: clearance → AZ (2) {cl}")
+        except Exception as e:  # noqa: BLE001 - never let the thread die
+            print(f"leluxe: clearance pass failed ({e})")
         try:
             with memlog.watch("leluxe.pull"):     # pulls the whole ClickUp board
                 p = run_pull_pass()
