@@ -1,0 +1,3703 @@
+{
+ "file": "web/index.html",
+ "total_lines": 15492,
+ "bytes": 1152235,
+ "regions": {
+  "style": [
+   9,
+   978
+  ],
+  "markup": [
+   979,
+   2034
+  ],
+  "script": [
+   2035,
+   15491
+  ],
+  "script_blocks": [
+   [
+    2035,
+    15491
+   ]
+  ]
+ },
+ "html_head_body_elements": {
+  "<html": 0,
+  "<head": 0,
+  "<body": 0
+ },
+ "sidebar": [
+  {
+   "line": 997,
+   "kind": "group",
+   "id": null,
+   "onclick": null,
+   "data_en": "Main menu",
+   "data_ar": "القائمة الرئيسية",
+   "hidden_by_default": false,
+   "text": "Main menu"
+  },
+  {
+   "line": 998,
+   "kind": "button",
+   "id": "brainBtn",
+   "onclick": "setView('brain')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🧠Brain"
+  },
+  {
+   "line": 1003,
+   "kind": "button",
+   "id": "poBtn",
+   "onclick": "setView('purchases')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "📦Purchases"
+  },
+  {
+   "line": 1004,
+   "kind": "button",
+   "id": "needBtn",
+   "onclick": "setView('needorder')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "💡To order"
+  },
+  {
+   "line": 1005,
+   "kind": "button",
+   "id": "leluxeBtn",
+   "onclick": "setView('leluxe')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": true,
+   "text": "⌚Leluxe"
+  },
+  {
+   "line": 1006,
+   "kind": "button",
+   "id": "goalsBtn",
+   "onclick": "setView('goals')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": true,
+   "text": "🏆Goals"
+  },
+  {
+   "line": 1007,
+   "kind": "button",
+   "id": "depositsBtn",
+   "onclick": "setView('deposits')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "💵Deposits"
+  },
+  {
+   "line": 1008,
+   "kind": "button",
+   "id": "homeBtn",
+   "onclick": "setView('orders')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🏠Orders"
+  },
+  {
+   "line": 1009,
+   "kind": "button",
+   "id": "cartBtn",
+   "onclick": "setView('incart')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🛒In cart"
+  },
+  {
+   "line": 1010,
+   "kind": "button",
+   "id": "metaLeadsBtn",
+   "onclick": "setView('metaleads')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": true,
+   "text": "📣Leads"
+  },
+  {
+   "line": 1011,
+   "kind": "button",
+   "id": "custBtn",
+   "onclick": "setView('customers')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "👤Customers"
+  },
+  {
+   "line": 1012,
+   "kind": "button",
+   "id": "pkgprepBtn",
+   "onclick": "setView('pkgprep')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🎁Package prep"
+  },
+  {
+   "line": 1013,
+   "kind": "button",
+   "id": "bulkSearchBtn",
+   "onclick": "setView('bulksearch')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🔎Bulk search"
+  },
+  {
+   "line": 1014,
+   "kind": "button",
+   "id": "gaashMailBtn",
+   "onclick": "setView('gaashmail')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "📧GAASH mail"
+  },
+  {
+   "line": 1015,
+   "kind": "button",
+   "id": "flagsBtn",
+   "onclick": "setView('flags')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🚩Flags"
+  },
+  {
+   "line": 1016,
+   "kind": "group",
+   "id": null,
+   "onclick": null,
+   "data_en": "Insights",
+   "data_ar": "التحليلات",
+   "hidden_by_default": false,
+   "text": "Insights"
+  },
+  {
+   "line": 1017,
+   "kind": "button",
+   "id": "pnlBtn",
+   "onclick": "setView('pnl')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "📊P&amp;L"
+  },
+  {
+   "line": 1018,
+   "kind": "button",
+   "id": "activityBtn",
+   "onclick": "setView('activity')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🕑Activity"
+  },
+  {
+   "line": 1019,
+   "kind": "group",
+   "id": null,
+   "onclick": null,
+   "data_en": "System",
+   "data_ar": "النظام",
+   "hidden_by_default": false,
+   "text": "System"
+  },
+  {
+   "line": 1020,
+   "kind": "button",
+   "id": "settingsBtn",
+   "onclick": "setView('settings')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "⚙️Settings"
+  },
+  {
+   "line": 1021,
+   "kind": "button",
+   "id": "teamBtn",
+   "onclick": "setView('team')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": true,
+   "text": "👥Team"
+  },
+  {
+   "line": 1022,
+   "kind": "button",
+   "id": "brokersBtn",
+   "onclick": "enterPlatform()",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": true,
+   "text": "🏗Tatabu"
+  },
+  {
+   "line": 1023,
+   "kind": "button",
+   "id": "trashBtn",
+   "onclick": "setView('trash')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🗑Trash"
+  },
+  {
+   "line": 1024,
+   "kind": "button",
+   "id": "clickupBtn",
+   "onclick": "syncClickup(this)",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "↗Sync ClickUp"
+  }
+ ],
+ "platform_nav": [
+  {
+   "line": 987,
+   "kind": "group",
+   "id": null,
+   "onclick": null,
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "Platform"
+  },
+  {
+   "line": 988,
+   "kind": "button",
+   "id": "platOverviewBtn",
+   "onclick": "setView('platoverview')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "📊Overview"
+  },
+  {
+   "line": 989,
+   "kind": "button",
+   "id": "platBrokersBtn",
+   "onclick": "setView('brokers')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🏢Brokers"
+  },
+  {
+   "line": 990,
+   "kind": "button",
+   "id": "plansBtn",
+   "onclick": "setView('plans')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "💳Plans &amp; pricing"
+  },
+  {
+   "line": 991,
+   "kind": "button",
+   "id": "usageBtn",
+   "onclick": "setView('usage')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "📈Usage"
+  },
+  {
+   "line": 992,
+   "kind": "button",
+   "id": "platActivityBtn",
+   "onclick": "setView('platactivity')",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "🕑Activity"
+  },
+  {
+   "line": 993,
+   "kind": "group",
+   "id": null,
+   "onclick": null,
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "Otlobly"
+  },
+  {
+   "line": 994,
+   "kind": "button",
+   "id": "exitPlatBtn",
+   "onclick": "exitPlatform()",
+   "data_en": null,
+   "data_ar": null,
+   "hidden_by_default": false,
+   "text": "↩Back to Otlobly"
+  }
+ ],
+ "sidebar_gates_js_refs": {
+  "brainBtn": [
+   {
+    "line": 2715,
+    "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
+   },
+   {
+    "line": 6834,
+    "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
+   }
+  ],
+  "poBtn": [
+   {
+    "line": 2715,
+    "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
+   },
+   {
+    "line": 6834,
+    "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
+   }
+  ],
+  "needBtn": [
+   {
+    "line": 2187,
+    "text": "const RESTRICTED_NAV={ sales:{ nav:[\"needBtn\",\"metaLeadsBtn\",\"catalogBtn\"], views:[\"quote\",\"needorder\",\"metale"
+   },
+   {
+    "line": 2716,
+    "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
+   },
+   {
+    "line": 6834,
+    "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
+   }
+  ],
+  "leluxeBtn": [
+   {
+    "line": 2197,
+    "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
+   },
+   {
+    "line": 2220,
+    "text": "hide(\"leluxeBtn\", p.includes(\"admin_actions\") && FEAT.leluxe!==false);"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "goalsBtn": [
+   {
+    "line": 2197,
+    "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
+   },
+   {
+    "line": 2223,
+    "text": "hide(\"goalsBtn\", p.includes(\"admin_actions\") && FEAT.leluxe!==false);"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "depositsBtn": [
+   {
+    "line": 2228,
+    "text": "hide(\"depositsBtn\", p.includes(\"view_money\"));"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   },
+   {
+    "line": 6835,
+    "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
+   }
+  ],
+  "homeBtn": [
+   {
+    "line": 2715,
+    "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
+   },
+   {
+    "line": 6834,
+    "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
+   }
+  ],
+  "cartBtn": [
+   {
+    "line": 2230,
+    "text": "hide(\"cartBtn\", p.includes(\"view_money\"));"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "metaLeadsBtn": [
+   {
+    "line": 2187,
+    "text": "const RESTRICTED_NAV={ sales:{ nav:[\"needBtn\",\"metaLeadsBtn\",\"catalogBtn\"], views:[\"quote\",\"needorder\",\"metale"
+   },
+   {
+    "line": 2197,
+    "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
+   },
+   {
+    "line": 2214,
+    "text": "hide(\"metaLeadsBtn\", p.includes(\"view_meta_leads\") && FEAT.leads!==false);"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   },
+   {
+    "line": 6835,
+    "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
+   }
+  ],
+  "custBtn": [
+   {
+    "line": 2715,
+    "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
+   },
+   {
+    "line": 6835,
+    "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
+   }
+  ],
+  "pkgprepBtn": [
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "bulkSearchBtn": [
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "gaashMailBtn": [
+   {
+    "line": 2225,
+    "text": "hide(\"gaashMailBtn\", p.includes(\"edit_fulfillment\") && FEAT.leluxe!==false);"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   },
+   {
+    "line": 11430,
+    "text": "function gmAvail(){ const b=$(\"gaashMailBtn\"); return !!b && b.style.display!==\"none\"; }"
+   }
+  ],
+  "flagsBtn": [
+   {
+    "line": 2227,
+    "text": "hide(\"flagsBtn\", p.includes(\"edit_fulfillment\") && FEAT.leluxe!==false);"
+   },
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "pnlBtn": [
+   {
+    "line": 2207,
+    "text": "hide(\"pnlBtn\", p.includes(\"view_pnl\"));"
+   },
+   {
+    "line": 2715,
+    "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
+   }
+  ],
+  "activityBtn": [
+   {
+    "line": 2716,
+    "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
+   }
+  ],
+  "settingsBtn": [
+   {
+    "line": 2231,
+    "text": "hide(\"settingsBtn\", p.includes(\"admin_actions\"));"
+   },
+   {
+    "line": 2716,
+    "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
+   },
+   {
+    "line": 6835,
+    "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
+   }
+  ],
+  "teamBtn": [
+   {
+    "line": 2209,
+    "text": "hide(\"teamBtn\", p.includes(\"manage_users\"));"
+   },
+   {
+    "line": 2716,
+    "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
+   }
+  ],
+  "brokersBtn": [
+   {
+    "line": 2211,
+    "text": "hide(\"brokersBtn\", p.includes(\"admin_actions\") && !!(ME.business && ME.business.id===1));"
+   }
+  ],
+  "trashBtn": [
+   {
+    "line": 2716,
+    "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
+   }
+  ],
+  "clickupBtn": [
+   {
+    "line": 2208,
+    "text": "hide(\"clickupBtn\", p.includes(\"admin_actions\") && FEAT.clickup!==false);"
+   }
+  ],
+  "platOverviewBtn": [
+   {
+    "line": 2717,
+    "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
+   }
+  ],
+  "platBrokersBtn": [
+   {
+    "line": 2717,
+    "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
+   },
+   {
+    "line": 2717,
+    "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
+   }
+  ],
+  "plansBtn": [
+   {
+    "line": 2717,
+    "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
+   }
+  ],
+  "usageBtn": [
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "platActivityBtn": [
+   {
+    "line": 2718,
+    "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
+   }
+  ],
+  "exitPlatBtn": []
+ },
+ "topbar": {
+  "line": 1033,
+  "ids": [
+   "navToggle",
+   "pageTitle",
+   "sub",
+   "langToggle",
+   "notifBell",
+   "notifBadge",
+   "notifMenu",
+   "addOrderBtn",
+   "refreshBtn"
+  ],
+  "buttons": 5,
+  "excerpt_lines": [
+   1033,
+   1047
+  ]
+ },
+ "views": [
+  {
+   "id": "ordersView",
+   "line": 1098,
+   "end": 1116,
+   "lines": 19,
+   "census": {
+    "button": 2,
+    "onclick": 3,
+    "input": 2,
+    "select": 2,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 1,
+    "po_btn": 2,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 2,
+    "emoji_distinct": 1
+   }
+  },
+  {
+   "id": "pnlView",
+   "line": 1117,
+   "end": 1163,
+   "lines": 47,
+   "census": {
+    "button": 7,
+    "onclick": 7,
+    "input": 2,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 1,
+    "h2": 3,
+    "toolbar": 1,
+    "po_btn": 6,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 6,
+    "emoji_distinct": 5
+   }
+  },
+  {
+   "id": "customersView",
+   "line": 1164,
+   "end": 1200,
+   "lines": 37,
+   "census": {
+    "button": 5,
+    "onclick": 5,
+    "input": 8,
+    "select": 2,
+    "textarea": 0,
+    "file_input": 1,
+    "table": 0,
+    "h2": 2,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 3,
+    "emoji_distinct": 3
+   }
+  },
+  {
+   "id": "purchasesView",
+   "line": 1201,
+   "end": 1246,
+   "lines": 46,
+   "census": {
+    "button": 12,
+    "onclick": 13,
+    "input": 3,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 2,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 8,
+    "iconbtn": 0,
+    "emoji": 23,
+    "emoji_distinct": 14
+   }
+  },
+  {
+   "id": "pickingView",
+   "line": 1247,
+   "end": 1254,
+   "lines": 8,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 3,
+    "emoji_distinct": 3
+   }
+  },
+  {
+   "id": "activityView",
+   "line": 1255,
+   "end": 1267,
+   "lines": 13,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 2,
+    "emoji_distinct": 2
+   }
+  },
+  {
+   "id": "needorderView",
+   "line": 1268,
+   "end": 1269,
+   "lines": 2,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "quoteView",
+   "line": 1270,
+   "end": 1307,
+   "lines": 38,
+   "census": {
+    "button": 5,
+    "onclick": 9,
+    "input": 2,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 2,
+    "toolbar": 2,
+    "po_btn": 0,
+    "minibtn": 4,
+    "iconbtn": 0,
+    "emoji": 6,
+    "emoji_distinct": 6
+   }
+  },
+  {
+   "id": "incartView",
+   "line": 1308,
+   "end": 1319,
+   "lines": 12,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 3,
+    "emoji_distinct": 3
+   }
+  },
+  {
+   "id": "flagsView",
+   "line": 1320,
+   "end": 1337,
+   "lines": 18,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 1,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 3,
+    "emoji_distinct": 3
+   }
+  },
+  {
+   "id": "settingsView",
+   "line": 1338,
+   "end": 1496,
+   "lines": 159,
+   "census": {
+    "button": 20,
+    "onclick": 20,
+    "input": 38,
+    "select": 3,
+    "textarea": 1,
+    "file_input": 0,
+    "table": 3,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 8,
+    "minibtn": 4,
+    "iconbtn": 0,
+    "emoji": 30,
+    "emoji_distinct": 23
+   }
+  },
+  {
+   "id": "trashView",
+   "line": 1497,
+   "end": 1507,
+   "lines": 11,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 1,
+    "emoji_distinct": 1
+   }
+  },
+  {
+   "id": "teamView",
+   "line": 1508,
+   "end": 1532,
+   "lines": 25,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 3,
+    "select": 1,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 2,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 1,
+    "emoji_distinct": 1
+   }
+  },
+  {
+   "id": "brainView",
+   "line": 1533,
+   "end": 1537,
+   "lines": 5,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "brokersView",
+   "line": 1538,
+   "end": 1560,
+   "lines": 23,
+   "census": {
+    "button": 1,
+    "onclick": 2,
+    "input": 4,
+    "select": 1,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 2,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 2,
+    "emoji_distinct": 2
+   }
+  },
+  {
+   "id": "brokerProfileView",
+   "line": 1561,
+   "end": 1565,
+   "lines": 5,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "platOverviewView",
+   "line": 1566,
+   "end": 1566,
+   "lines": 1,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "plansView",
+   "line": 1567,
+   "end": 1567,
+   "lines": 1,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "usageView",
+   "line": 1568,
+   "end": 1568,
+   "lines": 1,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "platActivityView",
+   "line": 1569,
+   "end": 1571,
+   "lines": 3,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "metaLeadsView",
+   "line": 1572,
+   "end": 1585,
+   "lines": 14,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 2,
+    "emoji_distinct": 2
+   }
+  },
+  {
+   "id": "depositsView",
+   "line": 1586,
+   "end": 1626,
+   "lines": 41,
+   "census": {
+    "button": 2,
+    "onclick": 2,
+    "input": 7,
+    "select": 2,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 4,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 7,
+    "emoji_distinct": 7
+   }
+  },
+  {
+   "id": "catalogView",
+   "line": 1627,
+   "end": 1659,
+   "lines": 33,
+   "census": {
+    "button": 2,
+    "onclick": 2,
+    "input": 4,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 3,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 6,
+    "emoji_distinct": 6
+   }
+  },
+  {
+   "id": "leluxeView",
+   "line": 1660,
+   "end": 1717,
+   "lines": 58,
+   "census": {
+    "button": 25,
+    "onclick": 25,
+    "input": 2,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 2,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 10,
+    "iconbtn": 0,
+    "emoji": 32,
+    "emoji_distinct": 24
+   }
+  },
+  {
+   "id": "pkgprepView",
+   "line": 1718,
+   "end": 1732,
+   "lines": 15,
+   "census": {
+    "button": 1,
+    "onclick": 1,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 4,
+    "emoji_distinct": 4
+   }
+  },
+  {
+   "id": "bulkSearchView",
+   "line": 1733,
+   "end": 1749,
+   "lines": 17,
+   "census": {
+    "button": 2,
+    "onclick": 2,
+    "input": 0,
+    "select": 0,
+    "textarea": 1,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 1,
+    "iconbtn": 0,
+    "emoji": 5,
+    "emoji_distinct": 2
+   }
+  },
+  {
+   "id": "goalsView",
+   "line": 1750,
+   "end": 1762,
+   "lines": 13,
+   "census": {
+    "button": 2,
+    "onclick": 2,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 2,
+    "iconbtn": 0,
+    "emoji": 9,
+    "emoji_distinct": 4
+   }
+  },
+  {
+   "id": "gmView",
+   "line": 1763,
+   "end": 1802,
+   "lines": 40,
+   "census": {
+    "button": 14,
+    "onclick": 14,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 1,
+    "toolbar": 1,
+    "po_btn": 0,
+    "minibtn": 13,
+    "iconbtn": 0,
+    "emoji": 40,
+    "emoji_distinct": 12
+   }
+  }
+ ],
+ "view_btn": {
+  "line": 2715,
+  "map": {
+   "brain": "brainBtn",
+   "orders": "homeBtn",
+   "picking": "pickBtn",
+   "pnl": "pnlBtn",
+   "customers": "custBtn",
+   "purchases": "poBtn",
+   "activity": "activityBtn",
+   "trash": "trashBtn",
+   "settings": "settingsBtn",
+   "needorder": "needBtn",
+   "team": "teamBtn",
+   "brokers": "platBrokersBtn",
+   "brokerprofile": "platBrokersBtn",
+   "platoverview": "platOverviewBtn",
+   "plans": "plansBtn",
+   "usage": "usageBtn",
+   "platactivity": "platActivityBtn",
+   "metaleads": "metaLeadsBtn",
+   "deposits": "depositsBtn",
+   "incart": "cartBtn",
+   "catalog": "catalogBtn",
+   "leluxe": "leluxeBtn",
+   "goals": "goalsBtn",
+   "pkgprep": "pkgprepBtn",
+   "bulksearch": "bulkSearchBtn",
+   "gaashmail": "gaashMailBtn",
+   "flags": "flagsBtn"
+  },
+  "dead_button_ids": [
+   "pickBtn",
+   "catalogBtn"
+  ]
+ },
+ "setview": {
+  "line": 2730,
+  "hidden_toggles": 30,
+  "toggle_view_ids": [
+   "activity",
+   "brain",
+   "brokerprofile",
+   "brokers",
+   "bulksearch",
+   "catalog",
+   "customers",
+   "deposits",
+   "flags",
+   "gaashmail",
+   "goals",
+   "incart",
+   "leluxe",
+   "metaleads",
+   "needorder",
+   "orders",
+   "picking",
+   "pkgprep",
+   "plans",
+   "platactivity",
+   "platoverview",
+   "pnl",
+   "purchases",
+   "settings",
+   "team",
+   "trash",
+   "usage"
+  ],
+  "call_sites": 60,
+  "router_signals": {
+   "pushState": 0,
+   "hashchange": 0,
+   "location.hash": 0
+  },
+  "localStorage_keys": [
+   "gm_cleared_open",
+   "gm_tab",
+   "gzBase",
+   "gz_click",
+   "lx_dash_metric",
+   "lx_dash_unit",
+   "lx_filters",
+   "lx_goal_celeb",
+   "lx_group",
+   "lx_group_dir",
+   "lx_sort",
+   "lx_view",
+   "lxt_hidden_",
+   "lxt_order_",
+   "lxt_pin_",
+   "lxt_sort_",
+   "ne_coll",
+   "ne_colw",
+   "notif_seen_ts",
+   "otl_gmdocs_view",
+   "otl_lang",
+   "otl_view",
+   "po_board_view",
+   "po_ccol",
+   "po_filters",
+   "po_view",
+   "q_open",
+   "tatabu_mode",
+   "tatabu_view"
+  ]
+ },
+ "js_regions": [
+  {
+   "region": "shell: globals · i18n · roles · notifications · load()",
+   "start": 2042,
+   "end": 2577,
+   "lines": 536,
+   "census": {
+    "onclick": 8,
+    "popMenu": 0,
+    "button": 5,
+    "input": 1,
+    "select": 2,
+    "table": 0,
+    "toast": 12,
+    "confirm": 2,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 1,
+    "pill_helpers": 1,
+    "lxtHead": 0,
+    "fld": 1,
+    "editCell": 2,
+    "T_calls": 11,
+    "emoji": 40,
+    "emoji_distinct": 22
+   }
+  },
+  {
+   "region": "orders board",
+   "start": 2578,
+   "end": 2659,
+   "lines": 82,
+   "census": {
+    "onclick": 4,
+    "popMenu": 0,
+    "button": 1,
+    "input": 3,
+    "select": 0,
+    "table": 0,
+    "toast": 2,
+    "confirm": 1,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 1,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 3,
+    "emoji": 6,
+    "emoji_distinct": 5
+   }
+  },
+  {
+   "region": "picking list (hidden)",
+   "start": 2660,
+   "end": 2693,
+   "lines": 34,
+   "census": {
+    "onclick": 0,
+    "popMenu": 0,
+    "button": 0,
+    "input": 0,
+    "select": 0,
+    "table": 1,
+    "toast": 4,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 1,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 2,
+    "emoji_distinct": 1
+   }
+  },
+  {
+   "region": "add-order panel",
+   "start": 2694,
+   "end": 2714,
+   "lines": 21,
+   "census": {
+    "onclick": 0,
+    "popMenu": 0,
+    "button": 0,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 3,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 2,
+    "emoji_distinct": 1
+   }
+  },
+  {
+   "region": "view registry · setView",
+   "start": 2715,
+   "end": 2822,
+   "lines": 108,
+   "census": {
+    "onclick": 0,
+    "popMenu": 0,
+    "button": 0,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 0,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 2,
+    "emoji_distinct": 2
+   }
+  },
+  {
+   "region": "package prep",
+   "start": 2823,
+   "end": 3036,
+   "lines": 214,
+   "census": {
+    "onclick": 17,
+    "popMenu": 0,
+    "button": 6,
+    "input": 1,
+    "select": 0,
+    "table": 0,
+    "toast": 13,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 15,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 1,
+    "T_calls": 0,
+    "emoji": 49,
+    "emoji_distinct": 16
+   }
+  },
+  {
+   "region": "catalog (hidden)",
+   "start": 3037,
+   "end": 3114,
+   "lines": 78,
+   "census": {
+    "onclick": 2,
+    "popMenu": 0,
+    "button": 2,
+    "input": 5,
+    "select": 0,
+    "table": 0,
+    "toast": 7,
+    "confirm": 1,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 6,
+    "emoji_distinct": 6
+   }
+  },
+  {
+   "region": "leluxe (boards, filters, widths)",
+   "start": 3115,
+   "end": 4044,
+   "lines": 930,
+   "census": {
+    "onclick": 28,
+    "popMenu": 0,
+    "button": 20,
+    "input": 9,
+    "select": 1,
+    "table": 0,
+    "toast": 8,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 9,
+    "pill_helpers": 13,
+    "lxtHead": 2,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 6,
+    "emoji": 83,
+    "emoji_distinct": 38
+   }
+  },
+  {
+   "region": "LXT table engine (inside leluxe)",
+   "start": 4045,
+   "end": 4955,
+   "lines": 911,
+   "census": {
+    "onclick": 24,
+    "popMenu": 2,
+    "button": 12,
+    "input": 4,
+    "select": 0,
+    "table": 0,
+    "toast": 10,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 3,
+    "pill_helpers": 5,
+    "lxtHead": 2,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 24,
+    "emoji": 124,
+    "emoji_distinct": 49
+   }
+  },
+  {
+   "region": "goals + leluxe tail (goal, parcels, sync, push, move)",
+   "start": 4956,
+   "end": 6680,
+   "lines": 1725,
+   "census": {
+    "onclick": 72,
+    "popMenu": 5,
+    "button": 55,
+    "input": 23,
+    "select": 3,
+    "table": 0,
+    "toast": 63,
+    "confirm": 11,
+    "prompt": 5,
+    "alert": 0,
+    "raw_pill": 3,
+    "pill_helpers": 19,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 2,
+    "T_calls": 37,
+    "emoji": 359,
+    "emoji_distinct": 68
+   }
+  },
+  {
+   "region": "deposits",
+   "start": 6681,
+   "end": 6764,
+   "lines": 84,
+   "census": {
+    "onclick": 1,
+    "popMenu": 0,
+    "button": 1,
+    "input": 0,
+    "select": 0,
+    "table": 1,
+    "toast": 5,
+    "confirm": 1,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 1,
+    "emoji": 8,
+    "emoji_distinct": 8
+   }
+  },
+  {
+   "region": "meta leads",
+   "start": 6765,
+   "end": 6825,
+   "lines": 61,
+   "census": {
+    "onclick": 2,
+    "popMenu": 0,
+    "button": 1,
+    "input": 1,
+    "select": 2,
+    "table": 0,
+    "toast": 5,
+    "confirm": 1,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 4,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 11,
+    "emoji_distinct": 10
+   }
+  },
+  {
+   "region": "brain",
+   "start": 6826,
+   "end": 6905,
+   "lines": 80,
+   "census": {
+    "onclick": 4,
+    "popMenu": 0,
+    "button": 2,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 0,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 16,
+    "emoji_distinct": 12
+   }
+  },
+  {
+   "region": "platform console",
+   "start": 6906,
+   "end": 7016,
+   "lines": 111,
+   "census": {
+    "onclick": 4,
+    "popMenu": 0,
+    "button": 1,
+    "input": 1,
+    "select": 0,
+    "table": 1,
+    "toast": 0,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 4,
+    "emoji_distinct": 4
+   }
+  },
+  {
+   "region": "brokers",
+   "start": 7017,
+   "end": 7125,
+   "lines": 109,
+   "census": {
+    "onclick": 5,
+    "popMenu": 0,
+    "button": 3,
+    "input": 0,
+    "select": 2,
+    "table": 2,
+    "toast": 4,
+    "confirm": 0,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 9,
+    "emoji_distinct": 4
+   }
+  },
+  {
+   "region": "team",
+   "start": 7126,
+   "end": 7196,
+   "lines": 71,
+   "census": {
+    "onclick": 6,
+    "popMenu": 0,
+    "button": 5,
+    "input": 1,
+    "select": 0,
+    "table": 1,
+    "toast": 7,
+    "confirm": 0,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 15,
+    "emoji_distinct": 9
+   }
+  },
+  {
+   "region": "activity + trash",
+   "start": 7197,
+   "end": 7342,
+   "lines": 146,
+   "census": {
+    "onclick": 3,
+    "popMenu": 0,
+    "button": 2,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 7,
+    "confirm": 2,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 22,
+    "emoji_distinct": 19
+   }
+  },
+  {
+   "region": "to order + quick quote",
+   "start": 7343,
+   "end": 7552,
+   "lines": 210,
+   "census": {
+    "onclick": 14,
+    "popMenu": 1,
+    "button": 8,
+    "input": 1,
+    "select": 0,
+    "table": 1,
+    "toast": 4,
+    "confirm": 1,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 1,
+    "pill_helpers": 9,
+    "lxtHead": 0,
+    "fld": 10,
+    "editCell": 1,
+    "T_calls": 3,
+    "emoji": 53,
+    "emoji_distinct": 27
+   }
+  },
+  {
+   "region": "in cart",
+   "start": 7553,
+   "end": 7725,
+   "lines": 173,
+   "census": {
+    "onclick": 6,
+    "popMenu": 0,
+    "button": 4,
+    "input": 2,
+    "select": 0,
+    "table": 0,
+    "toast": 24,
+    "confirm": 3,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 14,
+    "emoji": 24,
+    "emoji_distinct": 11
+   }
+  },
+  {
+   "region": "order edit modal · price image",
+   "start": 7726,
+   "end": 7774,
+   "lines": 49,
+   "census": {
+    "onclick": 2,
+    "popMenu": 0,
+    "button": 2,
+    "input": 3,
+    "select": 0,
+    "table": 0,
+    "toast": 5,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 7,
+    "emoji_distinct": 5
+   }
+  },
+  {
+   "region": "quote tool (QSTR)",
+   "start": 7775,
+   "end": 8076,
+   "lines": 302,
+   "census": {
+    "onclick": 7,
+    "popMenu": 0,
+    "button": 6,
+    "input": 6,
+    "select": 0,
+    "table": 0,
+    "toast": 10,
+    "confirm": 0,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 39,
+    "emoji_distinct": 15
+   }
+  },
+  {
+   "region": "settings",
+   "start": 8077,
+   "end": 8315,
+   "lines": 239,
+   "census": {
+    "onclick": 5,
+    "popMenu": 0,
+    "button": 5,
+    "input": 8,
+    "select": 4,
+    "table": 0,
+    "toast": 3,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 1,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 1,
+    "emoji": 31,
+    "emoji_distinct": 9
+   }
+  },
+  {
+   "region": "purchases: constants head (PO_BOXES…)",
+   "start": 8316,
+   "end": 8329,
+   "lines": 14,
+   "census": {
+    "onclick": 0,
+    "popMenu": 0,
+    "button": 0,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 2,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "region": "az / multilogin modal",
+   "start": 8330,
+   "end": 8409,
+   "lines": 80,
+   "census": {
+    "onclick": 5,
+    "popMenu": 0,
+    "button": 5,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 5,
+    "confirm": 3,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 23,
+    "emoji_distinct": 10
+   }
+  },
+  {
+   "region": "purchases: load · render · cards · packages",
+   "start": 8410,
+   "end": 8481,
+   "lines": 72,
+   "census": {
+    "onclick": 0,
+    "popMenu": 0,
+    "button": 0,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 1,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 1,
+    "emoji": 8,
+    "emoji_distinct": 3
+   }
+  },
+  {
+   "region": "purchases (cont.) + bulk-progress modal",
+   "start": 8482,
+   "end": 10940,
+   "lines": 2459,
+   "census": {
+    "onclick": 95,
+    "popMenu": 4,
+    "button": 63,
+    "input": 45,
+    "select": 8,
+    "table": 0,
+    "toast": 71,
+    "confirm": 10,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 19,
+    "pill_helpers": 40,
+    "lxtHead": 4,
+    "fld": 7,
+    "editCell": 3,
+    "T_calls": 19,
+    "emoji": 297,
+    "emoji_distinct": 70
+   }
+  },
+  {
+   "region": "customers",
+   "start": 10941,
+   "end": 11105,
+   "lines": 165,
+   "census": {
+    "onclick": 10,
+    "popMenu": 0,
+    "button": 3,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 12,
+    "confirm": 0,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 0,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 1,
+    "T_calls": 3,
+    "emoji": 18,
+    "emoji_distinct": 8
+   }
+  },
+  {
+   "region": "p&l",
+   "start": 11106,
+   "end": 11383,
+   "lines": 278,
+   "census": {
+    "onclick": 8,
+    "popMenu": 0,
+    "button": 1,
+    "input": 1,
+    "select": 0,
+    "table": 7,
+    "toast": 4,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 0,
+    "pill_helpers": 3,
+    "lxtHead": 0,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 40,
+    "emoji_distinct": 19
+   }
+  },
+  {
+   "region": "bulk search",
+   "start": 11384,
+   "end": 11541,
+   "lines": 158,
+   "census": {
+    "onclick": 2,
+    "popMenu": 0,
+    "button": 2,
+    "input": 0,
+    "select": 0,
+    "table": 0,
+    "toast": 1,
+    "confirm": 0,
+    "prompt": 0,
+    "alert": 0,
+    "raw_pill": 1,
+    "pill_helpers": 4,
+    "lxtHead": 1,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 13,
+    "emoji": 20,
+    "emoji_distinct": 12
+   }
+  },
+  {
+   "region": "gaash mail (+ forecast, analyze)",
+   "start": 11542,
+   "end": 14350,
+   "lines": 2809,
+   "census": {
+    "onclick": 116,
+    "popMenu": 0,
+    "button": 93,
+    "input": 16,
+    "select": 3,
+    "table": 1,
+    "toast": 57,
+    "confirm": 5,
+    "prompt": 1,
+    "alert": 0,
+    "raw_pill": 9,
+    "pill_helpers": 45,
+    "lxtHead": 2,
+    "fld": 0,
+    "editCell": 1,
+    "T_calls": 578,
+    "emoji": 373,
+    "emoji_distinct": 74
+   }
+  },
+  {
+   "region": "gaash mail tail: flags + forecast + analyze",
+   "start": 14351,
+   "end": 15491,
+   "lines": 1141,
+   "census": {
+    "onclick": 64,
+    "popMenu": 1,
+    "button": 51,
+    "input": 35,
+    "select": 7,
+    "table": 1,
+    "toast": 30,
+    "confirm": 6,
+    "prompt": 3,
+    "alert": 1,
+    "raw_pill": 1,
+    "pill_helpers": 10,
+    "lxtHead": 2,
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 283,
+    "emoji": 152,
+    "emoji_distinct": 41
+   }
+  }
+ ],
+ "global_counts": {
+  "<table": 20,
+  "</table>": 20,
+  "<button": 509,
+  "<input": 252,
+  "<select": 43,
+  "<textarea": 8,
+  "onclick=": 717,
+  "title=\"": 458,
+  "aria-*": 4,
+  "role=\"": 0,
+  "alt=\"": 3,
+  "tabindex": 1,
+  "confirm(": 47,
+  "prompt(": 15,
+  "alert(": 2,
+  "toast(": 379,
+  "popMenu(": 13,
+  "class=\"pill (raw literal)": 48,
+  "az-modal roots": 22,
+  "<dialog": 0,
+  "<h2": 44,
+  "class=\"toolbar": 21,
+  ".search inputs": 2,
+  "cu-search": 14,
+  "muted2": 475,
+  "class=\"empty\"": 21,
+  "T( calls": 997,
+  "data-en=": 60,
+  "data-ar=": 60,
+  "data-i18n": 0,
+  "dir=\"auto\"": 25,
+  "<bdi": 0,
+  "dir=\"rtl\"": 5,
+  "unicode-bidi": 0,
+  "Intl.": 0,
+  "toLocaleString(": 22,
+  "toLocaleDateString(": 5,
+  "toLocaleTimeString(": 2,
+  "toLocaleString(undefined": 9,
+  "toLocale*String with a pinned locale": 0,
+  "prefers-color-scheme": 0,
+  "prefers-reduced-motion": 0,
+  "type=\"file\"": 12,
+  "\"paste\" listeners": 4,
+  "ondrop/dragover": 1,
+  "fetch(": 88,
+  "localStorage refs": 80,
+  "<svg": 1,
+  "external icon libs": 0,
+  "bilingual literals (ar · en)": 1948,
+  "lines containing Arabic": 1883
+ },
+ "emoji": {
+  "total": 2168,
+  "distinct": 191,
+  "sidebar": 22,
+  "top": [
+   {
+    "glyph": "→",
+    "count": 179,
+    "codepoint": "U+2192"
+   },
+   {
+    "glyph": "⚠",
+    "count": 141,
+    "codepoint": "U+26A0"
+   },
+   {
+    "glyph": "✓",
+    "count": 133,
+    "codepoint": "U+2713"
+   },
+   {
+    "glyph": "📦",
+    "count": 104,
+    "codepoint": "U+1F4E6"
+   },
+   {
+    "glyph": "🪪",
+    "count": 64,
+    "codepoint": "U+1FAAA"
+   },
+   {
+    "glyph": "✅",
+    "count": 62,
+    "codepoint": "U+2705"
+   },
+   {
+    "glyph": "✕",
+    "count": 60,
+    "codepoint": "U+2715"
+   },
+   {
+    "glyph": "🗑",
+    "count": 41,
+    "codepoint": "U+1F5D1"
+   },
+   {
+    "glyph": "🚚",
+    "count": 39,
+    "codepoint": "U+1F69A"
+   },
+   {
+    "glyph": "⏳",
+    "count": 37,
+    "codepoint": "U+23F3"
+   },
+   {
+    "glyph": "↻",
+    "count": 36,
+    "codepoint": "U+21BB"
+   },
+   {
+    "glyph": "▾",
+    "count": 36,
+    "codepoint": "U+25BE"
+   },
+   {
+    "glyph": "⚙",
+    "count": 34,
+    "codepoint": "U+2699"
+   },
+   {
+    "glyph": "📧",
+    "count": 32,
+    "codepoint": "U+1F4E7"
+   },
+   {
+    "glyph": "✏",
+    "count": 31,
+    "codepoint": "U+270F"
+   },
+   {
+    "glyph": "🔎",
+    "count": 30,
+    "codepoint": "U+1F50E"
+   },
+   {
+    "glyph": "📋",
+    "count": 29,
+    "codepoint": "U+1F4CB"
+   },
+   {
+    "glyph": "📄",
+    "count": 28,
+    "codepoint": "U+1F4C4"
+   },
+   {
+    "glyph": "⌚",
+    "count": 28,
+    "codepoint": "U+231A"
+   },
+   {
+    "glyph": "↗",
+    "count": 27,
+    "codepoint": "U+2197"
+   },
+   {
+    "glyph": "🎯",
+    "count": 24,
+    "codepoint": "U+1F3AF"
+   },
+   {
+    "glyph": "≈",
+    "count": 22,
+    "codepoint": "U+2248"
+   },
+   {
+    "glyph": "👤",
+    "count": 19,
+    "codepoint": "U+1F464"
+   },
+   {
+    "glyph": "⊕",
+    "count": 19,
+    "codepoint": "U+2295"
+   },
+   {
+    "glyph": "⚡",
+    "count": 19,
+    "codepoint": "U+26A1"
+   },
+   {
+    "glyph": "⋯",
+    "count": 18,
+    "codepoint": "U+22EF"
+   },
+   {
+    "glyph": "✉",
+    "count": 17,
+    "codepoint": "U+2709"
+   },
+   {
+    "glyph": "📱",
+    "count": 17,
+    "codepoint": "U+1F4F1"
+   },
+   {
+    "glyph": "⤴",
+    "count": 17,
+    "codepoint": "U+2934"
+   },
+   {
+    "glyph": "🧾",
+    "count": 16,
+    "codepoint": "U+1F9FE"
+   },
+   {
+    "glyph": "💾",
+    "count": 16,
+    "codepoint": "U+1F4BE"
+   },
+   {
+    "glyph": "▸",
+    "count": 16,
+    "codepoint": "U+25B8"
+   },
+   {
+    "glyph": "📍",
+    "count": 15,
+    "codepoint": "U+1F4CD"
+   },
+   {
+    "glyph": "↩",
+    "count": 15,
+    "codepoint": "U+21A9"
+   },
+   {
+    "glyph": "🛒",
+    "count": 15,
+    "codepoint": "U+1F6D2"
+   },
+   {
+    "glyph": "💬",
+    "count": 15,
+    "codepoint": "U+1F4AC"
+   },
+   {
+    "glyph": "👁",
+    "count": 15,
+    "codepoint": "U+1F441"
+   },
+   {
+    "glyph": "📎",
+    "count": 15,
+    "codepoint": "U+1F4CE"
+   },
+   {
+    "glyph": "🏆",
+    "count": 14,
+    "codepoint": "U+1F3C6"
+   },
+   {
+    "glyph": "🖼",
+    "count": 14,
+    "codepoint": "U+1F5BC"
+   }
+  ],
+  "directional": {
+   "→": 179,
+   "←": 13,
+   "↩": 15,
+   "▸": 16,
+   "▾": 36,
+   "▴": 1,
+   "⤴": 17,
+   "↗": 27,
+   "↙": 2,
+   "⇒": 4
+  }
+ },
+ "physical_css": {
+  "by_property": {
+   "margin-left": {
+    "style_block": 9,
+    "whole_file": 9,
+    "style_sites": [
+     {
+      "line": 121,
+      "text": ".po-tbl .linkopen{margin-left:4px;text-decoration:none;color:var(--accent);font-weight:700;font-size:13px}"
+     },
+     {
+      "line": 149,
+      "text": ".po-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}"
+     },
+     {
+      "line": 166,
+      "text": ".pkg-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}"
+     },
+     {
+      "line": 284,
+      "text": ".gmd-row .pill,.gmd-grp .pill,.gmf-row .pill{margin-left:0}"
+     },
+     {
+      "line": 285,
+      "text": ".gmd-row .pill+.pill,.gmd-grp .pill+.pill,.gmf-row .pill+.pill{margin-left:6px}"
+     },
+     {
+      "line": 326,
+      "text": ".seeall{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}"
+     },
+     {
+      "line": 776,
+      "text": ".gm-mail-when{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:1"
+     },
+     {
+      "line": 941,
+      "text": ".ne-prod-multi .cnt{color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap;margin-left:2px}"
+     },
+     {
+      "line": 964,
+      "text": "background:#eef2ff;color:#6366f1;border-radius:20px;padding:2px 9px;margin-left:6px}"
+     }
+    ]
+   },
+   "margin-right": {
+    "style_block": 1,
+    "whole_file": 1,
+    "style_sites": [
+     {
+      "line": 778,
+      "text": ".gm-dot2{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}"
+     }
+    ]
+   },
+   "padding-left": {
+    "style_block": 3,
+    "whole_file": 3,
+    "style_sites": [
+     {
+      "line": 138,
+      "text": ".po-name{font-weight:750;font-size:15px;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;padding-left"
+     },
+     {
+      "line": 408,
+      "text": ".ne-row .cc{width:44px;color:var(--muted);text-align:center;padding-left:10px}"
+     },
+     {
+      "line": 776,
+      "text": ".gm-mail-when{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:1"
+     }
+    ]
+   },
+   "padding-right": {
+    "style_block": 0,
+    "whole_file": 0,
+    "style_sites": []
+   },
+   "left:": {
+    "style_block": 5,
+    "whole_file": 8,
+    "style_sites": [
+     {
+      "line": 48,
+      "text": "#sidebar{position:fixed;left:-250px;top:0;transition:left .22s ease}"
+     },
+     {
+      "line": 49,
+      "text": "body.nav-open #sidebar{left:0;box-shadow:0 10px 40px rgba(16,24,40,.25)}"
+     },
+     {
+      "line": 313,
+      "text": "#offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;"
+     },
+     {
+      "line": 316,
+      "text": "#dbBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#92400e;color:#fff;"
+     },
+     {
+      "line": 785,
+      "text": ".gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;co"
+     }
+    ]
+   },
+   "right:": {
+    "style_block": 7,
+    "whole_file": 9,
+    "style_sites": [
+     {
+      "line": 240,
+      "text": ".po-help .dismiss{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--muted);font-size:11px}"
+     },
+     {
+      "line": 308,
+      "text": "#toast{position:fixed;right:18px;bottom:18px;background:#15140f;color:#fff;"
+     },
+     {
+      "line": 313,
+      "text": "#offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;"
+     },
+     {
+      "line": 316,
+      "text": "#dbBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#92400e;color:#fff;"
+     },
+     {
+      "line": 398,
+      "text": ".col-resize{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;user-select:none;z-index:2"
+     },
+     {
+      "line": 399,
+      "text": ".col-resize::after{content:\"\";position:absolute;top:5px;bottom:5px;right:3px;width:2px;border-radius:2px;backg"
+     },
+     {
+      "line": 785,
+      "text": ".gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;co"
+     }
+    ]
+   },
+   "text-align:left": {
+    "style_block": 4,
+    "whole_file": 14,
+    "style_sites": [
+     {
+      "line": 33,
+      "text": "#sideNav button,#platNav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:non"
+     },
+     {
+      "line": 226,
+      "text": ".po-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padd"
+     },
+     {
+      "line": 278,
+      "text": "th,td{text-align:left;padding:9px 11px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top"
+     },
+     {
+      "line": 395,
+      "text": "text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:default;"
+     }
+    ]
+   },
+   "text-align:right": {
+    "style_block": 3,
+    "whole_file": 18,
+    "style_sites": [
+     {
+      "line": 265,
+      "text": ".bar .c{width:104px;text-align:right;font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;white-sp"
+     },
+     {
+      "line": 365,
+      "text": "#quoteView[dir=\"rtl\"] .qcard .qtitle,#quoteView[dir=\"rtl\"] #q_intro{text-align:right}"
+     },
+     {
+      "line": 377,
+      "text": "#quoteView[dir=\"rtl\"] .qhint{text-align:right}"
+     }
+    ]
+   },
+   "float": {
+    "style_block": 0,
+    "whole_file": 1,
+    "style_sites": []
+   },
+   "border-left": {
+    "style_block": 0,
+    "whole_file": 0,
+    "style_sites": []
+   },
+   "border-right": {
+    "style_block": 1,
+    "whole_file": 1,
+    "style_sites": [
+     {
+      "line": 25,
+      "text": "#sidebar{width:230px;flex:0 0 230px;background:var(--card);border-right:1px solid var(--line);"
+     }
+    ]
+   }
+  },
+  "style_total": 33,
+  "file_total": 64,
+  "logical_counts": {
+   "padding-inline": 17,
+   "margin-inline": 38,
+   "inset-inline": 33,
+   "border-inline": 22,
+   "text-align:start": 10,
+   "text-align:end": 5
+  }
+ },
+ "tokens": {
+  "root_blocks": [
+   10
+  ],
+  "declared": [
+   "--bg",
+   "--card",
+   "--ink",
+   "--muted",
+   "--line",
+   "--bg2",
+   "--bg3",
+   "--tint-accent",
+   "--accent",
+   "--ink2",
+   "--good",
+   "--warn",
+   "--bad",
+   "--info",
+   "--indigo",
+   "--cyan",
+   "--shadow"
+  ],
+  "count": 17,
+  "var_uses_in_css": 442,
+  "unused_in_css": [
+   "--info",
+   "--indigo"
+  ],
+  "top_uses": [
+   [
+    "--line",
+    113
+   ],
+   [
+    "--muted",
+    92
+   ],
+   [
+    "--bg2",
+    51
+   ],
+   [
+    "--accent",
+    38
+   ],
+   [
+    "--card",
+    36
+   ],
+   [
+    "--ink",
+    30
+   ],
+   [
+    "--tint-accent",
+    16
+   ],
+   [
+    "--bg3",
+    15
+   ],
+   [
+    "--shadow",
+    9
+   ],
+   [
+    "--bg",
+    7
+   ],
+   [
+    "--bad",
+    6
+   ],
+   [
+    "--ink2",
+    4
+   ]
+  ],
+  "runtime_grid_vars": [
+   "--bsgrid",
+   "--btpin",
+   "--ctgrid",
+   "--cugrid",
+   "--dpgrid",
+   "--engrid",
+   "--fhgrid",
+   "--icgrid",
+   "--lxgrid",
+   "--lxkgrid",
+   "--lxpgrid",
+   "--odgrid",
+   "--pogrid",
+   "--pokgrid",
+   "--popgrid",
+   "--trgrid",
+   "--wfgrid"
+  ]
+ },
+ "font_sizes": {
+  "distinct_in_css": 22,
+  "values": [
+   [
+    "9px",
+    2
+   ],
+   [
+    "9.5px",
+    3
+   ],
+   [
+    "10px",
+    16
+   ],
+   [
+    "10.5px",
+    11
+   ],
+   [
+    "11px",
+    31
+   ],
+   [
+    "11.5px",
+    31
+   ],
+   [
+    "12px",
+    22
+   ],
+   [
+    "12.5px",
+    29
+   ],
+   [
+    "13px",
+    18
+   ],
+   [
+    "13.5px",
+    2
+   ],
+   [
+    "14px",
+    2
+   ],
+   [
+    "14.5px",
+    1
+   ],
+   [
+    "15px",
+    7
+   ],
+   [
+    "16px",
+    3
+   ],
+   [
+    "17px",
+    2
+   ],
+   [
+    "18px",
+    2
+   ],
+   [
+    "19px",
+    5
+   ],
+   [
+    "20px",
+    1
+   ],
+   [
+    "22px",
+    2
+   ],
+   [
+    "25px",
+    1
+   ],
+   [
+    "26px",
+    1
+   ],
+   [
+    "34px",
+    2
+   ]
+  ],
+  "fonts_loaded": [
+   "Inter:wght@400;600;700;800"
+  ],
+  "font_family_decls": [
+   [
+    "ui-monospace,Menlo,monospace",
+    2
+   ],
+   [
+    "ui-monospace,monospace",
+    2
+   ],
+   [
+    "ui-monospace,SFMono-Regular,Menlo,monospace",
+    1
+   ]
+  ]
+ },
+ "hex_literals": {
+  "css": 125,
+  "css_distinct": 70,
+  "file": 520,
+  "file_distinct": 136
+ },
+ "colour_registries": {
+  "count": 13,
+  "items": [
+   {
+    "name": "STATUS_COLOR",
+    "line": 2042,
+    "end": 2049,
+    "hex_values": 24,
+    "distinct_hex": 22
+   },
+   {
+    "name": "COL",
+    "line": 3341,
+    "end": 3341,
+    "hex_values": 5,
+    "distinct_hex": 5
+   },
+   {
+    "name": "GL_COLORS",
+    "line": 4955,
+    "end": 4958,
+    "hex_values": 6,
+    "distinct_hex": 5
+   },
+   {
+    "name": "BUCKET_HEX",
+    "line": 8180,
+    "end": 8180,
+    "hex_values": 5,
+    "distinct_hex": 5
+   },
+   {
+    "name": "PO_GAASH_BUCKETS",
+    "line": 8884,
+    "end": 8885,
+    "hex_values": 5,
+    "distinct_hex": 5
+   },
+   {
+    "name": "CF_PALETTE",
+    "line": 9368,
+    "end": 9368,
+    "hex_values": 12,
+    "distinct_hex": 12
+   },
+   {
+    "name": "TONE",
+    "line": 9571,
+    "end": 9577,
+    "hex_values": 9,
+    "distinct_hex": 9
+   },
+   {
+    "name": "GAASH_HEX",
+    "line": 9591,
+    "end": 9595,
+    "hex_values": 4,
+    "distinct_hex": 4
+   },
+   {
+    "name": "GASH_STATUS",
+    "line": 9606,
+    "end": 9619,
+    "hex_values": 12,
+    "distinct_hex": 6
+   },
+   {
+    "name": "GZ_HEX",
+    "line": 10109,
+    "end": 10109,
+    "hex_values": 5,
+    "distinct_hex": 5
+   },
+   {
+    "name": "CU_STATUSES",
+    "line": 10259,
+    "end": 10270,
+    "hex_values": 31,
+    "distinct_hex": 21
+   },
+   {
+    "name": "GM_STATE",
+    "line": 11542,
+    "end": 11546,
+    "hex_values": 10,
+    "distinct_hex": 8
+   },
+   {
+    "name": "HEX",
+    "line": 13641,
+    "end": 13643,
+    "hex_values": 4,
+    "distinct_hex": 3
+   }
+  ]
+ },
+ "pill_css_rules": [
+  {
+   "line": 287,
+   "text": "  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;\n    font-size:11px;font-weight:700;white-space:nowrap;border:1px soli"
+  },
+  {
+   "line": 963,
+   "text": "  .pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;\n    background:#eef2ff;color:#6366f1;border-radius:20p"
+  }
+ ],
+ "modals": [
+  {
+   "line": 1803,
+   "id": "poDetailModal"
+  },
+  {
+   "line": 1811,
+   "id": "pkgInfoModal"
+  },
+  {
+   "line": 1819,
+   "id": "lxSyncReportModal"
+  },
+  {
+   "line": 1827,
+   "id": "gzBulkModal"
+  },
+  {
+   "line": 1835,
+   "id": "bulkModal"
+  },
+  {
+   "line": 1846,
+   "id": "notifyModal"
+  },
+  {
+   "line": 1862,
+   "id": "pnlDrillModal"
+  },
+  {
+   "line": 1869,
+   "id": "azModal"
+  },
+  {
+   "line": 1876,
+   "id": "gmStatModal"
+  },
+  {
+   "line": 1884,
+   "id": "priceImgModal"
+  },
+  {
+   "line": 1918,
+   "id": "orderEditModal"
+  },
+  {
+   "line": 1939,
+   "id": "itemEditModal"
+  },
+  {
+   "line": 1947,
+   "id": "newOrderModal"
+  },
+  {
+   "line": 1955,
+   "id": "pkgEditModal"
+  },
+  {
+   "line": 1963,
+   "id": "poEditModal"
+  },
+  {
+   "line": 1971,
+   "id": "lxActivityModal"
+  },
+  {
+   "line": 1980,
+   "id": "lxGoalSetModal"
+  },
+  {
+   "line": 1990,
+   "id": "lxInfoModal"
+  },
+  {
+   "line": 1998,
+   "id": "lxConflictModal"
+  },
+  {
+   "line": 2006,
+   "id": "lxEditModal"
+  },
+  {
+   "line": 2014,
+   "id": "lxAz2HistModal"
+  },
+  {
+   "line": 2023,
+   "id": "lxMoveModal"
+  }
+ ],
+ "formatters": {
+  "money": [
+   2053,
+   4765,
+   10612
+  ],
+  "money0": [
+   6930
+  ],
+  "fmt": [
+   4616
+  ],
+  "cfNum": [
+   9377
+  ],
+  "lxGm": [
+   4844
+  ],
+  "relTime": [
+   7199
+  ],
+  "agoTxt": [
+   10055
+  ],
+  "gmAgo": [
+   11572
+  ],
+  "fmtDue": [
+   9563
+  ],
+  "lxDate": [
+   3252
+  ],
+  "cfFmtDate": [
+   9373
+  ],
+  "gmChgLabel": [
+   12855
+  ],
+  "gmChgTime": [
+   12862
+  ],
+  "dueChip": [
+   7215
+  ]
+ },
+ "helper_usage": {
+  "statusPill": 8,
+  "tonePill": 88,
+  "hexPill": 32,
+  "solidPill": 11,
+  "gaashBucketPill": 3,
+  "lxStatusPill": 12,
+  "lxCfPill": 12,
+  "fld": 22,
+  "editCell": 11,
+  "openStore": 6,
+  "popMenu": 13,
+  "popToggle": 15,
+  "lxtHead": 19,
+  "lxtCells": 35,
+  "lxtWrap": 20,
+  "toast": 379,
+  "T": 997,
+  "cuLabel": 8
+ },
+ "landmarks": {
+  "function setView(": [
+   2730
+  ],
+  "const VIEW_BTN": [
+   2715
+  ],
+  "function restoreView": [
+   2722
+  ],
+  "const RESTRICTED_NAV": [
+   2187
+  ],
+  "const ADD_ORDER_VIEWS": [
+   2712
+  ],
+  "const REFRESH_VIEWS": [
+   2713
+  ],
+  "const PLAT_VIEWS": [
+   6906
+  ],
+  "const STATUS_COLOR": [
+   2042
+  ],
+  "const EXC_LABEL": [
+   2050
+  ],
+  "const CU_STATUSES": [
+   10259
+  ],
+  "const GASH_STATUS": [
+   9606
+  ],
+  "const GAASH_HEX": [
+   9591
+  ],
+  "const PO_GAASH_BUCKETS": [
+   8884
+  ],
+  "const BUCKET_HEX": [
+   8180
+  ],
+  "const GZ_HEX": [
+   10109
+  ],
+  "const GZ_AR": [
+   3349
+  ],
+  "const GM_STATE": [
+   11542
+  ],
+  "const ML_STATUS": [
+   6763
+  ],
+  "const TONE": [
+   9571
+  ],
+  "const MON": [
+   9562
+  ],
+  "const GM_DAY_LABELS": [
+   14758
+  ],
+  "const PO_BOXES": [
+   8316
+  ],
+  "const NE_COLS": [
+   7385
+  ],
+  "const LXT_COLS": [
+   4045
+  ],
+  "const LX_TABLES": [
+   3594
+  ],
+  "function lxtHead": [
+   4452
+  ],
+  "function lxtCells": [
+   4497
+  ],
+  "function lxtGridApply": [
+   4401
+  ],
+  "function neTable": [
+   7389
+  ],
+  "let LANG": [
+   2153
+  ],
+  "function T(": [
+   2155
+  ],
+  "function localizeStatic": [
+   2169
+  ],
+  "function langSet": [
+   2175
+  ],
+  "const QSTR": [
+   7775
+  ],
+  "let QLANG": [
+   7771
+  ],
+  "function toast(": [
+   2065
+  ],
+  "function statusPill": [
+   2443
+  ],
+  "function tonePill": [
+   9578
+  ],
+  "function hexPill": [
+   9581
+  ],
+  "function solidPill": [
+   9588
+  ],
+  "function fld(": [],
+  "function editCell": [
+   2462
+  ],
+  "function openStore": [
+   2487
+  ],
+  "function popMenu": [
+   10186
+  ],
+  "function bulkOpen": [
+   8482
+  ],
+  "function load(": [
+   2346
+  ],
+  "function applyRole": [
+   2189
+  ],
+  "function renderSummary": [
+   2404
+  ],
+  "id=\"sideNav\"": [
+   996
+  ],
+  "class=\"topbar\"": [
+   1033
+  ],
+  "id=\"sub\"": [
+   1035
+  ],
+  "$(\"sub\").textContent": [
+   2362
+  ],
+  "id=\"langToggle\"": [
+   1037
+  ],
+  "id=\"notifBell\"": [
+   1039
+  ],
+  "function poProfileCell": [
+   8575
+  ],
+  "function lxProfileChip": [
+   4526
+  ],
+  "function pkgDocsPill": [
+   10033
+  ],
+  "function gmDocsStatePill": [
+   13767
+  ],
+  "function lxIsDone": [
+   3334
+  ],
+  "function pkgStatus(": [
+   9546
+  ],
+  "function poRollupStatus": [
+   9553
+  ],
+  "function dueChip": [
+   7215
+  ],
+  "function pkgCuSelect": [
+   10275
+  ],
+  "function cuLabel": [
+   2866
+  ],
+  "function poCardHtml": [
+   10205
+  ],
+  "function poPkgHtml": [
+   10451
+  ],
+  "function renderPurchases": [
+   9088
+  ],
+  "function gmTab": [
+   11547
+  ],
+  "function bsTokens": [
+   11392
+  ],
+  "function gmNewGwds": [
+   13135
+  ],
+  "PILL POLICY": [
+   2037
+  ],
+  ".trk-cell:placeholder-shown": [
+   123
+  ],
+  "function gaashUploadOpen": [
+   9640,
+   9671
+  ]
+ },
+ "file_inputs_and_paste": {
+  "index.html": [
+   {
+    "line": 1171,
+    "text": "<input type=\"file\" id=\"custIdInput\" accept=\"image/jpeg,image/png,.pdf\" style=\"display:none\">"
+   },
+   {
+    "line": 1218,
+    "text": "<input type=\"file\" id=\"poImgInput\" accept=\"image/*\" style=\"display:none\">"
+   },
+   {
+    "line": 1219,
+    "text": "<input type=\"file\" id=\"podImgInput\" accept=\"image/*\" multiple style=\"display:none\">"
+   },
+   {
+    "line": 1891,
+    "text": "🧾<input type=\"file\" accept=\"image/*\" onchange=\"piUpload(this)\"></label>"
+   },
+   {
+    "line": 4480,
+    "text": "const dnd=c=>` draggable=\"true\" ondragstart=\"lxtColDragStart(event,'${tbl}','${c.key}')\" ondragover=\"lxtColDra"
+   },
+   {
+    "line": 6009,
+    "text": "<input type=\"file\" accept=\"image/*\" multiple onchange=\"lxImgUpload(this)\" style=\"font-size:12px\">`"
+   },
+   {
+    "line": 7823,
+    "text": "${r.proof?'':'🧾'}<input type=\"file\" accept=\"image/*\" onchange=\"qPickProof(${i},this)\"></label>"
+   },
+   {
+    "line": 7826,
+    "text": "${r.image?'':'🖼'}<input type=\"file\" accept=\"image/*\" onchange=\"qPickImage(${i},this)\"></label>"
+   },
+   {
+    "line": 7881,
+    "text": "window.addEventListener(\"paste\", qPasteImage);"
+   },
+   {
+    "line": 10421,
+    "text": "document.addEventListener(\"paste\",e=>{        // ⌘V while a package popup is open"
+   },
+   {
+    "line": 10727,
+    "text": "inp.type=\"file\"; inp.accept=\"image/*\"; inp.multiple=true;"
+   },
+   {
+    "line": 10906,
+    "text": "document.addEventListener(\"paste\",e=>{           // Cmd/Ctrl+V while the order detail is open"
+   },
+   {
+    "line": 10923,
+    "text": "document.addEventListener(\"paste\",e=>{           // Cmd/Ctrl+V while \"+ New order\" is open"
+   },
+   {
+    "line": 11987,
+    "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.multiple=true;"
+   },
+   {
+    "line": 12012,
+    "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.multiple=true;"
+   },
+   {
+    "line": 13253,
+    "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.accept=\".pdf,image/jpeg,image/png\";"
+   },
+   {
+    "line": 14160,
+    "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.accept=\".pdf,image/jpeg,image/png\";"
+   }
+  ],
+  "templates": {
+   "_nav.html": [],
+   "account.html": [],
+   "catalog.html": [],
+   "landing.html": [],
+   "login.html": [],
+   "order.html": [],
+   "order_request.html": [],
+   "pricing.html": [],
+   "submit_id.html": [
+    {
+     "line": 47,
+     "text": "<input id=\"f_file\" type=\"file\" accept=\"image/jpeg,image/png,.pdf\" style=\"display:none\" onchange=\"pic"
+    }
+   ],
+   "track.html": []
+  }
+ },
+ "routes": {
+  "total": 252,
+  "without_ui_caller": [
+   {
+    "line": 325,
+    "route": "/setup",
+    "methods": ",methods=[\"GET\",\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 406,
+    "route": "/api/health/db",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 467,
+    "route": "/healthz",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 488,
+    "route": "/favicon.ico",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 848,
+    "route": "/api/estimate",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 2559,
+    "route": "/api/automatch",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 2568,
+    "route": "/api/track_gwd",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 3985,
+    "route": "/api/gaash/rules/run",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 4018,
+    "route": "/api/gaash/px/<token>.gif",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 4548,
+    "route": "/api/worker/queue",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": false
+   },
+   {
+    "line": 4557,
+    "route": "/api/worker/result",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": true,
+    "test_caller": false
+   },
+   {
+    "line": 4570,
+    "route": "/api/worker/packages",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 4607,
+    "route": "/api/worker/docs_sweep",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 4659,
+    "route": "/api/worker/account_rd",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": true
+   },
+   {
+    "line": 4683,
+    "route": "/api/worker/board_pull",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": true
+   },
+   {
+    "line": 4720,
+    "route": "/api/worker/tracking",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 4884,
+    "route": "/api/quarantined",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 4900,
+    "route": "/api/quarantined/<path:name>",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 4916,
+    "route": "/api/restore",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": true,
+    "test_caller": true
+   },
+   {
+    "line": 4985,
+    "route": "/api/gaash/accounts/restore",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": true,
+    "test_caller": false
+   },
+   {
+    "line": 5025,
+    "route": "/api/worker/seed",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": true,
+    "test_caller": false
+   },
+   {
+    "line": 5339,
+    "route": "/api/bridge/draft",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 5826,
+    "route": "/api/customer/wa_login/start",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 5860,
+    "route": "/webhook/whatsapp",
+    "methods": ",methods=[\"GET\",\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 5891,
+    "route": "/webhook/manychat",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 5923,
+    "route": "/api/customer/wa_login/poll",
+    "methods": "",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 5946,
+    "route": "/api/customer/otp/request",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": true
+   },
+   {
+    "line": 5980,
+    "route": "/api/customer/otp/verify",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": true
+   },
+   {
+    "line": 6057,
+    "route": "/api/customer/wa_verify/start",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 6186,
+    "route": "/api/customer/email/login/start",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 6216,
+    "route": "/api/customer/email/login/verify",
+    "methods": ",methods=[\"POST\"]",
+    "script_caller": false,
+    "test_caller": false
+   },
+   {
+    "line": 6263,
+    "route": "/api/customer/google/callback",
+    "methods": "",
+    "script_caller": true,
+    "test_caller": false
+   }
+  ]
+ },
+ "cross_checks": {
+  "view_btn_keys": [
+   "activity",
+   "brain",
+   "brokerprofile",
+   "brokers",
+   "bulksearch",
+   "catalog",
+   "customers",
+   "deposits",
+   "flags",
+   "gaashmail",
+   "goals",
+   "incart",
+   "leluxe",
+   "metaleads",
+   "needorder",
+   "orders",
+   "picking",
+   "pkgprep",
+   "plans",
+   "platactivity",
+   "platoverview",
+   "pnl",
+   "purchases",
+   "settings",
+   "team",
+   "trash",
+   "usage"
+  ],
+  "view_btn_dead_buttons": [
+   "pickBtn",
+   "catalogBtn"
+  ],
+  "toggle_ids_without_container": [],
+  "containers_without_toggle": [],
+  "aliases": {
+   "gaashmail": "gmView"
+  },
+  "nested_containers": {
+   "quoteView": "needorderView"
+  }
+ }
+}
