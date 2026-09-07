@@ -80,6 +80,46 @@
     const x = o.onRemove ? `<button type="button" class="ds-tag-x" aria-label="Remove ${esc(o.label)}" onclick="${esc(o.onRemove)}">${DS.icon("x-mark", { size: 12 })}</button>` : "";
     return `<span${attrs({ class: cls("ds-tag", o.tone && `ds-tone-${o.tone}`, o.cls), title: o.title })}>${o.icon ? DS.icon(o.icon, { size: 12 }) : ""}<span>${esc(o.label)}</span>${x}</span>`;
   };
+  /** One product photo. `alt=""` on purpose: the title is already in the tooltip and
+      in the text next to it, so a screen reader must not read the product twice. */
+  DS.thumb = (it, alt) => {
+    it = it || {};
+    const tip = alt || it.title || it.asin || "";
+    return it.image
+      ? `<img class="ds-pu-thumb" src="${esc(it.image)}" alt="" title="${esc(tip)}" loading="lazy">`
+      : `<span class="ds-pu-thumb" title="${esc(tip)}"></span>`;
+  };
+  /** A row of product photos that says how many there are without spelling it out
+      twice. With no photos at all, a wall of empty grey squares says nothing that
+      the count does not - so the count goes alone.
+      Lived twice (fulfillment.js, and nearly a third time in sales.js) before it
+      moved here; every board that lists products must render them identically. */
+  DS.thumbs = (items, o) => {
+    items = items || []; o = o || {};
+    const n = items.length;
+    if (!n) return DS.dash();
+    const num = (v) => (DS.fmt ? DS.fmt.number(v) : String(v));
+    const word = o.word || "product";
+    const names = items.map((it) => it.title || it.asin || "").filter(Boolean).join(" · ");
+    if (!items.some((it) => it.image))
+      return `<span class="ds-muted" title="${esc(names)}">${esc(num(n))} ${esc(n === 1 ? word : word + "s")}</span>`;
+    const max = o.max || 5, more = n - max;
+    return `<span class="ds-fl-thumbs" title="${esc(names)}">${items.slice(0, max).map((it) => DS.thumb(it)).join("")}`
+      + (more > 0 ? `<span class="ds-fl-more">+${esc(num(more))}</span>` : "")
+      + `<span class="ds-muted">${esc(num(n))}</span></span>`;
+  };
+  /** The stateless aligned grid a row expansion opens into. Purchases introduced it,
+      fulfillment copied it, and sales.js hand-rolled a near-miss - `.ds-pu-subrow`
+      instead of `.ds-pu-sub-row`, and no `.ds-pu-td` at all - so the Orders expander
+      rendered with no padding, no borders and no overflow control. One builder now.
+      cols: [{ label, w, align:"end", render(row) }] */
+  DS.subTable = (cols, rows, label) => {
+    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,1fr)")).join(" ");
+    return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${label ? ` aria-label="${esc(label)}"` : ""}>`
+      + `<div class="ds-pu-sub-head" role="row">${cols.map((c) => `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`
+      + rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`).join("")
+      + `</div>`;
+  };
   DS.kbd = (k) => `<kbd>${esc(k)}</kbd>`;
   DS.tipWrap = (inner, text) => `<span class="ds-tip" tabindex="0" data-tip="${esc(text)}">${inner}</span>`;
 

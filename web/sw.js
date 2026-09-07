@@ -3,7 +3,11 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v5";          // v5: + fulfillment.js (Phase 4); v4 added purchases.js (Phase 3)
+const CACHE = "otl-off-v6";          // v6: Batch B3 changed ds.js/table.js/sales.js — bumping
+                                     // drops the old cache on activate, so a plain refresh is
+                                     // enough. Batch B and B2 did NOT bump, and the stale copy
+                                     // cost an afternoon of "the fix did not land".
+                                     // v5: + fulfillment.js (Phase 4); v4 added purchases.js (Phase 3)
 /* Static design-system assets: same network-first rule as the shell, but cached on install too so the
    offline copy of /app is never served without its stylesheet. */
 const DS_ASSETS = ["/static/ds/tokens.css","/static/ds/ds.css","/static/ds/status.js",

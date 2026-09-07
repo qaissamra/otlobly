@@ -35,30 +35,13 @@
     return v ? `<span class="ds-truncate" dir="auto" title="${esc(v)}">${esc(v)}</span>` : D.dash();
   };
   const mono = (v) => (String(v || "").trim() ? `<span class="ds-mono">${esc(v)}</span>` : D.dash());
-  /** The stateless aligned grid the Purchases page introduced, shared here. */
-  const grid = (cols, rows, label) => {
-    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,1fr)")).join(" ");
-    return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${label ? ` aria-label="${esc(label)}"` : ""}>`
-      + `<div class="ds-pu-sub-head" role="row">${cols.map((c) => `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`
-      + rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`).join("")
-      + `</div>`;
-  };
-  const thumb = (it, alt) => (it.image
-    ? `<img class="ds-pu-thumb" src="${esc(it.image)}" alt="" title="${esc(alt || it.title || it.asin || "")}">`
-    : `<span class="ds-pu-thumb" title="${esc(alt || it.title || it.asin || "")}"></span>`);
-  /** A row of thumbnails that says how many there are without spelling it out twice.
-      With no photos at all, empty grey squares say nothing - the count says it. */
-  const thumbs = (items, max) => {
-    items = items || []; max = max || 5;
-    if (!items.length) return D.dash();
-    const n = items.length;
-    const label = `${esc(num(n))} ${n === 1 ? "product" : "products"}`;
-    if (!items.some((it) => it.image)) return `<span class="ds-muted" title="${items.map((it) => esc(it.title || it.asin || "")).filter(Boolean).join(" · ")}">${label}</span>`;
-    const more = n - max;
-    return `<span class="ds-fl-thumbs">${items.slice(0, max).map((it) => thumb(it)).join("")}`
-      + (more > 0 ? `<span class="ds-fl-more">+${esc(num(more))}</span>` : "")
-      + `<span class="ds-muted">${esc(num(n))}</span></span>`;
-  };
+  /** The stateless aligned grid the Purchases page introduced - now DS.subTable,
+      because the Orders expansion needs the same one. */
+  const grid = D.subTable;
+  // product photos are DS.thumb / DS.thumbs - the Orders board lists products too,
+  // and two implementations would drift the moment one of them was tuned
+  const thumb = D.thumb;
+  const thumbs = (items, max) => D.thumbs(items, { max });
   const factStrip = (facts) => (facts.length
     ? `<div class="ds-pu-facts">${facts.map(([k, v]) => `<span class="ds-kv"><span class="ds-muted">${esc(k)}</span><span>${v}</span></span>`).join("")}</div>` : "");
 

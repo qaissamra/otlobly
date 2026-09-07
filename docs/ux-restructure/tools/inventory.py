@@ -202,7 +202,10 @@ G = {
     "<table": count(r"<table"), "</table>": count(r"</table>"), "<button": count(r"<button"), "<input": count(r"<input"),
     "<select": count(r"<select"), "<textarea": count(r"<textarea"), "onclick=": count(r"onclick="), 'title="': count(r'title="'),
     "aria-*": count(r"\baria-[a-z]+="), 'role="': count(r'\brole="'), 'alt="': count(r'\balt="'), "tabindex": count(r"tabindex"),
-    "confirm(": count(r"\bconfirm\("), "prompt(": count(r"\bprompt\("), "alert(": count(r"\balert\("), "toast(": count(r"\btoast\("),
+    # NOT \b — that matches the "confirm(" inside "DS.confirm(", counting the design
+    # system's own replacement as one of the native calls it is meant to retire.
+    "confirm(": count(r"(?<![.\w])confirm\("), "prompt(": count(r"(?<![.\w])prompt\("),
+    "alert(": count(r"(?<![.\w])alert\("), "toast(": count(r"\btoast\("),
     "popMenu(": count(r"popMenu\("), 'class="pill (raw literal)': count(r'class="pill'), "az-modal roots": count(r'class="az-modal'),
     "<dialog": count(r"<dialog"), '<h2': count(r"<h2"), 'class="toolbar': count(r'class="toolbar'), '.search inputs': count(r'class="search'),
     "cu-search": count(r"cu-search"), "muted2": count(r"muted2"), 'class="empty"': count(r'class="empty"'),
