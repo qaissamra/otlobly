@@ -3,11 +3,11 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v2";          // v2: the design-system files joined the shell (docs/ux-restructure Phase 1)
+const CACHE = "otl-off-v3";          // v3: + shell.js (Phase 2); v2 added the design system (Phase 1)
 /* Static design-system assets: same network-first rule as the shell, but cached on install too so the
    offline copy of /app is never served without its stylesheet. */
 const DS_ASSETS = ["/static/ds/tokens.css","/static/ds/ds.css","/static/ds/status.js",
-  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/icons.svg"];
+  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/shell.js","/static/ds/icons.svg"];
 const NO_STORE = ["/api/backup","/api/po_image","/api/customer_image","/api/leluxe/image",
   "/api/gaash/idfile","/api/gaash/attachment","/api/gaash/px/","/api/gaash/r/",
   "/api/product_image","/api/az/"];   // PII scans, multi-MB zip, SerpAPI-credit scrape, pixels, job pollers

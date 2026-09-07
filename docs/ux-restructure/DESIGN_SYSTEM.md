@@ -73,8 +73,27 @@ the old patterns (warn level until Phase 7).
 | `DS.form(o)` + `DS.formValidate` | every create/edit form | | validates on submit, marks each field, focuses the first error |
 | `DS.wizard(o)` | Source → Map → Validate → Confirm → Result | any other multi-step flow | the shell for `ImportWizard` (Phase 6) |
 | `DS.dropzone(o)` | every upload | a bare file input | drag-and-drop **and** click **and** Cmd/Ctrl+V; filters by `accept` and reports what it skipped |
-| `DS.sidebar / DS.topbar / DS.shell` | the app shell (Phase 2) | | ≤12 items in named groups; badges only on actionable queues |
+| `DS.sidebar / DS.topbar / DS.shell` | the app shell | | ≤12 items in named groups; badges only on actionable queues |
 | `DS.installShortcuts()` | `/` focuses search, `?` shows the sheet | | |
+
+## The shell (`shell.js`)
+
+`DS.shell2` is the running shell, not a component: it renders the sidebar and top bar over the
+existing app, owns the address bar, and draws the Needs attention page. It is opt-in
+(`localStorage.otl_shell === "ds"`, or `?shell=new`) and does nothing at all when the flag is off.
+
+| Piece | Contract |
+|---|---|
+| `NAV` / `STAGES` / `EXTRA` | the information architecture, in one place. Each item: `{key, label, icon, path, view, btn, badge}`. `view` is the legacy `setView` id it opens; `btn` is the legacy nav button whose visibility **is** its role/feature gate — never restate a gate here. |
+| `DS.shell2.href(view, tab)` | the canonical `#/group/page/tab` address for a view. |
+| `DS.shell2.go(path)` | navigate. Everything else (a nav click, a legacy `onclick`, the back button) reaches the same place through `hashchange` or the `setView` wrapper. |
+| `TABS` | which sub-tabs a page can address, and the page's own function to switch them (`gmTab`, `poSetView`, `lxSetView`). |
+| `window.APP` | the read-only bridge index.html exposes (`view`, `data`, `pos`, `me`, `platform`, `gmTab`, `poBoard`, `lxView`). The app's top-level `let` bindings are not `window` properties, so this is the only way in. |
+| `DS.shell2.attnLoad()` | fetches `/api/attention` (60 s cache, 5-minute refresh) and repaints the badge and the page. |
+
+Adding a page: add one entry to `NAV` (or `EXTRA` if it is not in the sidebar) with its legacy view
+id and nav-button id. `test_ds_shell.py` then checks that the view exists, the button exists, and
+nothing lost its address.
 
 ## DataTable (`table.js`)
 
