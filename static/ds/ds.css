@@ -376,7 +376,7 @@ dialog.ds-dialog[open] { display: flex; }
 .ds-td-check, .ds-th-check { padding: 0 8px; justify-content: center; }
 .ds-td-check input, .ds-th-check input { width: 15px; height: 15px; margin: 0; accent-color: var(--ds-accent); cursor: pointer; }
 .ds-td-exp { padding: 0 4px; justify-content: center; }
-.ds-exp-btn { width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ds-muted); }
+.ds-exp-btn { width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ds-muted); }
 .ds-exp-btn:hover { background: var(--ds-bg3); color: var(--ds-ink); }
 /* the accent is the nav's, not a row's: the rotation and the row's own surface say open */
 .is-open .ds-exp-btn { background: var(--ds-bg3); color: var(--ds-ink); }

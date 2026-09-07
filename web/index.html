@@ -234,7 +234,8 @@
   .po-tbl .qtyc input{width:40px;text-align:center}
   .po-tbl select.custc,.po-tbl input.custc{max-width:160px;width:100%}
   .po-tbl input.custc.custc-empty{border-color:#f59e0b;background:#fff7ed}
-  .iconbtn{border:none;background:transparent;cursor:pointer;font-size:13px;padding:2px 5px;border-radius:6px;color:var(--muted)}
+  .iconbtn{border:none;background:transparent;cursor:pointer;font-size:13px;padding:2px 5px;border-radius:6px;color:var(--muted);
+    min-width:24px;min-height:24px;display:inline-flex;align-items:center;justify-content:center}
   .iconbtn:hover{background:var(--bg3);color:var(--ink)}
   .po-help{background:#fff7ee;border:1px solid #f3d9be;border-radius:11px;padding:11px 14px;
     font-size:12.5px;line-height:1.6;color:#6b5a45;margin-bottom:12px;position:relative}
@@ -289,9 +290,18 @@
   .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
     font-size:11px;font-weight:700;white-space:nowrap;border:1px solid transparent}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
-  .lk{display:block;font-size:11.5px;color:var(--accent);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* a small action link inside a table cell - named once so it can't drift, and
+     sized to the 24px hit-target floor while the glyph stays small */
+  /* a pill that is a LINK or a BUTTON is a control, not a label - it needs the hit-target
+     floor. Display-only pills keep their compact size, which is why this is not on .pill. */
+  a.pill,button.pill{min-height:24px;display:inline-flex;align-items:center}
+  .cellact{display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;
+    cursor:pointer;color:var(--muted);text-decoration:none;border-radius:6px}
+  .cellact:hover{color:var(--ink);background:var(--bg3)}
+  .lk{display:block;font-size:11.5px;color:var(--accent);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    padding-block:4px}   /* 17px tall was under the 24px hit-target floor */
   .warnflag{color:var(--warn);font-weight:700}
-  .minibtn{padding:3px 8px;font-size:11.5px;border-radius:7px}
+  .minibtn{padding:3px 8px;font-size:11.5px;border-radius:7px;min-height:24px}
   .row-actions{display:flex;gap:5px;flex-wrap:wrap}
   /* min-width floor: without it the status button collapses to an empty sliver
      inside a shrunken .lxc cell (min-width:0 + overflow:hidden) */
@@ -427,7 +437,8 @@
   .po-thumbs .xn{position:absolute;bottom:0;inset-inline-end:0;background:var(--ink);color:#fff;
     font-size:9px;font-weight:800;border-radius:999px;padding:0 4px;line-height:12px;opacity:.92;pointer-events:none}
   /* Leluxe: ClickUp-style copy button — appears on row hover */
-  .lx-copy{opacity:0;transition:opacity .12s;border:none;background:transparent;cursor:pointer;font-size:12px;padding:0 2px;flex:0 0 auto}
+  .lx-copy{opacity:0;transition:opacity .12s;border:none;background:transparent;cursor:pointer;font-size:12px;flex:0 0 auto;
+    min-width:24px;min-height:24px;display:inline-flex;align-items:center;justify-content:center}  /* was 16x17 */
   .lx-hash{opacity:.45;margin-inline-end:2px}
   /* Leluxe ClickUp-style columns: the order card's right-side chips share one
      fixed grid, and a sticky label row above the list names each column. */
@@ -2451,7 +2462,8 @@ function itemsCell(o){
   const flag=o.needs_expand?` <span class="warnflag" title="a.co link needs expanding">⚠</span>`:"";
   const links=o.items.map(it=>{
     const label=it.asin||it.url||"link";
-    return `<a class="lk mono" href="${poEsc(it.url||'#')}" target="_blank">${poEsc(label)}</a>`;}).join("");
+    const tip=[it.title,label].filter(Boolean).join(" · ");
+    return `<a class="lk mono" href="${poEsc(it.url||'#')}" target="_blank" title="${poEsc(tip)}">${poEsc(label)}</a>`;}).join("");
   return `<div><b>${o.n_items}</b> item${o.n_items!=1?'s':''}${flag}</div>${links}`;
 }
 
@@ -2513,8 +2525,11 @@ function odLocEdit(el,oid,fldKey){
 }
 function odLocCell(o,fldKey){
   const v=o[fldKey]||"";
-  if(!CAN_EDIT) return v?`<span>${poEsc(v)}</span>`:"";
-  return `<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit"
+  // the cell truncates, so the tooltip has to carry the VALUE first - it used to say only
+  // "click to edit", which reads as a tooltip while telling you nothing you can't already see
+  const tip=v?`${v} · اضغط للتعديل · click to edit`:"اضغط للتعديل · click to edit";
+  if(!CAN_EDIT) return v?`<span dir="auto" title="${poEsc(v)}">${poEsc(v)}</span>`:"";
+  return `<span dir="auto" style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="${poEsc(tip)}"
     onclick="event.stopPropagation();odLocEdit(this,'${o.order_id}','${fldKey}')">${v?poEsc(v):"—"}</span>`;
 }
 function render(){
@@ -2537,11 +2552,11 @@ function render(){
     if(open){ out+=o.amount_to_collect_usd||0; totDep+=o.deposit_usd||0;
               totRem+=(o.remaining_usd!=null?o.remaining_usd:(o.amount_to_collect_usd||0)); }
     const amt=o.amount_to_collect_usd!=null
-      ? `${money(o.amount_to_collect_usd)} <a title="re-quote from a new checkout total" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="quoteOrder('${o.order_id}')">✎</a>`
+      ? `${money(o.amount_to_collect_usd)} <a class="cellact" title="re-quote from a new checkout total" onclick="quoteOrder('${o.order_id}')">✎</a>`
       : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
     const depTxt=(o.deposit_usd!=null&&o.deposit_usd>0)?money(o.deposit_usd):'';
     const depCell=CAN_EDIT
-      ? `<span>${depTxt}</span> <a title="سجّل عربون · record a deposit" style="cursor:pointer;color:var(--muted);text-decoration:none" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
+      ? `<span>${depTxt}</span> <a class="cellact" title="سجّل عربون · record a deposit" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
       : `<span>${depTxt||'—'}</span>`;
     const remCell=(o.remaining_usd!=null)?money(o.remaining_usd)
                  :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
@@ -2863,7 +2878,7 @@ function ppPkgRow(pkg){
 function ppLocFld(c,bucket,i,fld,lbl){
   const val=c[fld]||"";
   if(!val&&!CAN_EDIT) return "";
-  const edit=CAN_EDIT?` style="cursor:text;border-bottom:1px dashed var(--line)" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();ppLocEdit(this,'${bucket}',${i},'${fld}')"`:"";
+  const edit=CAN_EDIT?` style="cursor:text;border-bottom:1px dashed var(--line)" title="${poEsc(val?val+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();ppLocEdit(this,'${bucket}',${i},'${fld}')"`:"";
   return `<span class="field"><span class="lbl">${lbl}</span><b${edit}>${val?poEsc(val):"—"}</b></span>`;
 }
 function ppLocEdit(el,bucket,i,fldKey){
@@ -6556,7 +6571,7 @@ function renderDeposits(){
       rate:   `<span class="muted2">${p.currency==="USD"?'—':p.fx_rate}</span>`,
       usd:    `<b class="amt" style="color:var(--good)">${money(p.amount_usd||0)}</b>`,
       kind:   `<span>${kind}</span>`,
-      note:   `<span class="muted2">${poEsc(p.note||'')}</span>`,
+      note:   `<span class="muted2" dir="auto" title="${poEsc(p.note||'')}">${poEsc(p.note||'')}</span>`,
       by:     `<span class="muted2">${poEsc(p.created_by_name||'')}</span>`,
       del:    CAN_EDIT?`<button class="iconbtn" title="delete" onclick="delPayment(${p.id})">✕</button>`:'',
     })}</div>`;}).join("");
@@ -7115,9 +7130,9 @@ function trRender(){
     +lxtWrap("tr",`<div class="pkg open"><div class="pkg-body">`+
     live.map(r=>{
       const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
-        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.label)}</span></div>`;
+        <span dir="auto" title="${poEsc(r.label)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.label)}</span></div>`;
       return `<div class="poc-row">${pin}${lxtCells("tr",{
-        kind:`<span class="ttype">${TRASH_ICON[r.kind]||"•"} ${poEsc(r.kind_label)}</span>`,
+        kind:`<span class="ttype" title="${poEsc(r.kind_label)}">${TRASH_ICON[r.kind]||"•"} ${poEsc(r.kind_label)}</span>`,
         when:`<span title="${poEsc(r.deleted_at||'')}">${relTime(r.deleted_at)}</span>`,
         by:  `<span>${poEsc(r.deleted_by||"You")}</span>`,
         act: `<button class="po-btn" onclick="restoreTrash(this,'${r.trash_id}')">♻️ Restore</button>
@@ -10320,7 +10335,7 @@ function renderCustomers(){
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(c.name)||'—'}</b> <span class="mono" style="color:var(--muted);font-size:10.5px">${poEsc(c.whatsapp)||''}</span></span></div>`;
     return `<div class="poc-row" style="cursor:pointer" onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;showProfile('${c.customer_id}')">${pin}${lxtCells("cu",{
       city:   cuCanEdit()
-        ?`<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
+        ?`<span dir="auto" style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
         :(poEsc(c.city)||"—"),
       orders: `<b>${c.order_count}</b>`,
       spent:  `<b class="amt">${money(c.total_spent_usd)}</b>`,
