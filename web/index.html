@@ -6,6 +6,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="__BRAND_FAVICON__">
+<!-- Design system (docs/ux-restructure) - tokens first, then components. Loaded before this file's own
+     inline style and script blocks, so migrated views can call DS.* while the legacy code keeps working. -->
+<link rel="stylesheet" href="/static/ds/tokens.css">
+<link rel="stylesheet" href="/static/ds/ds.css">
+<script src="/static/ds/status.js"></script>
+<script src="/static/ds/format.js"></script>
+<script src="/static/ds/ds.js"></script>
+<script src="/static/ds/table.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;

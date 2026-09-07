@@ -69,28 +69,28 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 
 | Family today | Definition | Canonical target | Decision | Status |
 |---|---|---|---|---|
-| bare `button{}` + `.primary` + `.accent` | CSS ≈L54–58 | `Button` | merge | not started |
-| `.po-btn` (+`.accent`, `.danger`) | CSS ≈L241 | `Button` (secondary / primary / danger) | keep as base | not started |
-| `.minibtn` (+`.danger`) | CSS ≈L287 | `Button sm` | merge | not started |
+| bare `button{}` + `.primary` + `.accent` | CSS ≈L54–58 | `DS.button` | merge | **built** (0 of 55 call sites migrated) |
+| `.po-btn` (+`.accent`, `.danger`) | CSS ≈L241 | `DS.button` (secondary / primary / danger) | keep as base | **built** (0 of 129 migrated) |
+| `.minibtn` (+`.danger`) | CSS ≈L287 | `DS.button {size:'sm'}` | merge | **built** (0 of 213 migrated) |
 | `.iconbtn` · `.qchip` · `.chip` | CSS ≈L235 / 267 / 330 | `Button icon` · `Tag` · `Tabs` | merge | not started |
-| LXT table engine (`LX_TABLES` L3594, `LXT_COLS` L4045, `lxtHead` L4452, `lxtCells` L4497) — 15 tables | JS L4045–4955 | `DataTable` (+ `ColumnConfig`, `RowExpansion`) | keep as canonical, extend (bulk bar, sticky end columns, keyboard) | not started |
+| LXT table engine (`LX_TABLES` L3594, `LXT_COLS` L4045, `lxtHead` L4452, `lxtCells` L4497) — 15 tables | JS L4045–4955 | `DS.tableRender` (`table.js`) | superseded — the new engine adds selection + bulk bar, end-pinned status/actions, keyboard, skeleton/empty/error, typed cells | **built** (0 of 15 tables migrated) |
 | `neTable` / `NE_COLS` (To order) | JS L7385–7400 | `DataTable` | delete after migration | not started |
 | 20 raw `<table>` (P&L ×7, Settings ×3, platform ×3, Team, Activity, Picking, Deposits-by-customer, To order, GM templates, GM analyze) | markup + JS | `DataTable` | delete | not started |
-| `.pill` rule pair (L287 vs L963) + `statusPill` L2443 · `tonePill` L9578 · `hexPill` L9581 · `solidPill` L9588 · `gaashBucketPill` · `lxStatusPill` · `lxCfPill` + 12 domain builders + 48 raw literals | JS/CSS | `Badge` + `AttentionBadge` behind `status.js` | merge (one rule, one helper) | not started |
+| `.pill` rule pair (L287 vs L963) + `statusPill` L2443 · `tonePill` L9578 · `hexPill` L9581 · `solidPill` L9588 · `gaashBucketPill` · `lxStatusPill` · `lxCfPill` + 12 domain builders + 48 raw literals | JS/CSS | `DS.badge` + `DS.attention` behind `status.js` | merge (one rule, one helper) | **built** — registry covers all 35 live ClickUp statuses + every order status; 0 call sites migrated |
 | `fld()` L2449 (two CSS homes: `.po-meta .field`, `.ne-meta .field`) | JS/CSS | `Stat` / meta strip | keep, one CSS home | not started |
 | `editCell()` L2462 | JS | `DataTable` inline edit | keep | not started |
 | `openStore()` L2487 | JS | `RowExpansion` state | keep | not started |
 | `.po-card` two-tier header · `.ne-metarow` · `.poc-meta` | CSS | `PageHeader` / row header + `Stat` | merge (one meta strip) | not started |
-| `.az-modal` ×22, each with its own open/close pair | markup L1803–2023 | `Modal` / `DetailDrawer` / `ConfirmDialog` (one controller: focus trap, Esc, aria) | merge | not started |
+| `.az-modal` ×22, each with its own open/close pair | markup L1803–2023 | `DS.modal` / `DS.drawer` / `DS.confirm` (native `<dialog>`: focus trap, Esc, backdrop, unsaved guard) | merge | **built** (0 of 22 migrated) |
 | `.pop` / `.pop-menu` + `popMenu()` L10186 / `popToggle` | JS/CSS | `DropdownMenu` | keep, add keyboard | not started |
-| `toast()` L2065 (single slot, no variants, 379 calls) | JS | `Toast` (variants, queue, `role=status`) | keep, extend | not started |
+| `toast()` L2065 (single slot, no variants, 379 calls) | JS | `DS.toast` (+ `.success/.error/.warn/.info`, queue of 3, `role=status`, optional action) | keep, extend | **built** (0 of 379 migrated) |
 | `.empty` (21) + 475 ad-hoc `muted2` empty states | CSS | `EmptyState` | merge | not started |
 | `#pageTitle` + global `#sub` (L1035, written at L2362) + 44 `<h2>` + 21 `.toolbar` | markup | `PageHeader` (breadcrumb, stats, one primary) | merge | not started |
 | tabs ×3 (GAASH mail 8 tabs, Purchases 5-segment, quote chips) + `.chips` rows | markup | `Tabs` | merge | not started |
 | search boxes ×5 (2 `.search`, 3 inline) + 14 `.cu-search` + Purchases filter builder | markup/JS | `FilterBar` (+ `Combobox`) | merge | not started |
-| emoji icons (2,168 glyphs, 191 distinct) | everywhere | inline SVG sprite (D3) | replace | not started |
-| formatters `money` ×3 (L2053, 4765, 10612) · `money0` · `fmt` · `cfNum` · `lxGm` · `relTime` L7199 · `agoTxt` L10055 · `gmAgo` L11572 · `fmtDue` L9563 · `lxDate` L3252 · `cfFmtDate` L9373 | JS | `formatMoney / formatNumber / formatDate / formatRelative` (Intl, `en-US`) | merge | not started |
-| 13 colour registries (`STATUS_COLOR` L2042 … `GM_STATE` L11542) | JS | `status.js` registry | merge | not started |
+| emoji icons (2,168 glyphs, 191 distinct) | everywhere | `DS.icon` + `icons.svg` — 135 Heroicons v2 outline, MIT | replace | **built** (0 of 2,168 replaced) |
+| formatters `money` ×3 (L2053, 4765, 10612) · `money0` · `fmt` · `cfNum` · `lxGm` · `relTime` L7199 · `agoTxt` L10055 · `gmAgo` L11572 · `fmtDue` L9563 · `lxDate` L3252 · `cfFmtDate` L9373 | JS | `DS.fmt.money / number / date / relative` (Intl, `en-US`) | merge | **built** (0 of 13 migrated) |
+| 13 colour registries (`STATUS_COLOR` L2042 … `GM_STATE` L11542) | JS | `DS.status` (`status.js`) | merge | **built** — one palette per entity, one `pkgDone` set (fixes F-003/F-008); 0 call sites migrated |
 | `T()` bilingual split + `data-en/ar` + `QSTR` + `ML_STATUS` | JS | keep `T()` for legacy views; new components English (D2) | keep (deferred) | not started |
 
 ## D. Upload and import entry points → `ImportWizard` adapter (Phase 6)
@@ -120,10 +120,20 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `↗ Sync ClickUp` as a nav item | an action in a navigation list | move to Settings › Integrations |
 | `RESTRICTED_NAV.sales` reference to `catalogBtn` | dead id | delete with Catalog |
 
+## E2. Phase 1 evidence
+
+`/design-system` (admin only) renders every component in every state; screenshots in
+`screens/design-system/`. Verified headless on the Phase 1 branch: 135 icons render, the DataTable
+sorts / drags / resizes / hides columns / selects with a bulk bar / expands nested tables / mirrors
+the header to the body scroll, dialogs trap focus and return it, 30 icon-only buttons all carry a
+label, the focus ring appears on a real Tab, no console errors, no horizontal overflow, and the RTL
+smoke flip does not break the layout. The staff app itself renders identically to the Phase 0
+baseline with zero design-system classes in its DOM.
+
 ## F. Phase checklist
 
 - [x] **Phase 0** — audit and plan: `BRIEF.md`, `AUDIT.md`, this file, `tools/inventory.py`, `tools/screenshots.mjs`, `screens/before/`, test baseline 51/51. *Waiting for owner approval.*
-- [ ] **Phase 1** — foundations (tokens, icons, primitives, `AppShell`/`PageHeader`/`FilterBar`/`DataTable`/`Modal`/`DetailDrawer`/`FormLayout`/`ImportWizard` shell, `status.js`, formatters, `/design-system`, `DESIGN_SYSTEM.md`, lint at warn).
+- [x] **Phase 1** — foundations *(this PR)*: `static/ds/` (tokens · ds.css · ds.js · table.js · status.js · format.js · icons.svg), the `/design-system` catalogue, `DESIGN_SYSTEM.md`, the warn-level lint (`test_ds_lint.py` + `lint-baseline.json`), `test_design_system.py`, and the behaviour parity suite `test_ux_parity.py`. Loaded app-wide but used by nothing yet — the staff app is byte-for-byte unchanged on screen.
 - [ ] **Phase 2** — shell and navigation (grouped sidebar, top bar, hash router, Needs attention, workspace switcher).
 - [ ] **Phase 3** — Purchases on T1 (reference; brief §14 list).
 - [ ] **Phase 4** — GAASH mail, To order, Package prep, then Orders, In cart, Customers, Leads, Deposits, Tracking.

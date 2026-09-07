@@ -1,0 +1,19 @@
+{
+ "emoji_glyphs": 2168,
+ "raw_table": 20,
+ "raw_button": 509,
+ "raw_select": 43,
+ "raw_input": 252,
+ "physical_css_style": 33,
+ "physical_css_file": 64,
+ "hex_literals_css": 125,
+ "hex_literals_file": 520,
+ "colour_registries": 13,
+ "raw_pill_literals": 48,
+ "native_confirm": 47,
+ "native_prompt": 15,
+ "native_alert": 2,
+ "duplicate_formatters": 1,
+ "az_modal_roots": 22,
+ "ds_files_present": 1
+}

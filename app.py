@@ -537,6 +537,25 @@ def staff_app():
                               mimetype="text/html")
 
 
+_DS_HTML = None
+
+
+@app.route("/design-system")
+@login_required
+def design_system():
+    """The design-system catalogue: every primitive and composite in every state.
+
+    It is the visual contract for the UX restructure (docs/ux-restructure/) — a
+    component that is not on this page is not done. Admin-only because it is a
+    developer surface, not a business one; it reads no data and writes nothing."""
+    if not current_user.has("admin_actions"):
+        return redirect(url_for("staff_app"))
+    global _DS_HTML
+    if _DS_HTML is None or app.debug:
+        _DS_HTML = (HERE / "web" / "design-system.html").read_text(encoding="utf-8")
+    return app.response_class(_DS_HTML, mimetype="text/html")
+
+
 _SW_JS = None
 
 

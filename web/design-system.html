@@ -1,0 +1,186 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Otlobly design system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/ds/tokens.css">
+<link rel="stylesheet" href="/static/ds/ds.css">
+<style>
+  /* Catalogue chrome only — never a source of component styles. */
+  body { margin: 0; background: var(--ds-bg); color: var(--ds-ink); font: var(--ds-t-md)/var(--ds-lh) var(--ds-font); }
+  .cat { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  .cat-nav { position: sticky; top: 0; height: 100vh; overflow: auto; padding: var(--ds-s4) var(--ds-s3); background: var(--ds-card); border-inline-end: 1px solid var(--ds-line); }
+  .cat-nav h1 { font: var(--ds-w-bold) var(--ds-t-lg)/1.2 var(--ds-font); margin: 0 0 4px; }
+  .cat-nav p { font-size: var(--ds-t-sm); color: var(--ds-muted); margin: 0 0 var(--ds-s4); }
+  .cat-nav a { display: block; padding: 5px 8px; border-radius: var(--ds-r-sm); color: var(--ds-ink); text-decoration: none; font-size: var(--ds-t-sm); }
+  .cat-nav a:hover { background: var(--ds-bg3); }
+  .cat-main { padding: var(--ds-s5) var(--ds-s5) var(--ds-s7); max-width: 1180px; }
+  .cat-sec { padding: var(--ds-s5) 0; border-top: 1px solid var(--ds-line); scroll-margin-top: var(--ds-s4); }
+  .cat-sec:first-child { border-top: 0; }
+  .cat-sec > h2 { font: var(--ds-w-bold) var(--ds-t-xl)/1.2 var(--ds-font); margin: 0 0 4px; }
+  .cat-sec > .cat-note { color: var(--ds-muted); font-size: var(--ds-t-sm); margin: 0 0 var(--ds-s4); max-width: 70ch; }
+  .cat-block { margin: var(--ds-s4) 0; }
+  .cat-block > h3 { font: var(--ds-w-bold) var(--ds-t-md)/1.2 var(--ds-font); color: var(--ds-muted); margin: 0 0 var(--ds-s2); }
+  .cat-demo { display: flex; gap: var(--ds-s3); flex-wrap: wrap; align-items: center; padding: var(--ds-s4); background: var(--ds-card); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); }
+  .cat-demo.col { flex-direction: column; align-items: stretch; }
+  .cat-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--ds-s2); }
+  .cat-sw { border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); overflow: hidden; font-size: var(--ds-t-xs); }
+  .cat-sw i { display: block; height: 40px; }
+  .cat-sw span { display: block; padding: 5px 7px; font-family: var(--ds-font-mono); color: var(--ds-muted); }
+  .cat-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 2px; }
+  .cat-ico { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: var(--ds-r-sm); font-size: 10px; color: var(--ds-muted); text-align: center; }
+  .cat-ico:hover { background: var(--ds-bg3); color: var(--ds-ink); }
+  .cat-ico code { font-size: 9.5px; overflow-wrap: anywhere; }
+  .cat-type td { padding: 6px 10px; border-bottom: 1px solid var(--ds-line); }
+  .cat-type code { color: var(--ds-muted); font-size: var(--ds-t-xs); }
+</style>
+
+<div class="cat ds-root">
+  <nav class="cat-nav">
+    <h1>Design system</h1>
+    <p>The visual contract. A component that is not on this page is not done.</p>
+    <div id="catNav"></div>
+    <div style="margin-top:var(--ds-s4);padding-top:var(--ds-s3);border-top:1px solid var(--ds-line)">
+      <button type="button" class="ds-btn ds-btn-sm" onclick="document.documentElement.dir=document.documentElement.dir==='rtl'?'ltr':'rtl'">Flip direction</button>
+      <p style="font-size:11px;margin-top:6px">RTL is deferred (English only for now); the flip is here so new CSS stays logical.</p>
+    </div>
+  </nav>
+  <main class="cat-main" id="cat"></main>
+</div>
+
+<script src="/static/ds/status.js"></script>
+<script src="/static/ds/format.js"></script>
+<script src="/static/ds/ds.js"></script>
+<script src="/static/ds/table.js"></script>
+<script>
+/* The catalogue calls the real helpers — never a copy — so a drift here is a real defect. */
+const SECTIONS = [];
+const sec = (id, title, note, body) => SECTIONS.push({ id, title, note, body });
+const block = (title, html, o) => `<div class="cat-block"><h3>${DS.esc(title)}</h3><div class="cat-demo ${(o||{}).col?'col':''}">${html}</div></div>`;
+
+/* ---------------- tokens ---------------- */
+const swatch = (v, n) => `<div class="cat-sw"><i style="background:var(${v})"></i><span>${n||v}</span></div>`;
+sec("tokens", "Tokens", "One source for colour, spacing, radius, elevation, type and motion (static/ds/tokens.css). Nothing else may define a colour.", () =>
+  block("Surfaces and text", `<div class="cat-swatches" style="flex:1">${["--ds-bg","--ds-bg2","--ds-bg3","--ds-card","--ds-line","--ds-line-strong","--ds-ink","--ds-ink2","--ds-muted","--ds-muted2"].map(v=>swatch(v)).join("")}</div>`) +
+  block("Brand accent — the only accent in the product", `<div class="cat-swatches" style="flex:1">${["--ds-accent","--ds-accent-deep","--ds-accent-tint"].map(v=>swatch(v)).join("")}</div>`) +
+  block("Semantic tones", `<div class="cat-swatches" style="flex:1">${["info","success","warning","danger","neutral"].flatMap(t=>[`--ds-${t}-bg`,`--ds-${t}-ink`,`--ds-${t}-dot`]).map(v=>swatch(v)).join("")}</div>`) +
+  block("Type scale", `<table class="cat-type" style="width:100%;border-collapse:collapse">${[["--ds-t-xs","Badges, table header labels"],["--ds-t-sm","Compact tables, meta, help"],["--ds-t-md","Body and data"],["--ds-t-lg","Section titles"],["--ds-t-xl","Page titles"]].map(([v,d])=>`<tr><td style="font-size:var(${v})">The quick brown fox · 1,234.56</td><td><code>${v}</code></td><td class="ds-muted">${d}</td></tr>`).join("")}<tr><td class="ds-mono">GWD004705019 · PO-0017</td><td><code>--ds-font-mono</code></td><td class="ds-muted">Identifiers only</td></tr></table>`) +
+  block("Spacing · radius · elevation", `<div style="display:flex;gap:var(--ds-s3);align-items:flex-end;flex-wrap:wrap">${[1,2,3,4,5,6,7].map(i=>`<div style="text-align:center;font-size:10px;color:var(--ds-muted)"><div style="width:var(--ds-s${i});height:24px;background:var(--ds-accent);border-radius:2px"></div>s${i}</div>`).join("")}<div style="width:90px;height:44px;background:var(--ds-card);border:1px solid var(--ds-line);border-radius:var(--ds-r-sm);display:grid;place-items:center;font-size:10px">r-sm</div><div style="width:90px;height:44px;background:var(--ds-card);border:1px solid var(--ds-line);border-radius:var(--ds-r-md);display:grid;place-items:center;font-size:10px">r-md</div><div style="width:90px;height:44px;background:var(--ds-card);border-radius:var(--ds-r-md);box-shadow:var(--ds-e1);display:grid;place-items:center;font-size:10px">e1</div><div style="width:90px;height:44px;background:var(--ds-card);border-radius:var(--ds-r-md);box-shadow:var(--ds-e2);display:grid;place-items:center;font-size:10px">e2</div></div>`));
+
+/* ---------------- icons ---------------- */
+sec("icons", "Icons", "Heroicons v2 outline, vendored as one SVG sprite (static/ds/icons.svg, MIT). No emoji anywhere in the product. 20 px in the sidebar, 16 px inline; directional icons carry ds-icon-dir so they flip when RTL returns.", () => {
+  const names = window.__ICONS || [];
+  return block(`${names.length} icons — click to copy the call`, `<div class="cat-icons" style="flex:1">${names.map(n=>`<button type="button" class="cat-ico ds-btn-ghost" style="border:0;background:none;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText('DS.icon(&quot;${n}&quot;)');DS.toast('Copied DS.icon(\\'${n}\\')')">${DS.icon(n,{size:"lg"})}<code>${n}</code></button>`).join("")}</div>`);
+});
+
+/* ---------------- buttons ---------------- */
+sec("buttons", "Button", "One primary per page, at most two visible secondaries, the rest in an overflow menu. Icon-only buttons always carry aria-label and a tooltip.", () =>
+  block("Variants", ["primary","secondary","ghost","danger"].map(v=>DS.button({label:v[0].toUpperCase()+v.slice(1),variant:v})).join("") + DS.button({label:"Danger solid",variant:"danger",solid:true})) +
+  block("Sizes and icons", DS.button({label:"Create purchase order",variant:"primary",icon:"plus"}) + DS.button({label:"Mark received",icon:"check"}) + DS.button({label:"Open in Amazon",iconEnd:"arrow-top-right-on-square",href:"#",variant:"ghost"}) + DS.button({label:"Small",size:"sm",icon:"arrow-path"}) + DS.button({icon:"pencil",ariaLabel:"Edit",tip:"Edit"}) + DS.button({icon:"trash",variant:"danger",ariaLabel:"Delete",tip:"Delete",size:"sm"})) +
+  block("States", DS.button({label:"Loading",variant:"primary",loading:true}) + DS.button({label:"Disabled",disabled:true}) + DS.button({label:"Disabled primary",variant:"primary",disabled:true}) + DS.buttonGroup([{label:"Group",icon:"funnel"},{label:"Of",icon:"table-cells"},{icon:"ellipsis-horizontal",ariaLabel:"More"}])));
+
+/* ---------------- badges ---------------- */
+sec("badges", "Badge · AttentionBadge · Tag", "Status labels and colours come only from static/ds/status.js. Attention states are separate from status and use a small fixed vocabulary. An empty value is a muted dash, never red.", () =>
+  block("Tones", ["neutral","info","success","warning","danger"].map(t=>DS.badge({label:t,tone:t})).join("") + DS.badge({label:"With dot",tone:"success",dot:true}) + DS.badge({label:"With icon",tone:"info",icon:"truck"}) + DS.badge({label:"Small",tone:"neutral",size:"sm"})) +
+  block("Order statuses (entity: order)", DS.status.values("order").map(v=>DS.status.badge("order",v)).join(" ")) +
+  block("Package statuses — ClickUp values and colours, spelling unchanged (owner decision)", DS.status.values("pkg").slice(0,18).map(v=>DS.status.badge("pkg",v)).join(" ")) +
+  block("Carrier buckets · Gerizim · documents · thread states — one palette each", ["transit","customs","cleared","arrived","delivered"].map(v=>DS.status.badge("bucket",v)).join(" ") + "<br>" + ["office","sms","pickup","out","delivered"].map(v=>DS.status.badge("gerizim",v)).join(" ") + "<br>" + ["action","info","cleared","stopped","noanswer","unchecked"].map(v=>DS.status.badge("docs",v)).join(" ") + "<br>" + ["active","waiting_reply","missing_docs","goal_met","exhausted"].map(v=>DS.status.badge("gmThread",v)).join(" ")) +
+  block("Attention states", DS.attention({kind:"late",detail:"40 d"}) + DS.attention({kind:"no_tracking"}) + DS.attention({kind:"missing_name"}) + DS.attention({kind:"unpaid"}) + DS.attention({kind:"missing_docs",action:{label:"Upload",onclick:"DS.toast('Upload docs')"}}) + DS.attention({kind:"no_reply",detail:"5 d"}) + DS.attention({kind:"stale",detail:"9 d"})) +
+  block("Tags and the empty value", DS.tag({label:"B19",icon:"computer-desktop"}) + DS.tag({label:"watches"}) + DS.tag({label:"Removable",onRemove:"DS.toast('Removed')"}) + `<span>Empty value: ${DS.dash()}</span>`));
+
+/* ---------------- inputs and forms ---------------- */
+sec("inputs", "Inputs", "Labels above fields, help below, error below in the danger tone, focus moves to the first error on submit.", () =>
+  block("Controls", `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--ds-s3);flex:1">
+    ${DS.field({id:"d1",label:"Text",input:DS.input({id:"d1",placeholder:"Customer name",dirAuto:true})})}
+    ${DS.field({id:"d2",label:"Number",input:DS.numberInput({id:"d2",value:"827.55"})})}
+    ${DS.field({id:"d3",label:"Select",input:DS.select({id:"d3",options:["B19","B22","E-B15"],placeholder:"Buying account"})})}
+    ${DS.field({id:"d4",label:"Date",input:DS.datePicker({id:"d4",value:"2026-09-05"})})}
+    ${DS.field({id:"d5",label:"Search",input:DS.search({id:"d5"})})}
+    ${DS.field({id:"d6",label:"Identifier",help:"Monospace for codes",input:DS.input({id:"d6",mono:true,value:"GWD004705019"})})}
+    ${DS.field({id:"d7",label:"Required with error",required:true,error:"Enter an amount in USD",invalid:true,input:DS.input({id:"d7",invalid:true,value:""})})}
+    ${DS.field({id:"d8",label:"Disabled",input:DS.input({id:"d8",value:"Read only",disabled:true})})}</div>`) +
+  block("Checkbox, switch, textarea, combobox", DS.checkbox({label:"Include cancelled orders",checked:true}) + DS.checkbox({label:"Disabled",disabled:true}) + DS.switch({label:"Dry run",checked:true}) + DS.switch({label:"Off",checked:false}) + `<div style="flex:1;min-width:220px">${DS.textarea({placeholder:"Paste GWD numbers, one per line",rows:3})}</div>` + `<div style="min-width:200px">${DS.combobox({placeholder:"Type to search accounts",options:["B19","B22","B27","E-B15","S-B32"]})}</div>`) +
+  block("FormLayout", DS.form({id:"demoForm",sections:[{title:"Customer",rows:[[DS.field({id:"f1",label:"Name",required:true,input:DS.input({id:"f1",required:true,dirAuto:true})}),DS.field({id:"f2",label:"Phone",input:DS.input({id:"f2",type:"tel",inputmode:"tel",placeholder:"+970…"})})]]},{title:"Money",hint:"Amounts are USD; the ILS equivalent is shown as a secondary value.",rows:[[DS.field({id:"f3",label:"Amount",required:true,input:DS.numberInput({id:"f3",required:true})}),DS.field({id:"f4",label:"Kind",input:DS.select({id:"f4",options:[{value:"deposit",label:"Deposit"},{value:"collect",label:"Collected"},{value:"refund",label:"Refund"}]})})]]}],footer:{destructive:{label:"Delete",icon:"trash"},cancel:{onclick:"DS.toast('Cancelled')"},primary:{label:"Record payment",icon:"check"}},onsubmit:"DS.toast.success('Form is valid');event.preventDefault();"}),{col:true}));
+
+/* ---------------- overlays ---------------- */
+sec("overlays", "Menus · Tabs · Dialogs · Toasts", "One dropdown, one tab strip, one Modal / DetailDrawer / ConfirmDialog controller (native <dialog>: focus trap, Esc, backdrop, unsaved guard), one toast queue with variants.", () =>
+  block("DropdownMenu", DS.menu({button:{label:"Actions",iconEnd:"chevron-down"},items:[{head:"Purchase order"},{label:"Edit order",icon:"pencil",onclick:"DS.toast('Edit')"},{label:"Open detail",icon:"arrow-top-right-on-square",onclick:"DS.toast('Detail')"},{divider:true},{label:"Delete order",icon:"trash",danger:true,onclick:"DS.toast.error('Delete')"}]}) + DS.menu({items:[{label:"Mark received",icon:"check",onclick:"DS.toast('Received')"},{label:"Check shipping",icon:"truck",onclick:"DS.toast('Checking')"},{label:"Disabled item",icon:"no-symbol",disabled:true}]}) + `<span class="ds-muted" style="font-size:12px">Right-click a table header below for the column menu.</span>`) +
+  block("Tabs", DS.tabs({items:[{key:"conv",label:"Conversations",count:12},{key:"docs",label:"Documents",count:2},{key:"wf",label:"Workflows"},{key:"analyze",label:"Analyze"}],active:"conv",onchange:"DS.toast('Tab '+KEY)"}) + `<div style="width:100%"></div>` + DS.tabs({variant:"pills",items:[{key:"all",label:"All",count:41},{key:"late",label:"Late",count:6},{key:"soon",label:"Arriving this week"},{key:"notrk",label:"No tracking",count:3}],active:"late",onchange:"DS.toast('View '+KEY)"}),{col:true}) +
+  block("Dialogs", DS.button({label:"Modal",variant:"primary",onclick:"DS.dialogOpen('demoModal')"}) + DS.button({label:"Detail drawer",onclick:"DS.dialogOpen('demoDrawer')"}) + DS.button({label:"Confirm (destructive)",variant:"danger",onclick:"DS.confirm({title:'Delete purchase order?',text:'PO-0017 and its 3 packages will move to Trash. You can restore them for 30 days.',confirmLabel:'Delete',tone:'danger',icon:'trash'}).then(ok=>DS.toast(ok?'Deleted':'Kept',{tone:ok?'danger':'info'}))"}) + DS.button({label:"Prompt",onclick:"DS.prompt({title:'RD number',label:'Amazon refund number',placeholder:'113-…'}).then(v=>DS.toast(v?('Saved '+v):'Cancelled'))"}) + DS.button({label:"Shortcuts (?)",variant:"ghost",icon:"question-mark-circle",onclick:"DS.shortcutsSheet()"})) +
+  block("Toasts", DS.button({label:"Success",onclick:"DS.toast.success('Marked as received')"}) + DS.button({label:"Error",onclick:"DS.toast.error('Upload failed: file is larger than 15 MB')"}) + DS.button({label:"Warning",onclick:"DS.toast.warn('2 files skipped: type not accepted')"}) + DS.button({label:"With action",onclick:"DS.toast('Order moved to In cart',{tone:'info',action:{label:'Undo',onclick:()=>DS.toast('Undone')}})"})));
+
+/* ---------------- data display ---------------- */
+sec("data", "Stat · KPI · EmptyState · Skeleton · Feed · Banner", "", () =>
+  block("Stats and KPIs", `<div style="flex:1">${DS.kpis([{label:"Purchase orders",value:"41"},{label:"Outstanding",value:DS.fmt.money(9664.11)},{label:"Late",value:"6",tone:"danger"},{label:"Packages in customs",value:"12"}])}</div>`) +
+  block("Stat row (page header style)", `<div class="ds-stat-row" style="flex:1">${DS.stat({label:"Total",value:DS.fmt.money(827.55)})}${DS.stat({label:"In ILS",value:DS.fmt.secondary(3060,"ILS"),hint:"at 3.7"})}${DS.stat({label:"Items",value:"35"})}${DS.stat({label:"Customers",value:"17"})}</div>`) +
+  block("Empty · error · loading", `<div style="flex:1;display:grid;gap:var(--ds-s3)">${DS.empty({icon:"inbox",title:"No purchase orders match this filter",text:"Clear the filters, or create the first purchase order for this batch.",action:{label:"Create purchase order",icon:"plus",onclick:"DS.toast('New PO')"}})}${DS.errorState({text:"Could not load purchases. The server did not respond.",retry:{onclick:"DS.toast('Retrying')"}})}${DS.skeleton({rows:3})}</div>`) +
+  block("Activity feed and banners", `<div style="flex:1;display:grid;gap:var(--ds-s3)">${DS.feed({items:[{icon:"pencil",html:"<b>Qais</b> set status to <b>recieved no rd</b> on GWD004705019",when:new Date(Date.now()-6e5)},{icon:"plus",html:"<b>Qais</b> created PO-0021",when:new Date(Date.now()-864e5)},{icon:"arrow-path",html:"ClickUp sync updated 14 rows",when:new Date(Date.now()-3*864e5)}]})}<div class="ds-banner">${DS.icon("exclamation-triangle")}<span><b>Dry run is on.</b> Clearance emails are simulated; nothing is sent.</span></div><div class="ds-banner ds-banner-danger">${DS.icon("x-circle")}<span>You are offline. Showing the last saved copy.</span></div></div>`));
+
+/* ---------------- table ---------------- */
+sec("table", "DataTable", "One fact per column, status and actions pinned to the end, sticky header and first column, per-user column layout, selection with a bulk bar, expandable rows, keyboard navigation (arrows, Enter, Space). Try: sort, drag a header, right-click a header, resize, hide a column, select rows.", () => `<div class="cat-block"><h3>Full featured</h3><div id="demoTable"></div></div>
+  <div class="cat-block"><h3>Loading</h3><div id="demoTableLoading"></div></div>
+  <div class="cat-block"><h3>Empty</h3><div id="demoTableEmpty"></div></div>
+  <div class="cat-block"><h3>Error</h3><div id="demoTableError"></div></div>`);
+
+/* ---------------- imports ---------------- */
+sec("imports", "ImportWizard · Dropzone", "Every upload and import in the product uses these five steps: Source, Map, Validate, Confirm, Result. The drop zone accepts drag-and-drop, click and Cmd/Ctrl+V paste — the app has no real drop zone today.", () =>
+  block("Wizard shell", DS.wizard({steps:["Source","Map","Validate","Confirm","Result"],current:0,body:`<div style="display:grid;gap:var(--ds-s3)">${DS.dropzone({id:"dzDemo",accept:"image/*,.pdf",multiple:true,paste:true,title:"Drop the checkout screenshot here",hint:"PNG, JPG or PDF up to 15 MB · or paste with Cmd/Ctrl+V",onFiles:(f)=>DS.toast.success(f.length+" file(s) ready")})}${DS.field({id:"wz1",label:"Or paste tracking numbers",help:"One GWD per line; up to 300",input:DS.textarea({id:"wz1",rows:3,placeholder:"GWD004705019"})})}</div>`,cancel:{onclick:"DS.toast('Cancelled')"},next:{onclick:"DS.toast('Next step')"}}),{col:true}));
+
+/* ---------------- shell ---------------- */
+sec("shell", "AppShell · PageHeader · FilterBar", "The shell Phase 2 will move the app onto: at most 12 navigable items in named groups, count badges only on actionable queues, one active-state treatment, global search, breadcrumb in the page header.", () =>
+  block("PageHeader", `<div style="flex:1">${DS.pageHeader({crumbs:[{label:"Fulfillment",onclick:"DS.toast('Fulfillment')"},{label:"Purchase orders"}],title:"Purchase orders",stats:[{label:"Purchase orders",value:"41"},{label:"Outstanding",value:DS.fmt.money(9664.11)},{label:"Late",value:"6",tone:"danger"}],updated:new Date(Date.now()-18e4),primary:{label:"New purchase order",icon:"plus"},secondary:[{label:"Check shipping",icon:"truck"},{label:"Estimate costs",icon:"calculator"}],overflow:[{label:"Import from ClickUp",icon:"arrow-down-tray"},{label:"Register at Gerizim",icon:"map-pin"},{divider:true},{label:"Export CSV",icon:"arrow-up-tray"}]})}</div>`) +
+  block("FilterBar", `<div style="flex:1">${DS.filterBar({search:{placeholder:"Search PO, Amazon #, customer, GWD"},views:[{key:"all",label:"All",count:41,active:true},{key:"late",label:"Late",count:6},{key:"soon",label:"Arriving this week"},{key:"notrk",label:"No tracking",count:3}],chips:[{label:"Status",value:"in customs",active:true,onremove:"DS.toast('Removed')"},{label:"Buying account",value:"B19",active:true,onremove:"DS.toast('Removed')"}],add:{onclick:"DS.toast('Add filter')"},clear:{onclick:"DS.toast('Cleared')"}})}</div>`) +
+  block("Sidebar and top bar (Phase 2 preview)", `<div style="flex:1;border:1px solid var(--ds-line);border-radius:var(--ds-r-md);overflow:hidden;height:420px;display:grid;grid-template-columns:232px 1fr">
+    ${DS.sidebar({brand:'<b style="font-size:17px">Otlob<span style="color:var(--ds-accent)">ly</span></b>',groups:[{key:"sales",label:"Sales",items:[{key:"leads",label:"Leads",icon:"megaphone"},{key:"customers",label:"Customers",icon:"users"},{key:"orders",label:"Orders",icon:"clipboard-document-list"}]},{key:"ful",label:"Fulfillment",items:[{key:"toorder",label:"To order",icon:"light-bulb",badge:6},{key:"cart",label:"In cart",icon:"shopping-cart"},{key:"po",label:"Purchase orders",icon:"cube",active:true},{key:"prep",label:"Package prep",icon:"gift",badge:3}]},{key:"ship",label:"Shipping",items:[{key:"track",label:"Tracking",icon:"magnifying-glass"},{key:"gaash",label:"GAASH mail",icon:"envelope"}]},{key:"fin",label:"Finance",items:[{key:"dep",label:"Deposits",icon:"banknotes"},{key:"pnl",label:"P&L",icon:"chart-bar"}]},{key:"ins",label:"Insights",items:[{key:"goals",label:"Goals",icon:"trophy"},{key:"act",label:"Activity",icon:"clock"}]}],attention:{count:4,onclick:"DS.toast('Needs attention')"},workspace:{name:"Otlobly",onclick:"DS.toast('Switch workspace')"},user:{name:"Qais",role:"Admin"}})}
+    <div style="overflow:auto;background:var(--ds-bg)">${DS.topbar({search:{placeholder:"Search orders, customers, GWD…"},notifications:{count:2,onclick:"DS.toast('Notifications')"},language:{label:"ع",hidden:true},user:{name:"Qais",items:[{label:"Settings",icon:"cog-6-tooth"},{label:"Keyboard shortcuts",icon:"question-mark-circle",kbd:"?",onclick:"DS.shortcutsSheet()"},{divider:true},{label:"Sign out",icon:"arrow-uturn-left"}]}})}<div style="padding:var(--ds-s4)"><p class="ds-muted" style="font-size:12px">Content area. The sidebar has 12 navigable items in five named groups; badges appear only on actionable queues.</p></div></div>
+  </div>`));
+
+/* ---------------- render ---------------- */
+fetch("/static/ds/icons.svg").then(r=>r.text()).then(t=>{ window.__ICONS=[...t.matchAll(/id="i-([a-z0-9-]+)"/g)].map(m=>m[1]); paint(); }).catch(()=>{ window.__ICONS=[]; paint(); });
+
+function paint(){
+  document.getElementById("cat").innerHTML = SECTIONS.map(s=>`<section class="cat-sec" id="${s.id}"><h2>${DS.esc(s.title)}</h2>${s.note?`<p class="cat-note">${DS.esc(s.note)}</p>`:""}${typeof s.body==="function"?s.body():s.body}</section>`).join("")
+    + DS.modal({id:"demoModal",title:"Record a deposit",size:"sm",body:DS.form({id:"mForm",sections:[DS.field({id:"m1",label:"Amount (ILS)",required:true,input:DS.numberInput({id:"m1",value:"500"})}),DS.field({id:"m2",label:"Note",input:DS.input({id:"m2",placeholder:"Optional"})})],footer:{}}),cancel:{onclick:"DS.dialogClose('demoModal')"},primary:{label:"Record",onclick:"DS.dialogClose('demoModal');DS.toast.success('Deposit recorded')"}})
+    + DS.drawer({id:"demoDrawer",identifier:"PO-0017",title:"Waleed Kharmah",badge:DS.status.badge("order","ARRIVED"),subtitle:"Amazon order 113-0913603 · placed 5 Sep 2026",facts:[{label:"Total",value:DS.fmt.money(827.55)},{label:"Items",value:"35"},{label:"Customers",value:"17"},{label:"Packages",value:"12"}],tabs:DS.tabs({items:[{key:"ov",label:"Overview"},{key:"items",label:"Items",count:35},{key:"pkg",label:"Packages",count:12},{key:"pay",label:"Payments"},{key:"tl",label:"Timeline"}],active:"ov",onchange:"DS.toast('Tab '+KEY)"}),body:`<p class="ds-muted">A detail drawer opens over the list, so the working set is never lost. Esc closes it; focus returns to the row.</p>${DS.kpis([{label:"Landed cost",value:DS.fmt.money(912.4)},{label:"Collected",value:DS.fmt.money(400)},{label:"Due",value:DS.fmt.money(427.55),tone:"warning"}])}`,side:`<div>${["Buying account: B19","Ship to: Waleed Kharmah","Arrival: 12 Sep 2026","GAASH: CLEARED GASH"].map(t=>`<div class="ds-kv"><span>${t.split(": ")[0]}</span><b>${t.split(": ")[1]}</b></div>`).join("")}</div>`,actions:[{label:"Check shipping",icon:"truck"},{label:"Upload documents",icon:"document-arrow-up"}],primary:{label:"Mark received",icon:"check"}});
+
+  document.getElementById("catNav").innerHTML = SECTIONS.map(s=>`<a href="#${s.id}">${DS.esc(s.title)}</a>`).join("");
+  paintTables();
+  DS.installShortcuts();
+}
+
+function paintTables(){
+  const rows = [
+    {id:"PO-0017",name:"Waleed Kharmah",account:"B19",items:35,total:827.55,arrival:"2026-09-12",status:"ARRIVED",pkgStatus:"in clearance",attn:[]},
+    {id:"PO-0018",name:"مصطفى مسعود نايف القدح",account:"B22",items:4,total:488.86,arrival:"2026-08-30",status:"SHIPPED",pkgStatus:"recieved no rd",attn:[{kind:"late",detail:"8 d"}]},
+    {id:"PO-0019",name:"sultan maqbool",account:"E-B15",items:8,total:989,arrival:null,status:"ORDERED",pkgStatus:"oredered",attn:[{kind:"no_tracking"}]},
+    {id:"PO-0020",name:"yasmeen saad",account:"B27",items:1,total:59.11,arrival:"2026-09-20",status:"PAID",pkgStatus:"",attn:[{kind:"unpaid"}]},
+    {id:"PO-0021",name:"Sarah Odeh",account:"B19",items:12,total:142.5,arrival:"2026-09-08",status:"DELIVERED",pkgStatus:"complete",attn:[]},
+  ];
+  const columns = [
+    {key:"id",label:"Purchase order",type:"id",w:130,pin:"start",locked:true},
+    {key:"name",label:"Ship-to name",type:"text",w:220},
+    {key:"account",label:"Buying account",type:"text",w:130,title:"The Amazon buying account (Multilogin profile) the order was placed under",render:r=>r.account?DS.tag({label:r.account,icon:"computer-desktop"}):DS.dash()},
+    {key:"items",label:"Items",type:"number",w:80},
+    {key:"total",label:"Total",type:"money",w:120},
+    {key:"arrival",label:"Arrival",type:"date",w:120},
+    {key:"attn",label:"Attention",type:"attention",w:150,sortable:false},
+    {key:"pkgStatus",label:"Package status",type:"status",entity:"pkg",w:170,pin:"end"},
+    {key:"status",label:"Status",type:"status",entity:"order",w:130,pin:"end"},
+    {key:"actions",label:"",type:"actions",w:96,pin:"end",locked:true,sortable:false,
+      quick:r=>[{icon:"pencil",ariaLabel:"Edit "+r.id,tip:"Edit",onclick:`DS.toast('Edit ${r.id}')`},{icon:"truck",ariaLabel:"Check shipping",tip:"Check shipping",onclick:`DS.toast('Checking ${r.id}')`}],
+      menu:r=>[{label:"Open detail",icon:"arrow-top-right-on-square",onclick:"DS.dialogOpen('demoDrawer')"},{label:"Mark received",icon:"check",onclick:`DS.toast.success('${r.id} received')`},{divider:true},{label:"Delete",icon:"trash",danger:true,onclick:`DS.confirm({title:'Delete ${r.id}?',tone:'danger',confirmLabel:'Delete'}).then(ok=>ok&&DS.toast.error('Deleted'))`}]},
+  ];
+  DS.tableRender("demoTable",{id:"demo",columns,rows,rowKey:r=>r.id,selectable:true,
+    bulk:[{label:"Mark received",icon:"check",onclick:(keys)=>DS.toast.success(keys.length+" marked as received")},{label:"Delete",icon:"trash",variant:"danger",onclick:(keys)=>DS.confirm({title:`Delete ${keys.length} purchase orders?`,tone:"danger",confirmLabel:"Delete"}).then(ok=>ok&&DS.toast.error("Deleted "+keys.length))}],
+    expandable:{render:r=>`<div class="ds-muted" style="font-size:12px;margin-bottom:6px">Packages of ${DS.esc(r.id)} — a nested DataTable with its own header, on the same grid.</div>`+DS.table({id:"demo-sub-"+r.id.toLowerCase(),columns:[{key:"gwd",label:"Parcel",type:"id",w:150},{key:"items",label:"Items",type:"number",w:80},{key:"arrival",label:"Arrival",type:"date",w:120},{key:"docs",label:"Documents",type:"status",entity:"docs",w:150,pin:"end"},{key:"st",label:"Status",type:"status",entity:"bucket",w:150,pin:"end"}],rows:[{gwd:"GWD004705019",items:3,arrival:"2026-09-12",docs:"action",st:"customs"},{gwd:"GWD004694904",items:1,arrival:"2026-09-14",docs:"info",st:"transit"}],rowKey:x=>x.gwd})},
+    footer:{id:"Σ 5 purchase orders",items:"60",total:DS.fmt.money(2507.02)},
+    page:{from:1,to:5,total:41,onPrev:()=>DS.toast("Previous page"),onNext:()=>DS.toast("Next page")},
+    onRowClick:(r)=>DS.dialogOpen("demoDrawer"),
+    rowTitle:r=>`${r.id} · ${r.name}`});
+  DS.tableRender("demoTableLoading",{id:"demoLoading",columns:columns.slice(0,6),rows:[],loading:true});
+  DS.tableRender("demoTableEmpty",{id:"demoEmpty",columns:columns.slice(0,6),rows:[],empty:{icon:"table-cells",title:"No purchase orders match this filter",text:"Try clearing the filters.",action:{label:"Clear filters",onclick:"DS.toast('Cleared')"}}});
+  DS.tableRender("demoTableError",{id:"demoError",columns:columns.slice(0,6),rows:[],error:"Could not load purchases (500).",retry:()=>DS.toast("Retrying")});
+}
+</script>

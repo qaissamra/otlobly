@@ -1,0 +1,91 @@
+/* ============================================================================
+   Otlobly design system — tokens (the ONE source of visual values)
+   docs/ux-restructure/AUDIT.md §5.9 · DESIGN_SYSTEM.md
+   Every colour, size, radius, shadow, z-index and duration used by static/ds/ds.css
+   comes from here. Product CSS must reference these variables, never literals
+   (tools/inventory.py --lint counts the literals; Phase 7 turns that into an error).
+   Prefix --ds- keeps them apart from the legacy :root in web/index.html until that
+   file is retired in Phase 7.
+   ========================================================================== */
+:root {
+  /* ---- neutral scale: surfaces, text, borders ---- */
+  --ds-bg: #f6f7f9;            /* page ground */
+  --ds-bg2: #f9fafb;           /* tinted strips, meta rows, table header */
+  --ds-bg3: #f2f4f7;           /* hover, inset */
+  --ds-card: #ffffff;          /* raised surfaces: table body, panels, modals */
+  --ds-line: #e7e9ee;          /* hairline dividers */
+  --ds-line-strong: #d0d5dd;   /* input borders, focused hairlines */
+  --ds-ink: #101828;           /* primary text */
+  --ds-ink2: #111827;          /* headings, primary buttons */
+  --ds-muted: #667085;         /* secondary text */
+  --ds-muted2: #98a2b3;        /* placeholders, disabled text */
+
+  /* ---- the one brand accent (primary actions, active nav, focus) ---- */
+  --ds-accent: #ff5a1f;
+  --ds-accent-deep: #e6410c;   /* hover / pressed */
+  --ds-accent-tint: #fff4ee;   /* selected row, active tab background */
+  --ds-accent-ink: #ffffff;    /* text on accent */
+  --ds-on-solid: #ffffff;      /* text and knobs on any solid dark or accent surface */
+  --ds-accent-on-dark: #ffd2c0;/* the accent, legible on the dark bulk bar / active chip */
+  --ds-focus: 0 0 0 3px rgba(255, 90, 31, .35);
+
+  /* ---- semantic tones (bg / ink / line), each pair meets WCAG AA on its bg ---- */
+  --ds-info-bg: #e0f2fe;    --ds-info-ink: #075985;    --ds-info-line: #bae6fd;    --ds-info-dot: #0ea5e9;
+  --ds-success-bg: #ecfdf5; --ds-success-ink: #15803d; --ds-success-line: #bbf7d0; --ds-success-dot: #16a34a;
+  --ds-warning-bg: #fff7ed; --ds-warning-ink: #b45309; --ds-warning-line: #fed7aa; --ds-warning-dot: #d97706;
+  --ds-danger-bg: #fef2f2;  --ds-danger-ink: #b42318;  --ds-danger-line: #fecaca;  --ds-danger-dot: #dc2626;
+  --ds-neutral-bg: #f2f4f7; --ds-neutral-ink: #475467; --ds-neutral-line: #e4e7ec; --ds-neutral-dot: #98a2b3;
+
+  /* ---- spacing: 4 px base scale ---- */
+  --ds-s1: 4px; --ds-s2: 8px; --ds-s3: 12px; --ds-s4: 16px; --ds-s5: 24px; --ds-s6: 32px; --ds-s7: 48px;
+
+  /* ---- radius: two values (+ pill) ---- */
+  --ds-r-sm: 8px;              /* inputs, buttons, badges */
+  --ds-r-md: 14px;             /* panels, modals, drawers */
+  --ds-r-pill: 999px;
+
+  /* ---- elevation: two levels ---- */
+  --ds-e1: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 12px rgba(16, 24, 40, .08);     /* raised: menus, popovers */
+  --ds-e2: 0 8px 24px rgba(16, 24, 40, .16), 0 24px 48px rgba(16, 24, 40, .12);   /* overlay: modals, drawers */
+
+  /* ---- typography ---- */
+  --ds-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;   /* identifiers and tracking numbers only */
+  --ds-t-xs: 11px;             /* badges, table header labels */
+  --ds-t-sm: 12.5px;           /* compact tables, meta */
+  --ds-t-md: 14px;             /* body, data */
+  --ds-t-lg: 17px;             /* section titles */
+  --ds-t-xl: 22px;             /* page titles */
+  --ds-lh: 1.45;
+  --ds-w-regular: 400; --ds-w-medium: 600; --ds-w-bold: 700;
+
+  /* ---- density ---- */
+  --ds-row: 42px;              /* compact list row (default in lists) */
+  --ds-row-comfortable: 48px;  /* forms, detail lists */
+  --ds-control: 32px;          /* md buttons and inputs */
+  --ds-control-sm: 26px;       /* sm buttons, inline cells */
+
+  /* ---- layers ---- */
+  --ds-z-sticky: 20;           /* sticky table header, pinned column */
+  --ds-z-menu: 60;             /* dropdowns, popovers */
+  --ds-z-drawer: 80;
+  --ds-z-modal: 90;
+  --ds-z-toast: 100;
+  --ds-z-banner: 110;          /* offline / dry-run strips */
+
+  /* ---- motion: open / close / expand only, never on page load ---- */
+  --ds-dur-fast: 120ms;
+  --ds-dur: 180ms;
+  --ds-ease: cubic-bezier(.2, .7, .2, 1);
+
+  /* ---- shell ---- */
+  --ds-sidebar-w: 232px;
+  --ds-topbar-h: 56px;
+  --ds-content-max: 1400px;
+  --ds-icon: 16px;             /* inline */
+  --ds-icon-nav: 20px;         /* sidebar */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --ds-dur-fast: 0ms; --ds-dur: 0ms; }
+}
