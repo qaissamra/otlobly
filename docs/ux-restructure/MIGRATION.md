@@ -8,10 +8,10 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | View | Today | Template | Target home (brief §6, D-decisions pending) | Screen (before) | Status |
 |---|---|---|---|---|---|
 | `brain` | 🧠 Brain landing | T4 | Overview (D5, renamed in the shell Phase 2 ✓) + feeds Needs attention (✓) | `brain.jpg` | in progress |
-| `purchases` (orders tree) | 📦 Purchases | T1 | Fulfillment › Purchases (reference page, Phase 3) | `purchases-orders.jpg` | not started |
-| `purchases` › packages | 📦 Packages sub-view | T1 | same page, saved view | `purchases-packages.jpg` | not started |
-| `purchases` › products | ⫶ Products sub-view | T1 | same page, saved view | `purchases-products.jpg` | not started |
-| `purchases` › customers | 👤 Customers sub-view | T1 | same page, saved view | `purchases-customers.jpg` | not started |
+| `purchases` (orders tree) | 📦 Purchases | T1 | Fulfillment › Purchase orders (the reference page) | `purchases-orders.jpg` → `after/purchase-orders.jpg` | **migrated** |
+| `purchases` › packages | 📦 Packages sub-view | T1 | same page, saved view + its own address | `purchases-packages.jpg` → `after/purchase-packages.jpg` | **migrated** |
+| `purchases` › products | ⫶ Products sub-view | T1 | same page, saved view + its own address | `purchases-products.jpg` → `after/purchase-products.jpg` | **migrated** |
+| `purchases` › customers | 👤 Customers sub-view | T1 | same page, saved view + its own address | `purchases-customers.jpg` → `after/purchase-customers.jpg` | **migrated** |
 | `purchases` › split | 💵 Cost split (money roles) | T1 | same page, saved view | `purchases-split.jpg` | not started |
 | `needorder` | 💡 To order | T1 | Fulfillment › To order | `to-order.jpg` | not started |
 | `needorder` › quote tool | Quick quote (`#quoteView`, own `QLANG`) | T3 | Fulfillment › To order › Quote (drawer or page) | `to-order-quote-tool.jpg` | not started |
@@ -160,12 +160,59 @@ then the page header and the legacy toolbar title both show, which is why Purcha
 "Purchase orders" twice. Package prep has no count badge yet (no cheap source; it gets one when the
 page is migrated). The `#sub` subtitle now appears only on Orders, where it is actually true.
 
+## E4. Phase 3 evidence — Purchase orders, the reference page
+
+The page moved onto the design system: `static/ds/purchases.js` renders the header, the
+filter bar and all four boards on `DS.tableRender`. The old implementation is **gone** — not
+running beside it (brief §4 rule 4): `poCardHtml`, `poPkgHtml`, `poPkFlatRow`, `poItFlatRow`,
+`poRenderPkgsFlat`, `poRenderProdsFlat`, `poRenderCustomers`, `poSortVal` and `poCfCells` are
+deleted, the LXT tables `po` / `pok` / `pop` are out of `LX_TABLES`, `LXT_COLS` and `LXT_CLS`,
+and their orphaned CSS is stripped. `renderPurchases()` is now a 20-line bridge that applies
+the filters and hands the page a `ctx`; every cell still calls the app's own builders, so how
+a value is **saved** did not change in this phase.
+
+**Brief §14, item by item:**
+
+| # | Was | Now |
+|---|---|---|
+| 2 | a middle-dot sentence with a seconds clock, no primary action | `DS.pageHeader`: breadcrumb, title, six numbers, one primary ("New purchase order"), one secondary, the rest in an overflow menu |
+| 3 | "Purchases" titled a page counting "41 orders" | "Purchase orders", counting purchase orders, in the nav and the footer too (D7) |
+| 4 | ORDER cell = id + hash + a summary sentence repeating two other columns | the identity cell carries the PO number and the Amazon tail; Order name, Customers, Items and Packages are their own columns |
+| 5 | TOTAL concatenated into the CUSTOMER cell | **Paid** is its own right-aligned, tabular column |
+| 6 | two "$" amounts in one cell, one of them a conversion | **Est. cost** is a separate column, in the muted tone, with the unpriced count as `+3?` |
+| 7 | truncation with no tooltips, Arabic clipped at the wrong end | every text cell is `dir="auto"` + `ds-truncate` with the whole value in the tooltip; the three-word product-name clip is gone |
+| 8 | STATUS off-screen, pills cut, no pinned column | identity pinned to the start, **Status** and actions pinned to the end, edge shadow while there is more to scroll |
+| 9 | "40 DAYS LATE" beside lowercase pills | sentence case; lateness reads "47 d"; a legacy `.pill` stops shouting inside a DS table |
+| 10 | four problem treatments (red dash, orange text, red caps pill, tone pills) | one **Needs attention** column: `late` · `no_tracking` · `missing_name` from the attention vocabulary. Status pills stay status |
+| 11 | cards with shadows and gaps, a phantom row | flat rows, one border, no gap |
+| 12 | nested packages with emoji counters and no header row | packages and products each get an aligned sub-grid **with a header row** (`.ds-pu-sub`) |
+| 13 | `B19`, `E-B15` unexplained | the Buying account column explains itself in its header tooltip |
+| 14 | the nav's peach fill also marked the open row | the open row has its own surface and a start bar; the accent fill belongs to the nav alone |
+| 15 | an unlabelled "+" at the end of the header row | a labelled **Columns** button in the table bar, which also says how many are hidden |
+
+**Also landed:** every board has an address (`#/fulfillment/purchase-orders/packages`), so a
+board can be linked; `defaultHidden` columns (new in `table.js`) let a board ship with its
+secondary column folded away; and `DS.shell2.syncTab()` keeps the address honest when a page
+switches its own tab.
+
+Verified headless on a copy of the live data: 10 orders, 18 packages, 30 products, 19
+customers render; the identity column stays put while the grid scrolls and the Status column
+is fully on screen; 18/18 text cells carry tooltips; the open row's fill differs from the
+nav's; every inline editor still works (18 due-date editors, 18 RD inputs, the package status
+picker); the classic shell renders the same page; **no console errors**.
+Screens in `screens/after/purchase-*.jpg`.
+
+**Deliberate change to call out:** inside a package, products used to sit under a customer
+heading; each product row now NAMES its customer in its own column instead (one fact per
+column). Grouping by customer is what the Customers board is for, and it kept its per-order
+separation. Nothing was removed.
+
 ## F. Phase checklist
 
 - [x] **Phase 0** — audit and plan: `BRIEF.md`, `AUDIT.md`, this file, `tools/inventory.py`, `tools/screenshots.mjs`, `screens/before/`, test baseline 51/51. *Waiting for owner approval.*
 - [x] **Phase 1** — foundations *(this PR)*: `static/ds/` (tokens · ds.css · ds.js · table.js · status.js · format.js · icons.svg), the `/design-system` catalogue, `DESIGN_SYSTEM.md`, the warn-level lint (`test_ds_lint.py` + `lint-baseline.json`), `test_design_system.py`, and the behaviour parity suite `test_ux_parity.py`. Loaded app-wide but used by nothing yet — the staff app is byte-for-byte unchanged on screen.
 - [x] **Phase 2** — shell and navigation *(this PR)*: `static/ds/shell.js` (grouped sidebar, top bar with global search, hash router, stage tabs, workspace switcher), `attention.py` + `/api/attention` + the Needs attention page, `test_ds_shell.py`, `test_attention.py`. Behind the per-user flag (D13) until Phase 4 completes.
-- [ ] **Phase 3** — Purchases on T1 (reference; brief §14 list).
+- [x] **Phase 3** — Purchase orders on T1 *(this PR)*: `static/ds/purchases.js` (header, filter bar, four DataTable boards, aligned sub-grids), the old renderers and LXT tables deleted, `test_ds_purchases.py`, `defaultHidden` columns. All fifteen §14 items answered.
 - [ ] **Phase 4** — GAASH mail, To order, Package prep, then Orders, In cart, Customers, Leads, Deposits, Tracking.
 - [ ] **Phase 5** — details, forms, modals.
 - [ ] **Phase 6** — imports onto `ImportWizard`; delete old importers.

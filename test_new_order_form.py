@@ -63,10 +63,15 @@ def main():
     check("paste a link auto-extracts the ASIN",
           "const a=extractAsinClient(v); if(a) NO.rows[i].asin=a" in html)
 
-    # 4) Visible ＋ Add product on packages (not only the ⋯ menu).
+    # 4) A visible Add-product button on packages, not only in the overflow menu.
+    #    Since Phase 3 the package grid lives in static/ds/purchases.js, so that is
+    #    where the button is now — the requirement is unchanged, its home moved.
+    pur = (Path(__file__).parent / "static" / "ds" / "purchases.js").read_text(encoding="utf-8")
     check("package body has a visible Add-product button",
-          "＋ إضافة منتج · Add product</button></div></div>" in html
-          and "onclick=\"poAddItem('${p.po_id}',${pi})\">＋ إضافة منتج" in html)
+          'label: "Add product", icon: "plus"' in pur
+          and "onclick: `poAddItem('${esc(p.po_id)}',${pi})`" in pur)
+    check("and it is a button in the grid, not only a menu item",
+          'class="ds-pu-sub-foot"' in pur)
 
     # 5) Backend already creates a full nested PO in one POST (the form's write path).
     r = co.post("/api/purchase", json={

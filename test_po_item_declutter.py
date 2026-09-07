@@ -98,8 +98,17 @@ def main():
     html = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
     check("row template has NO status select",
           "poItemSet('${p.po_id}',${pi},${ii},'status'" not in html)
-    check("rows are grouped by customer", 'class="poc-cust' in html and "poc-group" in html)
-    check("row has the ✏️ editor button", "itemEditOpen('${p.po_id}',${pi},${ii})" in html)
+    # Since Phase 3 the product row lives in static/ds/purchases.js. Each row now
+    # NAMES its customer in its own column instead of sitting under a customer
+    # heading — the same fact, one per column (brief §14.4) — and the whole title is
+    # kept in the tooltip while CSS truncates it, instead of clipping to three words.
+    pur = (Path(__file__).parent / "static" / "ds" / "purchases.js").read_text(encoding="utf-8")
+    check("every product row names its customer",
+          'label: "Customer"' in pur and "it.customer_name" in pur)
+    check("a product with no customer is flagged, not left blank",
+          'kind: "missing_name"' in pur)
+    check("row has the editor button",
+          "itemEditOpen('${esc(p.po_id)}',${pi},${ii})" in pur and 'ariaLabel: "Edit product"' in pur)
     check("item editor modal exists", 'id="itemEditModal"' in html and "function ieRender" in html)
     check("editor holds link/ASIN/get-photo/notes/tracking",
           all(s in html for s in ("ieLink(this.value)", "ieFetch(this)",
@@ -110,8 +119,13 @@ def main():
           all(s in html for s in ("REFUNDED:[", "OUT_OF_STOCK:[", "RETURNED:[")))
     check("package effective status helper exists", "function pkgStatus(" in html)
     check("rollup now computes over packages", "least-advanced PACKAGE" in html)
-    check("row name clipped to first 3 words (full name stays in title)",
-          "const short3=" in html and "w.slice(0,3).join(' ')" in html and "short3(it.title)" in html)
+    # The three-word clip was a workaround for having no tooltip: it hid the rest of
+    # an Amazon title with no way to see it. The row now shows as much as fits and
+    # keeps the WHOLE title in the tooltip, truncating at the text's own end (§14.7).
+    check("the full product name is kept in the tooltip",
+          'title="${esc(v)}"' in pur and "it.title || it.asin" in pur)
+    check("and the cell truncates instead of pre-clipping the words",
+          'class="ds-truncate"' in pur and "const short3=" not in pur)
 
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     return 0 if not fails else 1

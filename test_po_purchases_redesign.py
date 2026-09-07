@@ -25,10 +25,16 @@ def main():
     html = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
 
     # 1) Filter tabs + state.
+    # Phase 3 rebuilt this page on the design system, so the MARKUP now lives in
+    # static/ds/purchases.js. Every requirement below is unchanged; only the file it
+    # is asserted against moved. See docs/ux-restructure/MIGRATION.md.
+    pur = (Path(__file__).parent / "static" / "ds" / "purchases.js").read_text(encoding="utf-8")
+
     check("filter definitions exist", "const PO_FILTERS=" in html and "PO_FILTER" in html)
     check("tab labels present",
           all(s in html for s in ('lab:"Late"', 'lab:"Arriving this week"', 'lab:"No tracking"')))
-    check("filters container in the toolbar", 'id="poFilters"' in html and "po-tab" in html)
+    check("the quick filters are chips in the page's filter bar",
+          "chips: ctx.quick.map" in pur and "poQuickFilter(" in html)
 
     # 2) Collapse-by-default tri-state (late POs auto-open, manual toggles stick).
     check("PO view tri-state helpers",
@@ -71,7 +77,7 @@ def main():
           and "function popToggle(" in html)
     check("Notify lives inside a menu", "Notify customers" in html and "pkgNotifyOpen(" in html)
     check("package menu also holds check-shipping + delete",
-          "Check shipping" in html and "Delete package" in html)
+          'label: "Check shipping"' in pur and 'label: "Delete package"' in pur)
 
     # 7) Edit drawers hold what left the rows.
     check("package edit drawer",
@@ -88,21 +94,22 @@ def main():
           "function poProfileCell(" in html and 'p.profile_box||""' in html)
 
     # 8) #28 read-view still intact (grouped rows, item editor, 3-word clip).
-    check("customer-grouped item rows survive", 'class="poc-cust' in html and "itemEditOpen(" in html)
-    check("3-word name clip survives", "const short3=" in html)
+    check("a product row still names its customer and opens the editor",
+          'label: "Customer"' in pur and "itemEditOpen('${esc(p.po_id)}',${pi},${ii})" in pur)
+    check("the whole product name survives, in the tooltip", 'class="ds-truncate"' in pur and "const short3=" not in pur)
 
     # 9) 🟢 RD number — own column on BOTH package tables, green pill, inline
     # editor + the ⋯ → Edit package field the owner asked for.
-    check("rdnum column registered on the package tables",
-          html.count('{key:"rdnum"') == 2)
+    check("RD number is a column on both package surfaces",
+          pur.count('key: "rd", label: "RD number"') == 2)
     check("RD cell renders green and edits inline",
           "function pkgRdCell(" in html and 'tonePill("green"' in html
           and "function pkgRdEdit(" in html and "pk.rd_number=" in html)
-    check("RD cell wired into the tree row AND the flat package row",
-          html.count("rdnum: pkgRdCell(p,pk,pi)") == 2)
+    check("RD cell wired into the package grid AND the flat package row",
+          pur.count("W.pkgRdCell(p, pk, pi)") == 2)
     check("RD field in the edit-package sheet",
           "pkeSet('rd_number',this.value)" in html)
-    check("RD column sorts", 'if(key==="rdnum")' in html)
+    check("RD column sorts", 'sortVal: ([, pk]) => (pk.rd_number' in pur)
 
     # 10) 📷 package photos — admin-only gallery + ⌘V paste + row badge.
     check("package photo gallery + paste handler",
@@ -112,8 +119,8 @@ def main():
     check("photo section is admin-gated", "CAN_ADMIN?sec('📷" in html.replace(" ", "")
           or "const pkgImgSec=CAN_ADMIN?sec(" in html)
     check("paste handler refuses non-admins", "if(!PKG_INFO||!CAN_ADMIN" in html)
-    check("📷N badge on both package rows",
-          "function pkgPhotoBadge(" in html and html.count("${pkgPhotoBadge(pk)}") == 2)
+    check("photo-count badge on the package identity cell",
+          "function pkgPhotoBadge(" in html and "W.pkgPhotoBadge(pk)" in pur)
 
     # 11) the popup's product thumbs can no longer be squeezed to nothing by the
     # pill row beside them (the "I don't see the image" report)

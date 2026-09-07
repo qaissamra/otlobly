@@ -76,6 +76,25 @@ the old patterns (warn level until Phase 7).
 | `DS.sidebar / DS.topbar / DS.shell` | the app shell | | ≤12 items in named groups; badges only on actionable queues |
 | `DS.installShortcuts()` | `/` focuses search, `?` shows the sheet | | |
 
+## Pages (`purchases.js`, and the ones that follow)
+
+A migrated page is its own file under `static/ds/`, exporting one namespace (`DS.purchases`).
+It renders the page header and the filter bar into a host element, and each board through
+`DS.tableRender`. It must not read the app's globals directly — index.html's top-level `let`
+bindings are not `window` properties — so the page's render function in index.html passes a
+`ctx` object with everything it needs, and the page calls the app's own cell builders through
+`window` for anything that still carries inline editing. Two rules that came out of the first
+one:
+
+* **Add the view to `OWN_HEADER` in `shell.js`** so the shell stops drawing a generic header
+  over the page's own; the shell then contributes only the tabs that are navigation.
+* **Call `DS.shell2.syncTab()`** whenever the page switches one of its own tabs, so a link
+  points at the tab that will actually open.
+
+Columns may carry `defaultHidden: true`: the board ships without them and the Columns button
+brings them back. It applies only the first time a user meets the table — a saved layout is
+theirs from then on.
+
 ## The shell (`shell.js`)
 
 `DS.shell2` is the running shell, not a component: it renders the sidebar and top bar over the

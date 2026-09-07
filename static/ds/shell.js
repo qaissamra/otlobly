@@ -293,6 +293,9 @@
   }
 
   // ---------------------------------------------------------------- page header
+  /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
+  const OWN_HEADER = new Set(["purchases"]);
+
   function paint() {
     const v = A().view || "orders";
     const it = BY_VIEW[v] || { label: v, key: v };
@@ -317,15 +320,23 @@
     }
     if (stage) store.set("ds_stage", it.key);
     const sub = v === "orders" && $("sub") ? $("sub").textContent : "";
-    $("dsPageHead").innerHTML = D.pageHeader({
-      crumbs: stage ? [{ label: "Fulfillment" }, { label: it.label }] : g ? [{ label: g.label }, { label: it.label }] : [],
-      title: it.label, below,
-    }) + (sub ? `<p class="ds-pagesub">${esc(sub)}</p>` : "");
+    // A migrated page draws its own header (breadcrumb, title, numbers, actions), so
+    // the shell must not draw a second one over it - it contributes only the tabs
+    // that are navigation. Pages join this set as Phase 4 migrates them.
+    $("dsPageHead").innerHTML = OWN_HEADER.has(v)
+      ? below
+      : D.pageHeader({
+        crumbs: stage ? [{ label: "Fulfillment" }, { label: it.label }] : g ? [{ label: g.label }, { label: it.label }] : [],
+        title: it.label, below,
+      }) + (sub ? `<p class="ds-pagesub">${esc(sub)}</p>` : "");
     if (v === "attention") attnRender();
   }
 
   S.stage = (key) => { const s = STAGES.find((x) => x.key === key); if (s) { store.set("ds_stage", key); S.go(s.path); } };
   S.tab = (key) => { const t = TABS[A().view]; if (t) { t.set(key); syncHash(); } };
+  /** A page switched one of its own tabs without going through the shell - make the
+      address say so, so the tab a link points at is the tab that opens. */
+  S.syncTab = () => { if (S.enabled()) syncHash(); };
 
   // ---------------------------------------------------------------- global search
   let POS_CACHE = null, SEARCH_ROWS = [], SEARCH_I = -1;

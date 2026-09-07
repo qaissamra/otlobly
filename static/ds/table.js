@@ -41,7 +41,10 @@
     constructor(o) { this.o = o; this.id = o.id; this.selected = new Set(); this.open = new Set(); this.load(); }
     load() {
       let s = {}; try { s = JSON.parse(localStorage.getItem(KEY(this.id)) || "{}") || {}; } catch (e) { s = {}; }
-      this.state = { w: s.w || {}, hidden: s.hidden || [], order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
+      // `defaultHidden` columns start folded away the FIRST time a user meets the table;
+      // once they have a saved layout it is theirs and this never overrides it again.
+      const seed = s.hidden || (this.o.columns || []).filter((c) => c.defaultHidden).map((c) => c.key);
+      this.state = { w: s.w || {}, hidden: seed, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
     }
     save() { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } if (this.o.onStateChange) this.o.onStateChange(this.state); }
     reset() { this.state = { w: {}, hidden: [], order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }

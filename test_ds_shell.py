@@ -52,7 +52,8 @@ def main():
     check("shell.js loads after ds.js (it calls DS.*)",
           idx.index("/static/ds/shell.js") > idx.index("/static/ds/ds.js"))
     check("service worker precaches shell.js", "/static/ds/shell.js" in sw)
-    check("service worker cache name was bumped", 'CACHE = "otl-off-v3"' in sw)
+    ver = re.search(r'CACHE = "otl-off-v(\d+)"', sw)
+    check("service worker cache name was bumped for the shell", ver and int(ver.group(1)) >= 3)
     check("shell.js carries no emoji", not EMOJI.findall(src))
 
     # ---- 2. the approved information architecture (AUDIT 5.8) --------------
