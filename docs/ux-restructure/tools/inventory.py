@@ -326,6 +326,41 @@ report["cross_checks"] = {
     "aliases": ALIAS, "nested_containers": NESTED,
 }
 
+# ---------------------------------------------------------------- lint (warn level in Phase 1, --strict later)
+def lint_metrics():
+    """The numbers the design-system lint watches. Each must only ever go DOWN as pages migrate."""
+    ds_dir = ROOT / "static" / "ds"
+    dup_formatters = [k for k, v in report["formatters"].items() if len(v) > 1]
+    return {
+        "emoji_glyphs": report["emoji"]["total"],
+        "raw_table": G["<table"], "raw_button": G["<button"], "raw_select": G["<select"], "raw_input": G["<input"],
+        "physical_css_style": report["physical_css"]["style_total"], "physical_css_file": report["physical_css"]["file_total"],
+        "hex_literals_css": report["hex_literals"]["css"], "hex_literals_file": report["hex_literals"]["file"],
+        "colour_registries": report["colour_registries"]["count"], "raw_pill_literals": G['class="pill (raw literal)'],
+        "native_confirm": G["confirm("], "native_prompt": G["prompt("], "native_alert": G["alert("],
+        "duplicate_formatters": len(dup_formatters), "az_modal_roots": G["az-modal roots"],
+        "ds_files_present": int(all((ds_dir / f).exists() for f in ("tokens.css", "ds.css", "ds.js", "status.js", "format.js", "icons.svg"))),
+    }
+
+if "--lint" in sys.argv:
+    baseline_path = OUT_DIR / "lint-baseline.json"
+    cur = lint_metrics()
+    if "--write-baseline" in sys.argv:
+        baseline_path.write_text(json.dumps(cur, indent=1), encoding="utf-8"); print("baseline written:", baseline_path)
+    base = json.loads(baseline_path.read_text(encoding="utf-8")) if baseline_path.exists() else {}
+    worse = []
+    print("design-system lint (warn level)")
+    for k, v in cur.items():
+        b = base.get(k)
+        bad = (b is not None and ((k == "ds_files_present" and v < b) or (k != "ds_files_present" and v > b)))
+        flag = "WARN" if bad else "  ok"
+        print(f"  {flag} {k:24} {v:>6}   baseline {b if b is not None else '-'}")
+        if bad: worse.append(k)
+    if worse:
+        print("WARN: these metrics got worse than docs/ux-restructure/lint-baseline.json:", ", ".join(worse))
+        if "--strict" in sys.argv: sys.exit(1)
+    sys.exit(0)
+
 # ---------------------------------------------------------------- write
 json_path = OUT_DIR / "inventory.json"
 md_path = OUT_DIR / "inventory.md"
