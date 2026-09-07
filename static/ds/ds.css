@@ -351,7 +351,10 @@ dialog.ds-dialog[open] { display: flex; }
 .ds-tr:last-child { border-bottom: 0; }
 .ds-tr:hover { background: var(--ds-bg2); }
 .ds-tr.is-selected { background: var(--ds-accent-tint); }
-.ds-tr.is-open { background: var(--ds-accent-tint); }
+/* The open row must NOT wear the nav's active fill - that fill means "you are here"
+   and nothing else (brief 14.14). An opened row is marked by its own quiet surface
+   plus a start-edge bar, which also survives being scrolled sideways. */
+.ds-tr.is-open { background: var(--ds-bg2); box-shadow: inset 3px 0 0 var(--ds-muted2); }
 .ds-tr:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ds-accent); }
 .ds-tr.is-clickable { cursor: pointer; }
 .ds-td { font-size: var(--ds-t-md); color: var(--ds-ink); }
@@ -375,7 +378,8 @@ dialog.ds-dialog[open] { display: flex; }
 .ds-td-exp { padding: 0 4px; justify-content: center; }
 .ds-exp-btn { width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ds-muted); }
 .ds-exp-btn:hover { background: var(--ds-bg3); color: var(--ds-ink); }
-.is-open .ds-exp-btn { background: var(--ds-accent); color: var(--ds-on-solid); }
+/* the accent is the nav's, not a row's: the rotation and the row's own surface say open */
+.is-open .ds-exp-btn { background: var(--ds-bg3); color: var(--ds-ink); }
 .ds-exp-btn .ds-icon { transition: transform var(--ds-dur-fast) var(--ds-ease); }
 .is-open .ds-exp-btn .ds-icon { transform: rotate(90deg); }
 .ds-tr-exp { width: var(--ds-view-w, 100%); padding: var(--ds-s3) var(--ds-s4); padding-inline-start: 44px; background: var(--ds-bg2); border-bottom: 1px solid var(--ds-line); will-change: transform; }
@@ -431,3 +435,41 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-attn-title { font-weight: var(--ds-w-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-attn-age { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .ds-attn-more { margin-inline-start: auto; font: var(--ds-w-medium) var(--ds-t-sm)/1 var(--ds-font); color: var(--ds-accent-deep); }
+
+/* A legacy `.pill` still carries text-transform:uppercase from the host page, which is
+   where "40 DAYS LATE" came from while the status pills beside it were lowercase
+   (brief 14.9). Inside a design-system table it stops shouting; pages lose the rule
+   entirely as they migrate their pills to DS.status.badge. */
+.ds-table .pill, .ds-pu-sub .pill { text-transform: none; letter-spacing: 0; }
+
+/* ---------------------------------------------------------- Purchase orders (Phase 3)
+   Only the parts the DataTable has no opinion about: the identity cells, and the
+   aligned sub-grids that a row expands into. Everything else is a DS primitive. */
+.ds-pu-id { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.ds-pu-id > b { flex: 0 0 auto; font-weight: var(--ds-w-bold); }
+.ds-pu-disc { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; inline-size: 20px; block-size: 20px; padding: 0; margin: 0; border: 0; border-radius: var(--ds-r-sm); background: transparent; color: var(--ds-muted); cursor: pointer; }
+.ds-pu-disc:hover { background: var(--ds-bg3); color: var(--ds-ink); }
+.ds-pu-disc[aria-expanded="true"] .ds-icon { transform: rotate(90deg); }
+.ds-pu-disc .ds-icon { transition: transform var(--ds-dur-fast); }
+.ds-pu-prod { display: flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; }
+.ds-pu-thumb { flex: 0 0 auto; inline-size: 26px; block-size: 26px; border-radius: 6px; border: 1px solid var(--ds-line); background: var(--ds-bg3); object-fit: cover; }
+.ds-pu-out { flex: 0 0 auto; color: var(--ds-muted); display: inline-flex; }
+.ds-pu-out:hover { color: var(--ds-accent-deep); }
+/* The estimate is the quieter of the two money columns — it is a guess, not a fact. */
+.ds-pu-est { color: var(--ds-muted); font-variant-numeric: tabular-nums; }
+.ds-pu-collect { color: var(--ds-accent-deep); }
+
+/* A row expands into aligned sub-grids WITH header rows, so nested content lines up
+   with itself instead of floating free (brief 14.12). */
+.ds-pu-sub { display: grid; grid-template-columns: var(--ds-pu-cols); align-items: center; border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-card); overflow-x: auto; overflow-y: hidden; }
+.ds-pu-sub-head, .ds-pu-sub-row { display: contents; }
+.ds-pu-th { padding: 6px var(--ds-s3); font: var(--ds-w-bold) var(--ds-t-xs)/1.2 var(--ds-font); color: var(--ds-muted); background: var(--ds-bg2); border-block-end: 1px solid var(--ds-line); position: sticky; inset-block-start: 0; }
+.ds-pu-td { padding: 7px var(--ds-s3); font: var(--ds-t-sm)/1.35 var(--ds-font); min-inline-size: 0; border-block-end: 1px solid var(--ds-line); overflow: hidden; }
+.ds-pu-sub-row:last-child .ds-pu-td { border-block-end: 0; }
+.ds-pu-sub-row:hover .ds-pu-td { background: var(--ds-bg2); }
+.ds-pu-sub-foot { padding: var(--ds-s2) 0 0; }
+.ds-pu-pkg-open { margin-block-start: var(--ds-s3); padding-inline-start: var(--ds-s4); border-inline-start: 2px solid var(--ds-line); }
+.ds-pu-pkg-open h4 { display: flex; align-items: center; gap: var(--ds-s2); margin: 0 0 var(--ds-s2); font: var(--ds-w-bold) var(--ds-t-sm)/1.2 var(--ds-font); color: var(--ds-muted); }
+.ds-pu-empty { padding: var(--ds-s4); color: var(--ds-muted); font-size: var(--ds-t-sm); display: flex; align-items: center; gap: var(--ds-s3); }
+.ds-pu-facts { display: flex; flex-wrap: wrap; gap: var(--ds-s2) var(--ds-s5); margin-block-end: var(--ds-s3); }
+.ds-pu-facts .ds-kv { border: 0; padding: 0; gap: 6px; }
