@@ -7,7 +7,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 
 | View | Today | Template | Target home (brief §6, D-decisions pending) | Screen (before) | Status |
 |---|---|---|---|---|---|
-| `brain` | 🧠 Brain landing | T4 | Overview (D5) + feeds Needs attention | `brain.jpg` | not started |
+| `brain` | 🧠 Brain landing | T4 | Overview (D5, renamed in the shell Phase 2 ✓) + feeds Needs attention (✓) | `brain.jpg` | in progress |
 | `purchases` (orders tree) | 📦 Purchases | T1 | Fulfillment › Purchases (reference page, Phase 3) | `purchases-orders.jpg` | not started |
 | `purchases` › packages | 📦 Packages sub-view | T1 | same page, saved view | `purchases-packages.jpg` | not started |
 | `purchases` › products | ⫶ Products sub-view | T1 | same page, saved view | `purchases-products.jpg` | not started |
@@ -30,7 +30,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `gaashmail` › docs | 📄 Docs | T1 | Shipping › GAASH mail › Docs (feeds Needs attention) | `gaash-mail-docs.jpg` | not started |
 | `gaashmail` › fcast | 🔮 Forecast | T4 | Shipping › GAASH mail › Forecast | `gaash-mail-forecast.jpg` | not started |
 | `gaashmail` › dash | 📊 Analyze | T4 | Shipping › GAASH mail › Analyze | `gaash-mail-analyze.jpg` | not started |
-| `flags` | 🚩 Flags | T1 | Needs attention (open flags) + Settings › Integrations (inboxes) | `flags.jpg` | not started |
+| `flags` | 🚩 Flags | T1 | Needs attention (open flags, Phase 2 ✓) + Settings › Integrations (inboxes; routed at `#/settings/inboxes` until Phase 7) | `flags.jpg` | in progress |
 | `deposits` | 💵 Deposits | T1 (+T3 entry) | Finance › Deposits | `deposits.jpg` | not started |
 | `pnl` | 📊 P&L | T4 | Finance › P&L | `pnl.jpg` | not started |
 | `goals` | 🏆 Goals | T4 | Insights › Goals | `goals.jpg` | not started |
@@ -130,11 +130,41 @@ label, the focus ring appears on a real Tab, no console errors, no horizontal ov
 smoke flip does not break the layout. The staff app itself renders identically to the Phase 0
 baseline with zero design-system classes in its DOM.
 
+## E3. Phase 2 evidence — the shell
+
+The new shell is **additive and opt-in**. `static/ds/shell.js` renders a design-system sidebar and
+top bar beside the legacy ones and hides those with CSS; every page it opens is the same legacy view
+container as before, shown by the same `setView()`. Only 49 lines of the app itself changed: the
+`window.APP` read-only bridge (index.html's top-level `let` bindings are not `window` properties),
+one `<script>` tag, one empty `#attentionView` container, and its four lines inside `setView`.
+
+| What | How it works |
+|---|---|
+| Flag (D13) | `localStorage.otl_shell` = `"ds"`. `?shell=new` / `?shell=old` set it from a link; the classic top bar grows one "New layout" button, and the new user menu has "Switch to the classic layout". Off for everyone until the owner turns it on. |
+| Role and feature gates | Not restated. A nav item is visible exactly when its legacy nav button is (`applyRole()` still owns every gate); `test_ds_shell.py` asserts each named button exists. |
+| Router (D4) | `#/group/page[/tab]`. `hashchange` opens the page and its tab; every `setView()` call — from anywhere — writes the address back. Pre-Phase-2 links (`#purchases`) land and are rewritten to the canonical path with `replaceState`. Deep links win over the app's own "restore last page" once, at boot. |
+| Tabs with addresses | GAASH mail (8), Purchases boards (4), Leluxe segments (5) — the route calls the page's own `gmTab` / `poSetView` / `lxSetView`. |
+| Fulfillment (D8) | One nav item, four stage tabs, four addresses. The nav badge is the work waiting in the pipeline; the tabs carry the per-stage counts. `/fulfillment` alone reopens the stage you were last on. |
+| Needs attention | New `attention.py` + `GET /api/attention`: action-required email (Flags), packages past their due date or GAASH deadline, customs asking for documents, packages with no GWD, and the Brain's urgent rules — minus anything that is already a nav badge. Carries no money, so it needs no redaction. |
+| Workspaces (D11) | Otlobly · Leluxe · Tatabu in the sidebar foot. Tatabu is its own shell mode: the five platform pages replace the groups, and "Otlobly" calls the app's own `exitPlatform()`. |
+| Global search | `/` focuses it. Pages, orders (from the report already loaded), purchase orders, GWD and OTL numbers; the PO store is fetched once, lazily, the first time someone searches. Arrow keys and Enter, Esc clears. |
+
+Verified headless against a live copy of the app: 12 navigable items in 5 groups, all 21 legacy nav
+buttons still carry their gates, 10 routes open the right page and tab, the back button works, a
+legacy `#purchases` link is rewritten, a deep link into `#/shipping/gaash-mail/ready` lands there
+through the app's own boot, switching the flag off restores the classic shell exactly, and there are
+no console errors. Screens in `screens/after/`.
+
+**Known and deliberate:** a migrated page will lose its own `<h2>` when Phase 3/4 rebuilds it — until
+then the page header and the legacy toolbar title both show, which is why Purchases reads
+"Purchase orders" twice. Package prep has no count badge yet (no cheap source; it gets one when the
+page is migrated). The `#sub` subtitle now appears only on Orders, where it is actually true.
+
 ## F. Phase checklist
 
 - [x] **Phase 0** — audit and plan: `BRIEF.md`, `AUDIT.md`, this file, `tools/inventory.py`, `tools/screenshots.mjs`, `screens/before/`, test baseline 51/51. *Waiting for owner approval.*
 - [x] **Phase 1** — foundations *(this PR)*: `static/ds/` (tokens · ds.css · ds.js · table.js · status.js · format.js · icons.svg), the `/design-system` catalogue, `DESIGN_SYSTEM.md`, the warn-level lint (`test_ds_lint.py` + `lint-baseline.json`), `test_design_system.py`, and the behaviour parity suite `test_ux_parity.py`. Loaded app-wide but used by nothing yet — the staff app is byte-for-byte unchanged on screen.
-- [ ] **Phase 2** — shell and navigation (grouped sidebar, top bar, hash router, Needs attention, workspace switcher).
+- [x] **Phase 2** — shell and navigation *(this PR)*: `static/ds/shell.js` (grouped sidebar, top bar with global search, hash router, stage tabs, workspace switcher), `attention.py` + `/api/attention` + the Needs attention page, `test_ds_shell.py`, `test_attention.py`. Behind the per-user flag (D13) until Phase 4 completes.
 - [ ] **Phase 3** — Purchases on T1 (reference; brief §14 list).
 - [ ] **Phase 4** — GAASH mail, To order, Package prep, then Orders, In cart, Customers, Leads, Deposits, Tracking.
 - [ ] **Phase 5** — details, forms, modals.

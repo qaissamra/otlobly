@@ -14,6 +14,7 @@
 <script src="/static/ds/format.js"></script>
 <script src="/static/ds/ds.js"></script>
 <script src="/static/ds/table.js"></script>
+<script src="/static/ds/shell.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -1323,6 +1324,12 @@
     <div class="cards" id="cartCards" style="margin-bottom:14px"></div>
     <div class="panel"><div id="cartList"></div></div>
   </div>
+
+  <!-- Needs attention (docs/ux-restructure Phase 2) - one queue for action-required
+       email, packages past their date, missing tracking numbers and document requests.
+       Rendered by static/ds/shell.js from /api/attention; reachable only from the new
+       shell's sidebar, so the classic layout is unchanged. -->
+  <div id="attentionView" class="hidden"></div>
 
   <!-- 🚩 Flag machine — watched inboxes, open flags, the every-minute Telegram nag -->
   <div id="flagsView" class="hidden">
@@ -2748,7 +2755,7 @@ function setView(v){
     v==="brokerprofile"&&BK_CUR?("brokerprofile:"+BK_CUR):v); }catch(e){} }
   VIEW=v;
   if(!PLAT_VIEWS.has(v)){ try{ localStorage.setItem("otl_view",v); }catch(e){} }   // survive a refresh
-  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="goals"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail"||v==="flags");
+  const full=(v==="brain"||v==="pnl"||v==="customers"||v==="purchases"||v==="trash"||v==="activity"||v==="quote"||v==="settings"||v==="needorder"||v==="team"||v==="brokers"||v==="brokerprofile"||v==="platoverview"||v==="plans"||v==="usage"||v==="platactivity"||v==="metaleads"||v==="deposits"||v==="incart"||v==="catalog"||v==="leluxe"||v==="goals"||v==="pkgprep"||v==="bulksearch"||v==="gaashmail"||v==="flags"||v==="attention");
   document.querySelector(".cards").classList.toggle("hidden",full);
   document.querySelector(".grid3").classList.toggle("hidden",full);
   $("homeActivity").classList.toggle("hidden",v!=="orders");
@@ -2781,6 +2788,7 @@ function setView(v){
   $("bulkSearchView").classList.toggle("hidden",v!=="bulksearch");
   $("gmView").classList.toggle("hidden",v!=="gaashmail");
   $("flagsView").classList.toggle("hidden",v!=="flags");
+  if($("attentionView")) $("attentionView").classList.toggle("hidden",v!=="attention");
   // Sidebar nav: highlight the active item + set the page title (labels never change).
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchases",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
@@ -2821,7 +2829,25 @@ function setView(v){
   if(v==="bulksearch"){ bsInit(); }
   if(v==="gaashmail"){ gmLoad().then(()=>{ if(GM.ov && GM.tab!=="conv") gmTab(GM.tab); }); }   // re-show the restored tab once data is in
   if(v==="flags"){ flagLoad(); }
+  if(v==="attention" && window.DS && DS.shell2){ DS.shell2.attnLoad(); }
 }
+
+// ---- Phase 2 shell bridge (docs/ux-restructure) ---------------------------
+// static/ds/shell.js is a separate file, so it cannot see this script's top-level
+// `let` bindings - they live in the global lexical scope, not on `window`. These
+// read-only getters ARE the contract between the two: which page and tab are open,
+// what data is loaded, who is signed in. Nothing here changes what the app does;
+// with the new shell switched off, nobody reads them.
+window.APP = {
+  get view(){ return VIEW; },
+  get data(){ return DATA; },
+  get pos(){ return POS; },
+  get me(){ return ME; },
+  get platform(){ return PLATFORM; },
+  get gmTab(){ return GM.tab; },
+  get poBoard(){ return PO_BOARD_VIEW; },
+  get lxView(){ return LX_VIEW; },
+};
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
 // ---- Package prep (تجهيز الطرود): who can we pack & ship right now? --------- //

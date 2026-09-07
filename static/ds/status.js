@@ -109,6 +109,8 @@
     late: T("Late", "danger"), no_tracking: T("No tracking #", "warning"), missing_name: T("Missing name", "warning"),
     unpaid: T("Unpaid", "warning"), missing_docs: T("Documents missing", "danger"), no_reply: T("No reply", "warning"),
     stale: T("Stale", "neutral"), missing_id: T("No ID", "warning"), conflict: T("Conflict", "danger"),
+    // Added in Phase 2 for the Needs attention queue (attention.py emits these three).
+    action_email: T("Action required", "danger"), unpriced: T("No price", "warning"), over_quota: T("Over plan limit", "danger"),
   };
 
   const maps = { order, poItem, pkg, bucket, gerizim, docs, gmThread, lead, payment, sync, flag, role, tier, attention };

@@ -623,6 +623,17 @@ def api_brain():
     return jsonify(_redact_brain(brain.build(db.current_business())))
 
 
+@app.route("/api/attention")
+@auth.require("view_orders")
+def api_attention():
+    """The Needs attention queue: action-required email, packages past their due
+    date or GAASH deadline, customs asking for documents, packages with no GWD,
+    and the Brain's urgent rules — merged into one list (attention.build). Carries
+    no money, so it needs no redaction; every row links to the page that fixes it."""
+    import attention
+    return jsonify(attention.build(db.current_business()))
+
+
 def _pnl_range():
     # ?days=7 → last week; ?since=&?until=YYYY-MM-DD → explicit range. Default: all time.
     since = (request.args.get("since") or "").strip() or None
