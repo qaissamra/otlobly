@@ -13,10 +13,10 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `purchases` › products | ⫶ Products sub-view | T1 | same page, saved view + its own address | `purchases-products.jpg` → `after/purchase-products.jpg` | **migrated** |
 | `purchases` › customers | 👤 Customers sub-view | T1 | same page, saved view + its own address | `purchases-customers.jpg` → `after/purchase-customers.jpg` | **migrated** |
 | `purchases` › split | 💵 Cost split (money roles) | T1 | same page, saved view | `purchases-split.jpg` | not started |
-| `needorder` | 💡 To order | T1 | Fulfillment › To order | `to-order.jpg` | not started |
-| `needorder` › quote tool | Quick quote (`#quoteView`, own `QLANG`) | T3 | Fulfillment › To order › Quote (drawer or page) | `to-order-quote-tool.jpg` | not started |
-| `incart` | 🛒 In cart | T1 | Fulfillment › In cart | `in-cart.jpg` | not started |
-| `pkgprep` | 🎁 Package prep | T1 | Fulfillment › Package prep | `package-prep.jpg` | not started |
+| `needorder` | 💡 To order | T1 | Fulfillment › To order (4 saved views, each addressable) | `to-order.jpg` → `after/to-order.jpg` | **migrated** |
+| `needorder` › quote tool | Quick quote (`#quoteView`, own `QLANG`) | T3 | Fulfillment › To order › Quote (drawer or page) — moved below the queue and folded by default in Phase 4a; rebuilt in Phase 5 | `to-order-quote-tool.jpg` | in progress |
+| `incart` | 🛒 In cart | T1 | Fulfillment › In cart | `in-cart.jpg` → `after/in-cart.jpg` | **migrated** |
+| `pkgprep` | 🎁 Package prep | T1 | Fulfillment › Package prep (3 saved views, each addressable) | `package-prep.jpg` → `after/package-prep.jpg` | **migrated** |
 | `orders` | 🏠 Orders | T1 | Sales › Orders | `orders.jpg` | not started |
 | `orders` › add-order panel | ＋ Add order (mounts Purchases cards) | T3 | Sales › Orders › New order (drawer) | `orders-add-order-panel.jpg` | not started |
 | `customers` | 👤 Customers | T1 (+T2 profile) | Sales › Customers | `customers.jpg` | not started |
@@ -207,13 +207,47 @@ heading; each product row now NAMES its customer in its own column instead (one 
 column). Grouping by customer is what the Customers board is for, and it kept its per-order
 separation. Nothing was removed.
 
+## E5. Phase 4a evidence — the rest of the Fulfillment pipeline
+
+To order, In cart and Package prep now run on the same recipe Purchase orders set:
+`static/ds/fulfillment.js` renders each page's header and saved views, then one DataTable
+per view, and expands a row into an aligned sub-grid. With this, **the whole Fulfillment
+nav item is on the design system**.
+
+| Page | Was | Now |
+|---|---|---|
+| To order | a raw `<table>` with its own drag-to-resize code, four collapsible sections, ticks wired by hand | one DataTable per saved view (To order · In cart · Ordered · Deleted), with the table's own selection and one bulk action, "Move to cart" |
+| | badges for website / plan / confirmed / deposit / ID, all different shapes | a **Tags** column with one shape, and a **Needs attention** column with one vocabulary: no price · no plan · no ID · late |
+| | the Arabic-first quote tool sat above the queue and opened by default | the queue comes first; the quote tool waits folded away below it |
+| In cart | an LXT table plus three KPI cards | one DataTable, and one decision strip: revenue, the cost you type, and the profit, which still answers as you type |
+| Package prep | three walls of cards with Arabic-only headings | one board with three saved views — Ready to pack · Waiting for pieces · Ask for a review — and a real count for each |
+| | the review card was a second, near-identical card type | every row is the same row, and every row opens the same shared body (`ppBody`) |
+
+**Deleted, not parked:** `neTable`, `neRowHtml`, `neItemRow`, `neSection`, `neChip`,
+`neSecToggle`, `neRowToggle`, `neCartBar`, `neCartToggle`, `neColDown`, `neColReset`,
+`neColStyle`, `neRz`, `NE_COLS`, `NE_COLW`, `cartTable`, `icSortVal`, `ppCard`,
+`ppReviewCard`, `ppSection`, `ppToggle`, `ppFlds` (and the already-unreachable `ppCopy`),
+plus the LXT table `ic` from all three registries.
+
+**Also landed:** every saved view has an address — `#/fulfillment/to-order/ordered`,
+`#/fulfillment/package-prep/waiting` — so a link opens the view it points at; and
+`DS.tag` learned a tone, so a fact about a row can be neutral, good or cautionary
+without becoming a status badge.
+
+Verified headless on a copy of the live data: the queue shows its four buckets with counts
+that match the stage tabs; ticking rows raises the bulk bar and Move to cart still posts the
+same ids; the cart's cost input still saves and the profit still answers live; Package prep
+shows both WhatsApp country codes, keeps every action, and its rows open the same package
+body with its editable status; the classic shell renders all three; **no console errors**.
+Screens in `screens/after/to-order*.jpg`, `in-cart.jpg`, `package-prep*.jpg`.
+
 ## F. Phase checklist
 
 - [x] **Phase 0** — audit and plan: `BRIEF.md`, `AUDIT.md`, this file, `tools/inventory.py`, `tools/screenshots.mjs`, `screens/before/`, test baseline 51/51. *Waiting for owner approval.*
 - [x] **Phase 1** — foundations *(this PR)*: `static/ds/` (tokens · ds.css · ds.js · table.js · status.js · format.js · icons.svg), the `/design-system` catalogue, `DESIGN_SYSTEM.md`, the warn-level lint (`test_ds_lint.py` + `lint-baseline.json`), `test_design_system.py`, and the behaviour parity suite `test_ux_parity.py`. Loaded app-wide but used by nothing yet — the staff app is byte-for-byte unchanged on screen.
 - [x] **Phase 2** — shell and navigation *(this PR)*: `static/ds/shell.js` (grouped sidebar, top bar with global search, hash router, stage tabs, workspace switcher), `attention.py` + `/api/attention` + the Needs attention page, `test_ds_shell.py`, `test_attention.py`. Behind the per-user flag (D13) until Phase 4 completes.
 - [x] **Phase 3** — Purchase orders on T1 *(this PR)*: `static/ds/purchases.js` (header, filter bar, four DataTable boards, aligned sub-grids), the old renderers and LXT tables deleted, `test_ds_purchases.py`, `defaultHidden` columns. All fifteen §14 items answered.
-- [ ] **Phase 4** — GAASH mail, To order, Package prep, then Orders, In cart, Customers, Leads, Deposits, Tracking.
+- [~] **Phase 4** — the daily pages. **4a *(this PR)*: To order, In cart, Package prep** — `static/ds/fulfillment.js`, `test_ds_fulfillment.py`; the Fulfillment group is now fully migrated. Still to do: GAASH mail (8 tabs), then Orders, Customers, Leads, Deposits, Tracking.
 - [ ] **Phase 5** — details, forms, modals.
 - [ ] **Phase 6** — imports onto `ImportWizard`; delete old importers.
 - [ ] **Phase 7** — insights, cleanup, lint to error, keyboard pass, before/after gallery.

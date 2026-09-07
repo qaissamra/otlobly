@@ -50,7 +50,7 @@ the old patterns (warn level until Phase 7).
 | `DS.button(o)` | every clickable action | navigation that is really a link (pass `href`) | `variant: primary\|secondary\|ghost\|danger`, `size: sm`, `icon/iconEnd/iconOnly`, `loading`, `disabled`, `tip`, `ariaLabel` (required when icon-only) |
 | `DS.badge(o)` | a stored state | free-form emphasis | `tone`, `hex` (ClickUp colour), `solid`, `dot`, `size: sm`. Prefer `DS.status.badge(entity, value)` |
 | `DS.attention(o)` | "this needs a person": late, no tracking, missing documents | a status (use a badge) | `kind`, `detail`, `action:{label,onclick}` |
-| `DS.tag(o)` | a value chip (buying account, category) | a status | `icon`, `onRemove` |
+| `DS.tag({label, icon, tone, title, onRemove})` | a value chip (buying account, category) | a status | `icon`, `onRemove` |
 | `DS.input / numberInput / datePicker / search / select / textarea / combobox / checkbox / switch` | form controls | anything outside a `DS.field` in forms | `size: sm`, `invalid`, `mono`, `num`, `dirAuto` (user text), `icon`, `affix` |
 | `DS.field(o)` | label + control + help + error | a bare control in a form | `required`, `help`, `error`, `invalid` |
 | `DS.stat / DS.kpis` | a number the reader compares | a sentence with a number inside | `label`, `value`, `hint`, `tone` |
@@ -78,7 +78,9 @@ the old patterns (warn level until Phase 7).
 
 ## Pages (`purchases.js`, and the ones that follow)
 
-A migrated page is its own file under `static/ds/`, exporting one namespace (`DS.purchases`).
+A migrated page is its own file under `static/ds/`, exporting one namespace (`DS.purchases`);
+pages that share a nav item may share a file (`fulfillment.js` holds `DS.toOrder`, `DS.inCart`
+and `DS.pkgPrep`).
 It renders the page header and the filter bar into a host element, and each board through
 `DS.tableRender`. It must not read the app's globals directly — index.html's top-level `let`
 bindings are not `window` properties — so the page's render function in index.html passes a
@@ -89,7 +91,8 @@ one:
 * **Add the view to `OWN_HEADER` in `shell.js`** so the shell stops drawing a generic header
   over the page's own; the shell then contributes only the tabs that are navigation.
 * **Call `DS.shell2.syncTab()`** whenever the page switches one of its own tabs, so a link
-  points at the tab that will actually open.
+  points at the tab that will actually open — and add the tab keys to `TABS` in `shell.js`
+  plus a getter on `window.APP`, or the address will not survive a reload.
 
 Columns may carry `defaultHidden: true`: the board ships without them and the Columns button
 brings them back. It applies only the first time a user meets the table — a saved layout is

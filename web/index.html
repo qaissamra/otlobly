@@ -16,6 +16,7 @@
 <script src="/static/ds/table.js"></script>
 <script src="/static/ds/shell.js"></script>
 <script src="/static/ds/purchases.js"></script>
+<script src="/static/ds/fulfillment.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -1222,20 +1223,23 @@
   <!-- Quick Quote estimator (bilingual) -->
   <!-- Need to order (demand queue) — the Quick Quote tool sits at the top -->
   <div id="needorderView" class="hidden">
-    <!-- ── Quick quote, embedded at the top of the To-order page (collapsible) ── -->
+    <!-- Header + saved views come from static/ds/fulfillment.js (Phase 4). -->
+    <div id="neChrome"></div>
+    <div id="needList"></div>
+    <!-- Quick quote, a separate tool, folded away below the queue -->
     <div id="quoteView" style="margin-bottom:16px">
-      <div class="toolbar" style="cursor:pointer;user-select:none" onclick="neQuoteToggle(event)" title="عرض/إخفاء أداة عرض السعر · show/hide the quote tool">
-        <span class="caret" id="q_caret">▾</span>
-        <h2 id="q_h" style="margin:0;font-size:17px;font-weight:800">💰 Quick quote</h2>
+      <div class="toolbar" style="cursor:pointer;user-select:none" onclick="neQuoteToggle(event)" title="Show or hide the quote tool">
+        <span class="caret" id="q_caret">&#9662;</span>
+        <h2 id="q_h" style="margin:0;font-size:17px;font-weight:800">Quick quote</h2>
         <span class="spacer"></span>
         <span class="chips" style="margin:0" onclick="event.stopPropagation()">
-          <span class="chip" id="qlang_ar" onclick="setQLang('ar')">عربي</span>
+          <span class="chip" id="qlang_ar" onclick="setQLang('ar')">&#1593;&#1585;&#1576;&#1610;</span>
           <span class="chip" id="qlang_en" onclick="setQLang('en')">EN</span></span>
       </div>
       <div class="panel" id="quotePanel">
         <div id="q_intro" class="muted2"></div>
         <div id="quoteRows" style="margin-top:10px"></div>
-        <button class="minibtn" id="q_add" onclick="qAddRow()">＋ item</button>
+        <button class="minibtn" id="q_add" onclick="qAddRow()">+ item</button>
         <div style="margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12.5px;color:var(--muted)" id="q_total_lbl">Total price $</span>
           <input id="q_total" type="number" min="0" step="0.01" style="width:110px;font-weight:700" placeholder="0.00" oninput="qLiveTotal()">
@@ -1248,28 +1252,12 @@
         <div id="qIntakeLink" style="margin-top:10px"></div>
       </div>
     </div>
-
-    <div class="toolbar">
-      <h2 style="margin:0;font-size:17px;font-weight:800">💡 Need to order</h2>
-      <span class="muted2" id="needSub" style="font-size:12px"></span>
-      <span class="spacer"></span>
-      <button id="neCartBtn" onclick="neMoveToCart(this)" class="minibtn" style="display:none;background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700" title="نقل المحدد إلى السلة · move the ticked orders to the In-cart page">🛒 Move <span id="neCartN">0</span> to cart</button>
-      <button onclick="neOpenAllProducts()" class="minibtn" title="افتح صفحة كل منتج على أمازون (تبويب لكل منتج) لإضافته للسلة يدويًا · open every product page on Amazon to add to the cart manually" style="background:#ff9900;border-color:#e88a00;color:#111;font-weight:700">🔗 Open all products</button>
-      <button onclick="loadNeedOrder()" class="minibtn">↻ Refresh</button>
-    </div>
-    <div class="panel"><div id="needList"></div></div>
   </div>
 
-  <!-- In cart — orders staged in the Amazon cart; profit preview before buying -->
+  <!-- In cart - orders staged in the Amazon cart; profit preview before buying -->
   <div id="incartView" class="hidden">
-    <div class="toolbar">
-      <h2 style="margin:0;font-size:17px;font-weight:800">🛒 In cart</h2>
-      <span class="muted2" id="cartSub" style="font-size:12px"></span>
-      <span class="spacer"></span>
-      <button onclick="loadIncart()" class="minibtn">↻ Refresh</button>
-    </div>
-    <div class="cards" id="cartCards" style="margin-bottom:14px"></div>
-    <div class="panel"><div id="cartList"></div></div>
+    <div id="cartChrome"></div>
+    <div id="cartList"></div>
   </div>
 
   <!-- Needs attention (docs/ux-restructure Phase 2) - one queue for action-required
@@ -1678,16 +1666,8 @@
   <!-- Package prep (تجهيز الطرود): crosses customer orders with received PO packages
        (استلمتها اطلبلي) — who can we pack & ship right now vs who's still missing pieces. -->
   <div id="pkgprepView" class="hidden">
-    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
-      <h2 style="margin:0;font-size:17px;font-weight:800">🎁 Package prep · تجهيز الطرود</h2>
-      <span class="muted2" id="ppSub" style="font-size:12px"></span>
-      <span class="spacer"></span>
-      <button class="minibtn" onclick="loadPkgprep()">↻ Refresh</button>
-    </div>
-    <div id="ppReady"></div>
-    <div id="ppWaiting" style="margin-top:14px"></div>
-    <div id="ppReviews" style="margin-top:14px"></div>
-    <div id="ppEmpty" class="muted2" style="display:none;padding:16px;text-align:center;font-size:13px"></div>
+    <div id="ppChrome"></div>
+    <div id="ppList"></div>
   </div>
 
   <!-- 🔎 Bulk search: paste many GWD/tracking numbers → where each package lives
@@ -2794,22 +2774,19 @@ window.APP = {
   get gmTab(){ return GM.tab; },
   get poBoard(){ return PO_BOARD_VIEW; },
   get lxView(){ return LX_VIEW; },
+  get neView(){ return NE_FILTER; },
+  get ppView(){ return PP_VIEW; },
 };
 function toggleMetaLeads(){ setView(VIEW==="metaleads"?"orders":"metaleads"); }
 function toggleDeposits(){ setView(VIEW==="deposits"?"orders":"deposits"); }
 // ---- Package prep (تجهيز الطرود): who can we pack & ship right now? --------- //
 // Crosses orders with received PO packages (استلمتها اطلبلي). READY = every live
 // piece in hand; WAITING = part received, part still on the way.
-let PKGPREP=null; const PP_OPEN=openStore();
+let PKGPREP=null;
 async function loadPkgprep(){
   let d; try{ d=await (await fetch("/api/pkgprep")).json(); }catch(e){ d=null; }
   PKGPREP=d; renderPkgprep();
 }
-function ppToggle(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
-  PP_OPEN.toggle(c.key); renderPkgprep(); }
-function ppCopy(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
-  (navigator.clipboard?navigator.clipboard.writeText(c.wa_text):Promise.reject())
-    .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
 function ppCopyReview(bucket,i){ const c=((PKGPREP||{})[bucket]||[])[i]; if(!c) return;
   (navigator.clipboard?navigator.clipboard.writeText(c.wa_review_text):Promise.reject())
     .then(()=>toast("Review message copied ✓")).catch(()=>toast("copy failed")); }
@@ -2904,23 +2881,6 @@ function ppLocEdit(el,bucket,i,fldKey){
 // Shared meta-strip fields (pieces, money, 📍 location) — one builder for the
 // ready/waiting cards AND the 📸 review cards, so DONE customers keep the
 // same strip instead of a bare title row.
-function ppFlds(c,bucket,i){
-  const t=c.totals||{}, money=t.usd!=null;
-  const flds=[];
-  if(c.n_received!=null) flds.push(`<span class="field"><span class="lbl">قطع</span><b>${c.n_received}/${c.n_items}</b><span class="unit">وصلت</span></span>`);
-  else if(c.n_items) flds.push(`<span class="field"><span class="lbl">قطع</span><b>${c.n_items}</b><span class="unit">قطعة</span></span>`);
-  if(money){
-    flds.push(`<span class="field"><span class="lbl">Total</span><b>${ppUsd(t.usd)}</b><span class="unit">≈ ₪${t.ils}</span></span>`);
-    if(t.deposit_usd>0){
-      flds.push(`<span class="field"><span class="lbl">عربون</span><b>${ppUsd(t.deposit_usd)}</b></span>`);
-      flds.push(`<span class="field"><span class="lbl">المتبقي</span><b>${ppUsd(t.remaining_usd)}</b><span class="unit">≈ ₪${t.remaining_ils}</span></span>`);
-    }
-    if(t.unpriced) flds.push(tonePill("amber","فيه طلب بدون تسعير","المجموع لا يشمل الطلب غير المسعّر"));
-  }
-  flds.push(ppLocFld(c,bucket,i,"city","📍 المدينة · City"));
-  flds.push(ppLocFld(c,bucket,i,"address","العنوان · Address"));
-  return flds.filter(Boolean).join("");
-}
 // Shared card body: the package-status block + each order's product rows.
 function ppBody(c){
   const pkgs=(c.packages||[]);
@@ -2934,85 +2894,34 @@ function ppBody(c){
     <div style="border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;overflow:hidden">${(o.items||[]).map(ppItemRow).join("")||`<div class="muted2" style="padding:8px 10px;font-size:12px">لا توجد منتجات</div>`}</div>`;
   }).join("");
 }
-function ppCard(c,bucket,i){
-  const open=PP_OPEN.isOpen(c.key);
-  // Primary action: ask for a review on +972 / +970 (same number, either code).
-  const rev=c.wa_review_970
-    ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +972">📱 972</a>
-      <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_review_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة طلب تقييم على مقدمة +970">📱 970</a>
-      <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`
-    :tonePill("gray","☎ بلا رقم","لا يوجد رقم هاتف — انسخ الرسالة 📋")
-      +`<button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppCopyReview('${bucket}',${i})" title="نسخ رسالة التقييم">📋</button>`;
-  // Secondary: the order-status + amount update message (the old one).
-  const statusBtn=c.wa_url?`<a class="po-btn" style="font-size:12px" href="${poEsc(c.wa_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="رسالة حالة الطلب + المبلغ (تحديث للعميل)">📦 حالة</a>`:"";
-  const state=bucket==="waiting"?tonePill("amber",`⏳ ناقص ${c.n_missing}`):tonePill("green","✓ كل القطع وصلت");
-  const head=`<div class="po-head">
-    <div class="po-title" onclick="ppToggle('${bucket}',${i})" style="cursor:pointer">
-      <span class="caret">${open?"▾":"▸"}</span>
-      <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
-      <span class="muted" style="font-size:12px">${c.orders.length>1?`${c.orders.length} orders · `:""}${poEsc(c.phone||"")}</span>
-      ${state}
-      <span class="spacer"></span>
-      ${rev}
-      ${statusBtn}
-    </div>
-    <div class="po-meta">${ppFlds(c,bucket,i)}</div>
-  </div>`;
-  if(!open) return `<div class="po-card">${head}</div>`;
-  return `<div class="po-card open">${head}<div class="po-body">${ppBody(c)}</div></div>`;
-}
-function ppSection(emoji,label,count,sub,tone){
-  return `<div style="display:flex;align-items:center;gap:9px;margin:4px 0 10px">
-    <h2 style="margin:0;font-size:15px;font-weight:800">${emoji} ${label}</h2>
-    ${tonePill(tone,String(count),null,{style:"font-weight:700"})}
-    <span class="muted2" style="font-size:12px">${sub}</span></div>`;
-}
-// One collected customer to ask for a Facebook review. Two WhatsApp links
-// (+972 / +970) because a Palestinian number may be reachable on either code.
-// Expandable like every other prep card: the body keeps the products (with
-// photos), the shipped packages (GWD + OTL) and the 📍 location — a DONE
-// customer no longer collapses to a bare name+phone row.
-function ppReviewCard(c,i){
-  const open=PP_OPEN.isOpen(c.key);
-  const meta=[c.n_orders>1?`${c.n_orders} orders`:"",poEsc(c.phone||"")].filter(Boolean).join(" · ");
-  const btns=c.wa_url_970
-    ?`<a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_972)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +972 برسالة تقييم جاهزة">📱 972</a>
-       <a class="po-btn accent" style="font-size:12px" href="${poEsc(c.wa_url_970)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="افتح واتساب على مقدمة +970 برسالة تقييم جاهزة">📱 970</a>`
-    :tonePill("gray","☎ بلا رقم","لا يوجد رقم — انسخ الرسالة 📋");
-  const head=`<div class="po-head"><div class="po-title" onclick="ppToggle('reviews',${i})" style="cursor:pointer">
-    <span class="caret">${open?"▾":"▸"}</span>
-    <span style="font-size:15px">📸</span>
-    <b class="po-name">${poEsc(c.name||c.phone||"—")}</b>
-    <span class="muted" style="font-size:12px">${meta}</span>
-    ${tonePill("green","✓ مرسَل بالكامل","كل القطع أُرسلت أو استُلمت — جاهز لطلب تقييم")}
-    <span class="spacer"></span>
-    ${btns}
-    <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewCopy(${i})" title="انسخ رسالة التقييم">📋</button>
-    <button class="po-btn" style="font-size:12px" onclick="event.stopPropagation();ppReviewDone('${poEsc(c.key)}')" title="تم التواصل — أخفِه من القائمة">✓ تم</button>
-  </div>
-  <div class="po-meta">${ppFlds(c,"reviews",i)}</div></div>`;
-  if(!open) return `<div class="po-card">${head}</div>`;
-  return `<div class="po-card open">${head}<div class="po-body">${ppBody(c)}</div></div>`;
-}
 function ppReviewCopy(i){ const c=((PKGPREP||{}).reviews||[])[i]; if(!c) return;
   (navigator.clipboard?navigator.clipboard.writeText(c.wa_review_text):Promise.reject())
-    .then(()=>toast("Message copied ✓")).catch(()=>toast("copy failed")); }
+    .then(()=>toast("Message copied")).catch(()=>toast("copy failed")); }
 async function ppReviewDone(key){
   const r=await post("/api/pkgprep/review-asked",{key:key,asked:true});
-  if(r&&r.ok){ toast("تم — انحذف من القائمة"); loadPkgprep(); } else { toast((r&&r.error)||"تعذّر"); }
+  if(r&&r.ok){ toast("Marked as asked"); loadPkgprep(); } else { toast((r&&r.error)||"couldn't save"); }
 }
+// ── 🎁 Package prep — the design-system page (Phase 4) ──
+// The three walls of cards became one board with three saved views; a card's body
+// (packages + products) is unchanged, it is now the row's expansion.
+let PP_VIEW=localStorage.getItem("pp_view")||"ready";
+function ppSetView(v){ PP_VIEW=v; try{ localStorage.setItem("pp_view",v); }catch(e){} renderPkgprep();
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab(); }
 function renderPkgprep(){
-  const d=PKGPREP, R=$("ppReady"), W=$("ppWaiting"), V=$("ppReviews"), E=$("ppEmpty");
-  if(!d){ R.innerHTML=""; W.innerHTML=""; V.innerHTML=""; E.style.display=""; E.textContent="تعذّر التحميل — جرّب ↻ Refresh"; return; }
-  $("ppSub").textContent=`1$ = ${d.rate} ₪ · تتغيّر من الإعدادات`;
-  const ready=d.ready||[], waiting=d.waiting||[], reviews=d.reviews||[];
-  R.innerHTML=ready.length?ppSection("✅","جاهزين للشحن — غلّف وابعت",ready.length,"كل قطعهم وصلت مكتب اطلبلي","green")+ready.map((c,i)=>ppCard(c,"ready",i)).join(""):"";
-  W.innerHTML=waiting.length?ppSection("⏳","ناقصهم قطع",waiting.length,"وصل جزء — بانتظار باقي القطع","amber")+waiting.map((c,i)=>ppCard(c,"waiting",i)).join(""):"";
-  V.innerHTML=reviews.length?ppSection("📸","اطلب تقييم — عملاء تم التسليم",reviews.length,"راسلهم واطلب تقييم على فيسبوك مقابل خصم","green")+reviews.map((c,i)=>ppReviewCard(c,i)).join(""):"";
-  const any=ready.length||waiting.length||reviews.length;
-  E.style.display=any?"none":"";
-  if(!any) E.textContent="لا شيء على طاولة التجهيز — عند وصول شحنة عيّن حالة طردها «recieved rd / no rd» من صفحة Purchases.";
+  const d=PKGPREP;
+  if(!d){ $("ppChrome").innerHTML=""; $("ppList").innerHTML=DS.errorState({text:"Couldn't load the prep table.",retry:{onclick:"loadPkgprep()"}}); return; }
+  const stats={ready:(d.ready||[]).length, waiting:(d.waiting||[]).length,
+                reviews:(d.reviews||[]).length, rate:d.rate};
+  if(!DS.pkgPrep.VIEWS.some(v=>v.key===PP_VIEW)) PP_VIEW="ready";
+  const rows=d[PP_VIEW]||[];
+  DS.pkgPrep.chrome("ppChrome",{view:PP_VIEW, stats});
+  DS.pkgPrep.board("ppList",rows,{
+    view:PP_VIEW, money:PO_MONEY,
+    indexOf:c=>rows.indexOf(c),
+    locCell:(c,bucket,i,fld)=>ppLocFld(c,bucket,i,fld,""),
+  });
 }
+
 // ---- Catalog: products the public /catalog page sells ----------------------- //
 let CATALOG=[];
 async function loadCatalog(){
@@ -3583,7 +3492,6 @@ const LX_TABLES={
   "cu": {key:"cu_colw", varn:"--cugrid",  head:".cu-colhead .cu-cols",   rows:"cuMount"},
   "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount"},
   "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
-  "ic": {key:"ic_colw", varn:"--icgrid",  head:".ic-colhead .ic-cols",   rows:"cartList"},
   "tr": {key:"tr_colw", varn:"--trgrid",  head:".tr-colhead .tr-cols",   rows:"trashList"},
   "fh": {key:"fh_colw", varn:"--fhgrid",  head:".fh-colhead .fh-cols",   rows:"flagHistMount"},
 };
@@ -4118,11 +4026,6 @@ const LXT_COLS={
     {key:"live",  label:"ظاهر · live",       w:56,  sortable:true},
     {key:"act",   label:"",                  w:88,  locked:true},
   ],
-  "ic":[    // 🛒 In cart
-    {key:"prods", label:"المنتجات · products", w:200},
-    {key:"rev",   label:"الإيراد · revenue",   w:100, sortable:true},
-    {key:"act",   label:"",                    w:200, locked:true},
-  ],
   "tr":[    // 🗑 Trash
     {key:"kind",  label:"النوع · type",     w:110, sortable:true},
     {key:"when",  label:"حُذف · deleted",   w:96,  sortable:true},
@@ -4161,9 +4064,9 @@ const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
                "en":["en-colhead","en-cols"],"od":["od-colhead","od-cols"],
                "cu":["cu-colhead","cu-cols"],"dp":["dp-colhead","dp-cols"],
-               "ct":["ct-colhead","ct-cols"],"ic":["ic-colhead","ic-cols"],
+               "ct":["ct-colhead","ct-cols"],
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
-const LXT_PINCLS={"":" pin-lg","po":" pin-md","p":"","k":"","pok":"","pop":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","ic":"","tr":" pin-md","fh":" pin-lg"};
+const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
 ["","p","k","po","pok","pop","bs","wf","en","od","cu","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
@@ -7232,7 +7135,7 @@ async function emptyTrash(btn){ if(!confirm("Empty the whole trash? Everything i
   const r=await post("/api/trash/empty",{}); if(r.ok){ toast(`Emptied (${r.removed} removed)`); loadTrash(); } }
 
 // ---- Quick Quote estimator (bilingual) + Settings -------------------------- //
-let QUOTE_JUMP=false, QUOTE_OPEN=(localStorage.getItem("q_open")!=="0");
+let QUOTE_JUMP=false, QUOTE_OPEN=(localStorage.getItem("q_open")==="1");   // folded until asked for
 function toggleQuote(){ QUOTE_JUMP=true; setView("needorder"); }
 function neQuoteExpand(){ QUOTE_OPEN=true; localStorage.setItem("q_open","1"); neQuoteApply();
   const el=$("quoteView"); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); }
@@ -7242,240 +7145,91 @@ function neQuoteApply(){ const p=$("quotePanel"), c=$("q_caret");
   if(p) p.style.display=QUOTE_OPEN?"":"none"; if(c) c.textContent=QUOTE_OPEN?"▾":"▸"; }
 function toggleSettings(){ setView(VIEW==="settings"?"orders":"settings"); }
 function toggleNeedOrder(){ setView(VIEW==="needorder"?"orders":"needorder"); }
-let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="all";
-let NE_COLL=new Set(JSON.parse(localStorage.getItem("ne_coll")||'["incart","ordered","deleted"]'));
-let NE_OPEN=openStore();   // order_ids whose product sub-rows are expanded
-let NE_CART_SEL=new Set();   // To-order rows ticked to move into the cart
-function neCartToggle(id,on){ on?NE_CART_SEL.add(id):NE_CART_SEL.delete(id); neCartBar(); }
-function neCartBar(){
-  const n=NE_CART_SEL.size, b=$("neCartBtn");
-  if(b){ b.style.display=n?"":"none"; if($("neCartN")) $("neCartN").textContent=n; }
-}
-async function neMoveToCart(btn){
-  const ids=[...NE_CART_SEL]; if(!ids.length) return;
-  if(btn) btn.disabled=true;
+let NEED_ORDERS=[], NE_DATA=null, NE_FILTER="pending";
+let NE_CART_SEL=[];                 // order_ids ticked on the To-order board
+// The board owns the tick boxes now; the bulk bar acts on what it hands back.
+async function neMoveSelected(){
+  const ids=NE_CART_SEL.slice(); if(!ids.length) return;
   let r; try{ r=await post("/api/incart/add",{ids}); }catch(e){ r={}; }
-  if(btn) btn.disabled=false;
   if(!r||!r.ok){ toast("Move failed"+((r&&r.error)?": "+r.error:"")); return; }
-  toast(`🛒 ${r.moved} moved to cart`);
-  NE_CART_SEL.clear(); neCartBar(); loadNeedOrder();
+  toast(`${r.moved} moved to cart`);
+  NE_CART_SEL=[]; loadNeedOrder();
 }
 async function neUncart(id){   // pull an order back out of the cart, from the To-order page
   let r; try{ r=await post("/api/incart/remove",{ids:[id]}); }catch(e){ r={}; }
   if(r&&r.ok) toast("↩ back to queue"); loadNeedOrder();
 }
-function neRowToggle(id){
-  const det=$("nedet_"+id), row=$("nerow_"+id); if(!det||!row) return;
-  const open=det.style.display==="none";
-  det.style.display=open?"":"none"; row.classList.toggle("open",open);
-  open?NE_OPEN.open(id):NE_OPEN.close(id);
-}
 async function loadNeedOrder(){
   let d;
   try{ const r=await fetch("/api/needorder"); if(!r.ok) throw new Error("HTTP "+r.status); d=await r.json(); }
-  catch(e){ $("needSub").textContent=""; $("needList").innerHTML=`<div class="empty">تعذّر تحميل القائمة · couldn't load${poEsc(apiFailReason())} — <a style="cursor:pointer;color:var(--accent)" onclick="loadNeedOrder()">إعادة المحاولة · retry</a></div>`; return; }
+  catch(e){ $("neChrome").innerHTML=""; $("needList").innerHTML=DS.errorState({text:"Couldn't load the queue"+poEsc(apiFailReason()),retry:{onclick:"loadNeedOrder()"}}); return; }
   NE_DATA=d; NEED_ORDERS=d.orders||[];
   renderNeedOrder();
 }
-function neSetFilter(f){ NE_FILTER=f; renderNeedOrder(); }
-function neSecToggle(k){ NE_COLL.has(k)?NE_COLL.delete(k):NE_COLL.add(k);
-  localStorage.setItem("ne_coll",JSON.stringify([...NE_COLL])); renderNeedOrder(); }
-function neChip(id,label,n){ const on=NE_FILTER===id;
-  return `<button class="po-btn" style="${on?'background:var(--ink);color:#fff;border-color:var(--ink)':''}" onclick="neSetFilter('${id}')">${label}${n!=null?` · ${n}`:''}</button>`; }
-function neSection(key,title,n,extra,body){
-  const closed=NE_COLL.has(key);
-  return `<div style="margin-bottom:6px">
-    <div onclick="neSecToggle('${key}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 4px;user-select:none">
-      <span class="caret">${closed?'▸':'▾'}</span><b style="font-size:14px">${title}</b>
-      <span class="pill">${n}</span>${extra||''}
-    </div>
-    ${closed?'':`<div>${body||'<div class="empty">لا يوجد · nothing here.</div>'}</div>`}
-  </div>`;
-}
+// The board's saved views ARE the old sections; switching one repaints the board.
+function neSetFilter(f){ NE_FILTER=f; NE_CART_SEL=[]; renderNeedOrder();
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab(); }
 // The ONE place an order item's Amazon URL is derived: explicit link, else /dp/<ASIN>.
 function neItemUrl(it){
   const a=((it&&it.asin)||extractAsinClient(it&&it.link)||"").toUpperCase();
   return (it&&it.link)||(/^[A-Z0-9]{10}$/.test(a)?('https://www.amazon.com/dp/'+a):"");
 }
-// One product sub-row: photo + title + 🔒 SERP chip + 🔗 Amazon. The 💲/📷 fetch
-// actions moved to the row's ⋯ menu — they work WITHOUT expanding, and act on every
-// item still missing that data, so nothing here depends on the row being open.
-function neItemRow(oid,it,ix){
-  const url=neItemUrl(it);
-  const name=poEsc(it.title||it.asin||'—');
-  return `<div class="qcard" style="padding:7px 9px" id="ne_${poEsc(oid)}_${ix}">
-    ${it.image?`<img src="${poEsc(it.image)}" style="width:44px;height:44px">`:'<div class="noimg" style="width:44px;height:44px"></div>'}
-    <div style="flex:1;min-width:0"><div class="qtitle" style="font-size:12px">${url?`<a href="${poEsc(url)}" target="_blank" style="color:inherit;text-decoration:none" title="افتح على أمازون · open on Amazon">${name}</a>`:name}</div>
-      <div class="muted2" style="font-size:11px">${poEsc(it.asin||'')}${it.qty>1?` · ×${it.qty}`:''}</div>
-      ${it.serp_price_usd!=null?`<div class="serp-cost" style="display:inline-block;margin-top:3px" title="سعر أمازون التقديري (SerpAPI) — داخلي فقط، لا يظهر للعميل · internal only, never shown to the customer">🔒 SERP $${(+it.serp_price_usd).toFixed(2)}${it.serp_price_at?` · ${poEsc((it.serp_price_at||'').slice(0,10))}`:''}</div>`:''}</div>
-    ${url?`<a class="po-btn" href="${poEsc(url)}" target="_blank" title="افتح صفحة المنتج على أمازون · open on Amazon" style="text-decoration:none;font-weight:600">🔗 Amazon</a>`:''}</div>`;
-}
-// Wrap a section's rows in the expandable table.
-// Column keys + default widths (px) for the resizable To-order table.
-const NE_COLS=[["cc",46],["customer",210],["products",0],["amount",110],["remaining",110],["status",120],["actions",120]];
-let NE_COLW=(()=>{ try{ return JSON.parse(localStorage.getItem("ne_colw")||"{}"); }catch(e){ return {}; } })();
-function neColStyle(key,def){ const w=NE_COLW[key]!=null?NE_COLW[key]:def; return w>0?` style="width:${w}px"`:''; }  // 0 = flexible (products)
-function neRz(key){ return `<span class="col-resize" data-col="${key}" onmousedown="neColDown(event,'${key}')" ondblclick="neColReset('${key}')" title="اسحب لتغيير العرض · drag to resize · double-click to reset"></span>`; }
-function neTable(rowsHtml){
-  return `<div class="ne-wrap"><table class="ne-tbl">
-    <colgroup>${NE_COLS.map(([k,d])=>`<col data-col="${k}"${neColStyle(k,d)}>`).join("")}</colgroup>
-    <thead><tr>
-      <th></th>
-      <th>العميل · Customer${neRz("customer")}</th>
-      <th>المنتجات · Products${neRz("products")}</th>
-      <th class="hide-sm">المبلغ · Amount${neRz("amount")}</th>
-      <th class="hide-sm">المتبقّي · Remaining${neRz("remaining")}</th>
-      <th>الحالة · Status${neRz("status")}</th>
-      <th style="text-align:right">إجراءات</th></tr></thead>
-    <tbody>${rowsHtml}</tbody></table></div>`;
-}
-// Drag a column edge → live-resize that column across all section tables; persist on release.
-function neColDown(e,key){
-  e.preventDefault(); e.stopPropagation();
-  const cols=[...document.querySelectorAll(`.ne-tbl col[data-col="${key}"]`)];
-  const startX=e.clientX, startW=cols[0]?cols[0].getBoundingClientRect().width:120;
-  document.body.style.userSelect="none";
-  function move(ev){ const w=Math.max(60,Math.min(600,Math.round(startW+(ev.clientX-startX))));
-    cols.forEach(c=>c.style.width=w+"px"); NE_COLW[key]=w; }
-  function up(){ window.removeEventListener("mousemove",move); window.removeEventListener("mouseup",up);
-    document.body.style.userSelect=""; localStorage.setItem("ne_colw",JSON.stringify(NE_COLW)); }
-  window.addEventListener("mousemove",move); window.addEventListener("mouseup",up);
-}
-function neColReset(key){ delete NE_COLW[key]; localStorage.setItem("ne_colw",JSON.stringify(NE_COLW));
-  const def=(NE_COLS.find(c=>c[0]===key)||[])[1]||0;
-  document.querySelectorAll(`.ne-tbl col[data-col="${key}"]`).forEach(c=>c.style.width=def>0?def+"px":""); }
-// One order = a clickable summary <tr> + a hidden detail <tr> (products as sub-rows).
-// kind ∈ 'pending' | 'ordered' | 'deleted'.
-// 📍 customer city/address on the To-order detail, editable in place (same
-// field the Orders board + Package prep cards edit) — /api/order/edit.
+// 📍 customer city/address, editable in place (same field the Orders board and
+// Package prep edit) — /api/order/edit.
 function neLocCell(o,fldKey){
   const v=o[fldKey]||"";
   if(!CAN_EDIT) return v?poEsc(v):"";
-  return `<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="اضغط للتعديل · click to edit" onclick="event.stopPropagation();neLocEdit(this,'${o.order_id}','${fldKey}')">${v?poEsc(v):"—"}</span>`;
+  return `<span style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="click to edit" onclick="event.stopPropagation();neLocEdit(this,'${o.order_id}','${fldKey}')">${v?poEsc(v):"—"}</span>`;
 }
 function neLocEdit(el,oid,fldKey){
-  if(!CAN_EDIT) return;
-  const rows=[...((NE_DATA||{}).orders||[]),...((NE_DATA||{}).ordered||[]),
-              ...((NE_DATA||{}).in_cart||[]),...((NE_DATA||{}).deleted||[])];
-  const o=rows.find(x=>x.order_id===oid); if(!o) return;
-  const cur=o[fldKey]||"";
-  editCell(el,{value:cur,width:"",minWidth:"84px",
-    placeholder:fldKey==="city"?"المدينة · city":"العنوان · address"},async v=>{
-    v=v.trim();
-    if(v===cur){ renderNeedOrder(); return; }
-    const body={order_id:oid}; body[fldKey]=v;
-    const r=await post("/api/order/edit",body);
-    if(r&&r.ok){ o[fldKey]=v; toast("📍 حُفظ ✓"); } else toast("⚠ "+((r&&r.error)||"failed"));
-    renderNeedOrder();
-  },renderNeedOrder);
-}
-function neRowHtml(o,kind){
-  const oid=o.order_id, isOpen=NE_OPEN.isOpen(oid), items=o.items||[];
-  // 1 product → thumbnail + title; 2+ → a strip of thumbnails (hover shows each name) + count.
-  const neThumb=it=>it.image?`<img src="${poEsc(it.image)}" title="${poEsc(it.title||it.asin||'')}">`:`<div class="noimg" title="${poEsc(it.title||it.asin||'')}"></div>`;
-  let prodCell;
-  if(items.length<=1){
-    const first=items[0]||{};
-    prodCell=`<div class="ne-prod">${neThumb(first)}<span class="t">${poEsc(first.title||first.asin||'—')}</span></div>`;
-  }else{
-    const MAX=5;
-    const thumbs=items.slice(0,MAX).map(neThumb).join("");
-    const extra=items.length>MAX?`<span class="more">+${items.length-MAX}</span>`:'';
-    prodCell=`<div class="ne-prod ne-prod-multi">${thumbs}${extra}<span class="cnt">${items.length} منتجات</span></div>`;
-  }
-  const badges=`${o.source==="website"?hexPill("#0369a1","🌐 موقع","طلب من متجر الموقع · placed on the website catalog"):''}${o.source==="website"&&!o.payment_plan?hexPill("#8a7f6d","⏳ بدون باقة","ترك الموقع قبل ما يختار الباقة — تواصل معه · left the site before choosing a plan"):''}${o.payment_plan==="prepaid"?tonePill("green","💰 مسبق 0%","يدفع كامل المبلغ مقدماً — 0% عمولة · pays in full up front"):''}${o.payment_plan==="zero_risk"?tonePill("amber","🛡️ زيرو ريسك","عربون + الباقي عند الاستلام · deposit + cash on delivery"):''}${o.customer_confirmed_at?tonePill("green","✓ أكّد العميل","أكّد العميل عرض السعر من الرابط · customer confirmed the quotation link"):''}${o.deposit_usd>0?tonePill("green","✅ عربون","دفع عربون · paid a deposit"):''}${(o.has_id||o.has_id_number)?hexPill("#1d4ed8","🪪 "+(o.id_number?o.id_number:'هوية'),o.id_number?('رقم الهوية · ID '+o.id_number):'الهوية على الملف · ID on file'):''}`;
-  const statusCell = kind==="deleted"?tonePill("red","🗑 محذوف")
-    : statusPill(o.status);   // shared per-status colour (same map as the card)
-  const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
-  const rem=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd-(o.deposit_usd||0)):'—';
-  const nm=poEsc((o.customer||'').replace(/'/g,''));
-  // ⋯ offers a fetch only when something is actually missing AND reachable — an item
-  // with no ASIN and no link can never be fetched, so it must not raise the menu item
-  const needPrice=items.some(it=>it.serp_price_usd==null&&neItemUrl(it));
-  const needImg  =items.some(it=>!it.image&&neItemUrl(it));
-  let acts='';
-  if(kind==="pending") acts=`${o.amount_to_collect_usd==null?`<button class="po-btn" title="سعّر الطلب (إجمالي أمازون → السعر النهائي) · price the order" onclick="event.stopPropagation();neQuotePrice('${poEsc(oid)}')">💲</button>`:''}
-    <button class="po-btn" title="أرسل عرض السعر برابط على واتساب · send the quotation link on WhatsApp" onclick="event.stopPropagation();neQuoteLink('${poEsc(oid)}')">🔗</button>
-    <button class="po-btn" title="تعديل الطلب · edit order" onclick="event.stopPropagation();openOrderEdit('${poEsc(oid)}')">✏️</button>
-    <button class="po-btn danger" title="حذف الطلب · delete order" onclick="event.stopPropagation();neDelete('${poEsc(oid)}','${nm}')">🗑</button>
-    <span onclick="event.stopPropagation()">${popMenu([
-      needPrice?[`💲 ${T("جلب الأسعار الناقصة · Get missing prices")}`, `neGetPricesAll('${poEsc(oid)}')`]:null,
-      needImg  ?[`📷 ${T("جلب الصور الناقصة · Get missing photos")}`,  `neImgsAll('${poEsc(oid)}')`]:null,
-      [`🪪 ${T("طلب الهوية · Request ID")}`, `neRequestId('${poEsc(oid)}')`],
-    ])}</span>`;
-  else if(kind==="incart") acts=`<button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="event.stopPropagation();neUncart('${poEsc(oid)}')">↩</button>`;
-  else if(kind==="deleted") acts=`${CAN_EDIT?`<button class="po-btn" title="استرجاع · restore" onclick="event.stopPropagation();neRestore('${poEsc(o.trash_id)}')">♻️</button>`:''}
-    ${CAN_ADMIN?`<button class="po-btn danger" title="إزالة نهائيًا · remove permanently" onclick="event.stopPropagation();nePurge('${poEsc(o.trash_id)}','${nm}')">✕</button>`:''}`;
-  // detail: customer info as a labelled meta strip (consistent with the order card), then the products
-  const bits=[fld('Phone',`<span class="mono">${poEsc((o.phones&&o.phones.length?o.phones.join(' · '):o.phone)||'—')}</span>`)];
-  if(o.id_number) bits.push(fld('🪪 هوية · ID',`<span class="mono">${poEsc(o.id_number)}</span>`,'font-weight:700'));
-  const cityBit=neLocCell(o,'city'), addrBit=neLocCell(o,'address');
-  if(cityBit) bits.push(fld('📍 City',cityBit));
-  if(addrBit) bits.push(fld('Address',addrBit));
-  if(o.payment_plan) bits.push(fld('الخطة · Plan', o.payment_plan==="prepaid"?"💰 دفع مسبق — 0% عمولة":"🛡️ زيرو ريسك — عربون + الباقي عند الاستلام"));
-  if(o.deposit_usd>0) bits.push(fld('عربون · Deposit',`${money(o.deposit_usd)}${o.amount_to_collect_usd!=null?` · متبقّي ${money(o.amount_to_collect_usd-o.deposit_usd)}`:''}`,'color:#15803d;font-weight:700'));
-  if(kind==="ordered"&&o.amazon_order_number) bits.push(fld('Amazon #',`<span class="mono">${poEsc(o.amazon_order_number)}</span>`));
-  if(o.est_delivery_customer) bits.push(fld('ETA',`${poEsc(o.est_delivery_customer)} ${dueChip(o.est_delivery_customer)}`));
-  if(kind==="deleted"&&o.deleted_at) bits.push(fld('Deleted',`${poEsc(o.deleted_at)}${o.deleted_by?` · ${poEsc(o.deleted_by)}`:''}`));
-  if(o.notes) bits.push(fld('Notes',poEsc(o.notes)));
-  const info=`<div class="ne-meta">${bits.join('')}</div>`;
-  const subrows=items.length?items.map((it,ix)=>neItemRow(oid,it,ix)).join(""):'<div class="empty">لا منتجات · no products</div>';
-  return `<tr class="ne-row${isOpen?' open':''}" id="nerow_${poEsc(oid)}" onclick="neRowToggle('${poEsc(oid)}')">
-      <td class="cc">${kind==="pending"?`<input type="checkbox" class="ne-cartsel" ${NE_CART_SEL.has(oid)?'checked':''} onclick="event.stopPropagation();neCartToggle('${poEsc(oid)}',this.checked)" title="حدّد للنقل إلى السلة · tick to move to cart" style="margin-inline-end:5px;vertical-align:middle">`:''}<span class="caret">▸</span></td>
-      <td class="ne-cust"><div><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:10.5px">${poEsc(oid)}</span></div>
-        <div style="font-size:11px" class="muted2">${badges}</div></td>
-      <td>${prodCell}</td>
-      <td class="amt hide-sm" style="color:var(--accent)">${amt}</td>
-      <td class="amt hide-sm"><b>${rem}</b></td>
-      <td>${statusCell}${o.est_delivery_customer?` ${dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))}`:''}</td>
-      <td><div class="ne-acts">${acts}</div></td>
-    </tr>
-    <tr class="ne-metarow" id="nemeta_${poEsc(oid)}">
-      <td colspan="7">${info}</td>
-    </tr>
-    <tr class="ne-detail" id="nedet_${poEsc(oid)}" style="display:${isOpen?'':'none'}">
-      <td colspan="7">
-        <div class="ne-subtask">
-        <div class="subhead">📦 المنتجات · Products (${items.length})</div>
-        <div style="display:flex;flex-direction:column;gap:6px">${subrows}</div>
-        </div>
-      </td>
-    </tr>`;
+  if(el.querySelector("input")) return;
+  const old=el.textContent.trim()==="—"?"":el.textContent.trim();
+  el.innerHTML=`<input value="${poEsc(old)}" style="width:150px;font-size:12px">`;
+  const inp=el.querySelector("input"); inp.focus(); inp.select();
+  const done=async(save)=>{ const v=inp.value.trim();
+    if(!save||v===old){ el.textContent=old||"—"; return; }
+    el.textContent=v||"—";
+    const r=await post("/api/order/edit",{id:oid,[fldKey]:v});
+    if(!(r&&r.ok)){ toast((r&&r.error)||"couldn't save"); el.textContent=old||"—"; return; }
+    const o=(NEED_ORDERS||[]).find(x=>x.order_id===oid); if(o) o[fldKey]=v;
+    toast("saved");
+  };
+  inp.onkeydown=e=>{ if(e.key==="Enter") done(true); if(e.key==="Escape") done(false); };
+  inp.onblur=()=>done(true);
 }
 async function nePurge(tid,name){
-  if(!confirm(`إزالة نهائية · Remove ${name?name+"'s ":""}deleted order from this list FOREVER?\nلا يمكن التراجع — it cannot be restored afterwards.`)) return;
-  let r; try{ r=await post("/api/trash/purge",{id:tid}); }catch(e){ r={}; }
-  if(r&&r.ok){ toast("أُزيل نهائيًا · removed permanently"); loadNeedOrder(); }
-  else toast("Remove failed"+((r&&r.error)?": "+r.error:""));
+  if(!confirm(`إزالة نهائية · permanently remove ${name}?`)) return;
+  const r=await post("/api/trash/purge",{trash_id:tid});
+  if(r&&r.ok){ toast("removed"); loadNeedOrder(); } else toast((r&&r.error)||"couldn't remove");
 }
+// ── 💡 To order — the design-system page (docs/ux-restructure Phase 4) ──
+// The four buckets became the board's saved views; the ticked rows became the
+// DataTable's own selection, and "Move to cart" its bulk action.
 function renderNeedOrder(){
   const d=NE_DATA; if(!d) return;
-  const pend=d.orders||[], placed=d.ordered||[], del=d.deleted||[], cart=d.in_cart||[];
-  const pendIds=new Set(pend.map(o=>o.order_id));   // drop ticks for orders no longer pending
-  [...NE_CART_SEL].forEach(id=>{ if(!pendIds.has(id)) NE_CART_SEL.delete(id); }); neCartBar();
-  const cartTotal=cart.reduce((s,o)=>s+(o.amount_to_collect_usd||0),0);
-  $("needSub").innerHTML=`${d.count} order(s) · ${d.products} product(s) · <b>الإجمالي · total ${money(d.total_usd||0)}</b>`
-    +((d.deposits_usd||0)>0?` · <b style="color:#15803d">✅ عرابين · deposits ${money(d.deposits_usd)}</b>`:'');
-  const chips=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-    ${neChip('all','الكل · All')}${neChip('pending','💡 للطلب · To order',pend.length)}
-    ${neChip('incart','🛒 في السلة · In cart',cart.length)}
-    ${neChip('ordered','✅ تم الطلب · Ordered',placed.length)}${neChip('deleted','🗑 محذوف · Deleted',del.length)}</div>`;
-  const S=[];
-  if(NE_FILTER==='all'||NE_FILTER==='pending')
-    S.push(neSection('pending','💡 للطلب · To order',pend.length,
-      `<span class="muted2" style="font-size:12px">${money(d.total_usd||0)}${(d.deposits_usd||0)>0?` · <b style="color:#15803d">عرابين ${money(d.deposits_usd)}</b>`:''}</span>`,
-      pend.length?neTable(pend.map(o=>neRowHtml(o,'pending')).join("")):`<div class="empty">🎉 Nothing waiting — all orders are placed.</div>`));
-  if(NE_FILTER==='all'||NE_FILTER==='incart')
-    S.push(neSection('incart','🛒 في السلة · In cart',cart.length,
-      cart.length?`<span class="muted2" style="font-size:12px">${money(cartTotal)}</span>`:'',
-      cart.length?neTable(cart.map(o=>neRowHtml(o,'incart')).join("")):`<div class="empty">لا شيء بالسلة · cart is empty.</div>`));
-  if(NE_FILTER==='all'||NE_FILTER==='ordered')
-    S.push(neSection('ordered','✅ تم الطلب · Ordered',placed.length,'',
-      placed.length?neTable(placed.map(o=>neRowHtml(o,'ordered')).join("")):`<div class="empty">لا شيء · nothing here.</div>`));
-  if(NE_FILTER==='all'||NE_FILTER==='deleted')
-    S.push(neSection('deleted','🗑 محذوف · Deleted',del.length,'',
-      del.length?neTable(del.map(o=>neRowHtml(o,'deleted')).join("")):`<div class="empty">لا شيء · nothing here.</div>`));
-  $("needList").innerHTML=chips+S.join("");
+  const buckets={pending:d.orders||[], incart:d.in_cart||[], ordered:d.ordered||[], deleted:d.deleted||[]};
+  const rows=buckets[NE_FILTER]||buckets.pending;
+  const ids=new Set(rows.map(o=>o.order_id));
+  NE_CART_SEL=NE_CART_SEL.filter(id=>ids.has(id));      // ticks never outlive their rows
+  NEED_ORDERS=buckets.pending;
+  DS.toOrder.chrome("neChrome",{
+    view:NE_FILTER, money:PO_MONEY,
+    counts:{pending:buckets.pending.length,incart:buckets.incart.length,
+            ordered:buckets.ordered.length,deleted:buckets.deleted.length},
+    stats:{pending:d.count||0, products:d.products||0, total:d.total_usd||0,
+           deposits:d.deposits_usd||0,
+           unpriced:buckets.pending.filter(o=>o.amount_to_collect_usd==null).length},
+  });
+  DS.toOrder.board("needList",rows,neCtx());
+}
+function neCtx(){
+  return {
+    view:NE_FILTER, money:PO_MONEY, canEdit:CAN_EDIT, canAdmin:CAN_ADMIN,
+    itemUrl:it=>neItemUrl(it),
+    lateDays:o=>{ const n=dueDays(o.est_delivery_customer);
+      return (n!=null&&n<0&&!["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))?Math.abs(n):null; },
+    setSelection:keys=>{ NE_CART_SEL=keys.slice(); },
+  };
 }
 
 // ---------- In cart: staged orders + live cost / revenue / profit preview ----------
@@ -7484,52 +7238,22 @@ async function loadIncart(){
   let d; try{ d=await (await fetch("/api/incart")).json(); }catch(e){ d=null; }
   CART_DATA=d; renderIncart();
 }
+// ── 🛒 In cart — the design-system page (Phase 4) ──
 function renderIncart(){
   const d=CART_DATA; if(!d) return;
-  $("cartSub").innerHTML=`${d.count||0} order(s) · ${d.products||0} product(s)`;
-  const rev=d.total_usd||0, cost=d.cost_usd||0, profit=rev-cost;
-  // money-free roles (server redacts): counts only, no revenue/cost/profit cards
-  $("cartCards").innerHTML=(d.money===false||d.cost_usd==null&&d.total_usd==null)?"":
-    `<div class="card"><div class="n money" id="cartRevN">${money(rev)}</div><div class="l">إجمالي الإيراد · Total revenue</div></div>`+
-    `<div class="card"><div style="display:flex;align-items:baseline;gap:3px"><span style="font-size:23px;font-weight:800;color:var(--muted)">$</span>`+
-      `<input id="cartCostIn" type="number" min="0" step="0.01" value="${cost||''}" placeholder="0.00" oninput="cartCostInput(this.value)" style="width:130px;font-size:22px;font-weight:800;border:1px solid var(--line);border-radius:8px;padding:2px 7px;background:#fff"></div>`+
-      `<div class="l">تكلفة السلة (اكتب ما يظهر بأمازون) · Cart cost — type it</div></div>`+
-    `<div class="card"><div class="n ${profit>=0?'good':'neg'}" id="cartProfitN">${money(profit)}</div><div class="l">الربح المتوقع قبل الشراء · Profit preview</div></div>`;
-  const rows=d.orders||[];
-  $("cartList").innerHTML = rows.length ? cartTable(rows)
-    : `<div class="empty">🛒 السلة فارغة · Cart is empty. Tick orders on the <a style="color:var(--accent);cursor:pointer" onclick="setView('needorder')">To-order</a> page, then “🛒 Move to cart”.</div>`;
-  if(rows.length){ lxColwApply(); lxtGridApply("ic",$("cartList")); }
+  const money=!(d.money===false||(d.cost_usd==null&&d.total_usd==null));
+  DS.inCart.chrome("cartChrome",{ money,
+    stats:{count:d.count||0, products:d.products||0, revenue:d.total_usd||0, cost:d.cost_usd||0} });
+  DS.inCart.board("cartList", d.orders||[], { money });
 }
-function icSortVal(o,k){ return k==="rev"?+(o.amount_to_collect_usd||0):String(o.order_id||""); }
-function cartTable(rows){
-  rows=lxtSortApply("ic",rows.slice(),icSortVal);
-  const body=rows.map(o=>{
-    const amt=o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—';
-    const thumbs=(o.items||[]).slice(0,6).map(it=>it.image
-      ?`<img src="${poEsc(it.image)}" title="${poEsc(it.title||it.asin||'')}" style="width:30px;height:30px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle">`
-      :`<span class="noimg" title="${poEsc(it.title||'')}" style="display:inline-block;width:30px;height:30px;border-radius:6px;border:1px solid var(--line);vertical-align:middle"></span>`).join(" ");
-    const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(o.customer||'—')}</b> <span class="muted2 mono" style="font-size:10.5px">${poEsc(o.order_id)}</span> <span class="muted2" style="font-size:11px">${poEsc(o.phone||'')}</span></span></div>`;
-    return `<div class="poc-row">${pin}${lxtCells("ic",{
-      prods:`<span style="white-space:nowrap;overflow:hidden">${thumbs||`<span class="muted2">${(o.items||[]).length} product(s)</span>`}</span>`,
-      rev:  `<b class="amt" style="color:var(--accent)">${amt}</b>`,
-      act:  `<button class="po-btn" title="اشتريته — انقله إلى ORDERED · bought it → mark ORDERED" onclick="cartSetStatus('${poEsc(o.order_id)}','ORDERED')">✅ Ordered</button>
-        <button class="po-btn" title="أعده إلى قائمة الطلب · back to the To-order queue" onclick="cartRemove('${poEsc(o.order_id)}')">↩</button>`,
-    })}</div>`;
-  }).join("");
-  return lxtHead("ic","العميل · customer")
-    +lxtWrap("ic",`<div class="pkg open"><div class="pkg-body">${body}</div></div>`);
-}
+
 function cartCostInput(v){
   const cost=Math.max(0,parseFloat(v||0)||0), rev=(CART_DATA&&CART_DATA.total_usd)||0;
-  const p=rev-cost, el=$("cartProfitN");
-  if(el){ el.textContent=money(p); el.className="n "+(p>=0?'good':'neg'); }
+  const el=document.querySelector(".ds-fl-profit-out .ds-stat-value");
+  if(el){ const p=rev-cost; el.textContent=DS.fmt.money(p,"USD");
+    el.style.color=`var(--ds-${p>=0?"success":"danger"}-ink)`; }
   clearTimeout(cartCostTimer);
-  cartCostTimer=setTimeout(async()=>{
-    let r; try{ r=await post("/api/incart/cost",{cost_usd:cost}); }catch(e){ r={}; }
-    if(r&&r.ok){ if(CART_DATA){ CART_DATA.cost_usd=r.cost_usd; CART_DATA.profit_usd=Math.round((rev-r.cost_usd)*100)/100; } }
-    else toast("Save failed"+((r&&r.error)?": "+r.error:""));
-  },700);
+  cartCostTimer=setTimeout(async()=>{ await post("/api/incart/cost",{cost_usd:cost}); if(CART_DATA) CART_DATA.cost_usd=cost; },600);
 }
 async function cartSetStatus(id,status){ let r; try{ r=await post("/api/status",{id,status}); }catch(e){ r={}; }
   toast(`${id} → ${status}`); loadIncart(); }
