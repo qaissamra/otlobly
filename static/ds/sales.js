@@ -49,11 +49,28 @@
   function who(o) {
     const web = o.source === "website"
       ? D.tag({ label: "Website", icon: "globe-alt", title: "Placed through the public catalog" }) : "";
+    // the phone left this cell (owner, 2026-09-08). It is still on the customer's
+    // profile and in the row's WhatsApp actions; here it was 120px of a number
+    // nobody reads off a board. The order number stays - it is what staff quote.
     return `<span class="ds-sl-who">
       <span class="ds-sl-id">${esc(o.order_id)}</span>${web}
       <span class="ds-sl-name">${text(o.customer)}</span>
-      <span class="ds-sl-phone">${o.phone ? esc(o.phone) : ""}</span>
     </span>`;
+  }
+
+  // ------------------------------------------------------- the parcel columns
+  /** Every package carrying a piece of this order, as [po, pk, pi] triples.
+      One order can be split across parcels; the owner's rule is that each keeps
+      its OWN number and its OWN status, so nothing here merges them. */
+  const parcels = (ctx, o) => (ctx.parcels ? ctx.parcels(o.order_id) : []);
+  /** A strip of one cell per parcel. `one` renders a single [po, pk, pi]; the
+      empty results are dropped so a parcel with nothing to say leaves no gap. */
+  function perParcel(ctx, o, one, tip) {
+    const list = parcels(ctx, o);
+    if (!list.length) return D.dash();
+    const out = list.map(one).filter((h) => h && String(h).trim());
+    if (!out.length) return D.dash();
+    return `<span class="ds-sl-parcels"${tip ? ` title="${esc(tip(list))}"` : ""}>${out.join("")}</span>`;
   }
 
   /** Everything wrong with this order, said once, in words. */
@@ -71,13 +88,13 @@
   function orderColumns(ctx) {
     const m = ctx.money;
     return [
-      { key: "who", label: "Order & customer", w: 260, pin: "start", locked: true,
+      { key: "who", label: "Order & customer", w: 210, pin: "start", locked: true,
         sortVal: (o) => (o.customer || "~").toLowerCase(), render: who },
       // The old board stacked one block link per product, which grew taller than a row
       // and bled into the rows below. Batch B replaced that with a bare count, which
       // threw away the product itself. Photos: report.py carries item.image now, and
       // DS.thumbs falls back to the plain count for an order whose items have none.
-      { key: "items", label: "Products", w: 150, sortVal: (o) => (o.items || []).length,
+      { key: "items", label: "Products", w: 120, sortVal: (o) => (o.items || []).length,
         render: (o) => {
           const warn = o.needs_expand
             ? D.attention({ kind: "stale", detail: "a.co", title: "A short a.co link that still has to be expanded" }) : "";
@@ -86,32 +103,58 @@
       m ? { key: "amount", label: "Amount", w: 112, align: "end",
         sortVal: (o) => (o.amount_to_collect_usd == null ? -1 : o.amount_to_collect_usd),
         render: (o) => ctx.amountCell(o) } : null,
-      m ? { key: "deposit", label: "Deposit", w: 100, align: "end",
+      // hidden, NOT deleted (owner, 2026-09-08: "remove the deposit" AND "do not
+      // remove anything"). One click in the Columns control, which since Batch B3
+      // sits above the rows where it can be found.
+      m ? { key: "deposit", label: "Deposit", w: 100, align: "end", defaultHidden: true,
         sortVal: (o) => o.deposit_usd || 0, render: (o) => ctx.depositCell(o) } : null,
       m ? { key: "remaining", label: "Still owed", w: 104, align: "end",
         sortVal: (o) => (o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd || 0),
         render: (o) => { const v = o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd;
           return v == null ? D.dash() : `<b class="ds-num">${esc(money(v))}</b>`; } } : null,
-      { key: "due", label: "Promised", w: 108, sortVal: (o) => (o.est_delivery_customer ? Date.parse(o.est_delivery_customer) || Infinity : Infinity),
+      { key: "due", label: "Promised", w: 100, sortVal: (o) => (o.est_delivery_customer ? Date.parse(o.est_delivery_customer) || Infinity : Infinity),
         render: (o) => W.dueChip(o.est_delivery_customer, ["DELIVERED", "COLLECTED", "CANCELLED"].includes(o.status)) || D.dash() },
-      // 190px, deliberately not narrowed with the rest: three pills can land in this
-      // cell at once ("No price", "Stale · a.co link", "No ID") and a clipped warning
-      // is worse than no warning.
-      { key: "attention", label: "Needs attention", w: 190, sortable: false, render: attention },
+      // Kept wide-ish: three pills can land here at once ("No price", "Stale · a.co
+      // link", "No ID") and a clipped warning is worse than no warning. It gives up
+      // 20px to the parcel columns, which say things this one never did.
+      { key: "attention", label: "Needs attention", w: 170, sortable: false, render: attention },
       { key: "box", label: "Box", w: 68, sortVal: (o) => o.profile_box || "~",
         title: "The Amazon buying account this order is bought on — the same name as its Multilogin browser profile",
         render: (o) => ctx.boxCell(o) },
       { key: "batch", label: "Batch", w: 64, sortVal: (o) => o.batch || "~", render: (o) => text(o.batch) },
       { key: "amazon", label: "Amazon #", w: 140, defaultHidden: true, render: (o) => ctx.amazonCell(o) },
-      { key: "city", label: "City", w: 100, sortVal: (o) => (o.city || "~").toLowerCase(),
+      { key: "city", label: "City", w: 100, defaultHidden: true,
+        sortVal: (o) => (o.city || "~").toLowerCase(),
         render: (o) => W.odLocCell(o, "city") },
       { key: "address", label: "Address", w: 150, defaultHidden: true, sortable: false,
         render: (o) => W.odLocCell(o, "address") },
-      // visible again (owner, 2026-09-07). Batch B hid it, and the control that would
-      // have brought it back was rendering below all 61 rows - see table.js.
-      { key: "tracking", label: "Tracking", w: 112, sortVal: (o) => o.tracking_number || "~",
-        title: "The OTL parcel number, once the package has one",
+      // The order's OWN otl number, which is not the number anyone works from -
+      // the parcel's GWD is (owner, 2026-09-08). Renamed so the two can never be
+      // confused in the Columns list, and hidden rather than deleted.
+      { key: "tracking", label: "OTL number", w: 112, defaultHidden: true,
+        sortVal: (o) => o.tracking_number || "~",
+        title: "The order's own OTL number. The parcel's GWD is in the Tracking column.",
         render: (o) => mono(o.tracking_number) },
+      // ---- the parcel, straight off the packages that carry this order --------
+      // Each cell renders the app's OWN builder, once per package: pkgGaashPill and
+      // pkgDocsPill are what the Purchases packages board has always used, and a
+      // second implementation of either would drift the day one was tuned.
+      { key: "gwd", label: "Tracking", w: 132, sortable: false,
+        title: "The GAASH parcel number (GWD) of every package carrying this order",
+        render: (o) => perParcel(ctx, o,
+          ([po, pk, pi]) => { const g = (pk.tracking_number || "").trim();
+            return g ? `<button type="button" class="ds-sl-gwd ds-mono" title="Open package ${esc(pk.package_no)} of ${esc(po.po_id)}"
+              onclick="event.stopPropagation();pkgInfoOpen('${esc(po.po_id)}',${pi})">${esc(g)}</button>` : ""; },
+          (l) => l.map(([, pk]) => (pk.tracking_number || "no GWD yet")).join("\n")) },
+      { key: "customs", label: "Customs", w: 140, sortable: false,
+        title: "Where GAASH says each parcel is",
+        render: (o) => perParcel(ctx, o, ([, pk]) => W.pkgGaashPill(pk)) },
+      { key: "docs", label: "Documents", w: 110, sortable: false,
+        title: "Whether customs is asking you to upload anything for this parcel",
+        render: (o) => perParcel(ctx, o, ([po, pk, pi]) => W.pkgDocsPill(po, pk, pi)) },
+      { key: "deadline", label: "GAASH deadline", w: 116, sortable: false, defaultHidden: true,
+        title: "The day the GAASH link expires — past it the parcel is lost",
+        render: (o) => perParcel(ctx, o, ([po, pk, pi]) => W.pkgDeadlinePill(po, pk, pi)) },
       { key: "status", label: "Status", w: 130, pin: "end", sortVal: (o) => o.status || "~",
         render: (o) => W.statusSelect(o) },
       // was a raw <select> of six message templates plus a 📦 button, 168px wide in
@@ -166,16 +209,35 @@
         // The ASIN now sits NEXT TO a title, or stands in for one, never both.
         render: (o) => {
           const items = o.items || [];
-          if (!items.length) return `<div class="ds-pu-sub-empty ds-muted">No products on this order.</div>`;
-          return D.subTable([
-            { label: "Product", render: (it) => {
-              const named = it.title && it.title.trim() && it.title.trim() !== it.asin;
-              return `<span class="ds-pu-prod">${D.thumb(it)}${named ? text(it.title) : mono(it.asin)}`
-                + `${named && it.asin ? ` ${mono(it.asin)}` : ""}</span>`; } },
-            { label: "Qty", w: 64, align: "end", render: (it) => esc(num(it.qty || 1)) },
-            { label: "", w: 40, render: (it) => (it.url
-              ? `<a class="ds-pu-out" href="${esc(it.url)}" target="_blank" rel="noopener" title="Open on Amazon" aria-label="Open on Amazon">${D.icon("arrow-top-right-on-square", { size: 13 })}</a>` : "") },
-          ], items, `Products on ${o.order_id}`);
+          const prods = items.length
+            ? D.subTable([
+              { label: "Product", render: (it) => {
+                const named = it.title && it.title.trim() && it.title.trim() !== it.asin;
+                return `<span class="ds-pu-prod">${D.thumb(it)}${named ? text(it.title) : mono(it.asin)}`
+                  + `${named && it.asin ? ` ${mono(it.asin)}` : ""}</span>`; } },
+              { label: "Qty", w: 64, align: "end", render: (it) => esc(num(it.qty || 1)) },
+              { label: "", w: 40, render: (it) => (it.url
+                ? `<a class="ds-pu-out" href="${esc(it.url)}" target="_blank" rel="noopener" title="Open on Amazon" aria-label="Open on Amazon">${D.icon("arrow-top-right-on-square", { size: 13 })}</a>` : "") },
+            ], items, `Products on ${o.order_id}`)
+            : `<div class="ds-pu-sub-empty ds-muted">No products on this order.</div>`;
+          // An order split across parcels gets a ROW PER PARCEL here, each with its
+          // own number and its own status (owner, 2026-09-08). The row's own cells
+          // can only show so much side by side; this is where the detail lives.
+          const list = parcels(ctx, o);
+          if (!list.length) return prods;
+          const parcelTbl = D.subTable([
+            { label: "Parcel", w: 150, render: ([po, pk, pi]) => {
+              const g = (pk.tracking_number || "").trim();
+              return `<button type="button" class="ds-sl-gwd ds-mono" title="Open package ${esc(pk.package_no)} of ${esc(po.po_id)}"
+                onclick="event.stopPropagation();pkgInfoOpen('${esc(po.po_id)}',${pi})">${esc(g || "no GWD yet")}</button>`; } },
+            { label: "Purchase order", w: 130, render: ([po]) => mono(po.po_id) },
+            { label: "Customs", w: 160, render: ([, pk]) => W.pkgGaashPill(pk) || D.dash() },
+            { label: "Documents", w: 150, render: ([po, pk, pi]) => W.pkgDocsPill(po, pk, pi) || D.dash() },
+            { label: "GAASH deadline", w: 140, render: ([po, pk, pi]) => W.pkgDeadlinePill(po, pk, pi) || D.dash() },
+            { label: "Package status", render: ([, pk]) => (pk.otlobly_status
+              ? D.status.badge("pkg", pk.otlobly_status) : D.dash()) },
+          ], list, `Parcels carrying ${o.order_id}`);
+          return `${prods}<div class="ds-sl-parcel-tbl">${parcelTbl}</div>`;
         },
       },
       onToggle: (key) => ctx.toggle(key),
@@ -186,6 +248,16 @@
       empty: { title: "No matching orders", hint: "Change the search or the filters above." },
     });
   };
+
+  // The same shape the Purchases page has had since Phase 3 (P.BOARDS): one set of
+  // rows, three lenses. Packages and Products DELEGATE to D.purchases.board rather
+  // than growing a second implementation of boards that already exist and are
+  // already tested (owner, 2026-09-08: "do not re do everything i did before").
+  O.BOARDS = [
+    { key: "orders", label: "Orders" },
+    { key: "packages", label: "Packages" },
+    { key: "products", label: "Products" },
+  ];
 
   O.chrome = (host, ctx) => {
     const el = typeof host === "string" ? document.getElementById(host) : host;
@@ -209,7 +281,9 @@
       ],
     });
     const bar = D.filterBar({
-      search: { id: "odSearch", value: ctx.query, placeholder: "Search name, phone, ASIN, address, order number", oninput: "odSearchInput(this.value)" },
+      search: { id: "odSearch", value: ctx.query, placeholder: "Search name, phone, ASIN, address, order number, GWD", oninput: "odSearchInput(this.value)" },
+      views: O.BOARDS.map((b) => ({ key: b.key, label: b.label, active: ctx.board === b.key })),
+      onView: "odSetView(KEY)",
       right: [
         D.select({ id: "odStatus", value: ctx.status, options: ctx.statusOptions, placeholder: "All statuses", size: "sm", onchange: "odFilter('status',this.value)", ariaLabel: "Filter by status" }),
         D.select({ id: "odBatch", value: ctx.batch, options: ctx.batchOptions, placeholder: "All batches", size: "sm", onchange: "odFilter('batch',this.value)", ariaLabel: "Filter by batch" }),

@@ -358,3 +358,58 @@ measuring click-handler controls only and never counted them.
 `native_confirm` counted `\bconfirm\(`, which matches the `confirm(` inside **`DS.confirm(`** —
 the design system's own replacement scored as one of the native calls it exists to retire. Now
 `(?<![.\w])confirm\(`, and the same for `prompt` and `alert`.
+
+## 10. Batch B4 - the Orders board becomes a parcel board (2026-09-08)
+
+The owner's next pass over the board: drop the phone, the deposit, the city and the order's
+own OTL; show the parcel instead - its GWD, its GAASH status, its documents; and put views
+on top. Then, decisively:
+
+> **same as before i do not want to re do eveything i did every futuer i did before do not
+> remove anything** - **ever package should have it's own status like GWD**
+
+**Q-018: everything he asked for already existed.** `purchases.js` has had four boards behind
+a view switcher since Phase 3 (`P.BOARDS`), and its packages board already carried
+`W.pkgGaashPill` ("Customs"), `W.pkgDocsPill` ("Documents") and `W.pkgDeadlinePill`. The work
+was wiring, not building: the Orders row calls those same builders, and the Packages and
+Products views **delegate to `D.purchases.board`**. `test_ds_sales.py` fails if `sales.js` ever
+grows a pill or a board of its own.
+
+**"Remove" and "do not remove anything" both hold.** Deposit, City, the OTL column and the new
+GAASH-deadline column are `defaultHidden` - off the board, one click away, nothing deleted.
+The OTL column was renamed "OTL number" so it can never be confused with the GWD.
+
+**Each parcel keeps its own identity.** No consensus rule was invented. An order split across
+parcels renders one GWD and one status *per parcel*; 6 of the 26 linked orders are split, and
+OTL-0055 correctly shows `GWD100031676` "Delivered" beside `GWD100063352` "ARIIVED
+Destination". The row expansion gained a parcel table - one line each, with purchase order,
+customs, documents, deadline and package status.
+
+### Q-019 - `defaultHidden` could never reach anyone who had used the board
+
+`table.js` seeded hidden columns only when there was **no** saved layout: `s.hidden` won
+forever. So a column added as `defaultHidden` in a later release was **visible for every
+existing user, permanently** - this batch's four would never have reached the owner at all.
+The saved state now records `known` (the columns a layout has actually seen), so a genuinely
+new column can be seeded once without disturbing any choice the user made. Layouts saved
+before `known` existed are re-seeded once and stamped immediately - not on the next change,
+or a deliberately un-hidden column would re-hide itself on every page load.
+
+### Q-020 - `static/ds/purchases.js` was not a text file
+
+`const NO_CUSTOMER = "\x00none"` - a literal NUL, committed and deployed. `file` reported the
+module as `data`, so **grep and ripgrep silently skipped it**: three separate searches of that
+file returned nothing at all before the cause became obvious. Every shell-grep check over the
+repo had been passing on it vacuously. The sentinel is a non-NUL value now, behaviour
+identical, and the suite fails if a NUL comes back.
+
+### Measured after
+
+| | before | after |
+|---|---|---|
+| board width | 1,614px | **1,576px**, with three more columns |
+| GWD / Customs / Documents populated | - | 25 / 26 / 3 of 61 orders |
+| orders showing more than one parcel | - | 6, each parcel with its own status |
+| views | 1 | 3, each with its own URL |
+| cells with unreadable text | 0 | 0 |
+| Purchases | 4 views, 22 rows | unchanged |

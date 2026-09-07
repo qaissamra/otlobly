@@ -41,13 +41,26 @@
     constructor(o) { this.o = o; this.id = o.id; this.selected = new Set(); this.open = new Set(); this.load(); }
     load() {
       let s = {}; try { s = JSON.parse(localStorage.getItem(KEY(this.id)) || "{}") || {}; } catch (e) { s = {}; }
-      // `defaultHidden` columns start folded away the FIRST time a user meets the table;
-      // once they have a saved layout it is theirs and this never overrides it again.
-      const seed = s.hidden || (this.o.columns || []).filter((c) => c.defaultHidden).map((c) => c.key);
-      this.state = { w: s.w || {}, hidden: seed, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
+      // `defaultHidden` folds a column away the first time someone meets this table,
+      // and their saved layout owns it from then on. But a column ADDED later had no
+      // way in: the saved `hidden` array simply won, so anyone who had ever used the
+      // board saw every new defaultHidden column as visible, forever. `known` records
+      // which columns a saved layout has actually seen, so a genuinely new one can be
+      // seeded once without touching the choices they made.
+      const all = (this.o.columns || []).map((c) => c.key);
+      const dflt = (this.o.columns || []).filter((c) => c.defaultHidden).map((c) => c.key);
+      let seed;
+      if (!s.hidden) seed = dflt;                       // never seen this table
+      else if (!s.known) seed = dflt;                   // layout predates `known` — seed once
+      else seed = s.hidden.concat(dflt.filter((k) => !s.known.includes(k) && !s.hidden.includes(k)));
+      this.state = { w: s.w || {}, hidden: seed, known: all, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
+      // Stamp `known` now, not on the next change. Otherwise a layout saved before
+      // this existed is re-seeded on EVERY load, so a column the user deliberately
+      // un-hid folds itself away again each time they open the page.
+      if (!s.known) { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } }
     }
     save() { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } if (this.o.onStateChange) this.o.onStateChange(this.state); }
-    reset() { this.state = { w: {}, hidden: [], order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
+    reset() { this.state = { w: {}, hidden: [], known: (this.o.columns || []).map((c) => c.key), order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
     columns() {
       const base = this.o.columns.slice();
       if (this.state.order) { const idx = new Map(this.state.order.map((k, i) => [k, i])); base.sort((a, b) => (idx.has(a.key) ? idx.get(a.key) : 1e6 + this.o.columns.indexOf(a)) - (idx.has(b.key) ? idx.get(b.key) : 1e6 + this.o.columns.indexOf(b))); }
