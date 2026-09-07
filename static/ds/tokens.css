@@ -56,6 +56,9 @@
   --ds-t-md: 14px;             /* body, data */
   --ds-t-lg: 17px;             /* section titles */
   --ds-t-xl: 22px;             /* page titles */
+  --ds-t-2xl: 28px;            /* hero numerals only - the P&L headline, the Leluxe goal,
+                                  the KPI cards. They were 34 / 26 / 25px: three sizes for
+                                  one idea. Five steps is too thin for an app with heroes. */
   --ds-lh: 1.45;
   --ds-w-regular: 400; --ds-w-medium: 600; --ds-w-bold: 700;
 

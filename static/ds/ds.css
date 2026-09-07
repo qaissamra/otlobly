@@ -459,13 +459,13 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 /* Sales identity cell — the order id, the customer and the phone are one fact
    ("which customer is this"), so they share a cell instead of three columns. */
 .ds-sl-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ds-sl-id { font-family: var(--ds-mono); font-weight: 700; font-size: var(--ds-fs-xs); flex: 0 0 auto; }
+.ds-sl-id { font-family: var(--ds-font-mono); font-weight: 700; font-size: var(--ds-t-xs); flex: 0 0 auto; }
 .ds-sl-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-sl-items { white-space: nowrap; }
-.ds-sl-phone { font-family: var(--ds-mono); font-size: var(--ds-fs-xs); color: var(--ds-muted); flex: 0 0 auto; }
+.ds-sl-phone { font-family: var(--ds-font-mono); font-size: var(--ds-t-xs); color: var(--ds-muted); flex: 0 0 auto; }
 /* an input that lives inside a table cell: fills the column, keeps the hit-target floor */
 .ds-cellinput { width: 100%; min-width: 0; min-height: 24px; padding: 2px 6px; font: inherit;
-  font-size: var(--ds-fs-sm); color: var(--ds-ink); background: var(--ds-bg);
+  font-size: var(--ds-t-sm); color: var(--ds-ink); background: var(--ds-bg);
   border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); }
 .ds-cellinput:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: -1px; }
 .ds-ok { color: var(--ds-success-text, var(--ds-ink)); }

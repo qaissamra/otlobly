@@ -226,3 +226,63 @@ Not fixed here, by design: the raw inline pills (**Q-003**, ~1,300) and the font
 (**Q-004**) need each page's own builders, so they belong to that page's migration batch.
 
 58 suites green.
+
+---
+
+## 8. Batch B2 — one type scale (2026-09-07). Q-004 closed.
+
+**Q-004 said Goals renders 15 font sizes, P&L 12, Leluxe 12, Orders 8.** The cause was not
+those pages: `web/index.html` declared **22 distinct sizes in its stylesheet and 20 more in
+inline styles — 903 declarations in total**, against a design system that defines 5.
+
+Every size is now a token. `--ds-t-2xl: 28px` was added for hero numerals, because the
+P&L headline (34px), the Leluxe goal (34px), its percentage (26px) and the KPI cards (25px)
+were four sizes for one idea and squashing them into 22px would have shrunk the numbers the
+owner reads first.
+
+Measured after, at 1600px — `steps` counts distinct rendered font sizes on the page:
+
+| surface | steps before | steps after | unreadable | targets < 24px |
+|---|---|---|---|---|
+| goals | 15 | **5** | 0 | 0 |
+| pnl | 12 | **5** | 0 | 0 |
+| leluxe › orders | 12 | **4** | 0 | 0 |
+| leluxe › products | 10 | **4** | 0 | 0 |
+| settings | 10 | **4** | 0 | 0 |
+| orders | 8 | **5** | 0 | 0 |
+| purchases › packages | 11 | **6** | 0 | 1 |
+| activity | 6 | **4** | 0 | 0 |
+| gaash mail › docs | 10 | **4** | 1 | 0 |
+
+`13.02px` appears on boards carrying GWD numbers and is **correct**: `.ds-mono` is
+`font-size:.93em`, an optical correction because monospace renders larger than Inter at the
+same size. It scales with whatever step it sits in, so it is not a fixed size and not sprawl.
+
+### It cannot come back
+
+`inventory.py` already computed a font-size count but nothing enforced it, and counting only
+literals would now read 0 and mean nothing. The metric is now **`font_size_steps`** — every
+hard-coded px value **plus** every distinct `--ds-t-*` token referenced — baselined at **6**,
+alongside `font_size_literals` at **0**. Adding a stray `13px` moves it to 7 and the lint warns.
+
+### Three bugs this turned up
+
+- **Three tokens Batch B shipped that do not exist.** `ds.css` referenced `--ds-fs-xs`,
+  `--ds-fs-sm` and `--ds-mono` with no fallback — the real names are `--ds-t-xs`, `--ds-t-sm`,
+  `--ds-font-mono`. The new Orders/Customers identity cell was silently inheriting the wrong
+  size in the wrong family. A sweep for undefined tokens found exactly these three
+  (`--ds-pu-cols` is also undefined in CSS but is set inline at runtime, which is correct).
+- **`.statussel` fell under the hit-target floor.** Dropping it from 11.5px to 11px took ~0.5px
+  off its height and put **207 buttons on the Leluxe products board** back under 24px — caught
+  only because the browser pass re-measured rather than trusting the CSS diff. It now carries
+  `min-height:24px`, as `.iconbtn` and friends got in Batch A.
+- **The literal-only remap missed four call sites.** `poTn4(t, fs)` takes its size as an
+  *argument* (`poTn4(tn,'10px')`), so the value never appeared next to `font-size:` in the
+  source. 267 GWD numbers were still rendering at 10px until the callers were fixed.
+
+### One methodology note, for whoever measures next
+
+Twice this session a measurement was wrong because the page under the harness was stale. The
+Flask app caches `web/index.html`, **and** `sw.js` caches `/app`. Restarting the server is not
+enough: unregister the service worker and clear its caches, or you will confidently measure
+code you replaced ten minutes ago.

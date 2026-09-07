@@ -1,13 +1,13 @@
 {
- "emoji_glyphs": 1979,
+ "emoji_glyphs": 1952,
  "raw_table": 19,
- "raw_button": 470,
- "raw_select": 43,
- "raw_input": 250,
+ "raw_button": 463,
+ "raw_select": 40,
+ "raw_input": 246,
  "physical_css_style": 33,
  "physical_css_file": 63,
  "hex_literals_css": 118,
- "hex_literals_file": 494,
+ "hex_literals_file": 490,
  "colour_registries": 13,
  "raw_pill_literals": 43,
  "native_confirm": 47,
@@ -15,5 +15,7 @@
  "native_alert": 2,
  "duplicate_formatters": 1,
  "az_modal_roots": 22,
+ "font_size_steps": 6,
+ "font_size_literals": 0,
  "ds_files_present": 1
 }

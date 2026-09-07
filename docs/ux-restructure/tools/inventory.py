@@ -252,7 +252,14 @@ report["tokens"] = {"root_blocks": [ln for ln, _ in root_blocks], "declared": to
                     "top_uses": var_use.most_common(12),
                     "runtime_grid_vars": sorted(set(re.findall(r"var\((--\w*grid|--btpin)", src)))}
 fs = collections.Counter(re.findall(r"font-size\s*:\s*([0-9.]+px)", style))
-report["font_sizes"] = {"distinct_in_css": len(fs), "values": sorted(fs.items(), key=lambda kv: float(kv[0][:-2])),
+# A font-size is now usually a token, so counting only literals would report 0 and mean
+# nothing. The metric that matters is how many distinct type STEPS the app uses: every
+# hard-coded px value plus every distinct --ds-t-* token referenced. The design system
+# defines six; anything above that is sprawl creeping back.
+fs_tokens = collections.Counter(re.findall(r"font-size\s*:\s*var\((--ds-t-[a-z0-9]+)\)", style))
+report["font_sizes"] = {"distinct_in_css": len(fs), "distinct_steps": len(fs) + len(fs_tokens),
+                        "tokens_used": sorted(fs_tokens.items()), "literal_decls": sum(fs.values()),
+                        "values": sorted(fs.items(), key=lambda kv: float(kv[0][:-2])),
                         "fonts_loaded": re.findall(r'fonts\.googleapis\.com/css2\?family=([^"&]+)', src),
                         "font_family_decls": collections.Counter(re.findall(r"font-family\s*:\s*([^;}]+)", style)).most_common(10)}
 hex6 = re.findall(r"#[0-9a-fA-F]{6}\b", src)
@@ -339,6 +346,8 @@ def lint_metrics():
         "colour_registries": report["colour_registries"]["count"], "raw_pill_literals": G['class="pill (raw literal)'],
         "native_confirm": G["confirm("], "native_prompt": G["prompt("], "native_alert": G["alert("],
         "duplicate_formatters": len(dup_formatters), "az_modal_roots": G["az-modal roots"],
+        "font_size_steps": report["font_sizes"]["distinct_steps"],
+        "font_size_literals": report["font_sizes"]["literal_decls"],
         "ds_files_present": int(all((ds_dir / f).exists() for f in ("tokens.css", "ds.css", "ds.js", "status.js", "format.js", "icons.svg"))),
     }
 
@@ -404,7 +413,10 @@ def md():
     t = report["tokens"]
     p(f"\n## Tokens\n\n`:root` blocks at {t['root_blocks']} · {t['count']} custom properties: {' '.join(t['declared'])} · `var()` uses in CSS {t['var_uses_in_css']} · unused in CSS {t['unused_in_css']} · runtime grid vars {len(t['runtime_grid_vars'])}\n")
     f = report["font_sizes"]
-    p(f"Font sizes in CSS: {f['distinct_in_css']} distinct — " + ", ".join(f"{k} ×{n}" for k, n in f["values"]) + f"\n\nFonts loaded: {f['fonts_loaded']} · font-family declarations: {f['font_family_decls']}\n")
+    p(f"Font sizes in CSS: {f['distinct_steps']} distinct type steps — {f['literal_decls']} hard-coded declaration(s) "
+      + (", ".join(f"{k} ×{n}" for k, n in f["values"]) or "(none)")
+      + " · tokens " + ", ".join(f"{k} ×{n}" for k, n in f["tokens_used"])
+      + f"\n\nFonts loaded: {f['fonts_loaded']} · font-family declarations: {f['font_family_decls']}\n")
     h = report["hex_literals"]
     p(f"Hex colour literals: CSS {h['css']} ({h['css_distinct']} distinct) · whole file {h['file']} ({h['file_distinct']} distinct)\n")
     p(f"## Colour / status registries in JS ({report['colour_registries']['count']} `const` objects/arrays carrying hex values)\n\n| name | line | hex values |\n|---|---|---|")
