@@ -1,0 +1,247 @@
+[
+ {
+  "name": "brain",
+  "status": "ok",
+  "meta": "{\"title\":\"Brain\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-orders",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-packages",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-products",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-customers",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-split",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-new-order-modal",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "purchases-fields-panel",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "to-order",
+  "status": "ok",
+  "meta": "{\"title\":\"To order\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "to-order-quote-tool",
+  "status": "ok",
+  "meta": "{\"title\":\"To order\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leluxe-orders",
+  "status": "ok",
+  "meta": "{\"title\":\"Leluxe\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leluxe-packages",
+  "status": "ok",
+  "meta": "{\"title\":\"Leluxe\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leluxe-products",
+  "status": "ok",
+  "meta": "{\"title\":\"Leluxe\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leluxe-dashboard",
+  "status": "ok",
+  "meta": "{\"title\":\"Leluxe\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leluxe-goal",
+  "status": "ok",
+  "meta": "{\"title\":\"Leluxe\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "goals",
+  "status": "ok",
+  "meta": "{\"title\":\"Goals\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "deposits",
+  "status": "ok",
+  "meta": "{\"title\":\"Deposits\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "orders",
+  "status": "ok",
+  "meta": "{\"title\":\"Orders\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "orders-add-order-panel",
+  "status": "ok",
+  "meta": "{\"title\":\"Orders\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:37:54 PM\",\"errors\":0}"
+ },
+ {
+  "name": "in-cart",
+  "status": "ok",
+  "meta": "{\"title\":\"In cart\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "leads",
+  "status": "ok",
+  "meta": "{\"title\":\"Leads\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "customers",
+  "status": "ok",
+  "meta": "{\"title\":\"Customers\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "package-prep",
+  "status": "ok",
+  "meta": "{\"title\":\"Package prep\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "bulk-search",
+  "status": "ok",
+  "meta": "{\"title\":\"Bulk search\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "bulk-search-results",
+  "status": "ok",
+  "meta": "{\"title\":\"Bulk search\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-conversations",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-overview",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-workflows",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-templates",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-readiness",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-docs",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-forecast",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "gaash-mail-analyze",
+  "status": "ok",
+  "meta": "{\"title\":\"GAASH mail\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "flags",
+  "status": "ok",
+  "meta": "{\"title\":\"Flags\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "pnl",
+  "status": "ok",
+  "meta": "{\"title\":\"P&L\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "activity",
+  "status": "ok",
+  "meta": "{\"title\":\"Activity\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "settings",
+  "status": "ok",
+  "meta": "{\"title\":\"Settings\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "team",
+  "status": "ok",
+  "meta": "{\"title\":\"Team\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "trash",
+  "status": "ok",
+  "meta": "{\"title\":\"Trash\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "catalog-hidden",
+  "status": "ok",
+  "meta": "{\"title\":\"Catalog\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "picking-hidden",
+  "status": "ok",
+  "meta": "{\"title\":\"Picking list\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "tatabu-overview",
+  "status": "ok",
+  "meta": "{\"title\":\"Tatabu \u00b7 Overview\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "tatabu-brokers",
+  "status": "ok",
+  "meta": "{\"title\":\"Brokers\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "tatabu-plans",
+  "status": "ok",
+  "meta": "{\"title\":\"Plans & pricing\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "tatabu-usage",
+  "status": "ok",
+  "meta": "{\"title\":\"Usage by broker\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "tatabu-activity",
+  "status": "ok",
+  "meta": "{\"title\":\"Platform activity\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "back-to-brain",
+  "status": "ok",
+  "meta": "{\"title\":\"Brain\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "language-arabic-purchases",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ },
+ {
+  "name": "language-back-to-english",
+  "status": "ok",
+  "meta": "{\"title\":\"Purchases\",\"sub\":\"30 orders \u00b7 $4,399.98 outstanding \u00b7 updated 9/6/2026, 6:38:41 PM\",\"errors\":0}"
+ }
+]
