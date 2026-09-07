@@ -240,7 +240,13 @@
       case "select": { if (ev.target.checked) t.selected.add(key); else t.selected.delete(key); t.paintSelection(); break; }
       case "selectAll": { if (ev.target.checked) rows.forEach((r, i) => t.selected.add(t.key(r, i))); else t.selected.clear(); t.paintSelection(); break; }
       case "clear": { t.selected.clear(); t.paintSelection(); break; }
-      case "bulk": { const b = (t.o.bulk || [])[+key]; if (b && b.onclick) b.onclick(Array.from(t.selected), t.selectedRows(), t); break; }
+      // a bulk action's onclick may be a function OR a string of JS, because every
+      // other onclick in this design system is a string - passing one here used to
+      // throw "b.onclick is not a function" the moment the button was clicked
+      case "bulk": { const b = (t.o.bulk || [])[+key]; if (!b || !b.onclick) break;
+        if (typeof b.onclick === "function") b.onclick(Array.from(t.selected), t.selectedRows(), t);
+        else new Function("keys", "rows", "table", b.onclick)(Array.from(t.selected), t.selectedRows(), t);
+        break; }
       case "toggle": { ev.stopPropagation(); if (t.open.has(key)) { t.open.delete(key); (t.closed = t.closed || new Set()).add(key); } else { t.open.add(key); if (t.closed) t.closed.delete(key); } t.rerender(); if (t.o.onToggle) t.o.onToggle(key, t.open.has(key)); break; }
       case "rowclick": { if (ev.target.closest("button,a,input,select,textarea,label,.ds-menu,[data-nostop]")) return; if (t.o.onRowClick) t.o.onRowClick(findRow(key), ev, t); break; }
       case "rowkey": { const el = ev.currentTarget; const list = Array.from(t.el().querySelectorAll(".ds-tr[data-key]")); const i = list.indexOf(el); let j = null;
