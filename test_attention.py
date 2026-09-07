@@ -114,8 +114,12 @@ def test_no_tracking_waits_for_the_order():
 
 
 def test_documents_requested():
-    store(pkg(1, tracking_number="GWD004000009", docs_state="action", docs_checked=d(1)),
-          pkg(2, tracking_number="GWD004000010", docs_state="info"))
+    # the REAL shape the sweeps store (tracking.docs_status's dict) — an
+    # earlier version of this test used a bare string, and the string is what
+    # the code was written against, so the group could never fire in production
+    store(pkg(1, tracking_number="GWD004000009",
+              docs_state={"state": "action", "codes": ["ID"], "links": []}, docs_checked=d(1)),
+          pkg(2, tracking_number="GWD004000010", docs_state={"state": "info", "links": []}))
     g = groups(attention.build())
     check("docs_state 'action' is raised", g["docs"]["count"] == 1)
     check("docs_state 'info' is not", "GWD004000010" not in json.dumps(g))
@@ -128,7 +132,7 @@ def test_documents_requested():
 
 def test_payload_shape():
     store(pkg(1, due_date=d(3), tracking_number="GWD004000001"),
-          pkg(2, docs_state="action", tracking_number="GWD004000002"))
+          pkg(2, docs_state="action", tracking_number="GWD004000002"))   # bare string: still honoured
     p = attention.build()
     check("the payload carries a generated_at stamp", bool(p.get("generated_at")))
     check("count is the sum of the groups", p["count"] == sum(g["count"] for g in p["groups"]))

@@ -83,6 +83,21 @@ def _pkg_label(po, pk):
     return f"{po.get('po_id') or 'PO'} · package {pk.get('package_no') or '?'}{tail}"
 
 
+def _docs_state(pk):
+    """The GAASH docs banner as a plain word.
+
+    purchases.store_docs_state persists tracking.docs_status's DICT
+    ({state, codes, links}), so the obvious `docs_state == "action"` compares a
+    dict to a string and is silently never true — the whole documents group
+    could never appear. Tolerate a bare string too: it costs nothing and any
+    older row that stored one still counts.
+    """
+    ds = pk.get("docs_state")
+    if isinstance(ds, dict):
+        return ds.get("state") or ""
+    return ds or ""
+
+
 def _packages(today):
     """Late · no tracking number · customs asking for documents — one pass over the
     PO store, skipping every package whose journey is already over (alerts owns
@@ -114,7 +129,7 @@ def _packages(today):
                 no_trk.append(_item(pid, "no_tracking", name,
                                     f"ordered {placed_age} days ago, still no GWD",
                                     age_days=placed_age, view="purchases", arg=po.get("po_id")))
-            if (pk.get("docs_state") or "") == "action":
+            if _docs_state(pk) == "action":
                 docs.append(_item(pid, "missing_docs", name,
                                   f"GAASH is asking for documents{' · ' + trk if trk else ''}",
                                   severity="urgent",
