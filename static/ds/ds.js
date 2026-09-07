@@ -78,7 +78,7 @@
   DS.tag = (o) => {
     o = o || {};
     const x = o.onRemove ? `<button type="button" class="ds-tag-x" aria-label="Remove ${esc(o.label)}" onclick="${esc(o.onRemove)}">${DS.icon("x-mark", { size: 12 })}</button>` : "";
-    return `<span${attrs({ class: cls("ds-tag", o.cls), title: o.title })}>${o.icon ? DS.icon(o.icon, { size: 12 }) : ""}<span>${esc(o.label)}</span>${x}</span>`;
+    return `<span${attrs({ class: cls("ds-tag", o.tone && `ds-tone-${o.tone}`, o.cls), title: o.title })}>${o.icon ? DS.icon(o.icon, { size: 12 }) : ""}<span>${esc(o.label)}</span>${x}</span>`;
   };
   DS.kbd = (k) => `<kbd>${esc(k)}</kbd>`;
   DS.tipWrap = (inner, text) => `<span class="ds-tip" tabindex="0" data-tip="${esc(text)}">${inner}</span>`;

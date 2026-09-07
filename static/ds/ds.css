@@ -473,3 +473,16 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-pu-empty { padding: var(--ds-s4); color: var(--ds-muted); font-size: var(--ds-t-sm); display: flex; align-items: center; gap: var(--ds-s3); }
 .ds-pu-facts { display: flex; flex-wrap: wrap; gap: var(--ds-s2) var(--ds-s5); margin-block-end: var(--ds-s3); }
 .ds-pu-facts .ds-kv { border: 0; padding: 0; gap: 6px; }
+
+/* ------------------------------------------------- Fulfillment pages (Phase 4) */
+/* Identity cell: who, with their reference underneath, both truncating cleanly. */
+.ds-fl-who { display: flex; flex-direction: column; gap: 1px; min-inline-size: 0; line-height: 1.25; }
+.ds-fl-who > .ds-muted, .ds-fl-who > .ds-mono { font-size: var(--ds-t-xs); }
+/* What is in the order, at a glance: a few thumbnails and how many there are. */
+.ds-fl-thumbs { display: flex; align-items: center; gap: 3px; min-inline-size: 0; }
+.ds-fl-thumbs .ds-pu-thumb { inline-size: 24px; block-size: 24px; }
+.ds-fl-more { font: var(--ds-w-bold) var(--ds-t-xs)/1 var(--ds-font); color: var(--ds-muted); padding-inline: 2px; }
+/* The cart's one decision: revenue, the cost you type, and the answer. */
+.ds-fl-profit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--ds-s6); padding-block: var(--ds-s3) var(--ds-s1); }
+.ds-fl-profit .ds-stat-value { font-size: var(--ds-t-xl); }
+.ds-fl-cost { inline-size: 150px; font: var(--ds-w-bold) var(--ds-t-xl)/1.2 var(--ds-font); }

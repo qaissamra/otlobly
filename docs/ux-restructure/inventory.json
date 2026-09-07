@@ -1,19 +1,19 @@
 {
  "file": "web/index.html",
- "total_lines": 15097,
- "bytes": 1120315,
+ "total_lines": 14823,
+ "bytes": 1093797,
  "regions": {
   "style": [
-   19,
-   958
+   20,
+   959
   ],
   "markup": [
-   959,
-   1996
+   960,
+   1976
   ],
   "script": [
-   1997,
-   15096
+   1977,
+   14822
   ],
   "script_blocks": [
    [
@@ -41,8 +41,12 @@
     18
    ],
    [
-    1997,
-    15096
+    19,
+    19
+   ],
+   [
+    1977,
+    14822
    ]
   ]
  },
@@ -53,7 +57,7 @@
  },
  "sidebar": [
   {
-   "line": 977,
+   "line": 978,
    "kind": "group",
    "id": null,
    "onclick": null,
@@ -63,7 +67,7 @@
    "text": "Main menu"
   },
   {
-   "line": 978,
+   "line": 979,
    "kind": "button",
    "id": "brainBtn",
    "onclick": "setView('brain')",
@@ -73,7 +77,7 @@
    "text": "🧠Brain"
   },
   {
-   "line": 983,
+   "line": 984,
    "kind": "button",
    "id": "poBtn",
    "onclick": "setView('purchases')",
@@ -83,7 +87,7 @@
    "text": "📦Purchases"
   },
   {
-   "line": 984,
+   "line": 985,
    "kind": "button",
    "id": "needBtn",
    "onclick": "setView('needorder')",
@@ -93,7 +97,7 @@
    "text": "💡To order"
   },
   {
-   "line": 985,
+   "line": 986,
    "kind": "button",
    "id": "leluxeBtn",
    "onclick": "setView('leluxe')",
@@ -103,7 +107,7 @@
    "text": "⌚Leluxe"
   },
   {
-   "line": 986,
+   "line": 987,
    "kind": "button",
    "id": "goalsBtn",
    "onclick": "setView('goals')",
@@ -113,7 +117,7 @@
    "text": "🏆Goals"
   },
   {
-   "line": 987,
+   "line": 988,
    "kind": "button",
    "id": "depositsBtn",
    "onclick": "setView('deposits')",
@@ -123,7 +127,7 @@
    "text": "💵Deposits"
   },
   {
-   "line": 988,
+   "line": 989,
    "kind": "button",
    "id": "homeBtn",
    "onclick": "setView('orders')",
@@ -133,7 +137,7 @@
    "text": "🏠Orders"
   },
   {
-   "line": 989,
+   "line": 990,
    "kind": "button",
    "id": "cartBtn",
    "onclick": "setView('incart')",
@@ -143,7 +147,7 @@
    "text": "🛒In cart"
   },
   {
-   "line": 990,
+   "line": 991,
    "kind": "button",
    "id": "metaLeadsBtn",
    "onclick": "setView('metaleads')",
@@ -153,7 +157,7 @@
    "text": "📣Leads"
   },
   {
-   "line": 991,
+   "line": 992,
    "kind": "button",
    "id": "custBtn",
    "onclick": "setView('customers')",
@@ -163,7 +167,7 @@
    "text": "👤Customers"
   },
   {
-   "line": 992,
+   "line": 993,
    "kind": "button",
    "id": "pkgprepBtn",
    "onclick": "setView('pkgprep')",
@@ -173,7 +177,7 @@
    "text": "🎁Package prep"
   },
   {
-   "line": 993,
+   "line": 994,
    "kind": "button",
    "id": "bulkSearchBtn",
    "onclick": "setView('bulksearch')",
@@ -183,7 +187,7 @@
    "text": "🔎Bulk search"
   },
   {
-   "line": 994,
+   "line": 995,
    "kind": "button",
    "id": "gaashMailBtn",
    "onclick": "setView('gaashmail')",
@@ -193,7 +197,7 @@
    "text": "📧GAASH mail"
   },
   {
-   "line": 995,
+   "line": 996,
    "kind": "button",
    "id": "flagsBtn",
    "onclick": "setView('flags')",
@@ -203,7 +207,7 @@
    "text": "🚩Flags"
   },
   {
-   "line": 996,
+   "line": 997,
    "kind": "group",
    "id": null,
    "onclick": null,
@@ -213,7 +217,7 @@
    "text": "Insights"
   },
   {
-   "line": 997,
+   "line": 998,
    "kind": "button",
    "id": "pnlBtn",
    "onclick": "setView('pnl')",
@@ -223,7 +227,7 @@
    "text": "📊P&amp;L"
   },
   {
-   "line": 998,
+   "line": 999,
    "kind": "button",
    "id": "activityBtn",
    "onclick": "setView('activity')",
@@ -233,7 +237,7 @@
    "text": "🕑Activity"
   },
   {
-   "line": 999,
+   "line": 1000,
    "kind": "group",
    "id": null,
    "onclick": null,
@@ -243,7 +247,7 @@
    "text": "System"
   },
   {
-   "line": 1000,
+   "line": 1001,
    "kind": "button",
    "id": "settingsBtn",
    "onclick": "setView('settings')",
@@ -253,7 +257,7 @@
    "text": "⚙️Settings"
   },
   {
-   "line": 1001,
+   "line": 1002,
    "kind": "button",
    "id": "teamBtn",
    "onclick": "setView('team')",
@@ -263,7 +267,7 @@
    "text": "👥Team"
   },
   {
-   "line": 1002,
+   "line": 1003,
    "kind": "button",
    "id": "brokersBtn",
    "onclick": "enterPlatform()",
@@ -273,7 +277,7 @@
    "text": "🏗Tatabu"
   },
   {
-   "line": 1003,
+   "line": 1004,
    "kind": "button",
    "id": "trashBtn",
    "onclick": "setView('trash')",
@@ -283,7 +287,7 @@
    "text": "🗑Trash"
   },
   {
-   "line": 1004,
+   "line": 1005,
    "kind": "button",
    "id": "clickupBtn",
    "onclick": "syncClickup(this)",
@@ -295,7 +299,7 @@
  ],
  "platform_nav": [
   {
-   "line": 967,
+   "line": 968,
    "kind": "group",
    "id": null,
    "onclick": null,
@@ -305,7 +309,7 @@
    "text": "Platform"
   },
   {
-   "line": 968,
+   "line": 969,
    "kind": "button",
    "id": "platOverviewBtn",
    "onclick": "setView('platoverview')",
@@ -315,7 +319,7 @@
    "text": "📊Overview"
   },
   {
-   "line": 969,
+   "line": 970,
    "kind": "button",
    "id": "platBrokersBtn",
    "onclick": "setView('brokers')",
@@ -325,7 +329,7 @@
    "text": "🏢Brokers"
   },
   {
-   "line": 970,
+   "line": 971,
    "kind": "button",
    "id": "plansBtn",
    "onclick": "setView('plans')",
@@ -335,7 +339,7 @@
    "text": "💳Plans &amp; pricing"
   },
   {
-   "line": 971,
+   "line": 972,
    "kind": "button",
    "id": "usageBtn",
    "onclick": "setView('usage')",
@@ -345,7 +349,7 @@
    "text": "📈Usage"
   },
   {
-   "line": 972,
+   "line": 973,
    "kind": "button",
    "id": "platActivityBtn",
    "onclick": "setView('platactivity')",
@@ -355,7 +359,7 @@
    "text": "🕑Activity"
   },
   {
-   "line": 973,
+   "line": 974,
    "kind": "group",
    "id": null,
    "onclick": null,
@@ -365,7 +369,7 @@
    "text": "Otlobly"
   },
   {
-   "line": 974,
+   "line": 975,
    "kind": "button",
    "id": "exitPlatBtn",
    "onclick": "exitPlatform()",
@@ -378,264 +382,264 @@
  "sidebar_gates_js_refs": {
   "brainBtn": [
    {
-    "line": 2677,
+    "line": 2657,
     "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
    },
    {
-    "line": 6764,
+    "line": 6667,
     "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
    }
   ],
   "poBtn": [
    {
-    "line": 2677,
+    "line": 2657,
     "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
    },
    {
-    "line": 6764,
+    "line": 6667,
     "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
    }
   ],
   "needBtn": [
    {
-    "line": 2149,
+    "line": 2129,
     "text": "const RESTRICTED_NAV={ sales:{ nav:[\"needBtn\",\"metaLeadsBtn\",\"catalogBtn\"], views:[\"quote\",\"needorder\",\"metale"
    },
    {
-    "line": 2678,
+    "line": 2658,
     "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
    },
    {
-    "line": 6764,
+    "line": 6667,
     "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
    }
   ],
   "leluxeBtn": [
    {
-    "line": 2159,
+    "line": 2139,
     "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
    },
    {
-    "line": 2182,
+    "line": 2162,
     "text": "hide(\"leluxeBtn\", p.includes(\"admin_actions\") && FEAT.leluxe!==false);"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "goalsBtn": [
    {
-    "line": 2159,
+    "line": 2139,
     "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
    },
    {
-    "line": 2185,
+    "line": 2165,
     "text": "hide(\"goalsBtn\", p.includes(\"admin_actions\") && FEAT.leluxe!==false);"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "depositsBtn": [
    {
-    "line": 2190,
+    "line": 2170,
     "text": "hide(\"depositsBtn\", p.includes(\"view_money\"));"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    },
    {
-    "line": 6765,
+    "line": 6668,
     "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
    }
   ],
   "homeBtn": [
    {
-    "line": 2677,
+    "line": 2657,
     "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
    },
    {
-    "line": 6764,
+    "line": 6667,
     "text": "const NAVB={brain:\"brainBtn\",orders:\"homeBtn\",needorder:\"needBtn\",purchases:\"poBtn\","
    }
   ],
   "cartBtn": [
    {
-    "line": 2192,
+    "line": 2172,
     "text": "hide(\"cartBtn\", p.includes(\"view_money\"));"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "metaLeadsBtn": [
    {
-    "line": 2149,
+    "line": 2129,
     "text": "const RESTRICTED_NAV={ sales:{ nav:[\"needBtn\",\"metaLeadsBtn\",\"catalogBtn\"], views:[\"quote\",\"needorder\",\"metale"
    },
    {
-    "line": 2159,
+    "line": 2139,
     "text": "[\"leluxeBtn\",\"goalsBtn\",\"metaLeadsBtn\"].forEach(id=>{const el=$(id); if(el) el.style.display=\"\";});"
    },
    {
-    "line": 2176,
+    "line": 2156,
     "text": "hide(\"metaLeadsBtn\", p.includes(\"view_meta_leads\") && FEAT.leads!==false);"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    },
    {
-    "line": 6765,
+    "line": 6668,
     "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
    }
   ],
   "custBtn": [
    {
-    "line": 2677,
+    "line": 2657,
     "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
    },
    {
-    "line": 6765,
+    "line": 6668,
     "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
    }
   ],
   "pkgprepBtn": [
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "bulkSearchBtn": [
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "gaashMailBtn": [
    {
-    "line": 2187,
+    "line": 2167,
     "text": "hide(\"gaashMailBtn\", p.includes(\"edit_fulfillment\") && FEAT.leluxe!==false);"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    },
    {
-    "line": 11035,
+    "line": 10761,
     "text": "function gmAvail(){ const b=$(\"gaashMailBtn\"); return !!b && b.style.display!==\"none\"; }"
    }
   ],
   "flagsBtn": [
    {
-    "line": 2189,
+    "line": 2169,
     "text": "hide(\"flagsBtn\", p.includes(\"edit_fulfillment\") && FEAT.leluxe!==false);"
    },
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "pnlBtn": [
    {
-    "line": 2169,
+    "line": 2149,
     "text": "hide(\"pnlBtn\", p.includes(\"view_pnl\"));"
    },
    {
-    "line": 2677,
+    "line": 2657,
     "text": "const VIEW_BTN={brain:\"brainBtn\",orders:\"homeBtn\",picking:\"pickBtn\",pnl:\"pnlBtn\",customers:\"custBtn\",purchases"
    }
   ],
   "activityBtn": [
    {
-    "line": 2678,
+    "line": 2658,
     "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
    }
   ],
   "settingsBtn": [
    {
-    "line": 2193,
+    "line": 2173,
     "text": "hide(\"settingsBtn\", p.includes(\"admin_actions\"));"
    },
    {
-    "line": 2678,
+    "line": 2658,
     "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
    },
    {
-    "line": 6765,
+    "line": 6668,
     "text": "deposits:\"depositsBtn\",metaleads:\"metaLeadsBtn\",settings:\"settingsBtn\",customers:\"custBtn\"};"
    }
   ],
   "teamBtn": [
    {
-    "line": 2171,
+    "line": 2151,
     "text": "hide(\"teamBtn\", p.includes(\"manage_users\"));"
    },
    {
-    "line": 2678,
+    "line": 2658,
     "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
    }
   ],
   "brokersBtn": [
    {
-    "line": 2173,
+    "line": 2153,
     "text": "hide(\"brokersBtn\", p.includes(\"admin_actions\") && !!(ME.business && ME.business.id===1));"
    }
   ],
   "trashBtn": [
    {
-    "line": 2678,
+    "line": 2658,
     "text": "activity:\"activityBtn\",trash:\"trashBtn\",settings:\"settingsBtn\",needorder:\"needBtn\",team:\"teamBtn\","
    }
   ],
   "clickupBtn": [
    {
-    "line": 2170,
+    "line": 2150,
     "text": "hide(\"clickupBtn\", p.includes(\"admin_actions\") && FEAT.clickup!==false);"
    }
   ],
   "platOverviewBtn": [
    {
-    "line": 2679,
+    "line": 2659,
     "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
    }
   ],
   "platBrokersBtn": [
    {
-    "line": 2679,
+    "line": 2659,
     "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
    },
    {
-    "line": 2679,
+    "line": 2659,
     "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
    }
   ],
   "plansBtn": [
    {
-    "line": 2679,
+    "line": 2659,
     "text": "brokers:\"platBrokersBtn\",brokerprofile:\"platBrokersBtn\",platoverview:\"platOverviewBtn\",plans:\"plansBtn\","
    }
   ],
   "usageBtn": [
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "platActivityBtn": [
    {
-    "line": 2680,
+    "line": 2660,
     "text": "usage:\"usageBtn\",platactivity:\"platActivityBtn\",metaleads:\"metaLeadsBtn\",deposits:\"depositsBtn\",incart:\"cartBt"
    }
   ],
   "exitPlatBtn": []
  },
  "topbar": {
-  "line": 1013,
+  "line": 1014,
   "ids": [
    "navToggle",
    "pageTitle",
@@ -649,15 +653,15 @@
   ],
   "buttons": 5,
   "excerpt_lines": [
-   1013,
-   1027
+   1014,
+   1028
   ]
  },
  "views": [
   {
    "id": "ordersView",
-   "line": 1078,
-   "end": 1096,
+   "line": 1079,
+   "end": 1097,
    "lines": 19,
    "census": {
     "button": 2,
@@ -678,8 +682,8 @@
   },
   {
    "id": "pnlView",
-   "line": 1097,
-   "end": 1143,
+   "line": 1098,
+   "end": 1144,
    "lines": 47,
    "census": {
     "button": 7,
@@ -700,8 +704,8 @@
   },
   {
    "id": "customersView",
-   "line": 1144,
-   "end": 1180,
+   "line": 1145,
+   "end": 1181,
    "lines": 37,
    "census": {
     "button": 5,
@@ -722,8 +726,8 @@
   },
   {
    "id": "purchasesView",
-   "line": 1181,
-   "end": 1202,
+   "line": 1182,
+   "end": 1203,
    "lines": 22,
    "census": {
     "button": 0,
@@ -744,8 +748,8 @@
   },
   {
    "id": "pickingView",
-   "line": 1203,
-   "end": 1210,
+   "line": 1204,
+   "end": 1211,
    "lines": 8,
    "census": {
     "button": 1,
@@ -766,8 +770,8 @@
   },
   {
    "id": "activityView",
-   "line": 1211,
-   "end": 1223,
+   "line": 1212,
+   "end": 1224,
    "lines": 13,
    "census": {
     "button": 1,
@@ -788,9 +792,9 @@
   },
   {
    "id": "needorderView",
-   "line": 1224,
-   "end": 1225,
-   "lines": 2,
+   "line": 1225,
+   "end": 1229,
+   "lines": 5,
    "census": {
     "button": 0,
     "onclick": 0,
@@ -810,35 +814,13 @@
   },
   {
    "id": "quoteView",
-   "line": 1226,
-   "end": 1263,
-   "lines": 38,
+   "line": 1230,
+   "end": 1257,
+   "lines": 28,
    "census": {
-    "button": 5,
-    "onclick": 9,
+    "button": 2,
+    "onclick": 6,
     "input": 2,
-    "select": 0,
-    "textarea": 0,
-    "file_input": 0,
-    "table": 0,
-    "h2": 2,
-    "toolbar": 2,
-    "po_btn": 0,
-    "minibtn": 4,
-    "iconbtn": 0,
-    "emoji": 6,
-    "emoji_distinct": 6
-   }
-  },
-  {
-   "id": "incartView",
-   "line": 1264,
-   "end": 1278,
-   "lines": 15,
-   "census": {
-    "button": 1,
-    "onclick": 1,
-    "input": 0,
     "select": 0,
     "textarea": 0,
     "file_input": 0,
@@ -848,14 +830,36 @@
     "po_btn": 0,
     "minibtn": 1,
     "iconbtn": 0,
-    "emoji": 2,
-    "emoji_distinct": 2
+    "emoji": 0,
+    "emoji_distinct": 0
+   }
+  },
+  {
+   "id": "incartView",
+   "line": 1258,
+   "end": 1266,
+   "lines": 9,
+   "census": {
+    "button": 0,
+    "onclick": 0,
+    "input": 0,
+    "select": 0,
+    "textarea": 0,
+    "file_input": 0,
+    "table": 0,
+    "h2": 0,
+    "toolbar": 0,
+    "po_btn": 0,
+    "minibtn": 0,
+    "iconbtn": 0,
+    "emoji": 0,
+    "emoji_distinct": 0
    }
   },
   {
    "id": "attentionView",
-   "line": 1279,
-   "end": 1281,
+   "line": 1267,
+   "end": 1269,
    "lines": 3,
    "census": {
     "button": 0,
@@ -876,8 +880,8 @@
   },
   {
    "id": "flagsView",
-   "line": 1282,
-   "end": 1299,
+   "line": 1270,
+   "end": 1287,
    "lines": 18,
    "census": {
     "button": 0,
@@ -898,8 +902,8 @@
   },
   {
    "id": "settingsView",
-   "line": 1300,
-   "end": 1458,
+   "line": 1288,
+   "end": 1446,
    "lines": 159,
    "census": {
     "button": 20,
@@ -920,8 +924,8 @@
   },
   {
    "id": "trashView",
-   "line": 1459,
-   "end": 1469,
+   "line": 1447,
+   "end": 1457,
    "lines": 11,
    "census": {
     "button": 1,
@@ -942,8 +946,8 @@
   },
   {
    "id": "teamView",
-   "line": 1470,
-   "end": 1494,
+   "line": 1458,
+   "end": 1482,
    "lines": 25,
    "census": {
     "button": 1,
@@ -964,8 +968,8 @@
   },
   {
    "id": "brainView",
-   "line": 1495,
-   "end": 1499,
+   "line": 1483,
+   "end": 1487,
    "lines": 5,
    "census": {
     "button": 0,
@@ -986,8 +990,8 @@
   },
   {
    "id": "brokersView",
-   "line": 1500,
-   "end": 1522,
+   "line": 1488,
+   "end": 1510,
    "lines": 23,
    "census": {
     "button": 1,
@@ -1008,8 +1012,8 @@
   },
   {
    "id": "brokerProfileView",
-   "line": 1523,
-   "end": 1527,
+   "line": 1511,
+   "end": 1515,
    "lines": 5,
    "census": {
     "button": 0,
@@ -1030,8 +1034,8 @@
   },
   {
    "id": "platOverviewView",
-   "line": 1528,
-   "end": 1528,
+   "line": 1516,
+   "end": 1516,
    "lines": 1,
    "census": {
     "button": 0,
@@ -1052,8 +1056,8 @@
   },
   {
    "id": "plansView",
-   "line": 1529,
-   "end": 1529,
+   "line": 1517,
+   "end": 1517,
    "lines": 1,
    "census": {
     "button": 0,
@@ -1074,8 +1078,8 @@
   },
   {
    "id": "usageView",
-   "line": 1530,
-   "end": 1530,
+   "line": 1518,
+   "end": 1518,
    "lines": 1,
    "census": {
     "button": 0,
@@ -1096,8 +1100,8 @@
   },
   {
    "id": "platActivityView",
-   "line": 1531,
-   "end": 1533,
+   "line": 1519,
+   "end": 1521,
    "lines": 3,
    "census": {
     "button": 0,
@@ -1118,8 +1122,8 @@
   },
   {
    "id": "metaLeadsView",
-   "line": 1534,
-   "end": 1547,
+   "line": 1522,
+   "end": 1535,
    "lines": 14,
    "census": {
     "button": 1,
@@ -1140,8 +1144,8 @@
   },
   {
    "id": "depositsView",
-   "line": 1548,
-   "end": 1588,
+   "line": 1536,
+   "end": 1576,
    "lines": 41,
    "census": {
     "button": 2,
@@ -1162,8 +1166,8 @@
   },
   {
    "id": "catalogView",
-   "line": 1589,
-   "end": 1621,
+   "line": 1577,
+   "end": 1609,
    "lines": 33,
    "census": {
     "button": 2,
@@ -1184,8 +1188,8 @@
   },
   {
    "id": "leluxeView",
-   "line": 1622,
-   "end": 1679,
+   "line": 1610,
+   "end": 1667,
    "lines": 58,
    "census": {
     "button": 25,
@@ -1206,30 +1210,30 @@
   },
   {
    "id": "pkgprepView",
-   "line": 1680,
-   "end": 1694,
-   "lines": 15,
+   "line": 1668,
+   "end": 1674,
+   "lines": 7,
    "census": {
-    "button": 1,
-    "onclick": 1,
+    "button": 0,
+    "onclick": 0,
     "input": 0,
     "select": 0,
     "textarea": 0,
     "file_input": 0,
     "table": 0,
-    "h2": 1,
-    "toolbar": 1,
+    "h2": 0,
+    "toolbar": 0,
     "po_btn": 0,
-    "minibtn": 1,
+    "minibtn": 0,
     "iconbtn": 0,
-    "emoji": 4,
-    "emoji_distinct": 4
+    "emoji": 2,
+    "emoji_distinct": 2
    }
   },
   {
    "id": "bulkSearchView",
-   "line": 1695,
-   "end": 1711,
+   "line": 1675,
+   "end": 1691,
    "lines": 17,
    "census": {
     "button": 2,
@@ -1250,8 +1254,8 @@
   },
   {
    "id": "goalsView",
-   "line": 1712,
-   "end": 1724,
+   "line": 1692,
+   "end": 1704,
    "lines": 13,
    "census": {
     "button": 2,
@@ -1272,8 +1276,8 @@
   },
   {
    "id": "gmView",
-   "line": 1725,
-   "end": 1764,
+   "line": 1705,
+   "end": 1744,
    "lines": 40,
    "census": {
     "button": 14,
@@ -1294,7 +1298,7 @@
   }
  ],
  "view_btn": {
-  "line": 2677,
+  "line": 2657,
   "map": {
    "brain": "brainBtn",
    "orders": "homeBtn",
@@ -1330,7 +1334,7 @@
   ]
  },
  "setview": {
-  "line": 2692,
+  "line": 2672,
   "hidden_toggles": 31,
   "toggle_view_ids": [
    "activity",
@@ -1362,7 +1366,7 @@
    "trash",
    "usage"
   ],
-  "call_sites": 60,
+  "call_sites": 59,
   "router_signals": {
    "pushState": 0,
    "hashchange": 0,
@@ -1385,8 +1389,6 @@
    "lxt_order_",
    "lxt_pin_",
    "lxt_sort_",
-   "ne_coll",
-   "ne_colw",
    "notif_seen_ts",
    "otl_gmdocs_view",
    "otl_lang",
@@ -1395,6 +1397,7 @@
    "po_ccol",
    "po_filters",
    "po_view",
+   "pp_view",
    "q_open",
    "tatabu_mode",
    "tatabu_view"
@@ -1403,8 +1406,8 @@
  "js_regions": [
   {
    "region": "shell: globals · i18n · roles · notifications · load()",
-   "start": 2004,
-   "end": 2539,
+   "start": 1984,
+   "end": 2519,
    "lines": 536,
    "census": {
     "onclick": 8,
@@ -1429,8 +1432,8 @@
   },
   {
    "region": "orders board",
-   "start": 2540,
-   "end": 2621,
+   "start": 2520,
+   "end": 2601,
    "lines": 82,
    "census": {
     "onclick": 4,
@@ -1455,8 +1458,8 @@
   },
   {
    "region": "picking list (hidden)",
-   "start": 2622,
-   "end": 2655,
+   "start": 2602,
+   "end": 2635,
    "lines": 34,
    "census": {
     "onclick": 0,
@@ -1481,8 +1484,8 @@
   },
   {
    "region": "add-order panel",
-   "start": 2656,
-   "end": 2676,
+   "start": 2636,
+   "end": 2656,
    "lines": 21,
    "census": {
     "onclick": 0,
@@ -1507,9 +1510,9 @@
   },
   {
    "region": "view registry · setView",
-   "start": 2677,
-   "end": 2803,
-   "lines": 127,
+   "start": 2657,
+   "end": 2785,
+   "lines": 129,
    "census": {
     "onclick": 0,
     "popMenu": 0,
@@ -1533,34 +1536,34 @@
   },
   {
    "region": "package prep",
-   "start": 2804,
-   "end": 3017,
-   "lines": 214,
+   "start": 2786,
+   "end": 2926,
+   "lines": 141,
    "census": {
-    "onclick": 17,
+    "onclick": 6,
     "popMenu": 0,
-    "button": 6,
+    "button": 2,
     "input": 1,
     "select": 0,
     "table": 0,
-    "toast": 13,
+    "toast": 11,
     "confirm": 0,
     "prompt": 0,
     "alert": 0,
     "raw_pill": 0,
-    "pill_helpers": 15,
+    "pill_helpers": 8,
     "lxtHead": 0,
     "fld": 0,
     "editCell": 1,
     "T_calls": 0,
-    "emoji": 49,
-    "emoji_distinct": 16
+    "emoji": 19,
+    "emoji_distinct": 10
    }
   },
   {
    "region": "catalog (hidden)",
-   "start": 3018,
-   "end": 3095,
+   "start": 2927,
+   "end": 3004,
    "lines": 78,
    "census": {
     "onclick": 2,
@@ -1585,9 +1588,9 @@
   },
   {
    "region": "leluxe (boards, filters, widths)",
-   "start": 3096,
-   "end": 4022,
-   "lines": 927,
+   "start": 3005,
+   "end": 3930,
+   "lines": 926,
    "census": {
     "onclick": 28,
     "popMenu": 0,
@@ -1611,9 +1614,9 @@
   },
   {
    "region": "LXT table engine (inside leluxe)",
-   "start": 4023,
-   "end": 4885,
-   "lines": 863,
+   "start": 3931,
+   "end": 4788,
+   "lines": 858,
    "census": {
     "onclick": 24,
     "popMenu": 2,
@@ -1631,14 +1634,14 @@
     "fld": 0,
     "editCell": 0,
     "T_calls": 24,
-    "emoji": 114,
-    "emoji_distinct": 48
+    "emoji": 113,
+    "emoji_distinct": 47
    }
   },
   {
    "region": "goals + leluxe tail (goal, parcels, sync, push, move)",
-   "start": 4886,
-   "end": 6610,
+   "start": 4789,
+   "end": 6513,
    "lines": 1725,
    "census": {
     "onclick": 72,
@@ -1663,8 +1666,8 @@
   },
   {
    "region": "deposits",
-   "start": 6611,
-   "end": 6694,
+   "start": 6514,
+   "end": 6597,
    "lines": 84,
    "census": {
     "onclick": 1,
@@ -1689,8 +1692,8 @@
   },
   {
    "region": "meta leads",
-   "start": 6695,
-   "end": 6755,
+   "start": 6598,
+   "end": 6658,
    "lines": 61,
    "census": {
     "onclick": 2,
@@ -1715,8 +1718,8 @@
   },
   {
    "region": "brain",
-   "start": 6756,
-   "end": 6835,
+   "start": 6659,
+   "end": 6738,
    "lines": 80,
    "census": {
     "onclick": 4,
@@ -1741,8 +1744,8 @@
   },
   {
    "region": "platform console",
-   "start": 6836,
-   "end": 6946,
+   "start": 6739,
+   "end": 6849,
    "lines": 111,
    "census": {
     "onclick": 4,
@@ -1767,8 +1770,8 @@
   },
   {
    "region": "brokers",
-   "start": 6947,
-   "end": 7055,
+   "start": 6850,
+   "end": 6958,
    "lines": 109,
    "census": {
     "onclick": 5,
@@ -1793,8 +1796,8 @@
   },
   {
    "region": "team",
-   "start": 7056,
-   "end": 7126,
+   "start": 6959,
+   "end": 7029,
    "lines": 71,
    "census": {
     "onclick": 6,
@@ -1819,9 +1822,9 @@
   },
   {
    "region": "activity + trash",
-   "start": 7127,
-   "end": 7272,
-   "lines": 146,
+   "start": 7030,
+   "end": 7161,
+   "lines": 132,
    "census": {
     "onclick": 3,
     "popMenu": 0,
@@ -1839,66 +1842,66 @@
     "fld": 0,
     "editCell": 0,
     "T_calls": 0,
-    "emoji": 22,
-    "emoji_distinct": 19
+    "emoji": 21,
+    "emoji_distinct": 18
    }
   },
   {
    "region": "to order + quick quote",
-   "start": 7273,
-   "end": 7482,
-   "lines": 210,
+   "start": 7162,
+   "end": 7236,
+   "lines": 75,
    "census": {
-    "onclick": 14,
-    "popMenu": 1,
-    "button": 8,
+    "onclick": 1,
+    "popMenu": 0,
+    "button": 0,
     "input": 1,
     "select": 0,
-    "table": 1,
+    "table": 0,
     "toast": 4,
     "confirm": 1,
     "prompt": 0,
     "alert": 0,
-    "raw_pill": 1,
-    "pill_helpers": 9,
+    "raw_pill": 0,
+    "pill_helpers": 0,
     "lxtHead": 0,
-    "fld": 10,
-    "editCell": 1,
-    "T_calls": 3,
-    "emoji": 53,
-    "emoji_distinct": 27
+    "fld": 0,
+    "editCell": 0,
+    "T_calls": 0,
+    "emoji": 2,
+    "emoji_distinct": 2
    }
   },
   {
    "region": "in cart",
-   "start": 7483,
-   "end": 7655,
-   "lines": 173,
+   "start": 7237,
+   "end": 7379,
+   "lines": 143,
    "census": {
-    "onclick": 6,
+    "onclick": 3,
     "popMenu": 0,
-    "button": 4,
-    "input": 2,
+    "button": 2,
+    "input": 1,
     "select": 0,
     "table": 0,
-    "toast": 24,
+    "toast": 23,
     "confirm": 3,
     "prompt": 1,
     "alert": 0,
     "raw_pill": 0,
     "pill_helpers": 0,
-    "lxtHead": 1,
+    "lxtHead": 0,
     "fld": 0,
     "editCell": 0,
     "T_calls": 14,
-    "emoji": 24,
-    "emoji_distinct": 11
+    "emoji": 20,
+    "emoji_distinct": 10
    }
   },
   {
    "region": "order edit modal · price image",
-   "start": 7656,
-   "end": 7704,
+   "start": 7380,
+   "end": 7428,
    "lines": 49,
    "census": {
     "onclick": 2,
@@ -1923,8 +1926,8 @@
   },
   {
    "region": "quote tool (QSTR)",
-   "start": 7705,
-   "end": 8006,
+   "start": 7429,
+   "end": 7730,
    "lines": 302,
    "census": {
     "onclick": 7,
@@ -1949,8 +1952,8 @@
   },
   {
    "region": "settings",
-   "start": 8007,
-   "end": 8245,
+   "start": 7731,
+   "end": 7969,
    "lines": 239,
    "census": {
     "onclick": 5,
@@ -1975,8 +1978,8 @@
   },
   {
    "region": "purchases: constants head (PO_BOXES…)",
-   "start": 8246,
-   "end": 8259,
+   "start": 7970,
+   "end": 7983,
    "lines": 14,
    "census": {
     "onclick": 0,
@@ -2001,8 +2004,8 @@
   },
   {
    "region": "az / multilogin modal",
-   "start": 8260,
-   "end": 8339,
+   "start": 7984,
+   "end": 8063,
    "lines": 80,
    "census": {
     "onclick": 5,
@@ -2027,8 +2030,8 @@
   },
   {
    "region": "purchases: load · render · cards · packages",
-   "start": 8340,
-   "end": 8411,
+   "start": 8064,
+   "end": 8135,
    "lines": 72,
    "census": {
     "onclick": 0,
@@ -2053,9 +2056,9 @@
   },
   {
    "region": "purchases (cont.) + bulk-progress modal",
-   "start": 8412,
-   "end": 10545,
-   "lines": 2134,
+   "start": 8136,
+   "end": 10271,
+   "lines": 2136,
    "census": {
     "onclick": 79,
     "popMenu": 1,
@@ -2079,8 +2082,8 @@
   },
   {
    "region": "customers",
-   "start": 10546,
-   "end": 10710,
+   "start": 10272,
+   "end": 10436,
    "lines": 165,
    "census": {
     "onclick": 10,
@@ -2105,8 +2108,8 @@
   },
   {
    "region": "p&l",
-   "start": 10711,
-   "end": 10988,
+   "start": 10437,
+   "end": 10714,
    "lines": 278,
    "census": {
     "onclick": 8,
@@ -2131,8 +2134,8 @@
   },
   {
    "region": "bulk search",
-   "start": 10989,
-   "end": 11146,
+   "start": 10715,
+   "end": 10872,
    "lines": 158,
    "census": {
     "onclick": 2,
@@ -2157,8 +2160,8 @@
   },
   {
    "region": "gaash mail (+ forecast, analyze)",
-   "start": 11147,
-   "end": 13955,
+   "start": 10873,
+   "end": 13681,
    "lines": 2809,
    "census": {
     "onclick": 116,
@@ -2183,8 +2186,8 @@
   },
   {
    "region": "gaash mail tail: flags + forecast + analyze",
-   "start": 13956,
-   "end": 15096,
+   "start": 13682,
+   "end": 14822,
    "lines": 1141,
    "census": {
     "onclick": 64,
@@ -2209,14 +2212,14 @@
   }
  ],
  "global_counts": {
-  "<table": 20,
-  "</table>": 20,
-  "<button": 489,
-  "<input": 251,
+  "<table": 19,
+  "</table>": 19,
+  "<button": 470,
+  "<input": 250,
   "<select": 43,
   "<textarea": 8,
-  "onclick=": 689,
-  "title=\"": 420,
+  "onclick=": 657,
+  "title=\"": 391,
   "aria-*": 4,
   "role=\"": 0,
   "alt=\"": 3,
@@ -2224,18 +2227,18 @@
   "confirm(": 47,
   "prompt(": 15,
   "alert(": 2,
-  "toast(": 379,
-  "popMenu(": 10,
-  "class=\"pill (raw literal)": 44,
+  "toast(": 376,
+  "popMenu(": 9,
+  "class=\"pill (raw literal)": 43,
   "az-modal roots": 22,
   "<dialog": 0,
-  "<h2": 43,
-  "class=\"toolbar": 20,
+  "<h2": 39,
+  "class=\"toolbar": 17,
   ".search inputs": 2,
   "cu-search": 14,
-  "muted2": 466,
-  "class=\"empty\"": 20,
-  "T( calls": 994,
+  "muted2": 453,
+  "class=\"empty\"": 12,
+  "T( calls": 991,
   "data-en=": 56,
   "data-ar=": 56,
   "data-i18n": 0,
@@ -2255,56 +2258,51 @@
   "\"paste\" listeners": 4,
   "ondrop/dragover": 1,
   "fetch(": 88,
-  "localStorage refs": 81,
+  "localStorage refs": 78,
   "<svg": 1,
   "external icon libs": 0,
-  "bilingual literals (ar · en)": 1850,
-  "lines containing Arabic": 1787
+  "bilingual literals (ar · en)": 1780,
+  "lines containing Arabic": 1698
  },
  "emoji": {
-  "total": 2076,
-  "distinct": 190,
+  "total": 1979,
+  "distinct": 189,
   "sidebar": 22,
   "top": [
    {
     "glyph": "→",
-    "count": 175,
+    "count": 170,
     "codepoint": "U+2192"
    },
    {
     "glyph": "⚠",
-    "count": 138,
+    "count": 137,
     "codepoint": "U+26A0"
    },
    {
     "glyph": "✓",
-    "count": 133,
+    "count": 126,
     "codepoint": "U+2713"
    },
    {
     "glyph": "📦",
-    "count": 94,
+    "count": 92,
     "codepoint": "U+1F4E6"
    },
    {
-    "glyph": "✅",
-    "count": 62,
-    "codepoint": "U+2705"
-   },
-   {
-    "glyph": "🪪",
-    "count": 59,
-    "codepoint": "U+1FAAA"
-   },
-   {
     "glyph": "✕",
-    "count": 59,
+    "count": 58,
     "codepoint": "U+2715"
    },
    {
-    "glyph": "🗑",
-    "count": 39,
-    "codepoint": "U+1F5D1"
+    "glyph": "🪪",
+    "count": 56,
+    "codepoint": "U+1FAAA"
+   },
+   {
+    "glyph": "✅",
+    "count": 56,
+    "codepoint": "U+2705"
    },
    {
     "glyph": "🚚",
@@ -2312,14 +2310,14 @@
     "codepoint": "U+1F69A"
    },
    {
-    "glyph": "⏳",
-    "count": 37,
-    "codepoint": "U+23F3"
+    "glyph": "🗑",
+    "count": 35,
+    "codepoint": "U+1F5D1"
    },
    {
-    "glyph": "↻",
-    "count": 36,
-    "codepoint": "U+21BB"
+    "glyph": "⏳",
+    "count": 34,
+    "codepoint": "U+23F3"
    },
    {
     "glyph": "⚙",
@@ -2327,19 +2325,14 @@
     "codepoint": "U+2699"
    },
    {
+    "glyph": "↻",
+    "count": 32,
+    "codepoint": "U+21BB"
+   },
+   {
     "glyph": "📧",
     "count": 31,
     "codepoint": "U+1F4E7"
-   },
-   {
-    "glyph": "▾",
-    "count": 30,
-    "codepoint": "U+25BE"
-   },
-   {
-    "glyph": "📋",
-    "count": 29,
-    "codepoint": "U+1F4CB"
    },
    {
     "glyph": "📄",
@@ -2357,19 +2350,29 @@
     "codepoint": "U+1F50E"
    },
    {
+    "glyph": "▾",
+    "count": 26,
+    "codepoint": "U+25BE"
+   },
+   {
     "glyph": "🎯",
     "count": 24,
     "codepoint": "U+1F3AF"
    },
    {
-    "glyph": "✏",
+    "glyph": "📋",
     "count": 24,
-    "codepoint": "U+270F"
+    "codepoint": "U+1F4CB"
    },
    {
     "glyph": "↗",
     "count": 23,
     "codepoint": "U+2197"
+   },
+   {
+    "glyph": "✏",
+    "count": 23,
+    "codepoint": "U+270F"
    },
    {
     "glyph": "⊕",
@@ -2392,24 +2395,9 @@
     "codepoint": "U+2934"
    },
    {
-    "glyph": "⋯",
-    "count": 16,
-    "codepoint": "U+22EF"
-   },
-   {
     "glyph": "💾",
     "count": 16,
     "codepoint": "U+1F4BE"
-   },
-   {
-    "glyph": "↩",
-    "count": 15,
-    "codepoint": "U+21A9"
-   },
-   {
-    "glyph": "🛒",
-    "count": 15,
-    "codepoint": "U+1F6D2"
    },
    {
     "glyph": "💬",
@@ -2417,19 +2405,14 @@
     "codepoint": "U+1F4AC"
    },
    {
-    "glyph": "📱",
-    "count": 15,
-    "codepoint": "U+1F4F1"
-   },
-   {
     "glyph": "📎",
     "count": 15,
     "codepoint": "U+1F4CE"
    },
    {
-    "glyph": "📍",
+    "glyph": "⋯",
     "count": 14,
-    "codepoint": "U+1F4CD"
+    "codepoint": "U+22EF"
    },
    {
     "glyph": "🏆",
@@ -2447,14 +2430,14 @@
     "codepoint": "U+1F441"
    },
    {
-    "glyph": "≈",
-    "count": 13,
-    "codepoint": "U+2248"
-   },
-   {
     "glyph": "👤",
     "count": 13,
     "codepoint": "U+1F464"
+   },
+   {
+    "glyph": "↩",
+    "count": 13,
+    "codepoint": "U+21A9"
    },
    {
     "glyph": "🧾",
@@ -2465,14 +2448,34 @@
     "glyph": "←",
     "count": 13,
     "codepoint": "U+2190"
+   },
+   {
+    "glyph": "✎",
+    "count": 13,
+    "codepoint": "U+270E"
+   },
+   {
+    "glyph": "📝",
+    "count": 12,
+    "codepoint": "U+1F4DD"
+   },
+   {
+    "glyph": "−",
+    "count": 12,
+    "codepoint": "U+2212"
+   },
+   {
+    "glyph": "🧬",
+    "count": 12,
+    "codepoint": "U+1F9EC"
    }
   ],
   "directional": {
-   "→": 175,
+   "→": 170,
    "←": 13,
-   "↩": 15,
-   "▸": 13,
-   "▾": 30,
+   "↩": 13,
+   "▸": 9,
+   "▾": 26,
    "▴": 1,
    "⤴": 17,
    "↗": 23,
@@ -2487,39 +2490,39 @@
     "whole_file": 9,
     "style_sites": [
      {
-      "line": 131,
+      "line": 132,
       "text": ".po-tbl .linkopen{margin-left:4px;text-decoration:none;color:var(--accent);font-weight:700;font-size:13px}"
      },
      {
-      "line": 159,
+      "line": 160,
       "text": ".po-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}"
      },
      {
-      "line": 176,
+      "line": 177,
       "text": ".pkg-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}"
      },
      {
-      "line": 285,
+      "line": 286,
       "text": ".gmd-row .pill,.gmd-grp .pill,.gmf-row .pill{margin-left:0}"
      },
      {
-      "line": 286,
+      "line": 287,
       "text": ".gmd-row .pill+.pill,.gmd-grp .pill+.pill,.gmf-row .pill+.pill{margin-left:6px}"
      },
      {
-      "line": 327,
+      "line": 328,
       "text": ".seeall{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}"
      },
      {
-      "line": 767,
+      "line": 768,
       "text": ".gm-mail-when{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:1"
      },
      {
-      "line": 921,
+      "line": 922,
       "text": ".ne-prod-multi .cnt{color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap;margin-left:2px}"
      },
      {
-      "line": 944,
+      "line": 945,
       "text": "background:#eef2ff;color:#6366f1;border-radius:20px;padding:2px 9px;margin-left:6px}"
      }
     ]
@@ -2529,7 +2532,7 @@
     "whole_file": 1,
     "style_sites": [
      {
-      "line": 769,
+      "line": 770,
       "text": ".gm-dot2{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}"
      }
     ]
@@ -2539,15 +2542,15 @@
     "whole_file": 3,
     "style_sites": [
      {
-      "line": 148,
+      "line": 149,
       "text": ".po-name{font-weight:750;font-size:15px;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;padding-left"
      },
      {
-      "line": 409,
+      "line": 410,
       "text": ".ne-row .cc{width:44px;color:var(--muted);text-align:center;padding-left:10px}"
      },
      {
-      "line": 767,
+      "line": 768,
       "text": ".gm-mail-when{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:1"
      }
     ]
@@ -2562,23 +2565,23 @@
     "whole_file": 8,
     "style_sites": [
      {
-      "line": 58,
+      "line": 59,
       "text": "#sidebar{position:fixed;left:-250px;top:0;transition:left .22s ease}"
      },
      {
-      "line": 59,
+      "line": 60,
       "text": "body.nav-open #sidebar{left:0;box-shadow:0 10px 40px rgba(16,24,40,.25)}"
      },
      {
-      "line": 314,
+      "line": 315,
       "text": "#offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;"
      },
      {
-      "line": 317,
+      "line": 318,
       "text": "#dbBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#92400e;color:#fff;"
      },
      {
-      "line": 776,
+      "line": 777,
       "text": ".gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;co"
      }
     ]
@@ -2588,31 +2591,31 @@
     "whole_file": 9,
     "style_sites": [
      {
-      "line": 241,
+      "line": 242,
       "text": ".po-help .dismiss{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--muted);font-size:11px}"
      },
      {
-      "line": 309,
+      "line": 310,
       "text": "#toast{position:fixed;right:18px;bottom:18px;background:#15140f;color:#fff;"
      },
      {
-      "line": 314,
+      "line": 315,
       "text": "#offBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#7f1d1d;color:#fff;"
      },
      {
-      "line": 317,
+      "line": 318,
       "text": "#dbBanner{position:fixed;top:0;left:0;right:0;z-index:100;display:none;background:#92400e;color:#fff;"
      },
      {
-      "line": 399,
+      "line": 400,
       "text": ".col-resize{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;user-select:none;z-index:2"
      },
      {
-      "line": 400,
+      "line": 401,
       "text": ".col-resize::after{content:\"\";position:absolute;top:5px;bottom:5px;right:3px;width:2px;border-radius:2px;backg"
      },
      {
-      "line": 776,
+      "line": 777,
       "text": ".gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;font-style:normal;co"
      }
     ]
@@ -2622,37 +2625,37 @@
     "whole_file": 14,
     "style_sites": [
      {
-      "line": 43,
+      "line": 44,
       "text": "#sideNav button,#platNav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:non"
      },
      {
-      "line": 227,
+      "line": 228,
       "text": ".po-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padd"
      },
      {
-      "line": 279,
+      "line": 280,
       "text": "th,td{text-align:left;padding:9px 11px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top"
      },
      {
-      "line": 396,
+      "line": 397,
       "text": "text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:default;"
      }
     ]
    },
    "text-align:right": {
     "style_block": 3,
-    "whole_file": 18,
+    "whole_file": 17,
     "style_sites": [
      {
-      "line": 266,
+      "line": 267,
       "text": ".bar .c{width:104px;text-align:right;font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;white-sp"
      },
      {
-      "line": 366,
+      "line": 367,
       "text": "#quoteView[dir=\"rtl\"] .qcard .qtitle,#quoteView[dir=\"rtl\"] #q_intro{text-align:right}"
      },
      {
-      "line": 378,
+      "line": 379,
       "text": "#quoteView[dir=\"rtl\"] .qhint{text-align:right}"
      }
     ]
@@ -2672,17 +2675,17 @@
     "whole_file": 1,
     "style_sites": [
      {
-      "line": 35,
+      "line": 36,
       "text": "#sidebar{width:230px;flex:0 0 230px;background:var(--card);border-right:1px solid var(--line);"
      }
     ]
    }
   },
   "style_total": 33,
-  "file_total": 64,
+  "file_total": 63,
   "logical_counts": {
    "padding-inline": 15,
-   "margin-inline": 38,
+   "margin-inline": 37,
    "inset-inline": 32,
    "border-inline": 19,
    "text-align:start": 10,
@@ -2691,7 +2694,7 @@
  },
  "tokens": {
   "root_blocks": [
-   20
+   21
   ],
   "declared": [
    "--bg",
@@ -2898,100 +2901,100 @@
  "hex_literals": {
   "css": 118,
   "css_distinct": 70,
-  "file": 505,
-  "file_distinct": 136
+  "file": 494,
+  "file_distinct": 132
  },
  "colour_registries": {
   "count": 13,
   "items": [
    {
     "name": "STATUS_COLOR",
-    "line": 2004,
-    "end": 2011,
+    "line": 1984,
+    "end": 1991,
     "hex_values": 24,
     "distinct_hex": 22
    },
    {
     "name": "COL",
-    "line": 3322,
-    "end": 3322,
+    "line": 3231,
+    "end": 3231,
     "hex_values": 5,
     "distinct_hex": 5
    },
    {
     "name": "GL_COLORS",
-    "line": 4885,
-    "end": 4888,
+    "line": 4788,
+    "end": 4791,
     "hex_values": 6,
     "distinct_hex": 5
    },
    {
     "name": "BUCKET_HEX",
-    "line": 8110,
-    "end": 8110,
+    "line": 7834,
+    "end": 7834,
     "hex_values": 5,
     "distinct_hex": 5
    },
    {
     "name": "PO_GAASH_BUCKETS",
-    "line": 8814,
-    "end": 8815,
+    "line": 8538,
+    "end": 8539,
     "hex_values": 5,
     "distinct_hex": 5
    },
    {
     "name": "CF_PALETTE",
-    "line": 9095,
-    "end": 9095,
+    "line": 8821,
+    "end": 8821,
     "hex_values": 12,
     "distinct_hex": 12
    },
    {
     "name": "TONE",
-    "line": 9297,
-    "end": 9303,
+    "line": 9023,
+    "end": 9029,
     "hex_values": 9,
     "distinct_hex": 9
    },
    {
     "name": "GAASH_HEX",
-    "line": 9317,
-    "end": 9321,
+    "line": 9043,
+    "end": 9047,
     "hex_values": 4,
     "distinct_hex": 4
    },
    {
     "name": "GASH_STATUS",
-    "line": 9332,
-    "end": 9345,
+    "line": 9058,
+    "end": 9071,
     "hex_values": 12,
     "distinct_hex": 6
    },
    {
     "name": "GZ_HEX",
-    "line": 9835,
-    "end": 9835,
+    "line": 9561,
+    "end": 9561,
     "hex_values": 5,
     "distinct_hex": 5
    },
    {
     "name": "CU_STATUSES",
-    "line": 9934,
-    "end": 9945,
+    "line": 9660,
+    "end": 9671,
     "hex_values": 31,
     "distinct_hex": 21
    },
    {
     "name": "GM_STATE",
-    "line": 11147,
-    "end": 11151,
+    "line": 10873,
+    "end": 10877,
     "hex_values": 10,
     "distinct_hex": 8
    },
    {
     "name": "HEX",
-    "line": 13246,
-    "end": 13248,
+    "line": 12972,
+    "end": 12974,
     "hex_values": 4,
     "distinct_hex": 3
    }
@@ -2999,454 +3002,451 @@
  },
  "pill_css_rules": [
   {
-   "line": 288,
+   "line": 289,
    "text": "  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;\n    font-size:11px;font-weight:700;white-space:nowrap;border:1px soli"
   },
   {
-   "line": 943,
+   "line": 944,
    "text": "  .pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;\n    background:#eef2ff;color:#6366f1;border-radius:20p"
   }
  ],
  "modals": [
   {
-   "line": 1765,
+   "line": 1745,
    "id": "poDetailModal"
   },
   {
-   "line": 1773,
+   "line": 1753,
    "id": "pkgInfoModal"
   },
   {
-   "line": 1781,
+   "line": 1761,
    "id": "lxSyncReportModal"
   },
   {
-   "line": 1789,
+   "line": 1769,
    "id": "gzBulkModal"
   },
   {
-   "line": 1797,
+   "line": 1777,
    "id": "bulkModal"
   },
   {
-   "line": 1808,
+   "line": 1788,
    "id": "notifyModal"
   },
   {
-   "line": 1824,
+   "line": 1804,
    "id": "pnlDrillModal"
   },
   {
-   "line": 1831,
+   "line": 1811,
    "id": "azModal"
   },
   {
-   "line": 1838,
+   "line": 1818,
    "id": "gmStatModal"
   },
   {
-   "line": 1846,
+   "line": 1826,
    "id": "priceImgModal"
   },
   {
-   "line": 1880,
+   "line": 1860,
    "id": "orderEditModal"
   },
   {
-   "line": 1901,
+   "line": 1881,
    "id": "itemEditModal"
   },
   {
-   "line": 1909,
+   "line": 1889,
    "id": "newOrderModal"
   },
   {
-   "line": 1917,
+   "line": 1897,
    "id": "pkgEditModal"
   },
   {
-   "line": 1925,
+   "line": 1905,
    "id": "poEditModal"
   },
   {
-   "line": 1933,
+   "line": 1913,
    "id": "lxActivityModal"
   },
   {
-   "line": 1942,
+   "line": 1922,
    "id": "lxGoalSetModal"
   },
   {
-   "line": 1952,
+   "line": 1932,
    "id": "lxInfoModal"
   },
   {
-   "line": 1960,
+   "line": 1940,
    "id": "lxConflictModal"
   },
   {
-   "line": 1968,
+   "line": 1948,
    "id": "lxEditModal"
   },
   {
-   "line": 1976,
+   "line": 1956,
    "id": "lxAz2HistModal"
   },
   {
-   "line": 1985,
+   "line": 1965,
    "id": "lxMoveModal"
   }
  ],
  "formatters": {
   "money": [
-   2015,
-   4695,
-   10217
+   1995,
+   4598,
+   7244,
+   9943
   ],
   "money0": [
-   6860
+   6763
   ],
   "fmt": [
-   4546
+   4449
   ],
   "cfNum": [
-   9104
+   8830
   ],
   "lxGm": [
-   4774
+   4677
   ],
   "relTime": [
-   7129
+   7032
   ],
   "agoTxt": [
-   9781
+   9507
   ],
   "gmAgo": [
-   11177
+   10903
   ],
   "fmtDue": [
-   9289
+   9015
   ],
   "lxDate": [
-   3233
+   3142
   ],
   "cfFmtDate": [
-   9100
+   8826
   ],
   "gmChgLabel": [
-   12460
+   12186
   ],
   "gmChgTime": [
-   12467
+   12193
   ],
   "dueChip": [
-   7145
+   7048
   ]
  },
  "helper_usage": {
-  "statusPill": 6,
-  "tonePill": 88,
-  "hexPill": 31,
+  "statusPill": 5,
+  "tonePill": 76,
+  "hexPill": 28,
   "solidPill": 11,
   "gaashBucketPill": 3,
   "lxStatusPill": 12,
   "lxCfPill": 12,
-  "fld": 15,
-  "editCell": 11,
-  "openStore": 6,
-  "popMenu": 10,
+  "fld": 5,
+  "editCell": 10,
+  "openStore": 4,
+  "popMenu": 9,
   "popToggle": 14,
-  "lxtHead": 15,
-  "lxtCells": 25,
-  "lxtWrap": 16,
-  "toast": 379,
-  "T": 994,
+  "lxtHead": 14,
+  "lxtCells": 24,
+  "lxtWrap": 15,
+  "toast": 376,
+  "T": 991,
   "cuLabel": 7
  },
  "landmarks": {
   "function setView(": [
-   2692
+   2672
   ],
   "const VIEW_BTN": [
-   2677
+   2657
   ],
   "function restoreView": [
-   2684
+   2664
   ],
   "const RESTRICTED_NAV": [
-   2149
+   2129
   ],
   "const ADD_ORDER_VIEWS": [
-   2674
+   2654
   ],
   "const REFRESH_VIEWS": [
-   2675
+   2655
   ],
   "const PLAT_VIEWS": [
-   6836
+   6739
   ],
   "const STATUS_COLOR": [
-   2004
+   1984
   ],
   "const EXC_LABEL": [
-   2012
+   1992
   ],
   "const CU_STATUSES": [
-   9934
+   9660
   ],
   "const GASH_STATUS": [
-   9332
+   9058
   ],
   "const GAASH_HEX": [
-   9317
+   9043
   ],
   "const PO_GAASH_BUCKETS": [
-   8814
+   8538
   ],
   "const BUCKET_HEX": [
-   8110
+   7834
   ],
   "const GZ_HEX": [
-   9835
+   9561
   ],
   "const GZ_AR": [
-   3330
+   3239
   ],
   "const GM_STATE": [
-   11147
+   10873
   ],
   "const ML_STATUS": [
-   6693
+   6596
   ],
   "const TONE": [
-   9297
+   9023
   ],
   "const MON": [
-   9288
+   9014
   ],
   "const GM_DAY_LABELS": [
-   14363
+   14089
   ],
   "const PO_BOXES": [
-   8246
+   7970
   ],
-  "const NE_COLS": [
-   7315
-  ],
+  "const NE_COLS": [],
   "const LXT_COLS": [
-   4023
+   3931
   ],
   "const LX_TABLES": [
-   3575
+   3484
   ],
   "function lxtHead": [
-   4382
+   4285
   ],
   "function lxtCells": [
-   4427
+   4330
   ],
   "function lxtGridApply": [
-   4331
+   4234
   ],
-  "function neTable": [
-   7319
-  ],
+  "function neTable": [],
   "let LANG": [
-   2115
+   2095
   ],
   "function T(": [
-   2117
+   2097
   ],
   "function localizeStatic": [
-   2131
+   2111
   ],
   "function langSet": [
-   2137
+   2117
   ],
   "const QSTR": [
-   7705
+   7429
   ],
   "let QLANG": [
-   7701
+   7425
   ],
   "function toast(": [
-   2027
+   2007
   ],
   "function statusPill": [
-   2405
+   2385
   ],
   "function tonePill": [
-   9304
+   9030
   ],
   "function hexPill": [
-   9307
+   9033
   ],
   "function solidPill": [
-   9314
+   9040
   ],
   "function fld(": [],
   "function editCell": [
-   2424
+   2404
   ],
   "function openStore": [
-   2449
+   2429
   ],
   "function popMenu": [
-   9912
+   9638
   ],
   "function bulkOpen": [
-   8412
+   8136
   ],
   "function load(": [
-   2308
+   2288
   ],
   "function applyRole": [
-   2151
+   2131
   ],
   "function renderSummary": [
-   2366
+   2346
   ],
   "id=\"sideNav\"": [
-   976
+   977
   ],
   "class=\"topbar\"": [
-   1013
+   1014
   ],
   "id=\"sub\"": [
-   1015
+   1016
   ],
   "$(\"sub\").textContent": [
-   2324
+   2304
   ],
   "id=\"langToggle\"": [
-   1017
+   1018
   ],
   "id=\"notifBell\"": [
-   1019
+   1020
   ],
   "function poProfileCell": [
-   8505
+   8229
   ],
   "function lxProfileChip": [
-   4456
+   4359
   ],
   "function pkgDocsPill": [
-   9759
+   9485
   ],
   "function gmDocsStatePill": [
-   13372
+   13098
   ],
   "function lxIsDone": [
-   3315
+   3224
   ],
   "function pkgStatus(": [
-   9272
+   8998
   ],
   "function poRollupStatus": [
-   9279
+   9005
   ],
   "function dueChip": [
-   7145
+   7048
   ],
   "function pkgCuSelect": [
-   9950
+   9676
   ],
   "function cuLabel": [
-   2847
+   2824
   ],
   "function poCardHtml": [],
   "function poPkgHtml": [],
   "function renderPurchases": [
-   9006
+   8732
   ],
   "function gmTab": [
-   11152
+   10878
   ],
   "function bsTokens": [
-   10997
+   10723
   ],
   "function gmNewGwds": [
-   12740
+   12466
   ],
   "PILL POLICY": [
-   1999
+   1979
   ],
   ".trk-cell:placeholder-shown": [
-   133
+   134
   ],
   "function gaashUploadOpen": [
-   9366,
-   9397
+   9092,
+   9123
   ]
  },
  "file_inputs_and_paste": {
   "index.html": [
    {
-    "line": 1151,
+    "line": 1152,
     "text": "<input type=\"file\" id=\"custIdInput\" accept=\"image/jpeg,image/png,.pdf\" style=\"display:none\">"
    },
    {
-    "line": 1186,
+    "line": 1187,
     "text": "<input type=\"file\" id=\"poImgInput\" accept=\"image/*\" style=\"display:none\">"
    },
    {
-    "line": 1187,
+    "line": 1188,
     "text": "<input type=\"file\" id=\"podImgInput\" accept=\"image/*\" multiple style=\"display:none\">"
    },
    {
-    "line": 1853,
+    "line": 1833,
     "text": "🧾<input type=\"file\" accept=\"image/*\" onchange=\"piUpload(this)\"></label>"
    },
    {
-    "line": 4410,
+    "line": 4313,
     "text": "const dnd=c=>` draggable=\"true\" ondragstart=\"lxtColDragStart(event,'${tbl}','${c.key}')\" ondragover=\"lxtColDra"
    },
    {
-    "line": 5939,
+    "line": 5842,
     "text": "<input type=\"file\" accept=\"image/*\" multiple onchange=\"lxImgUpload(this)\" style=\"font-size:12px\">`"
    },
    {
-    "line": 7753,
+    "line": 7477,
     "text": "${r.proof?'':'🧾'}<input type=\"file\" accept=\"image/*\" onchange=\"qPickProof(${i},this)\"></label>"
    },
    {
-    "line": 7756,
+    "line": 7480,
     "text": "${r.image?'':'🖼'}<input type=\"file\" accept=\"image/*\" onchange=\"qPickImage(${i},this)\"></label>"
    },
    {
-    "line": 7811,
+    "line": 7535,
     "text": "window.addEventListener(\"paste\", qPasteImage);"
    },
    {
-    "line": 10096,
+    "line": 9822,
     "text": "document.addEventListener(\"paste\",e=>{        // ⌘V while a package popup is open"
    },
    {
-    "line": 10332,
+    "line": 10058,
     "text": "inp.type=\"file\"; inp.accept=\"image/*\"; inp.multiple=true;"
    },
    {
-    "line": 10511,
+    "line": 10237,
     "text": "document.addEventListener(\"paste\",e=>{           // Cmd/Ctrl+V while the order detail is open"
    },
    {
-    "line": 10528,
+    "line": 10254,
     "text": "document.addEventListener(\"paste\",e=>{           // Cmd/Ctrl+V while \"+ New order\" is open"
    },
    {
-    "line": 11592,
+    "line": 11318,
     "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.multiple=true;"
    },
    {
-    "line": 11617,
+    "line": 11343,
     "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.multiple=true;"
    },
    {
-    "line": 12858,
+    "line": 12584,
     "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.accept=\".pdf,image/jpeg,image/png\";"
    },
    {
-    "line": 13765,
+    "line": 13491,
     "text": "const inp=document.createElement(\"input\"); inp.type=\"file\"; inp.accept=\".pdf,image/jpeg,image/png\";"
    }
   ],

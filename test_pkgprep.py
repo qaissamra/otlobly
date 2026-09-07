@@ -250,9 +250,13 @@ def main():
     check("location fields editable inline",
           "function ppLocEdit(" in html and "function ppLocFld(" in html
           and '"/api/order/edit"' in html)
-    check("review card expandable with the shared body",
-          "ppToggle('reviews'" in html and "function ppBody(" in html
-          and "function ppFlds(" in html)
+    # Since Phase 4 all three buckets are saved views of one board, and every row -
+    # reviews included - expands into the same shared body.
+    ful = (Path(__file__).parent / "static" / "ds" / "fulfillment.js").read_text(encoding="utf-8")
+    check("review rows expand into the shared body, like every other row",
+          'key: "reviews", label: "Ask for a review"' in ful
+          and "expandable: { render: (c) => W.ppBody(c)" in ful
+          and "function ppBody(" in html)
     check("package row shows the OTL number", "pkg.customer_tracking" in html)
 
     # ---- a line with NO ASIN still sees its linked pieces ------------------- #

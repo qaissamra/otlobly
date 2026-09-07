@@ -55,10 +55,13 @@ def main():
     check("PO detail modal package header carries a chip", "يصل ${poEsc(pk.arrival)} ${dueChip(pk.arrival)}" in html)
 
     # 4) To-order: the summary row (next to the status pill) + the expanded ETA field.
-    check("To-order summary row shows the chip next to status",
-          "${statusCell}${o.est_delivery_customer?" in html)
-    check("To-order ETA meta field carries a chip",
-          "fld('ETA',`${poEsc(o.est_delivery_customer)} ${dueChip(o.est_delivery_customer)}`)" in html)
+    # Since Phase 4 the queue is a DataTable in static/ds/fulfillment.js: the promised
+    # date is its own column and still carries the chip, next to the status column.
+    ful = (Path(__file__).parent / "static" / "ds" / "fulfillment.js").read_text(encoding="utf-8")
+    check("To-order shows the promised date with its chip, in its own column",
+          'key: "promised", label: "Promised"' in ful and "W.dueChip(o.est_delivery_customer," in ful)
+    check("and the row's detail repeats it as a fact",
+          '["Promised", `${esc(o.est_delivery_customer)} ${W.dueChip(o.est_delivery_customer)}`]' in ful)
 
     print("\nRESULT:", "PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     return 0 if not fails else 1

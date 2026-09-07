@@ -137,7 +137,8 @@ def main():
     check("pricing.html: COD is the Safety card's first bullet",
           'data-i18n="plan2.fPay"' in tpl.read_text(encoding="utf-8"))
     staff = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
-    check("staff queue flags plan-less website leads", "بدون باقة" in staff)
+    check("staff queue flags plan-less website leads",
+          'detail: "no plan"' in (Path(__file__).parent / "static" / "ds" / "fulfillment.js").read_text(encoding="utf-8"))
 
     print()
     if fails:

@@ -126,6 +126,12 @@
     purchases: { keys: ["orders", "packages", "products", "customers"],
       labels: { orders: "Orders", packages: "Packages", products: "Products", customers: "Customers" },
       get: () => A().poBoard, set: (t) => window.poSetView && window.poSetView(t) },
+    needorder: { keys: ["pending", "incart", "ordered", "deleted"],
+      labels: { pending: "To order", incart: "In cart", ordered: "Ordered", deleted: "Deleted" },
+      get: () => A().neView, set: (t) => window.neSetFilter && window.neSetFilter(t) },
+    pkgprep: { keys: ["ready", "waiting", "reviews"],
+      labels: { ready: "Ready to pack", waiting: "Waiting for pieces", reviews: "Ask for a review" },
+      get: () => A().ppView, set: (t) => window.ppSetView && window.ppSetView(t) },
     leluxe: { keys: ["orders", "products", "packages", "dashboard", "goal"],
       labels: { orders: "Orders", products: "Products", packages: "Packages", dashboard: "Board", goal: "Goal" },
       get: () => A().lxView, set: (t) => window.lxSetView && window.lxSetView(t) },
@@ -294,7 +300,7 @@
 
   // ---------------------------------------------------------------- page header
   /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
-  const OWN_HEADER = new Set(["purchases"]);
+  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep"]);
 
   function paint() {
     const v = A().view || "orders";
