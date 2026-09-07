@@ -17,6 +17,7 @@
 <script src="/static/ds/shell.js"></script>
 <script src="/static/ds/purchases.js"></script>
 <script src="/static/ds/fulfillment.js"></script>
+<script src="/static/ds/sales.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -214,7 +215,7 @@
      overflow:visible + z-index:40 on open — collapsing the h-scroll container
      (sticky pin + header desync) and painting rows OVER the topbar. Don't
      re-add them. */
-  .lx-cols .lxc>.pop, .lx-pcols .lxc>.pop, .lx-kcols .lxc>.pop, .bs-cols .lxc>.pop, .wf-cols .lxc>.pop, .en-cols .lxc>.pop, .od-cols .lxc>.pop, .cu-cols .lxc>.pop, .dp-cols .lxc>.pop, .ct-cols .lxc>.pop, .ic-cols .lxc>.pop, .tr-cols .lxc>.pop, .fh-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc>.pop, .lx-pcols .lxc>.pop, .lx-kcols .lxc>.pop, .bs-cols .lxc>.pop, .wf-cols .lxc>.pop, .en-cols .lxc>.pop, .dp-cols .lxc>.pop, .ct-cols .lxc>.pop, .ic-cols .lxc>.pop, .tr-cols .lxc>.pop, .fh-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -454,8 +455,6 @@
   .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
-  .od-cols{display:grid;grid-template-columns:var(--odgrid,170px 110px 90px 96px 64px 64px 88px 132px 120px 92px 130px 96px 168px);gap:6px;align-items:center;flex:0 0 auto}
-  .cu-cols{display:grid;grid-template-columns:var(--cugrid,110px 70px 100px 56px 52px);gap:6px;align-items:center;flex:0 0 auto}
   .dp-cols{display:grid;grid-template-columns:var(--dpgrid,96px 84px 64px 92px 86px 160px 96px 40px);gap:6px;align-items:center;flex:0 0 auto}
   .ct-cols{display:grid;grid-template-columns:var(--ctgrid,80px 96px 120px 150px 56px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .ic-cols{display:grid;grid-template-columns:var(--icgrid,200px 100px 200px);gap:6px;align-items:center;flex:0 0 auto}
@@ -645,11 +644,11 @@
     .en-cf-r>b:first-child{flex:1 1 100%}
   }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
-  .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}.lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .bs-cols .lxc, .wf-cols .lxc, .en-cols .lxc, .od-cols .lxc, .cu-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .bs-cols .lxc>.pill, .bs-cols .lxc>span, .bs-cols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .od-cols .lxc>.pill, .od-cols .lxc>span, .od-cols .lxc>b, .cu-cols .lxc>.pill, .cu-cols .lxc>span, .cu-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
+  .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}.lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .bs-cols .lxc, .wf-cols .lxc, .en-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .bs-cols .lxc>.pill, .bs-cols .lxc>span, .bs-cols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead, .lx-pcolhead, .lx-kcolhead, .bs-colhead, .wf-colhead, .en-colhead, .od-colhead, .cu-colhead, .dp-colhead, .ct-colhead, .ic-colhead, .tr-colhead, .fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}.lx-colhead .lbl, .lx-pcolhead .lbl, .lx-kcolhead .lbl, .bs-colhead .lbl, .wf-colhead .lbl, .en-colhead .lbl, .od-colhead .lbl, .cu-colhead .lbl, .dp-colhead .lbl, .ct-colhead .lbl, .ic-colhead .lbl, .tr-colhead .lbl, .fh-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lx-colhead .lx-sort, .lx-pcolhead .lx-sort, .lx-kcolhead .lx-sort, .bs-colhead .lx-sort, .wf-colhead .lx-sort, .en-colhead .lx-sort, .od-colhead .lx-sort, .cu-colhead .lx-sort, .dp-colhead .lx-sort, .ct-colhead .lx-sort, .ic-colhead .lx-sort, .tr-colhead .lx-sort, .fh-colhead .lx-sort{cursor:pointer;user-select:none}.lx-colhead .lx-sort:hover, .lx-pcolhead .lx-sort:hover, .lx-kcolhead .lx-sort:hover, .bs-colhead .lx-sort:hover, .wf-colhead .lx-sort:hover, .en-colhead .lx-sort:hover, .od-colhead .lx-sort:hover, .cu-colhead .lx-sort:hover, .dp-colhead .lx-sort:hover, .ct-colhead .lx-sort:hover, .ic-colhead .lx-sort:hover, .tr-colhead .lx-sort:hover, .fh-colhead .lx-sort:hover{color:var(--ink)}/* drag the right edge of a header label to resize that column (persisted);
+  .lx-colhead, .lx-pcolhead, .lx-kcolhead, .bs-colhead, .wf-colhead, .en-colhead, .dp-colhead, .ct-colhead, .ic-colhead, .tr-colhead, .fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}.lx-colhead .lbl, .lx-pcolhead .lbl, .lx-kcolhead .lbl, .bs-colhead .lbl, .wf-colhead .lbl, .en-colhead .lbl, .dp-colhead .lbl, .ct-colhead .lbl, .ic-colhead .lbl, .tr-colhead .lbl, .fh-colhead .lbl{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lx-colhead .lx-sort, .lx-pcolhead .lx-sort, .lx-kcolhead .lx-sort, .bs-colhead .lx-sort, .wf-colhead .lx-sort, .en-colhead .lx-sort, .dp-colhead .lx-sort, .ct-colhead .lx-sort, .ic-colhead .lx-sort, .tr-colhead .lx-sort, .fh-colhead .lx-sort{cursor:pointer;user-select:none}.lx-colhead .lx-sort:hover, .lx-pcolhead .lx-sort:hover, .lx-kcolhead .lx-sort:hover, .bs-colhead .lx-sort:hover, .wf-colhead .lx-sort:hover, .en-colhead .lx-sort:hover, .dp-colhead .lx-sort:hover, .ct-colhead .lx-sort:hover, .ic-colhead .lx-sort:hover, .tr-colhead .lx-sort:hover, .fh-colhead .lx-sort:hover{color:var(--ink)}/* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl, .lx-pcolhead .lx-pcols .lbl, .lx-kcolhead .lx-kcols .lbl, .bs-colhead .bs-cols .lbl, .wf-colhead .wf-cols .lbl, .en-colhead .en-cols .lbl, .od-colhead .od-cols .lbl, .cu-colhead .cu-cols .lbl, .dp-colhead .dp-cols .lbl, .ct-colhead .ct-cols .lbl, .ic-colhead .ic-cols .lbl, .tr-colhead .tr-cols .lbl, .fh-colhead .fh-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl, .lx-pcolhead .lx-pcols .lbl, .lx-kcolhead .lx-kcols .lbl, .bs-colhead .bs-cols .lbl, .wf-colhead .wf-cols .lbl, .en-colhead .en-cols .lbl, .dp-colhead .dp-cols .lbl, .ct-colhead .ct-cols .lbl, .ic-colhead .ic-cols .lbl, .tr-colhead .tr-cols .lbl, .fh-colhead .fh-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -838,7 +837,7 @@
   .bt-wrap .pkg-body{padding-inline:0;overflow-x:visible}
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}/* the contact strip spans the whole (scrollable) row{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
-  .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .bs-colhead .bt-pin, .en-colhead .bt-pin, .od-colhead .bt-pin, .cu-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .bs-colhead .bt-pin, .en-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
   /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
   .wf-row:hover{background:var(--bg2)}
   .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
@@ -1088,20 +1087,7 @@
 
   <!-- Orders -->
   <div id="ordersView">
-    <div class="toolbar">
-      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);cursor:pointer" title="select all shown">
-        <input type="checkbox" id="selAll" onclick="toggleSelAll(this.checked)"><span data-en="all" data-ar="الكل">all</span></label>
-      <input class="search" id="search" placeholder="Search name, phone, ASIN, address…" oninput="render()">
-      <select id="statusFilter" onchange="render()"><option value="">All statuses</option></select>
-      <select id="batchFilter" onchange="render()"><option value="">All batches</option></select>
-      <span class="spacer"></span>
-    </div>
-    <div id="bulkBar" class="hidden" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;margin-bottom:8px">
-      <b id="bulkCount" style="color:#b91c1c">0 selected</b>
-      <button class="po-btn danger" onclick="deleteSelectedOrders()">🗑 Delete selected</button>
-      <button class="po-btn" onclick="clearOrderSel()">Clear</button>
-      <span class="muted2" style="font-size:11.5px">deleted orders move to 🗑 Trash — you can restore them</span>
-    </div>
+    <div id="odChrome"></div>
     <div id="odMount"></div>
   </div>
 
@@ -1154,14 +1140,8 @@
 
   <!-- Customer CRM -->
   <div id="customersView" class="hidden">
-    <div class="toolbar">
-      <input class="search" id="custSearch" placeholder="Search customer, phone, city…" oninput="custSearchInput()">
-      <span class="spacer"></span>
-      <button onclick="toggleIdGallery()" id="idToggleBtn" title="see every uploaded ID document in one place">🪪 View IDs</button>
-      <button onclick="toggleCustForm()" class="accent">+ Add customer</button>
-      <button onclick="syncCustomers(this)">↻ Sync from orders</button>
-      <input type="file" id="custIdInput" accept="image/jpeg,image/png,.pdf" style="display:none">
-    </div>
+    <div id="cuChrome"></div>
+    <input type="file" id="custIdInput" accept="image/jpeg,image/png,.pdf" style="display:none">
     <div class="panel hidden" id="custFormPanel" style="margin-bottom:12px">
       <h2>New / edit customer</h2>
       <div class="form-grid">
@@ -2311,7 +2291,7 @@ async function load(){
       +'<a href="#" onclick="location.reload();return false" style="color:var(--accent);font-weight:700">إعادة المحاولة · Retry</a>';
     return;
   }
-  buildFilters(); renderSummary(); render(); renderPicking();
+  renderSummary(); render(); renderPicking();
   $("sub").textContent = `${DATA.summary.total} orders · ${money(DATA.summary.money.outstanding_usd)} outstanding · updated ${new Date(DATA.generated_at).toLocaleString()}`;
   fillBoxSelect();
   loadHomeActivity();
@@ -2319,13 +2299,6 @@ async function load(){
   try{ const p=await (await fetch("/api/pricing")).json(); if(p.markup_pct!=null) MARKUP_PCT=p.markup_pct; }catch(e){}
 }
 
-function buildFilters(){
-  const sf=$("statusFilter"), bf=$("batchFilter");
-  const curS=sf.value, curB=bf.value;
-  sf.innerHTML='<option value="">All statuses</option>'+DATA.statuses.map(s=>`<option ${s===curS?'selected':''}>${s}</option>`).join("");
-  const batches=[...new Set(DATA.orders.map(o=>o.batch).filter(Boolean))].sort();
-  bf.innerHTML='<option value="">All batches</option>'+batches.map(b=>`<option ${b===curB?'selected':''}>${b}</option>`).join("");
-}
 function fillBoxSelect(){
   if(!$("f_box")) return;   // box is no longer on the create-order form (assigned at PO time)
   const boxes=[...new Set(DATA.orders.map(o=>o.profile_box).filter(Boolean))];
@@ -2467,22 +2440,6 @@ function itemsCell(o){
   return `<div><b>${o.n_items}</b> item${o.n_items!=1?'s':''}${flag}</div>${links}`;
 }
 
-function waMenu(o){
-  // 📦 = send the track_package template (auto WhatsApp: "on the way" + delivery date + track link).
-  // Distinct from the 💬 menu, which opens wa.me with prefilled text for the staffer to send.
-  // Gated on the delivery date — same rule as the 📱 Notify button on the Purchases page.
-  const track=o.est_delivery_customer
-    ?`<button class="po-btn" title="Notify customer: package on the way + delivery date (WhatsApp)" onclick="notifyTrack('${o.order_id}',this)">📦</button>`
-    :`<button class="po-btn" disabled title="set the package's Arrives date first (Purchases page) — then you can notify" style="opacity:.5;cursor:not-allowed">📦</button>`;
-  return `<select class="statussel" onchange="sendWa('${o.order_id}',this.value);this.selectedIndex=0">
-    <option>💬 message…</option>
-    <option value="quote">Quote</option>
-    <option value="confirmation">Confirmation</option>
-    <option value="payment_due">Amount due</option>
-    <option value="order_placed">Order placed</option>
-    <option value="status_update">Status update</option>
-    <option value="ready_for_pickup">Ready for pickup</option></select> ${track}`;
-}
 async function notifyTrack(id,btn,force){
   if(!force && !confirm("Send the customer a WhatsApp 'package is on the way' message with their delivery date?")) return;
   btn.disabled=true; const o=btn.textContent; btn.textContent="…";
@@ -2494,19 +2451,6 @@ async function notifyTrack(id,btn,force){
   else { toast("⚠ "+(d.error||"failed")); }
 }
 
-// typed sort values for the Orders board (numbers sort numerically, text lexically)
-function odSortVal(o,k){
-  switch(k){
-    case "collect": return o.amount_to_collect_usd==null?-1:+o.amount_to_collect_usd;
-    case "dep":     return +(o.deposit_usd||0);
-    case "rem":     return o.remaining_usd==null?-1:+o.remaining_usd;
-    case "batch":   return String(o.batch||"");
-    case "due":     return String(o.est_delivery_customer||"9999-99-99");
-    case "ostatus": return String(o.status||"");
-    case "city":    return String(o.city||"");
-    default:        return String(o.order_id||"");
-  }
-}
 // 📍 customer city/address, editable in place on the board (same field the
 // Package prep cards edit) — saves via /api/order/edit, updates the row model
 function odLocEdit(el,oid,fldKey){
@@ -2535,77 +2479,61 @@ function odLocCell(o,fldKey){
 function render(){
   if(!DATA) return;
   const mount=$("odMount"); if(!mount) return;
-  const term=$("search").value.trim().toLowerCase();
-  const fs=$("statusFilter").value, fb=$("batchFilter").value;
   let rows=DATA.orders.filter(o=>{
-    if(fs && o.status!==fs) return false;
-    if(fb && o.batch!==fb) return false;
-    if(!term) return true;
+    if(OD_STATUS && o.status!==OD_STATUS) return false;
+    if(OD_BATCH  && o.batch !==OD_BATCH ) return false;
+    if(!OD_QUERY) return true;
     const hay=[o.customer,o.phone,o.address,o.city,o.order_id,
-      ...o.items.map(i=>i.asin)].join(" ").toLowerCase();
-    return hay.includes(term);
+      ...(o.items||[]).map(i=>i.asin)].join(" ").toLowerCase();
+    return hay.includes(OD_QUERY);
   });
-  rows=lxtSortApply("od",rows.slice(),odSortVal);
-  let out=0, totDep=0, totRem=0;
-  const rowsHtml=rows.map(o=>{
-    const open=["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"].includes(o.status);
-    if(open){ out+=o.amount_to_collect_usd||0; totDep+=o.deposit_usd||0;
-              totRem+=(o.remaining_usd!=null?o.remaining_usd:(o.amount_to_collect_usd||0)); }
-    const amt=o.amount_to_collect_usd!=null
-      ? `${money(o.amount_to_collect_usd)} <a class="cellact" title="re-quote from a new checkout total" onclick="quoteOrder('${o.order_id}')">✎</a>`
-      : `<button class="po-btn" title="enter the Amazon checkout total → final price" onclick="quoteOrder('${o.order_id}')">💲 Quote</button>`;
-    const depTxt=(o.deposit_usd!=null&&o.deposit_usd>0)?money(o.deposit_usd):'';
-    const depCell=CAN_EDIT
-      ? `<span>${depTxt}</span> <a class="cellact" title="سجّل عربون · record a deposit" onclick="depositForOrder('${o.order_id}')">＋₪</a>`
-      : `<span>${depTxt||'—'}</span>`;
-    const remCell=(o.remaining_usd!=null)?money(o.remaining_usd)
-                 :(o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—');
-    const web=o.source==="website"?" "+hexPill("#0369a1","🌐","طلب من متجر الموقع · placed on the website catalog",{style:"font-size:9.5px"}):"";
-    const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
-      <input type="checkbox" class="ordsel" ${SELECTED_ORDERS.has(o.order_id)?'checked':''} onclick="event.stopPropagation();toggleOrderSel('${o.order_id}',this.checked)">
-      <span class="mono" style="flex:none;font-weight:700">${o.order_id}</span>${web}
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(o.customer)||"—"}</b> <span class="mono" style="color:var(--muted);font-size:10.5px">${poEsc(o.phone)||""}</span></span>
-    </div>`;
-    return `<div class="poc-row">${pin}${lxtCells("od",{
-      items:  itemsCell(o),
-      collect:`<span class="amt">${amt}</span>`,
-      dep:    `<span class="amt" style="color:var(--good)">${depCell}</span>`,
-      rem:    `<b class="amt">${remCell}</b>`,
-      box:    `<input value="${poEsc(o.profile_box||'')}" style="width:100%;min-width:40px;padding:3px 6px;font-size:11.5px" onchange="setBox('${o.order_id}',this.value)">`,
-      batch:  poEsc(o.batch)||"—",
-      due:    dueChip(o.est_delivery_customer,["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))||'<span style="color:var(--muted)">—</span>',
-      ostatus:statusSelect(o),
-      amzn:   `<input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="mono" style="width:100%;min-width:80px;padding:3px 6px;font-size:11px" onchange="setAmazon('${o.order_id}',this.value)">`,
-      city:   odLocCell(o,"city"),
-      addr:   odLocCell(o,"address"),
-      otl:    o.tracking_number?`<span class="mono">${poEsc(o.tracking_number)}</span>`:"",
-      wa:     waMenu(o),
-    })}</div>`;}).join("");
-  const totals=`<div class="poc-row bt-total">
-      <div class="bt-pin">Σ ${rows.length} ${T("طلب · orders")} · ${T("المستحق · outstanding")}</div>
-      ${lxtCells("od",{collect:`<b>${money(out)}</b>`,dep:`<b>${money(totDep)}</b>`,rem:`<b>${money(totRem)}</b>`})}
-    </div>`;
-  const empty=`<div class="muted2" style="padding:16px">${T("لا طلبات مطابقة · no matching orders")}</div>`;
-  mount.innerHTML=lxtHead("od","الطلب والعميل · order & customer")
-    +lxtWrap("od",`<div class="pkg open"><div class="pkg-body">${rowsHtml||empty}${rowsHtml?totals:""}</div></div>`);
-  lxColwApply(); lxtGridApply("od",mount);
-  VISIBLE_ORDER_IDS=rows.map(o=>o.order_id);
-  updateBulkBar();
+  DS.orders.chrome("odChrome", odChromeCtx(rows.length));
+  DS.orders.board(mount, rows, odCtx());
 }
+
+// The bridge to static/ds/sales.js. index.html's top-level bindings are not window
+// properties, so everything the page needs arrives in this object.
+const OD_OPEN=["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"];
+let OD_QUERY="", OD_STATUS="", OD_BATCH="";
+const OD_OPEN_ROWS=new Set();          // which order rows are expanded (openStore's job elsewhere)
+function odCtx(){
+  return {
+    money: PO_MONEY,
+    canDelete: CAN_EDIT,
+    OPEN: OD_OPEN,
+    setSelection: keys=>{ SELECTED_ORDERS=new Set(keys); },
+    isOpen: id=>OD_OPEN_ROWS.has(id),
+    toggle: id=>{ OD_OPEN_ROWS.has(id)?OD_OPEN_ROWS.delete(id):OD_OPEN_ROWS.add(id); },
+    amountCell: o=> o.amount_to_collect_usd!=null
+      ? `<span class="ds-num">${money(o.amount_to_collect_usd)}</span> <a class="cellact" title="re-quote from a new checkout total" onclick="event.stopPropagation();quoteOrder('${o.order_id}')">✎</a>`
+      : `<button class="ds-btn ds-sm" title="enter the Amazon checkout total → final price" onclick="event.stopPropagation();quoteOrder('${o.order_id}')">Quote</button>`,
+    depositCell: o=>{ const t=(o.deposit_usd!=null&&o.deposit_usd>0)?money(o.deposit_usd):"";
+      return CAN_EDIT
+        ? `<span class="ds-num ds-ok">${t}</span> <a class="cellact" title="سجّل عربون · record a deposit" onclick="event.stopPropagation();depositForOrder('${o.order_id}')">＋₪</a>`
+        : (t?`<span class="ds-num ds-ok">${t}</span>`:DS.dash()); },
+    boxCell: o=>`<input value="${poEsc(o.profile_box||'')}" class="ds-cellinput" aria-label="Buying account" onclick="event.stopPropagation()" onchange="setBox('${o.order_id}',this.value)">`,
+    amazonCell: o=>`<input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="ds-cellinput ds-mono" aria-label="Amazon order number" onclick="event.stopPropagation()" onchange="setAmazon('${o.order_id}',this.value)">`,
+  };
+}
+function odChromeCtx(shown){
+  const batches=[...new Set(DATA.orders.map(o=>o.batch).filter(Boolean))].sort();
+  const q=DATA.summary?DATA.summary.action_queue:{};
+  return {
+    money: PO_MONEY, query: OD_QUERY, status: OD_STATUS, batch: OD_BATCH,
+    statusOptions: DATA.statuses||[], batchOptions: batches,
+    stats: { shown, total: DATA.orders.length,
+             unpriced: DATA.orders.filter(o=>o.amount_to_collect_usd==null).length,
+             needOrder: q.need_order||0, toCollect: q.arrived_not_collected||0,
+             outstanding: (DATA.summary&&DATA.summary.money)?DATA.summary.money.outstanding_usd:0 },
+  };
+}
+function odSearchInput(v){ OD_QUERY=(v||"").trim().toLowerCase(); render(); }
+function odFilter(which,v){ if(which==="status") OD_STATUS=v||""; else OD_BATCH=v||""; render(); }
+function odDeleteSelected(){ deleteSelectedOrders(); }
+
 
 // ── Bulk select + delete orders ──
 let SELECTED_ORDERS=new Set(), VISIBLE_ORDER_IDS=[];
-function toggleOrderSel(id,on){ on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id); updateBulkBar(); }
-function toggleSelAll(on){ VISIBLE_ORDER_IDS.forEach(id=>on?SELECTED_ORDERS.add(id):SELECTED_ORDERS.delete(id));
-  document.querySelectorAll('#odMount .ordsel').forEach(cb=>cb.checked=on); updateBulkBar(); }
-function clearOrderSel(){ SELECTED_ORDERS.clear(); document.querySelectorAll('#odMount .ordsel').forEach(cb=>cb.checked=false);
-  const sa=$("selAll"); if(sa)sa.checked=false; updateBulkBar(); }
-function updateBulkBar(){
-  const n=SELECTED_ORDERS.size, bar=$("bulkBar");
-  if(bar){ bar.classList.toggle("hidden", n===0); $("bulkCount").textContent=`${n} selected`; }
-  const sa=$("selAll");
-  if(sa) sa.checked = VISIBLE_ORDER_IDS.length>0 && VISIBLE_ORDER_IDS.every(id=>SELECTED_ORDERS.has(id));
-}
 async function deleteSelectedOrders(){
   const ids=[...SELECTED_ORDERS]; if(!ids.length) return;
   if(!confirm(`Delete ${ids.length} order${ids.length>1?'s':''}? They move to 🗑 Trash — you can restore them.`)) return;
@@ -3503,8 +3431,6 @@ const LX_TABLES={
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
   "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane"},
   "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl"},
-  "od": {key:"od_colw", varn:"--odgrid",  head:".od-colhead .od-cols",   rows:"odMount"},
-  "cu": {key:"cu_colw", varn:"--cugrid",  head:".cu-colhead .cu-cols",   rows:"cuMount"},
   "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount"},
   "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
   "tr": {key:"tr_colw", varn:"--trgrid",  head:".tr-colhead .tr-cols",   rows:"trashList"},
@@ -4001,28 +3927,6 @@ const LXT_COLS={
     {key:"found",    label:"موجود في · found in",    w:96,  sortable:true},
     {key:"cust",     label:"العميل · customer",      w:130, sortable:true},
   ],
-  "od":[    // 🏠 Orders board (the staff CRM table)
-    {key:"items",  label:"منتجات · items",      w:170},
-    {key:"collect",label:"المبلغ · amount",     w:110, sortable:true},
-    {key:"dep",    label:"عربون · deposit",     w:90,  sortable:true},
-    {key:"rem",    label:"المتبقي · remaining", w:96,  sortable:true},
-    {key:"box",    label:"صندوق · box",         w:64},
-    {key:"batch",  label:"دفعة · batch",        w:64,  sortable:true},
-    {key:"due",    label:"الموعد · due",        w:88,  sortable:true},
-    {key:"ostatus",label:"الحالة · status",     w:132, sortable:true},
-    {key:"amzn",   label:"أمازون # · amazon #", w:120},
-    {key:"city",   label:"📍 المدينة · city",   w:92,  sortable:true},
-    {key:"addr",   label:"العنوان · address",   w:130},
-    {key:"otl",    label:"التتبع · tracking",   w:96},
-    {key:"wa",     label:"واتساب · whatsapp",   w:168},
-  ],
-  "cu":[    // 👥 Customers list (row click → profile panel)
-    {key:"city",  label:"📍 المدينة · city", w:110, sortable:true},
-    {key:"orders",label:"طلبات · orders",    w:70,  sortable:true},
-    {key:"spent", label:"الإنفاق · spent",   w:100, sortable:true},
-    {key:"idnum", label:"🪪 هوية · ID",      w:56,  sortable:true},
-    {key:"vip",   label:"★ VIP",             w:52,  sortable:true},
-  ],
   "dp":[    // 🧾 Deposits ledger
     {key:"order",  label:"الطلب · order",    w:96,  sortable:true},
     {key:"entered",label:"المدخل · entered", w:84},
@@ -4077,13 +3981,13 @@ const LXT_COLS={
 const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
-               "en":["en-colhead","en-cols"],"od":["od-colhead","od-cols"],
-               "cu":["cu-colhead","cu-cols"],"dp":["dp-colhead","dp-cols"],
+               "en":["en-colhead","en-cols"],
+               "dp":["dp-colhead","dp-cols"],
                "ct":["ct-colhead","ct-cols"],
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
-const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","od":" pin-md","cu":"","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
+const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-["","p","k","po","pok","pop","bs","wf","en","od","cu","dp","ct","ic","tr","fh"].forEach(t=>{
+["","p","k","po","pok","pop","bs","wf","en","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -4113,8 +4017,8 @@ function lxtCols(tbl){
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
 function lxtRender(tbl){
   if(tbl==="po"||tbl==="pok"||tbl==="pop") return renderPurchases();
-  const fn={bs:bsRender, wf:gmRenderSeq, en:gmEnrollRender, od:render,
-            cu:renderCustomers, dp:renderDeposits, ct:renderCatalog,
+  const fn={bs:bsRender, wf:gmRenderSeq, en:gmEnrollRender,
+            dp:renderDeposits, ct:renderCatalog,
             ic:renderIncart, tr:trRender}[tbl];
   (fn||renderLeluxe)();
 }
@@ -10286,7 +10190,7 @@ async function clickupPO(btn,id,dry){ btn.disabled=true; const old=btn.innerHTML
 let CUST=null;
 async function loadCustomers(){ const r=await fetch("/api/customers"); CUST=await r.json(); fillPayments();
   CUSTSUB="list"; $("custGrid").style.display="grid"; $("custGallery").classList.add("hidden");
-  $("idToggleBtn").textContent="🪪 View IDs"; renderCustomers(); }
+  renderCustomers(); }
 function fillPayments(){ $("c_payment").innerHTML=(CUST.payment_methods||[]).map(p=>`<option>${p}</option>`).join(""); }
 // board inline edits (UI_AUDIT Batch 6): safe because /api/customer now MERGE-
 // guards server-side (keeps stored ID image/number + customer_id) — the client
@@ -10314,44 +10218,56 @@ function cuVipToggle(cid){
   const c=CUST.customers.find(x=>x.customer_id===cid); if(!c) return;
   cuSave(c,{vip:!c.vip});
 }
-function cuSortVal(c,k){
-  switch(k){
-    case "city":   return String(c.city||"");
-    case "orders": return +(c.order_count||0);
-    case "spent":  return +(c.total_spent_usd||0);
-    case "idnum":  return c.id_image?1:0;
-    case "vip":    return c.vip?1:0;
-    default:       return String(c.name||"");
-  }
-}
 function renderCustomers(){
   if(!CUST) return;
   const mount=$("cuMount"); if(!mount) return;
-  const term=$("custSearch").value.trim().toLowerCase();
-  let rows=CUST.customers.filter(c=>!term||[c.name,c.whatsapp,c.city,c.email].join(" ").toLowerCase().includes(term));
-  rows=lxtSortApply("cu",rows.slice(),cuSortVal);
-  const rowsHtml=rows.map(c=>{
-    const pin=`<div class="bt-pin" style="display:flex;align-items:center;gap:7px">
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(c.name)||'—'}</b> <span class="mono" style="color:var(--muted);font-size:10.5px">${poEsc(c.whatsapp)||''}</span></span></div>`;
-    return `<div class="poc-row" style="cursor:pointer" onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;showProfile('${c.customer_id}')">${pin}${lxtCells("cu",{
-      city:   cuCanEdit()
-        ?`<span dir="auto" style="cursor:text;border-bottom:1px dashed var(--line);min-width:24px" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
-        :(poEsc(c.city)||"—"),
-      orders: `<b>${c.order_count}</b>`,
-      spent:  `<b class="amt">${money(c.total_spent_usd)}</b>`,
-      idnum:  `<span title="${c.id_image?'ID on file':'no ID uploaded'}" style="color:${c.id_image?'inherit':'var(--muted)'}">${c.id_image?'🪪':'—'}</span>`,
-      vip:    cuCanEdit()
-        ?`<span style="cursor:pointer" title="VIP — اضغط للتبديل · click to toggle" onclick="event.stopPropagation();cuVipToggle('${c.customer_id}')">${c.vip?'★':'☆'}</span>`
-        :(c.vip?'★':''),
-    })}</div>`;}).join("");
-  const totals=`<div class="poc-row bt-total">
-      <div class="bt-pin">Σ ${rows.length} ${T("عميل · customers")}</div>
-      ${lxtCells("cu",{spent:`<b>${money(rows.reduce((s,c)=>s+(+c.total_spent_usd||0),0))}</b>`})}
-    </div>`;
-  mount.innerHTML=lxtHead("cu","العميل · customer")
-    +lxtWrap("cu",`<div class="pkg open"><div class="pkg-body">${rowsHtml||`<div class="muted2" style="padding:14px">No customers. Click "Sync from orders".</div>`}${rowsHtml?totals:""}</div></div>`);
-  lxColwApply(); lxtGridApply("cu",mount);
+  let rows=CUST.customers.filter(c=>!CU_QUERY||[c.name,c.whatsapp,c.city,c.email].join(" ").toLowerCase().includes(CU_QUERY));
+  DS.customers.chrome("cuChrome", cuChromeCtx());
+  DS.customers.board(mount, rows, cuCtx());
 }
+
+// The bridge to static/ds/sales.js (see odCtx for why a ctx object is needed).
+let CU_QUERY="";
+function cuCtx(){
+  return {
+    money: PO_MONEY,
+    openProfile: id=>showProfile(id),
+    cityCell: c=> cuCanEdit()
+      ? `<span dir="auto" class="ds-truncate" style="cursor:text;border-bottom:1px dashed var(--line);min-height:24px;display:inline-flex;align-items:center" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
+      : (c.city?`<span dir="auto" class="ds-truncate" title="${poEsc(c.city)}">${poEsc(c.city)}</span>`:DS.dash()),
+    idCell: c=> c.id_number
+      ? `<span class="ds-mono" title="ID number on file${c.id_image?" · photo too":""}">${poEsc(c.id_number)}</span>`
+      : (c.id_image ? DS.tag({label:"Photo only", icon:"identification", title:"An ID photo is on file but no number was typed"})
+                    : DS.attention({kind:"missing_id", title:"No ID on file — customs needs one before the parcel can clear"})),
+    rowMenu: c=>[
+      {label:"Open the profile", icon:"user", onclick:`showProfile('${poEsc(c.customer_id)}')`},
+      {label:"Edit customer", icon:"pencil-square", onclick:`editCustomer('${poEsc(c.customer_id)}')`},
+      {label:c.id_image?"Replace the ID photo":"Upload an ID photo", icon:"identification", onclick:`custIdUpload('${poEsc(c.customer_id)}')`},
+      {label:"Set the ID number", icon:"hashtag", onclick:`custIdNumberEdit('${poEsc(c.customer_id)}')`},
+      {divider:true},
+      {label:c.vip?"Remove the VIP mark":"Mark as VIP", icon:"star", onclick:`cuVipToggle('${poEsc(c.customer_id)}')`},
+    ],
+  };
+}
+function cuChromeCtx(){
+  const all=CUST.customers||[];
+  return {
+    money: PO_MONEY, query: CU_QUERY, gallery: CUSTSUB==="gallery",
+    idMissing: ID_MISS, idToOrder: ID_TO,
+    stats: { total: all.length,
+             withId: all.filter(c=>c.id_image||c.id_number).length,   // a photo OR a typed number
+             noPhoto: all.filter(c=>!c.id_image).length,                // what the gallery chip filters
+             vip: all.filter(c=>c.vip).length,
+             toOrder: all.filter(c=>c.in_to_order).length },
+  };
+}
+function cuSearchInput(v){ CU_QUERY=(v||"").trim().toLowerCase();
+  CUSTSUB==="gallery"?renderIdGallery():renderCustomers(); }
+function custAddOpen(){ toggleCustForm(); }
+function custSync(b){ syncCustomers(b); }
+function cuGalleryFilter(which){ if(which==="missing") ID_MISS=!ID_MISS; else ID_TO=!ID_TO; renderIdGallery(); }
+
+
 function showProfile(id){
   const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
   const orders=(c.previous_orders||[]).map(o=>`<div class="kv"><span>${o.order_id} · ${o.status}</span><b>${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b></div>`).join("")||'<div style="color:var(--muted);font-size:12px">No orders yet.</div>';
@@ -10389,12 +10305,12 @@ function custSearchInput(){ CUSTSUB==="gallery"?renderIdGallery():renderCustomer
 function setCustSub(s){ CUSTSUB=s;
   $("custGrid").style.display=(s==="list")?"grid":"none";   // inline display beats .hidden
   $("custGallery").classList.toggle("hidden",s!=="gallery");
-  $("idToggleBtn").textContent=s==="gallery"?"📋 Customer list":"🪪 View IDs";
-  s==="gallery"?renderIdGallery():renderCustomers(); }
+  if(s==="gallery"){ DS.customers.chrome("cuChrome", cuChromeCtx()); renderIdGallery(); }
+  else renderCustomers(); }
 function toggleIdGallery(){ setCustSub(CUSTSUB==="gallery"?"list":"gallery"); }
 function renderIdGallery(){
   if(!CUST) return;
-  const term=$("custSearch").value.trim().toLowerCase();
+  const term=CU_QUERY;
   const list=CUST.customers.filter(c=>!term||[c.name,c.whatsapp,c.city].join(" ").toLowerCase().includes(term));
   const have=CUST.customers.filter(c=>c.id_image).length, total=CUST.customers.length;
   const toCount=CUST.customers.filter(c=>c.in_to_order).length;
@@ -10409,10 +10325,11 @@ function renderIdGallery(){
       <div class="nm" title="${poEsc(c.name)}">${poEsc(c.name)||'—'}${c.in_to_order?` <span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;white-space:nowrap" title="لديه طلب قيد التجهيز · has a To-order order">💡 للطلب</span>`:''}</div>
       <div class="ph">${poEsc(c.whatsapp)||''}${c.id_number?` · 🪪 ${poEsc(c.id_number)}`:''}</div></div>`;
   }).join("");
-  $("custGallery").innerHTML=`<div class="idsum">🪪 <b>${have}</b> of <b>${total}</b> customers have an ID on file.
-      <a class="seeall" onclick="ID_MISS=!ID_MISS;renderIdGallery()">${ID_MISS?'Show all':`Show only missing (${total-have})`}</a>
-      <a class="seeall" onclick="ID_TO=!ID_TO;renderIdGallery()">${ID_TO?'Show all':`Show only To-order (${toCount})`}</a></div>
-    <div class="id-gallery">${cards||'<div class="empty">No matches.</div>'}</div>`;
+  // the counter and the two "Show only …" links moved into the page header and the
+  // filter bar (they were bare <a>s with no keyboard affordance, and the counter
+  // disagreed with the header's because it counted photos while that counts photos
+  // OR typed numbers). The gallery is just the wall of cards now.
+  $("custGallery").innerHTML=`<div class="id-gallery">${cards||'<div class="empty">No matches.</div>'}</div>`;
 }
 function custIdUpload(id){ const inp=$("custIdInput"); inp.value=""; inp.onchange=()=>{ const f=inp.files[0]; if(!f)return;
   toast("Uploading ID…");

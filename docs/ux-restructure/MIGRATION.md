@@ -17,9 +17,9 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `needorder` › quote tool | Quick quote (`#quoteView`, own `QLANG`) | T3 | Fulfillment › To order › Quote (drawer or page) — moved below the queue and folded by default in Phase 4a; rebuilt in Phase 5 | `to-order-quote-tool.jpg` | in progress |
 | `incart` | 🛒 In cart | T1 | Fulfillment › In cart | `in-cart.jpg` → `after/in-cart.jpg` | **migrated** |
 | `pkgprep` | 🎁 Package prep | T1 | Fulfillment › Package prep (3 saved views, each addressable) | `package-prep.jpg` → `after/package-prep.jpg` | **migrated** |
-| `orders` | 🏠 Orders | T1 | Sales › Orders | `orders.jpg` | not started |
+| `orders` | 🏠 Orders | T1 | Sales › Orders | `orders.jpg` | **migrated** (Batch B) |
 | `orders` › add-order panel | ＋ Add order (mounts Purchases cards) | T3 | Sales › Orders › New order (drawer) | `orders-add-order-panel.jpg` | not started |
-| `customers` | 👤 Customers | T1 (+T2 profile) | Sales › Customers | `customers.jpg` | not started |
+| `customers` | 👤 Customers | T1 (+T2 profile) | Sales › Customers | `customers.jpg` | **migrated** (Batch B) |
 | `metaleads` | 📣 Leads | T1 | Sales › Leads | `leads.jpg` | not started |
 | `bulksearch` | 🔎 Bulk search | T1 | Shipping › Tracking | `bulk-search.jpg`, `bulk-search-results.jpg` | not started |
 | `gaashmail` › conv | 💬 Conversations | T1 (+T2 thread) | Shipping › GAASH mail | `gaash-mail-conversations.jpg` | not started |
@@ -251,3 +251,46 @@ Screens in `screens/after/to-order*.jpg`, `in-cart.jpg`, `package-prep*.jpg`.
 - [ ] **Phase 5** — details, forms, modals.
 - [ ] **Phase 6** — imports onto `ImportWizard`; delete old importers.
 - [ ] **Phase 7** — insights, cleanup, lint to error, keyboard pass, before/after gallery.
+
+
+## Batch B — Sales (2026-09-07)
+
+`static/ds/sales.js` holds `DS.orders` and `DS.customers`; `render()` and
+`renderCustomers()` in index.html are bridges passing a `ctx`. The LXT `od` and `cu`
+tables are **deleted** from all four registries, from `lxtRender`, from the persistence
+bootstrap and from their orphaned CSS. Ten functions removed: `buildFilters`,
+`toggleOrderSel`, `toggleSelAll`, `clearOrderSel`, `updateBulkBar`, `odSortVal`,
+`waMenu`, `cuSortVal`, plus the two hand-rolled render bodies.
+
+Measured before → after (1600px, admin):
+
+| | unreadable | truncated | targets < 24px | raw pills | DS header |
+|---|---|---|---|---|---|
+| Orders | 69 → **0** | 29 → **0** | 220 → **0** | 22 → **0** | no → **yes** |
+| Customers | 0 → 0 | 0 → 0 | 1 → **0** | 0 → 0 | no → **yes** |
+
+**Capabilities kept:** every inline edit (city, address, box, Amazon #, status, VIP),
+bulk select + delete, the Σ totals row and its open-status rule, the quote/deposit
+actions, the six WhatsApp templates, the notify button and its date gate, the ID
+gallery and both its filters, the profile panel and its order history.
+
+**Capabilities gained:** the products of an order are now readable (a row expansion with
+ASIN and a link out, instead of block links overflowing a 43px row); Customers gained
+`Collected` and `Last order` columns, which `customers.enrich()` has always computed and
+nothing displayed; the WhatsApp templates became a labelled menu instead of a bare
+`<select>`; the gallery's two "Show only …" links became real filter chips.
+
+**Bugs found and fixed while migrating:**
+- `DS.tableEv`'s bulk handler called `b.onclick(...)` as a function, but every other
+  onclick in the design system is a string — so Phase 4a's "Move to cart" button on the
+  To-order page threw the moment it was clicked. It now accepts either.
+- The Customers `Spent` column rendered `$0.00` for a role without `view_money`, because
+  the server redacts the figure to `null` and `money(null)` is `"$0.00"`. A redacted
+  number that looks real is worse than no column, so the column is dropped for that role.
+- The gallery's counter said "8 of 43 have an ID" while the header said 43/43: one
+  counted photos, the other photos-or-typed-numbers. The chip now counts exactly what it
+  filters, and is labelled "No photo yet".
+
+**Known, not fixed here:** Orders still renders 8 distinct font sizes (was 7). The board
+itself is on the DS scale; the remainder come from `statusSelect`'s inline styles and the
+KPI cards above the board, which are legacy markup this batch did not touch.

@@ -300,7 +300,7 @@
 
   // ---------------------------------------------------------------- page header
   /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
-  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep"]);
+  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers"]);
 
   function paint() {
     const v = A().view || "orders";
