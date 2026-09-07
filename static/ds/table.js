@@ -134,6 +134,11 @@
       const lead = this.lead().map((l, li) => `<div class="ds-td ds-pin-start" style="inset-inline-start:${pins.start[li].off}px"></div>`).join("");
       return `<div class="ds-table-foot" role="row">${lead}${this.visible().map((c) => `<div${attrs(this.cellAttrs(c, 0, pins, false))}><span class="ds-cell">${this.o.footer[c.key] != null ? this.o.footer[c.key] : ""}</span></div>`).join("")}</div>`;
     }
+    /** ABOVE the rows, not below them (Batch B3). It carries the Columns control,
+        and under a 61-row board that put the only way to unhide a column ~2,800px
+        down the page - the owner reported columns as "gone" because the escape
+        hatch was unreachable. The bulk bar stays at the end: it is sticky to the
+        bottom of the viewport, so it is never out of reach. */
     bar() {
       const p = this.o.page; const n = (this.o.rows || []).length;
       const count = p ? `${DS.fmt.number(p.from)}–${DS.fmt.number(p.to)} of ${DS.fmt.number(p.total)}` : `${DS.fmt.number(n)} ${n === 1 ? "row" : "rows"}`;
@@ -153,7 +158,7 @@
       else if (this.o.error) body = `<div class="ds-table-state">${DS.errorState({ text: this.o.error, retry: this.o.retry ? { onclick: `DS.tableEv('${this.id}','retry',null,event)` } : null })}</div>`;
       else if (!(this.o.rows || []).length) body = `<div class="ds-table-state">${DS.empty(Object.assign({ icon: "table-cells", title: "No rows" }, this.o.empty || {}))}</div>`;
       else body = this.rows().map((r, i) => this.row(r, i, pins)).join("");
-      return `<div${attrs({ class: cls("ds-table ds-root", this.state.density === "comfortable" && "ds-table-comfortable", this.o.cls), id: "dst-" + this.id, "data-table": this.id, role: "table", "aria-label": this.o.ariaLabel || this.o.label, "aria-busy": this.o.loading ? "true" : null })} style="${style}">${this.head(pins)}<div class="ds-table-scroll" onscroll="DS.tableSync(this)"><div class="ds-table-body" role="rowgroup">${body}</div>${this.foot(pins)}</div>${this.bar()}${this.bulkbar()}</div>`;
+      return `<div${attrs({ class: cls("ds-table ds-root", this.state.density === "comfortable" && "ds-table-comfortable", this.o.cls), id: "dst-" + this.id, "data-table": this.id, role: "table", "aria-label": this.o.ariaLabel || this.o.label, "aria-busy": this.o.loading ? "true" : null })} style="${style}">${this.bar()}${this.head(pins)}<div class="ds-table-scroll" onscroll="DS.tableSync(this)"><div class="ds-table-body" role="rowgroup">${body}</div>${this.foot(pins)}</div>${this.bulkbar()}</div>`;
     }
     // ---- selection helpers
     allSelected() { const rows = this.o.rows || []; return rows.length > 0 && rows.every((r, i) => this.selected.has(this.key(r, i))); }

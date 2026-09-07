@@ -7295,6 +7295,67 @@ async function neFetchAll(oid,kindKey){
 }
 function neGetPricesAll(oid){ return neFetchAll(oid,"price"); }
 function neImgsAll(oid){ return neFetchAll(oid,"img"); }
+
+// The same photo job across the WHOLE Orders board rather than one To-order card.
+// Reuses the two endpoints above and obeys the same rule they do: ONE request in
+// flight at a time, because /api/order/item_image reads the order, changes one item
+// and writes the whole document back — two overlapping writes to one order silently
+// drop each other's items. Never rewrite this as Promise.all.
+let OD_PHOTOS_BUSY=false, OD_PHOTOS_STOP=false;
+function odPhotoTodo(){
+  const todo=[];
+  ((DATA||{}).orders||[]).forEach(o=>(o.items||[]).forEach((it,ix)=>{
+    if(it.image) return;
+    const asin=(it.asin||"").toUpperCase();
+    const url=it.url||(/^[A-Z0-9]{10}$/.test(asin)?("https://www.amazon.com/dp/"+asin):"");
+    if(url) todo.push({oid:o.order_id, ix, url, asin});
+  }));
+  return todo;
+}
+async function odFetchPhotos(){
+  if(OD_PHOTOS_BUSY){
+    if(await DS.confirm({title:"Still fetching photos", text:"Stop after the product it is on now?",
+                         confirmLabel:"Stop", tone:"danger"})) OD_PHOTOS_STOP=true;
+    return;
+  }
+  if(!DATA){ toast(T("لم تُحمّل البيانات بعد · still loading — try again in a second")); return; }
+  const todo=odPhotoTodo();
+  if(!todo.length){ toast(T("كل منتج لديه صورة · every product already has a photo")); return; }
+  // Count FIRST. Nothing is spent before the owner has seen the number: /api/product_image
+  // tries Amazon directly and a free reader proxy, and only a product neither can reach
+  // falls through to SerpApi — where an ASIN already in the import cache is free too.
+  const uniq=new Set(todo.map(t=>t.asin||t.url));
+  const ok0=await DS.confirm({
+    title:`Fetch ${todo.length} missing product photo${todo.length>1?"s":""}?`,
+    text:(uniq.size<todo.length?`${uniq.size} different products — a repeat is fetched once. `:"")
+        +"Amazon and a free proxy are tried first; only a product neither can reach uses a paid lookup.",
+    confirmLabel:"Fetch photos", icon:"photo"});
+  if(!ok0) return;
+  OD_PHOTOS_BUSY=true; OD_PHOTOS_STOP=false;
+  const seen=new Map();                 // asin/url to image URL, so a repeat costs nothing
+  let ok=0, done=0, firstErr="";
+  try{
+    for(const t of todo){
+      if(OD_PHOTOS_STOP) break;
+      done++;
+      toast(`${T("جاري جلب الصور · fetching photos")} ${done}/${todo.length}…`);
+      const key=t.asin||t.url;
+      let img=seen.get(key);
+      if(img===undefined){
+        let d; try{ d=await (await fetch("/api/product_image?url="+encodeURIComponent(t.url))).json(); }catch(e){ d={}; }
+        img=(d&&d.image)||null; seen.set(key,img);
+        if(!img&&!firstErr) firstErr=(d&&d.error)||"";
+      }
+      if(!img) continue;
+      let r; try{ r=await post("/api/order/item_image",{order_id:t.oid,index:t.ix,image:img}); }catch(e){ r={}; }
+      if(r&&r.ok) ok++; else if(!firstErr&&r&&r.error) firstErr=r.error;
+    }
+  } finally { OD_PHOTOS_BUSY=false; }
+  // the first real reason is worth keeping — a missing SERPAPI key fails every item and
+  // a bare "37 failed" sends you hunting for a per-product problem that isn't there
+  toast(`${ok}/${done} ${T("صورة · photos")}${OD_PHOTOS_STOP?" · stopped":""}${ok<done?` · ${firstErr||T("فشل · failed")}`:""}`);
+  if(ok) await load();
+}
 // ---- Edit order (products / amount / customer) on the To-order page ---------- //
 let OE=null;
 function closeOrderEdit(){ $("orderEditModal").classList.add("hidden"); OE=null; }

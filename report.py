@@ -36,7 +36,13 @@ def _row(o):
         "wa": ph["wa"] if ph else None,
         "address": o["customer"]["address"],
         "city": o["customer"].get("city", ""),
+        # title + image are already on the item (product import / the 📷 photo
+        # grab writes them into the order document); this row used to drop both,
+        # which is the ONLY reason the Orders board could not show a product photo
+        # while To order and Package prep - fed by store._order_row - could.
         "items": [{"asin": it.get("asin"), "url": it.get("clean_url"),
+                   "title": it.get("title"), "image": it.get("image"),
+                   "qty": it.get("qty") or 1,
                    "needs_expand": it.get("needs_expand")} for it in o["items"]],
         "n_items": len(o["items"]),
         "batch": o.get("batch"),

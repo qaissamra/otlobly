@@ -73,41 +73,46 @@
     return [
       { key: "who", label: "Order & customer", w: 260, pin: "start", locked: true,
         sortVal: (o) => (o.customer || "~").toLowerCase(), render: who },
-      // itemsCell stacks one block link per product, which is taller than a row and
-      // bled into the rows below it. A row cell states the count; the products
-      // themselves live in the row's expansion, where they have room.
+      // The old board stacked one block link per product, which grew taller than a row
+      // and bled into the rows below. Batch B replaced that with a bare count, which
+      // threw away the product itself. Photos: report.py carries item.image now, and
+      // DS.thumbs falls back to the plain count for an order whose items have none.
       { key: "items", label: "Products", w: 150, sortVal: (o) => (o.items || []).length,
         render: (o) => {
-          const n = o.n_items != null ? o.n_items : (o.items || []).length;
-          const asins = (o.items || []).map((it) => it.asin || it.url || "link");
           const warn = o.needs_expand
             ? D.attention({ kind: "stale", detail: "a.co", title: "A short a.co link that still has to be expanded" }) : "";
-          if (!n) return D.dash();
-          return `<span class="ds-sl-items" title="${esc(asins.join("\n"))}"><b>${esc(num(n))}</b> ${n === 1 ? "product" : "products"}</span>${warn}`;
+          return `${D.thumbs(o.items, { max: 4 })}${warn}`;
         } },
-      m ? { key: "amount", label: "Amount", w: 124, align: "end",
+      m ? { key: "amount", label: "Amount", w: 112, align: "end",
         sortVal: (o) => (o.amount_to_collect_usd == null ? -1 : o.amount_to_collect_usd),
         render: (o) => ctx.amountCell(o) } : null,
-      m ? { key: "deposit", label: "Deposit", w: 112, align: "end",
+      m ? { key: "deposit", label: "Deposit", w: 100, align: "end",
         sortVal: (o) => o.deposit_usd || 0, render: (o) => ctx.depositCell(o) } : null,
-      m ? { key: "remaining", label: "Still owed", w: 116, align: "end",
+      m ? { key: "remaining", label: "Still owed", w: 104, align: "end",
         sortVal: (o) => (o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd || 0),
         render: (o) => { const v = o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd;
           return v == null ? D.dash() : `<b class="ds-num">${esc(money(v))}</b>`; } } : null,
-      { key: "due", label: "Promised", w: 124, sortVal: (o) => (o.est_delivery_customer ? Date.parse(o.est_delivery_customer) || Infinity : Infinity),
+      { key: "due", label: "Promised", w: 108, sortVal: (o) => (o.est_delivery_customer ? Date.parse(o.est_delivery_customer) || Infinity : Infinity),
         render: (o) => W.dueChip(o.est_delivery_customer, ["DELIVERED", "COLLECTED", "CANCELLED"].includes(o.status)) || D.dash() },
+      // 190px, deliberately not narrowed with the rest: three pills can land in this
+      // cell at once ("No price", "Stale · a.co link", "No ID") and a clipped warning
+      // is worse than no warning.
       { key: "attention", label: "Needs attention", w: 190, sortable: false, render: attention },
-      { key: "box", label: "Box", w: 84, sortVal: (o) => o.profile_box || "~",
+      { key: "box", label: "Box", w: 68, sortVal: (o) => o.profile_box || "~",
         title: "The Amazon buying account this order is bought on — the same name as its Multilogin browser profile",
         render: (o) => ctx.boxCell(o) },
-      { key: "batch", label: "Batch", w: 84, sortVal: (o) => o.batch || "~", render: (o) => text(o.batch) },
-      { key: "amazon", label: "Amazon #", w: 150, defaultHidden: true, render: (o) => ctx.amazonCell(o) },
-      { key: "city", label: "City", w: 112, sortVal: (o) => (o.city || "~").toLowerCase(),
+      { key: "batch", label: "Batch", w: 64, sortVal: (o) => o.batch || "~", render: (o) => text(o.batch) },
+      { key: "amazon", label: "Amazon #", w: 140, defaultHidden: true, render: (o) => ctx.amazonCell(o) },
+      { key: "city", label: "City", w: 100, sortVal: (o) => (o.city || "~").toLowerCase(),
         render: (o) => W.odLocCell(o, "city") },
-      { key: "address", label: "Address", w: 170, defaultHidden: true, sortable: false,
+      { key: "address", label: "Address", w: 150, defaultHidden: true, sortable: false,
         render: (o) => W.odLocCell(o, "address") },
-      { key: "tracking", label: "Tracking", w: 124, defaultHidden: true, render: (o) => mono(o.tracking_number) },
-      { key: "status", label: "Status", w: 150, pin: "end", sortVal: (o) => o.status || "~",
+      // visible again (owner, 2026-09-07). Batch B hid it, and the control that would
+      // have brought it back was rendering below all 61 rows - see table.js.
+      { key: "tracking", label: "Tracking", w: 112, sortVal: (o) => o.tracking_number || "~",
+        title: "The OTL parcel number, once the package has one",
+        render: (o) => mono(o.tracking_number) },
+      { key: "status", label: "Status", w: 130, pin: "end", sortVal: (o) => o.status || "~",
         render: (o) => W.statusSelect(o) },
       // was a raw <select> of six message templates plus a 📦 button, 168px wide in
       // every row. The templates are actions, so they belong in the row's action menu.
@@ -154,19 +159,23 @@
       ariaLabel: "Customer orders",
       expandable: {
         open: (o) => ctx.isOpen(o.order_id),
+        // Was a hand-rolled grid with `.ds-pu-subrow` (the real class is
+        // `.ds-pu-sub-row`) and no `.ds-pu-td`, so it drew unpadded and unbordered;
+        // and it put the ASIN in its own column beside a "title" that falls back to
+        // the ASIN, which is why every unnamed product read "B09CLKPMVC B09CLKPMVC".
+        // The ASIN now sits NEXT TO a title, or stands in for one, never both.
         render: (o) => {
           const items = o.items || [];
-          if (!items.length) return `<div class="ds-pu-sub"><span class="ds-muted">No products on this order.</span></div>`;
-          const head = `<div class="ds-pu-sub-head"><span class="ds-pu-th">Product</span><span class="ds-pu-th">ASIN</span><span class="ds-pu-th"></span></div>`;
-          const rows = items.map((it) => {
-            const label = it.asin || it.url || "link";
-            return `<div class="ds-pu-subrow">
-              <span>${text(it.title || label)}</span>
-              <span>${mono(it.asin)}</span>
-              <span>${it.url ? `<a class="ds-pu-out" href="${esc(it.url)}" target="_blank" rel="noopener" title="Open on Amazon" aria-label="Open on Amazon">${D.icon("arrow-top-right-on-square", { size: 13 })}</a>` : ""}</span>
-            </div>`;
-          }).join("");
-          return `<div class="ds-pu-sub" style="--ds-pu-cols: 1fr 140px 40px">${head}${rows}</div>`;
+          if (!items.length) return `<div class="ds-pu-sub-empty ds-muted">No products on this order.</div>`;
+          return D.subTable([
+            { label: "Product", render: (it) => {
+              const named = it.title && it.title.trim() && it.title.trim() !== it.asin;
+              return `<span class="ds-pu-prod">${D.thumb(it)}${named ? text(it.title) : mono(it.asin)}`
+                + `${named && it.asin ? ` ${mono(it.asin)}` : ""}</span>`; } },
+            { label: "Qty", w: 64, align: "end", render: (it) => esc(num(it.qty || 1)) },
+            { label: "", w: 40, render: (it) => (it.url
+              ? `<a class="ds-pu-out" href="${esc(it.url)}" target="_blank" rel="noopener" title="Open on Amazon" aria-label="Open on Amazon">${D.icon("arrow-top-right-on-square", { size: 13 })}</a>` : "") },
+          ], items, `Products on ${o.order_id}`);
         },
       },
       onToggle: (key) => ctx.toggle(key),
@@ -192,6 +201,10 @@
       primary: { label: "New order", icon: "plus", onclick: "newOrderOpen()" },
       overflow: [
         { label: "Refresh", icon: "arrow-path", onclick: "refreshAll(this)" },
+        // it counts what is missing and shows you the number before it fetches anything
+        { label: "Fetch missing product photos", icon: "photo",
+          title: "Find every product with no photo and try to grab one. Amazon and a free proxy are tried first; it tells you how many before it starts.",
+          onclick: "odFetchPhotos()" },
         { label: "Import from ClickUp", icon: "arrow-down-tray", onclick: "importClickup(this)" },
       ],
     });

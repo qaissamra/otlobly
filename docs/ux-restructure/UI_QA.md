@@ -286,3 +286,75 @@ Twice this session a measurement was wrong because the page under the harness wa
 Flask app caches `web/index.html`, **and** `sw.js` caches `/app`. Restarting the server is not
 enough: unregister the service worker and clear its caches, or you will confidently measure
 code you replaced ten minutes ago.
+
+## 9. Batch B3 — the information Batch B cost the Orders board (2026-09-07)
+
+Reported by the owner, looking at the migrated board: *"a lot of the information I had for
+column is gone we need them back."* He was right, and the audit above had not caught it —
+every check in §1–§3 asked whether what was ON the page was readable, and none asked whether
+what used to be on the page still was. **Q-014: a migration must diff its column set against
+the one it replaces.**
+
+### What had gone
+
+| Old column (`LXT_COLS.od`) | After Batch B |
+|---|---|
+| منتجات · items — the ASIN links | a bare count, "2 products" |
+| أمازون # · amazon # | `defaultHidden` |
+| العنوان · address | `defaultHidden` |
+| التتبع · tracking | `defaultHidden` |
+| واتساب · whatsapp | folded into the ⋯ menu (kept — owner) |
+
+### Q-015 · the escape hatch was unreachable — fixed, design-system wide
+
+The table bar carrying the **Columns** control rendered *after* the rows. Measured on the
+running preview with 61 orders: **y = 2,953px**. The control that unhides a column sat ~2,800px
+below the top of the page, so "hidden by default" meant "gone". The bar now renders before the
+header on **every** DataTable — Purchases, To order, In cart, Package prep, Orders, Customers,
+all verified. The bulk bar stays last: it is `position: sticky` to the bottom of the viewport
+and was never out of reach.
+
+### Q-016 · one serializer was starving the board — fixed
+
+Thumbnails looked like a schema change. `order_items` is `id · order_code · asin · clean_url ·
+business_id` and stores no title and no image. But **that table is a search index, not the
+record**: the order's truth is `orders.data_json`, where 68/101 items carry a title and 64/101
+carry an image. `store.py:_order_row` reads both — which is why To order and Package prep were
+built expecting photos. `report.py:39` dropped them. Two keys.
+
+That same omission produced the expander printing `B09CLKPMVC   B09CLKPMVC`: with no title, it
+rendered the ASIN in the title column and again in the ASIN column. The ASIN now sits *next to*
+a title, or stands in for one, never both.
+
+### Q-017 · three near-copies of the same markup — fixed
+
+`thumb`, `thumbs` and the sub-table `grid` lived in `fulfillment.js`; `sales.js` hand-rolled a
+fourth that emitted `.ds-pu-subrow` (the real class is `.ds-pu-sub-row`) with no `.ds-pu-td` at
+all, so the Orders expander drew with no padding, no borders and no overflow control. All three
+are now `DS.thumb` / `DS.thumbs` / `DS.subTable` in `ds.js`, and the suite fails if any other
+page module builds that markup itself.
+
+### Measured after
+
+| | before | after |
+|---|---|---|
+| board width | 1,622px, 13 columns | **1,614px, 14 columns** (Tracking added) |
+| Columns control | y ≈ 2,953px | y ≈ 1,177px, above the header |
+| orders showing product photos | 0 | **35 / 61** (26 fall back to the plain count) |
+| grey placeholder walls | — | 0 |
+| cells with unreadable text | 0 | 0 |
+| expander rows printing the ASIN twice | every unnamed product | 0 |
+
+### Still open, and pre-existing
+
+**Every selectable board's row checkbox is 15px**, under the 24px hit-target floor — 62 of them
+on Orders, 19 on To order. It is the browser's native checkbox in `.ds-td-check`, it predates
+this batch, and the honest fix is making the whole cell toggle the row rather than growing the
+box. It belongs in a design-system pass, not here; §1's "0 undersized controls" for Orders was
+measuring click-handler controls only and never counted them.
+
+### The lint was lying about one metric
+
+`native_confirm` counted `\bconfirm\(`, which matches the `confirm(` inside **`DS.confirm(`** —
+the design system's own replacement scored as one of the native calls it exists to retire. Now
+`(?<![.\w])confirm\(`, and the same for `prompt` and `alert`.
