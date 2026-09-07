@@ -462,6 +462,17 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-sl-id { font-family: var(--ds-font-mono); font-weight: 700; font-size: var(--ds-t-xs); flex: 0 0 auto; }
 .ds-sl-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-sl-phone { font-family: var(--ds-font-mono); font-size: var(--ds-t-xs); color: var(--ds-muted); flex: 0 0 auto; }
+/* One order can be split across parcels, and each keeps its own number and its own
+   status. They sit in a row and the cell clips; the full list is in the tooltip and
+   the row's expansion carries one line per parcel. */
+.ds-sl-parcels { display: flex; align-items: center; gap: 4px; min-inline-size: 0; overflow: hidden; }
+.ds-sl-parcels > * { flex: 0 0 auto; }
+.ds-sl-gwd { font-size: var(--ds-t-xs); color: var(--ds-accent-deep); background: none; border: 0; padding: 0 2px;
+  min-block-size: 24px; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;
+  text-underline-offset: 2px; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-sl-gwd:hover { color: var(--ds-accent); }
+.ds-sl-gwd:focus-visible { outline: none; box-shadow: var(--ds-focus); border-radius: var(--ds-r-sm); }
+.ds-sl-parcel-tbl { margin-block-start: var(--ds-s2); }
 /* an input that lives inside a table cell: fills the column, keeps the hit-target floor */
 .ds-cellinput { width: 100%; min-width: 0; min-height: 24px; padding: 2px 6px; font: inherit;
   font-size: var(--ds-t-sm); color: var(--ds-ink); background: var(--ds-bg);

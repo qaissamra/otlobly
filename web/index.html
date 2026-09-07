@@ -2485,17 +2485,62 @@ function render(){
     if(OD_BATCH  && o.batch !==OD_BATCH ) return false;
     if(!OD_QUERY) return true;
     const hay=[o.customer,o.phone,o.address,o.city,o.order_id,
-      ...(o.items||[]).map(i=>i.asin)].join(" ").toLowerCase();
+      ...(o.items||[]).map(i=>i.asin),
+      ...odParcelsFor(o.order_id).map(([,pk])=>pk.tracking_number||"")].join(" ").toLowerCase();
     return hay.includes(OD_QUERY);
   });
   DS.orders.chrome("odChrome", odChromeCtx(rows.length));
-  DS.orders.board(mount, rows, odCtx());
+  if(OD_BOARD==="orders"){ DS.orders.board(mount, rows, odCtx()); }
+  else {
+    // Packages and Products are the Purchases page's own boards, pointed at the POs
+    // that carry THESE orders — not a second implementation of either.
+    const ids=new Set(rows.map(o=>o.order_id));
+    const list=(POS||[]).filter(p=>(p.packages||[]).some(pk=>(pk.items||[])
+      .some(it=>ids.has((it.customer_order_id||"").trim()))));
+    DS.purchases.board(mount, list, Object.assign(poCtx(false), {board:OD_BOARD}));
+  }
+  odEnsurePOS();                      // first paint has no parcels; this fills them in
+}
+// ── the parcel behind an order ────────────────────────────────────────────────
+// Package items carry customer_order_id — the same key pkgprep._tally() joins on
+// server-side. Built once per POS load, not once per row: 61 orders x 35 packages
+// is a scan nobody should pay on every render.
+let OD_PKGIX=null, OD_PKGIX_FOR=null, OD_POS_LOADING=null;
+function odPkgIndex(){
+  if(OD_PKGIX && OD_PKGIX_FOR===POS) return OD_PKGIX;
+  const ix={};
+  (POS||[]).forEach(po=>(po.packages||[]).forEach((pk,pi)=>{
+    const seen=new Set();
+    (pk.items||[]).forEach(it=>{
+      const oid=(it.customer_order_id||"").trim();
+      if(!oid||seen.has(oid)) return;          // one package counts ONCE per order
+      seen.add(oid); (ix[oid]=ix[oid]||[]).push([po,pk,pi]);
+    });
+  }));
+  OD_PKGIX=ix; OD_PKGIX_FOR=POS; return ix;
+}
+function odParcelsFor(oid){ return odPkgIndex()[oid]||[]; }
+// POS is lazily loaded and lives behind a `let`, so the Orders view has to ask for
+// it. loadPurchases() IS the loader — this only makes sure it has run once, then
+// repaints so the parcel columns fill in.
+function odEnsurePOS(){
+  if(POS||OD_POS_LOADING) return OD_POS_LOADING;
+  OD_POS_LOADING=(async()=>{ try{ await loadPurchases(); }catch(e){} })()
+    .then(()=>{ OD_POS_LOADING=null; if(VIEW==="orders") render(); });
+  return OD_POS_LOADING;
 }
 
 // The bridge to static/ds/sales.js. index.html's top-level bindings are not window
 // properties, so everything the page needs arrives in this object.
 const OD_OPEN=["REQUESTED","QUOTED","ORDERED","SHIPPED","ARRIVED","DELIVERED"];
 let OD_QUERY="", OD_STATUS="", OD_BATCH="";
+// Orders / Packages / Products — the same three-lens switch the Purchases page has.
+let OD_BOARD=localStorage.getItem("od_board_view")||"orders";
+function odSetView(v){
+  OD_BOARD=v; try{ localStorage.setItem("od_board_view",v); }catch(e){}
+  if(v!=="orders") odEnsurePOS();
+  render(); DS.shell2.syncTab();
+}
 const OD_OPEN_ROWS=new Set();          // which order rows are expanded (openStore's job elsewhere)
 function odCtx(){
   return {
@@ -2512,6 +2557,7 @@ function odCtx(){
       return CAN_EDIT
         ? `<span class="ds-num ds-ok">${t}</span> <a class="cellact" title="سجّل عربون · record a deposit" onclick="event.stopPropagation();depositForOrder('${o.order_id}')">＋₪</a>`
         : (t?`<span class="ds-num ds-ok">${t}</span>`:DS.dash()); },
+    parcels: oid=>odParcelsFor(oid),
     boxCell: o=>`<input value="${poEsc(o.profile_box||'')}" class="ds-cellinput" aria-label="Buying account" onclick="event.stopPropagation()" onchange="setBox('${o.order_id}',this.value)">`,
     amazonCell: o=>`<input value="${poEsc(o.amazon_order_number||'')}" placeholder="113-…" class="ds-cellinput ds-mono" aria-label="Amazon order number" onclick="event.stopPropagation()" onchange="setAmazon('${o.order_id}',this.value)">`,
   };
@@ -2520,7 +2566,7 @@ function odChromeCtx(shown){
   const batches=[...new Set(DATA.orders.map(o=>o.batch).filter(Boolean))].sort();
   const q=DATA.summary?DATA.summary.action_queue:{};
   return {
-    money: PO_MONEY, query: OD_QUERY, status: OD_STATUS, batch: OD_BATCH,
+    money: PO_MONEY, query: OD_QUERY, status: OD_STATUS, batch: OD_BATCH, board: OD_BOARD,
     statusOptions: DATA.statuses||[], batchOptions: batches,
     stats: { shown, total: DATA.orders.length,
              unpriced: DATA.orders.filter(o=>o.amount_to_collect_usd==null).length,
@@ -2716,6 +2762,7 @@ window.APP = {
   get me(){ return ME; },
   get platform(){ return PLATFORM; },
   get gmTab(){ return GM.tab; },
+  get odBoard(){ return OD_BOARD; },
   get poBoard(){ return PO_BOARD_VIEW; },
   get lxView(){ return LX_VIEW; },
   get neView(){ return NE_FILTER; },

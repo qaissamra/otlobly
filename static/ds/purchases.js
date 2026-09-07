@@ -326,7 +326,11 @@
     });
   }
 
-  const NO_CUSTOMER = " none";
+  // A sentinel that no real customer name can equal. It used to be a literal NUL
+  // ("\x00none"), which made `file` report this whole module as binary data and made
+  // grep/ripgrep skip it silently - three searches of this file returned nothing at
+  // all before anyone noticed the file was never being read.
+  const NO_CUSTOMER = "\u0001none";
 
   /** One row per customer; open it to see their products, kept separate per order. */
   function customersBoard(ctx, mount, list) {
