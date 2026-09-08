@@ -345,13 +345,19 @@ def safe_name(s):
 # paper from the declaration of use above. Use says what the goods are FOR;
 # originality says the branded goods are genuine, bought new from Amazon, and
 # not counterfeit. Branded parcels (watches, bags, electronics) get asked for it.
+#
+# It says NOTHING about personal vs commercial import (owner, 08/09/2026:
+# "remove that it's for personal import"). This paper answers one question —
+# are the goods genuine — and 23 watches in one box is not a personal import;
+# claiming it here would give customs a reason to disbelieve the part that
+# matters. That question is answered on the use declaration, where it belongs.
 ORIGINALITY_BODY = (
     "The goods listed above are new and original branded products, bought "
     "online from Amazon.com and its sellers and shipped from there. They are "
     "not counterfeit, imitation or replica goods; no trademark, label or "
-    "serial marking on them has been altered or removed. They are imported "
-    "for personal use and not for trade. The Amazon order confirmation is "
-    "available on request, and I take responsibility for this declaration.")
+    "serial marking on them has been altered or removed. The Amazon order "
+    "confirmation is available on request, and I take responsibility for "
+    "this declaration.")
 
 
 def _para(p, text, x, y, width, size=10.5, lead=15):
