@@ -708,6 +708,47 @@ def declaration_attachment(gwd):
 ORIG_AUTO = "orig:auto"
 
 
+_ANNEX_CAP = 2                                  # proof pages per declaration
+
+
+def annex_images(gwd):
+    """[(image_bytes, caption)] — the proof that goes BEHIND the originality
+    declaration: the Amazon order screenshot the PO already carries, plus the
+    package's own photos if that is all there is.
+
+    Why inside the same PDF rather than beside it: GAASH's upload page takes
+    one file per document slot, so a screenshot sent as a second attachment has
+    nowhere to land — and a declaration of originality with the order behind it
+    is the whole point of the paper. Purchases parcels only: a Leluxe parcel
+    stores no order screenshot, and inventing one is not on."""
+    g = (gwd or "").strip().upper()
+    po, pk = _po_package(g)
+    if not po:
+        return []
+    order = str(po.get("amazon_order_number") or "").strip()
+    cap = (f"Amazon order {order} — order confirmation" if order
+           else "Amazon order — order confirmation")
+    names = [f for f in (po.get("attachments") or []) if f]
+    if not names and po.get("screenshot"):
+        names = [po["screenshot"]]
+    pkg_caps = []
+    if not names:                               # no order screenshot: the box itself
+        names = [f for f in ((pk or {}).get("pkg_images") or []) if f]
+        pkg_caps = [f"Package {(pk or {}).get('package_no') or ''} — photo"] * len(names)
+    out = []
+    try:
+        import purchases
+        for i, fn in enumerate(names[:_ANNEX_CAP]):
+            p = purchases.IMAGE_DIR / str(fn)
+            # never let a filename out of the store reach the filesystem
+            if p.resolve().parent != purchases.IMAGE_DIR.resolve() or not p.exists():
+                continue
+            out.append((p.read_bytes(), pkg_caps[i] if pkg_caps else cap))
+    except Exception:  # noqa — a missing picture must never sink the paper
+        return out
+    return out
+
+
 def originality_build(gwd):
     """One package's declaration of ORIGINALITY as (filename, bytes), or
     ValueError with a printable reason."""
@@ -715,7 +756,8 @@ def originality_build(gwd):
     _declaration_fill_titles(gwd)               # blank PO titles → real names
     return declaration.build_originality(
         gwd=gwd, name=parcel_name(gwd), id_number=id_number_for_email(gwd),
-        contents=package_contents(gwd), order_code=package_order_code(gwd))
+        contents=package_contents(gwd), order_code=package_order_code(gwd),
+        annex=annex_images(gwd))
 
 
 def originality_attachment(gwd):

@@ -20,6 +20,8 @@ prevent. The caller surfaces the message and the owner sets a Latin spelling.
 """
 
 import re
+import struct
+import zlib
 from datetime import date
 
 PAGE_W, PAGE_H = 595, 842          # A4 in points
@@ -94,37 +96,195 @@ class _Page:
         return b"\n".join(self.ops)
 
 
-def _pdf(page, title):
-    """One-page PDF document bytes with a proper xref table."""
-    content = page.stream()
-    objs = [
-        b"<</Type/Catalog/Pages 2 0 R>>",
-        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
-        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 %d %d]"
-        b"/Resources<</Font<</F1 5 0 R/F2 6 0 R/F3 7 0 R>>>>/Contents 4 0 R>>"
-        % (PAGE_W, PAGE_H),
-        b"<</Length %d>>stream\n%s\nendstream" % (len(content), content),
-        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>",
-        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold/Encoding/WinAnsiEncoding>>",
-        # F3 is the signature face. Times-Italic, because the base-14 PDF fonts
-        # hold no script face and embedding one would mean shipping a TTF — and
-        # a slanted TYPED name is an e-signature, which is what this is, rather
-        # than an imitation of anybody's handwriting.
-        b"<</Type/Font/Subtype/Type1/BaseFont/Times-Italic/Encoding/WinAnsiEncoding>>",
-        b"<</Title(%s)/Producer(Otlobly)>>" % _esc(_enc(title) or b""),
-    ]
+def read_png(data):
+    """(rgb_bytes, width, height, colours) from PNG bytes — pure stdlib.
+
+    Why by hand: the server has no image library (see the module docstring),
+    and a PDF wants exactly what a PNG already holds — 8-bit samples, deflate
+    compressed. So the only real work is undoing PNG's per-row filters and
+    dropping the alpha channel onto white, which is what a screenshot pasted
+    from a browser carries. Returns None for anything this cannot read
+    (16-bit, interlaced) rather than guessing at a picture of a customs
+    document. A JPEG is handled by read_jpeg instead."""
+    if not data or data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    w = h = None
+    bits = ct = interlace = 0
+    idat, palette, trns = bytearray(), b"", b""
+    i = 8
+    while i + 8 <= len(data):
+        ln = struct.unpack(">I", data[i:i + 4])[0]
+        typ = data[i + 4:i + 8]
+        body = data[i + 8:i + 8 + ln]
+        if typ == b"IHDR":
+            w, h, bits, ct, _cm, _fm, interlace = struct.unpack(">IIBBBBB", body)
+        elif typ == b"PLTE":
+            palette = body
+        elif typ == b"tRNS":
+            trns = body
+        elif typ == b"IDAT":
+            idat += body
+        elif typ == b"IEND":
+            break
+        i += 12 + ln
+    if not w or not h or bits != 8 or interlace != 0 or not idat:
+        return None
+    chan = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(ct)
+    if not chan or (ct == 3 and not palette):
+        return None
+    try:
+        raw = zlib.decompress(bytes(idat))
+    except zlib.error:
+        return None
+    stride = w * chan
+    if len(raw) < (stride + 1) * h:
+        return None
+    out = bytearray(stride * h)
+    prev = bytearray(stride)
+    pos = 0
+    for row in range(h):
+        f = raw[pos]
+        line = bytearray(raw[pos + 1:pos + 1 + stride])
+        pos += 1 + stride
+        # PNG filters: each byte is stored as a difference from a neighbour
+        if f == 1:                              # Sub
+            for x in range(chan, stride):
+                line[x] = (line[x] + line[x - chan]) & 0xFF
+        elif f == 2:                            # Up
+            for x in range(stride):
+                line[x] = (line[x] + prev[x]) & 0xFF
+        elif f == 3:                            # Average
+            for x in range(stride):
+                a = line[x - chan] if x >= chan else 0
+                line[x] = (line[x] + ((a + prev[x]) >> 1)) & 0xFF
+        elif f == 4:                            # Paeth
+            for x in range(stride):
+                a = line[x - chan] if x >= chan else 0
+                b = prev[x]
+                c = prev[x - chan] if x >= chan else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[x] = (line[x] + pr) & 0xFF
+        elif f != 0:
+            return None
+        out[row * stride:(row + 1) * stride] = line
+        prev = line
+    # → what PDF takes: 8-bit gray or RGB, alpha composited onto white paper
+    if ct == 0:
+        return bytes(out), w, h, 1
+    if ct == 2:
+        return bytes(out), w, h, 3
+    if ct == 3:
+        rgb = bytearray(w * h * 3)
+        for k, ix in enumerate(out):
+            rgb[k * 3:k * 3 + 3] = palette[ix * 3:ix * 3 + 3] or b"\xff\xff\xff"
+        return bytes(rgb), w, h, 3
+    if ct == 4:                                 # gray + alpha
+        px = bytearray(w * h)
+        for k in range(w * h):
+            g, a = out[k * 2], out[k * 2 + 1]
+            px[k] = (g * a + 255 * (255 - a)) // 255
+        return bytes(px), w, h, 1
+    px = bytearray(w * h * 3)                   # ct == 6, RGBA
+    for k in range(w * h):
+        a = out[k * 4 + 3]
+        if a == 255:
+            px[k * 3:k * 3 + 3] = out[k * 4:k * 4 + 3]
+        else:
+            for ch in range(3):
+                px[k * 3 + ch] = (out[k * 4 + ch] * a + 255 * (255 - a)) // 255
+    return bytes(px), w, h, 3
+
+
+def read_image(data):
+    """(rgb, w, h, colours) for a pasted screenshot, or None. PNG today — the
+    format every browser and every macOS screenshot pastes."""
+    got = read_png(data)
+    return got
+
+
+def _pdf(page, title, images=()):
+    """PDF document bytes with a proper xref table. `images` are extra pages,
+    one picture each — the proof a customs officer asks for next: the Amazon
+    order confirmation behind the declaration, in the SAME file, because
+    GAASH's upload page takes one PDF per slot and a separate screenshot has
+    nowhere to go. Each is (rgb_bytes, width, height, colours, caption)."""
+    pages = [(page.stream(), None)]
+    for k, img in enumerate(images):
+        pages.append(_image_page(img, k))
+    n_pages = len(pages)
+    # object ids: 1 catalog, 2 pages, then per page (page, content), then
+    # one XObject per image, then 3 fonts, then info
+    first = 3
+    page_ids = [first + 2 * i for i in range(n_pages)]
+    img_ids = [first + 2 * n_pages + i for i in range(len(images))]
+    font_ids = [first + 2 * n_pages + len(images) + i for i in range(3)]
+    info_id = font_ids[-1] + 1
+    objs = {
+        1: b"<</Type/Catalog/Pages 2 0 R>>",
+        2: b"<</Type/Pages/Kids[%s]/Count %d>>"
+           % (b" ".join(b"%d 0 R" % i for i in page_ids), n_pages),
+    }
+    fonts = (b"<</F1 %d 0 R/F2 %d 0 R/F3 %d 0 R>>"
+             % (font_ids[0], font_ids[1], font_ids[2]))
+    for i, (content, img_ix) in enumerate(pages):
+        xo = (b"/XObject<</Im0 %d 0 R>>" % img_ids[img_ix]) if img_ix is not None else b""
+        objs[page_ids[i]] = (
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 %d %d]"
+            b"/Resources<</Font%s%s>>/Contents %d 0 R>>"
+            % (PAGE_W, PAGE_H, fonts, xo, page_ids[i] + 1))
+        objs[page_ids[i] + 1] = (b"<</Length %d>>stream\n%s\nendstream"
+                                 % (len(content), content))
+    for i, (rgb, w, h, colours, _cap) in enumerate(images):
+        data = zlib.compress(rgb, 6)
+        objs[img_ids[i]] = (
+            b"<</Type/XObject/Subtype/Image/Width %d/Height %d/ColorSpace/%s"
+            b"/BitsPerComponent 8/Filter/FlateDecode/Length %d>>stream\n%s\n"
+            b"endstream" % (w, h, b"DeviceRGB" if colours == 3 else b"DeviceGray",
+                            len(data), data))
+    for i, face in enumerate((b"Helvetica", b"Helvetica-Bold",
+                              # F3 is the signature face. Times-Italic, because
+                              # the base-14 PDF fonts hold no script face and
+                              # embedding one would mean shipping a TTF — and a
+                              # slanted TYPED name is an e-signature, which is
+                              # what this is, rather than an imitation of
+                              # anybody's handwriting.
+                              b"Times-Italic")):
+        objs[font_ids[i]] = (b"<</Type/Font/Subtype/Type1/BaseFont/%s"
+                             b"/Encoding/WinAnsiEncoding>>" % face)
+    objs[info_id] = b"<</Title(%s)/Producer(Otlobly)>>" % _esc(_enc(title) or b"")
+
     out = bytearray(b"%PDF-1.4\n")
-    offsets = []
-    for i, o in enumerate(objs, 1):
-        offsets.append(len(out))
-        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    offsets = {}
+    for i in range(1, info_id + 1):
+        offsets[i] = len(out)
+        out += b"%d 0 obj\n" % i + objs[i] + b"\nendobj\n"
     xref = len(out)
-    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
-    for off in offsets:
-        out += b"%010d 00000 n \n" % off
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (info_id + 1)
+    for i in range(1, info_id + 1):
+        out += b"%010d 00000 n \n" % offsets[i]
     out += (b"trailer\n<</Size %d/Root 1 0 R/Info %d 0 R>>\nstartxref\n%d\n%%%%EOF\n"
-            % (len(objs) + 1, len(objs), xref))
+            % (info_id + 1, info_id, xref))
     return bytes(out)
+
+
+def _image_page(img, index):
+    """(content stream, image index) for one annex page: the picture fitted
+    inside the margins with its caption above it, never stretched — a squashed
+    screenshot of an order is a screenshot an officer will squint at."""
+    rgb, w, h, colours, caption = img
+    p = _Page()
+    top = 92
+    if caption:
+        p.text(MARGIN, top - 22, caption, 11, bold=True)
+    box_w, box_h = PAGE_W - 2 * MARGIN, PAGE_H - top - MARGIN
+    scale = min(box_w / float(w), box_h / float(h), 1.0)
+    dw, dh = w * scale, h * scale
+    x = (PAGE_W - dw) / 2
+    y = PAGE_H - top - dh                       # PDF origin is bottom-left
+    p.ops.append(b"q %g 0 0 %g %g %g cm /Im0 Do Q" % (dw, dh, x, y))
+    return p.stream(), index
 
 
 def _wrap(s, width):
@@ -356,8 +516,11 @@ ORIGINALITY_BODY = (
     "online from Amazon.com and its sellers and shipped from there. They are "
     "not counterfeit, imitation or replica goods; no trademark, label or "
     "serial marking on them has been altered or removed. The Amazon order "
-    "confirmation is available on request, and I take responsibility for "
-    "this declaration.")
+    "confirmation is %s, and I take responsibility for this declaration.")
+# The last clause tells the truth about THIS copy: a paper that says "available
+# on request" while the order is stapled behind it reads as though nobody looked
+# at it, and one that says "attached" with nothing attached is worse.
+ORIGINALITY_PROOF = ("attached to this declaration", "available on request")
 
 
 def _para(p, text, x, y, width, size=10.5, lead=15):
@@ -380,11 +543,21 @@ def _para(p, text, x, y, width, size=10.5, lead=15):
     return y
 
 
+MAX_ANNEX_PX = 3_000_000                        # ~3 MP: the unfilter loop above
+# is pure Python, and a 12 MP phone photo would take the send call minutes.
+# A pasted browser screenshot is well under this; a camera photo is not.
+
+
 def build_originality(*, gwd, name, id_number, contents, order_code=None,
-                      today=None):
+                      today=None, annex=()):
     """(filename, bytes) for one package's DECLARATION OF ORIGINALITY. Same
     identity rules as build(): everything is READ from the boards, nothing is
-    signed by hand, and an unprintable field is a hard error."""
+    signed by hand, and an unprintable field is a hard error.
+
+    `annex` is [(image_bytes, caption)] — the proof pages that follow the
+    declaration, normally the Amazon order confirmation. They go in the SAME
+    PDF because GAASH's upload page takes one file per slot: a screenshot sent
+    beside the declaration has nowhere to land."""
     day = (today or date.today()).strftime("%d/%m/%Y")
     order = str(order_code or "").strip()
     goods_ln = goods_lines(contents)
@@ -422,7 +595,20 @@ def build_originality(*, gwd, name, id_number, contents, order_code=None,
             y += 26
             p.text(x0 + 4, y - 1, f"and {len(goods_ln) - 8} more item(s)", 10)
         y += 55
-    y = _para(p, ORIGINALITY_BODY, L, y, R - L) + 60
+    pics = []
+    for raw, caption in (annex or ()):
+        got = read_image(raw)
+        # an unreadable or enormous picture is skipped, never fatal: the
+        # declaration itself is the document, the proof page is the bonus
+        if got and got[1] * got[2] <= MAX_ANNEX_PX:
+            rgb, w, h, colours = got
+            pics.append((rgb, w, h, colours, caption or ""))
+    body = ORIGINALITY_BODY % ORIGINALITY_PROOF[0 if pics else 1]
+    y = _para(p, body, L, y, R - L) + 60
     _sign_block(p, name, day, min(y, PAGE_H - 120))
+    if pics:
+        p.text(L, PAGE_H - 70, "Attached: the Amazon order this parcel was "
+               "bought on" + (f", {len(pics)} pages." if len(pics) > 1 else "."),
+               9.5)
     return (f"{gwd} - originality.pdf",
-            _pdf(p, f"Declaration of originality {gwd}"))
+            _pdf(p, f"Declaration of originality {gwd}", pics))
