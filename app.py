@@ -3564,11 +3564,17 @@ def api_gaash_declaration():
     say yes or name the reason. Pass save=true for the rare hand-filed copy."""
     b = request.get_json(force=True, silent=True) or {}
     save = bool(b.get("save"))
+    # kind=originality is the second paper — "הצהרת מקוריות", what customs asks
+    # for when it wants proof that branded goods are genuine. Same everything
+    # else: read from the boards, never stored, written onto the email.
+    make = (gaash_mail.originality_make
+            if str(b.get("kind") or "") == "originality"
+            else gaash_mail.declaration_make)
     many = b.get("gwds")
     if isinstance(many, list):
         # one refusal must not sink the batch: a parcel with no name is reported
         # by name with its reason, the rest still come back ready
-        results = [{**gaash_mail.declaration_make(g, save=save),
+        results = [{**make(g, save=save),
                     "gwd": str(g or "").strip().upper()} for g in many[:200]]
         done = [r["gwd"] for r in results if r.get("ok")]
         if done and save:
@@ -3576,7 +3582,7 @@ def api_gaash_declaration():
                          detail=f"filed {len(done)} customs declaration(s)",
                          user=_user())
         return jsonify({"ok": True, "results": results})
-    res = gaash_mail.declaration_make(b.get("gwd"), save=save)
+    res = make(b.get("gwd"), save=save)
     if res.get("ok") and save:
         activity.log("create", "gaash", 0, res.get("gwd") or "",
                      detail="filed a customs declaration", user=_user())
@@ -3598,11 +3604,14 @@ def api_gaash_declaration_preview():
 
     Inline, not a download — the point is to glance at it and go back."""
     gwd = (request.args.get("gwd") or "").strip().upper()
-    got = gaash_mail.declaration_attachment(gwd)
+    orig = (request.args.get("kind") or "") == "originality"
+    got = (gaash_mail.originality_attachment(gwd) if orig
+           else gaash_mail.declaration_attachment(gwd))
     if not got:
-        # declaration_make names the reason (no name on the parcel, an Arabic
-        # name the document cannot print); the UI shows it instead of a dead link
-        res = gaash_mail.declaration_make(gwd)
+        # *_make names the reason (no name on the parcel, an Arabic name the
+        # document cannot print); the UI shows it instead of a dead link
+        res = (gaash_mail.originality_make(gwd) if orig
+               else gaash_mail.declaration_make(gwd))
         return jsonify({"ok": False,
                         "error": res.get("error") or "no declaration"}), 400
     name, data, ctype = got
@@ -3747,11 +3756,11 @@ def api_gaash_send():
     for did in (b.get("doc_ids") or [])[:6]:
         # DECL_AUTO = "write this parcel's declaration now" — never a stored
         # file. On a grouped conversation that means one PER member parcel.
-        if did == gaash_mail.DECL_AUTO:
+        if did in gaash_mail.AUTO_DOCS:
             mem = gaash_mail.thread_members(
                 gaash_mail.thread_get(gwd) or {"gwd": gwd})
             for m in mem:
-                got = gaash_mail.declaration_attachment(m)
+                got = gaash_mail.auto_attachment(did, m)
                 if got:
                     files.append(got)
             continue

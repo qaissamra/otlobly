@@ -11394,8 +11394,12 @@ async function gmSendFilePick(){
 // no door at all: you had to go back out and start a sequence to paper it.
 // Everything on it is read from the boards, so there is nothing to fill in —
 // one press, and it is filed in the library AND ticked onto this message.
-async function gmSendDeclMake(btn){
+async function gmSendDeclMake(btn,kind){
   if(!GM.cur) return;
+  // kind="originality" is the SECOND paper — הצהרת מקוריות, the one customs
+  // asks for when it wants proof that branded goods are genuine. Same door,
+  // same one-press flow; only the words on the page differ.
+  const orig=kind==="originality", suf=orig?" - originality":" - declaration";
   if(btn) btn.disabled=true;
   GM.declMsg={ok:true,text:T("جارِ التحقق… · checking…")};
   gmIdsRender();
@@ -11403,9 +11407,9 @@ async function gmSendDeclMake(btn){
   // outgoing set — the fresh one supersedes it, and two declarations on one
   // email is how the wrong one gets read
   const stale=(((GM.ov||{}).ids)||[])
-    .filter(x=>x.name===GM.cur+" - declaration").map(x=>x.id);
+    .filter(x=>x.name===GM.cur+suf).map(x=>x.id);
   let r=null;
-  try{ r=await post("/api/gaash/declaration",{gwd:GM.cur}); }
+  try{ r=await post("/api/gaash/declaration",{gwd:GM.cur,kind:kind||"use"}); }
   catch(e){ r={ok:false,error:T("تعذّر الاتصال بالخادم · could not reach the server")}; }
   if(btn) btn.disabled=false;
   if(!r||!r.ok){
@@ -11430,7 +11434,10 @@ function gmChipUrl(d,gwd){
   // The gwd is passed in because the chip may belong to a parcel that is not the
   // open conversation — the enroll wizard previews parcels before any thread
   // exists, and a grouped unit papers every member. GM.cur is only the fallback.
-  if(d.id==="decl:auto") return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(gwd||GM.cur||"")}`;
+  // orig:auto is the same deal for the originality paper, one kind= apart.
+  if(d.id==="decl:auto"||d.id==="orig:auto")
+    return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(gwd||GM.cur||"")}`+
+      (d.id==="orig:auto"?"&kind=originality":"");
   return d.filename?`/api/gaash/idfile?file=${encodeURIComponent(d.filename)}`:"";
 }
 // ✕ on a chip must drop it from THIS message, always. gmIdPick routes through
@@ -11460,8 +11467,9 @@ function gmSendChips(){
   const box=$("gmSendChips"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
   // "decl:auto" has no library row — it is written when the message is sent
-  const docs=(GM.sendDocs||[]).map(id=>id==="decl:auto"
-    ?{id, name:(GM.cur||"")+" - declaration", auto:true}
+  const docs=(GM.sendDocs||[]).map(id=>(id==="decl:auto"||id==="orig:auto")
+    ?{id, name:(GM.cur||"")+(id==="orig:auto"?" - originality":" - declaration"),
+      auto:true}
     :ids.find(x=>x.id===id)).filter(Boolean);
   const files=GM.sendFiles||[];
   box.classList.toggle("hidden",!docs.length&&!files.length);
@@ -12565,6 +12573,7 @@ function gmIdsRender(){
   // hand — the reply box. The wizard papers its whole batch from the step-2 tick.
   const canGen=f.k==="declaration"&&GM.docTarget==="send"&&GM.cur;
   const had=canGen&&ids.some(x=>x.name===GM.cur+" - declaration");
+  const hadOrig=canGen&&ids.some(x=>x.name===GM.cur+" - originality");
   // the message outlives a re-render — this box is rewritten whole on every pick
   const msg=(canGen&&GM.declMsg)
     ?(GM.declMsg.ok
@@ -12578,7 +12587,10 @@ function gmIdsRender(){
       <span class="spacer"></span>
       ${canGen?`<button class="minibtn" onclick="gmSendDeclMake(this)"
         title="${T("يُملأ من اللوحات — الاسم، رقم الهوية، المحتويات · filled from the boards — name, ID number, contents")}">${
-        had?"↻ "+T("أعد الإنشاء · regenerate"):"＋ "+T("أنشئ تصريحاً · generate")} ${poEsc(GM.cur)}</button>`:""}
+        had?"↻ "+T("أعد الإنشاء · regenerate"):"＋ "+T("أنشئ تصريحاً · generate")} ${poEsc(GM.cur)}</button>
+      <button class="minibtn" onclick="gmSendDeclMake(this,'originality')"
+        title="${T("إقرار بأن البضاعة أصلية — يطلبه المكس للماركات · declares the goods are genuine — customs asks for it on branded parcels")}">${
+        hadOrig?"↻ ":"＋ "}${T("إقرار أصلية · originality")}</button>`:""}
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
     </div>
     ${msg}

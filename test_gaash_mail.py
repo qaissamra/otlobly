@@ -1499,6 +1499,51 @@ def main():
     check("the migration is idempotent", gm.migrate_decl_auto() == 0)
     _del_thread("GWD900900900")
 
+    print("— the originality declaration (הצהרת מקוריות) —")
+    # GAASH, 08/09/2026: "לדרישת המכס יש לצרף הצהרת מקוריות" — customs wants a
+    # SECOND paper on branded parcels saying the goods are genuine. It rides
+    # the same rails as the use declaration: written from the boards at send
+    # time, never filed, refused by name when it cannot be printed.
+    check("the PO's Amazon order number is what the paper cites",
+          gm.package_order_code("GWD900900900") == "111-D")
+    kept = _lib_rows()                          # the migration above moved rows
+    ores = gm.originality_make("GWD900900900")
+    check("the check says yes and files NOTHING",
+          ores.get("ok") and ores.get("id") == gm.ORIG_AUTO
+          and _lib_rows() == kept)
+    oatt = gm.originality_attachment("GWD900900900")
+    check("send time builds a real originality PDF",
+          oatt and oatt[0] == "GWD900900900 - originality.pdf"
+          and oatt[1][:5] == b"%PDF-" and oatt[2] == "application/pdf")
+    check("a parcel that is not one refuses by name, never crashes",
+          gm.originality_make("NOT-A-GWD").get("error") == "not a tracking number"
+          and gm.originality_attachment("NOT-A-GWD") is None)
+    _mk_thread("GWD900900900")
+    with db.connect() as c:
+        c.execute("UPDATE gaash_threads SET docs_json=? WHERE gwd=?",
+                  (json.dumps([gm.DECL_AUTO, gm.ORIG_AUTO]), "GWD900900900"))
+    both = gm._step_attachments(gm.thread_get("GWD900900900"))
+    check("both papers ride the same email, each written fresh",
+          [a[0] for a in both] == ["GWD900900900 - declaration.pdf",
+                                   "GWD900900900 - originality.pdf"]
+          and all(a[1][:5] == b"%PDF-" for a in both)
+          and _lib_rows() == kept)
+    import declaration as _decl
+    check("the row's own count and the seller never reach the paper — "
+          "\"7 Anne Klein … Sold by: Amazon\" x7 read as two numbers",
+          _decl.goods_lines([{"title": "7 Anne Klein Women's Bracelet Watch "
+                              "Sold by: Amazon Export Sales LLC", "qty": 7},
+                             {"title": "3 Pack Socks", "qty": 1}])
+          == ["Anne Klein Women's Bracelet Watch x7", "3 Pack Socks"])
+    try:
+        _decl.build_originality(gwd="GWD900900900", name="فيصل",
+                                id_number="1", contents=[])
+        _bad = False
+    except ValueError:
+        _bad = True
+    check("an Arabic name is refused, never printed as question marks", _bad)
+    _del_thread("GWD900900900")
+
     print("— grouped conversations (one email, several parcels of one order) —")
     _mk_thread("GWD700700701")
     with db.connect() as c:

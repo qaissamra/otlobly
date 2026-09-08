@@ -174,17 +174,30 @@ def _w(s, size, bold=False):
     return total * size / 1000.0
 
 
-def build(*, gwd, name, id_number, contents, purpose=None, today=None):
-    """(filename, bytes) for one package's DECLARATION OF USE — the same form
-    the owner fills in by hand, with the blanks already filled. Raises
-    ValueError naming any field this document cannot print."""
-    purpose = (purpose or PURPOSE_DEFAULT).strip()
-    day = (today or date.today()).strftime("%d/%m/%Y")
+def _clean_title(title, qty):
+    """A ClickUp mirror row is named "7 Anne Klein Women's Bracelet Watch Sold
+    by: Amazon Export Sales LLC" — the count is already in the row's own
+    quantity, and the seller is not the product. Left alone the line reads
+    "7 Anne Klein Womens Bracelet x7", which on a customs paper looks like two
+    different numbers for one box. A leading number is dropped ONLY when it is
+    the quantity we are already printing."""
+    t = re.sub(r"(?is)\s*[-–|,]?\s*sold by\s*:.*$", "", str(title or "")).strip()
+    m = re.match(r"^(\d+)\s*[x×]?\s+(.+)$", t)
+    if m and int(m.group(1)) == int(qty or 1):
+        t = m.group(2).strip()
+    return t
+
+
+def goods_lines(contents):
+    """["Anne Klein Womens Bracelet Watch x7", …] — the product lines both
+    documents print. Shared, because the officer who reads the originality
+    declaration next to the use declaration must see the SAME goods on both."""
     # ~5 words is what identifies a product to customs; the rest of an Amazon
     # title is marketing. One item takes one line, several take a line each so
     # the officer can count them against the box.
-    words = [str(c.get("title") or "").split() for c in (contents or [])]
     qtys = [c.get("qty") or 1 for c in (contents or [])]
+    words = [_clean_title(c.get("title"), q).split()
+             for c, q in zip(contents or [], qtys)]
     take = [5] * len(words)
     # 5 words, UNLESS that makes two products read alike: "Crave for Google
     # Pixel 6" twice tells an officer nothing and looks like a duplicated row,
@@ -205,10 +218,13 @@ def build(*, gwd, name, id_number, contents, purpose=None, today=None):
         short = " ".join(w[:take[i]])
         if short:
             goods_lines.append(f"{short} x{qtys[i]}" if qtys[i] > 1 else short)
-    goods = " / ".join(goods_lines)
+    return goods_lines
 
-    for label, val in (("name on the parcel", name), ("ID number", id_number),
-                       ("purpose of use", purpose), ("contents", goods)):
+
+def _check(name, fields):
+    """Refuse to print a field WinAnsi cannot carry, and refuse a nameless
+    parcel — the two failures that put a wrong identity on a customs paper."""
+    for label, val in fields:
         bad = _unprintable(val)
         if bad:
             raise ValueError(
@@ -217,6 +233,49 @@ def build(*, gwd, name, id_number, contents, purpose=None, today=None):
     if not str(name or "").strip():
         raise ValueError("no name on the parcel — set one before declaring it")
 
+
+def _filled(p, label, value, y, x=None, end=None, size=11):
+    """`label ____value____` — the value centred on its rule, as if typed
+    into the blank of the printed form."""
+    L, R = MARGIN + 20, PAGE_W - MARGIN - 20
+    x = L if x is None else x
+    end = R if end is None else end
+    p.text(x, y, label, size)
+    x0 = x + _w(label, size) + 6
+    p.line(x0, y + 4, end, y + 4, w=0.9, grey=0.15)
+    v = str(value)
+    p.text(max(x0 + 4, (x0 + end) / 2 - _w(v, size, True) / 2), y - 1,
+           v, size, bold=True)
+    return x0
+
+
+def _sign_block(p, name, day, y):
+    """DATE and SIGNATURE, the p.p. e-signature rule of this module: a TYPED
+    name in a second face, never a drawn mark."""
+    L, R = MARGIN + 20, PAGE_W - MARGIN - 20
+    _filled(p, "", day, y, x=L + 30, end=L + 230)
+    p.text(L + 108, y + 20, "DATE", 9.5)
+    p.line(R - 250, y + 4, R, y + 4, w=0.9, grey=0.15)
+    p.text(R - 148, y + 20, "SIGNATURE", 9.5)
+    sig = str(name).strip()
+    pp, ppw = "p.p. ", _w("p.p. ", 10)
+    total = ppw + _w(sig, 17) * 0.92
+    sx = (R - 250 + R) / 2 - total / 2
+    p.text(sx, y - 2, pp, 10)
+    p.text(sx + ppw, y - 2, sig, 17, font=b"F3")
+
+
+def build(*, gwd, name, id_number, contents, purpose=None, today=None):
+    """(filename, bytes) for one package's DECLARATION OF USE — the same form
+    the owner fills in by hand, with the blanks already filled. Raises
+    ValueError naming any field this document cannot print."""
+    purpose = (purpose or PURPOSE_DEFAULT).strip()
+    day = (today or date.today()).strftime("%d/%m/%Y")
+    goods_ln = goods_lines(contents)
+    goods = " / ".join(goods_ln)
+    _check(name, (("name on the parcel", name), ("ID number", id_number),
+                  ("purpose of use", purpose), ("contents", goods)))
+
     p = _Page()
     L, R = MARGIN + 20, PAGE_W - MARGIN - 20
     ttl, tsz = "DECLARATION OF USE", 15
@@ -224,39 +283,26 @@ def build(*, gwd, name, id_number, contents, purpose=None, today=None):
     p.text(tx, 130, ttl, tsz, bold=True)
     p.line(tx, 134, tx + _w(ttl, tsz, True), 134, w=1.1, grey=0)
 
-    def filled(label, value, y, x=None, end=None, size=11):
-        """`label ____value____` — the value centred on its rule, as if typed
-        into the blank of the printed form."""
-        x = L if x is None else x
-        end = R if end is None else end
-        p.text(x, y, label, size)
-        x0 = x + _w(label, size) + 6
-        p.line(x0, y + 4, end, y + 4, w=0.9, grey=0.15)
-        v = str(value)
-        p.text(max(x0 + 4, (x0 + end) / 2 - _w(v, size, True) / 2), y - 1,
-               v, size, bold=True)
-        return x0
-
-    filled("Name:", str(name).strip(), 205, end=L + 250)
-    filled("ID number:", str(id_number).strip() or "—", 205, x=L + 268)
-    filled("I declare that the parcel number:", gwd, 275, end=R - 60)
+    _filled(p, "Name:", str(name).strip(), 205, end=L + 250)
+    _filled(p, "ID number:", str(id_number).strip() or "—", 205, x=L + 268)
+    _filled(p, "I declare that the parcel number:", gwd, 275, end=R - 60)
 
     y = 345
-    if not goods_lines:
-        filled("contain", "(not itemised)", y)
+    if not goods_ln:
+        _filled(p, "contain", "(not itemised)", y)
         y += 70
     else:
-        x0 = filled("contain", goods_lines[0], y)
-        for extra in goods_lines[1:8]:          # a line each, stacked
+        x0 = _filled(p, "contain", goods_ln[0], y)
+        for extra in goods_ln[1:8]:             # a line each, stacked
             y += 26
             p.line(x0, y + 4, R, y + 4, w=0.9, grey=0.15)
             p.text(max(x0 + 4, (x0 + R) / 2 - _w(extra, 11, True) / 2), y - 1,
                    extra, 11, bold=True)
-        if len(goods_lines) > 8:
+        if len(goods_ln) > 8:
             y += 26
-            p.text(x0 + 4, y - 1, f"and {len(goods_lines) - 8} more item(s)", 10)
+            p.text(x0 + 4, y - 1, f"and {len(goods_ln) - 8} more item(s)", 10)
         y += 70
-    filled("In purpose of", purpose, y)
+    _filled(p, "In purpose of", purpose, y)
     y += 70
 
     # "and it is personal / commercial import (circle the relevant answer)"
@@ -266,21 +312,12 @@ def build(*, gwd, name, id_number, contents, purpose=None, today=None):
     p.ellipse(wx + _w(word, 11) / 2, y - 3.5, _w(word, 11) / 2 + 5, 11)
 
     y += 105                                    # was ~155 — the gap was dead space
-    filled("", day, y, x=L + 30, end=L + 230)
-    p.text(L + 108, y + 20, "DATE", 9.5)
-    p.line(R - 250, y + 4, R, y + 4, w=0.9, grey=0.15)
-    p.text(R - 148, y + 20, "SIGNATURE", 9.5)
     # The signature is the name, TYPED in a second face — an e-signature, not a
     # drawn mark. "p.p." (per procurationem) is the standard notation for an
     # agent signing on someone's behalf: two characters, and the page stops
     # asserting that this customer put pen to it. The name and ID here are
     # theirs, not ours, so something has to say who actually produced this.
-    sig = str(name).strip()
-    pp, ppw = "p.p. ", _w("p.p. ", 10)
-    total = ppw + _w(sig, 17) * 0.92
-    sx = (R - 250 + R) / 2 - total / 2
-    p.text(sx, y - 2, pp, 10)
-    p.text(sx + ppw, y - 2, sig, 17, font=b"F3")
+    _sign_block(p, name, day, y)
     return f"{gwd} - declaration.pdf", _pdf(p, f"Declaration of use {gwd}")
 
 
@@ -298,3 +335,88 @@ def _sum_lines(lines, cap=8):
 
 def safe_name(s):
     return re.sub(r"[^A-Za-z0-9 ._-]+", "_", str(s or "")).strip() or "declaration"
+
+
+# --------------------------------------------------------------------------- #
+# The second document: originality
+# --------------------------------------------------------------------------- #
+# GAASH, 08/09/2026, on GWD004791532: "לדרישת המכס יש לצרף הצהרת מקוריות" — the
+# customs authority wants a declaration of ORIGINALITY, which is a different
+# paper from the declaration of use above. Use says what the goods are FOR;
+# originality says the branded goods are genuine, bought new from Amazon, and
+# not counterfeit. Branded parcels (watches, bags, electronics) get asked for it.
+ORIGINALITY_BODY = (
+    "The goods listed above are new and original branded products, bought "
+    "online from Amazon.com and its sellers and shipped from there. They are "
+    "not counterfeit, imitation or replica goods; no trademark, label or "
+    "serial marking on them has been altered or removed. They are imported "
+    "for personal use and not for trade. The Amazon order confirmation is "
+    "available on request, and I take responsibility for this declaration.")
+
+
+def _para(p, text, x, y, width, size=10.5, lead=15):
+    """Justify-free paragraph wrapped on REAL Helvetica widths (the char-count
+    wrap in _wrap overflows the margin on capital-heavy lines). Returns the y
+    below the last line."""
+    line, out = "", []
+    for word in str(text or "").split():
+        trial = (line + " " + word).strip()
+        if _w(trial, size) <= width or not line:
+            line = trial
+        else:
+            out.append(line)
+            line = word
+    if line:
+        out.append(line)
+    for ln in out:
+        p.text(x, y, ln, size)
+        y += lead
+    return y
+
+
+def build_originality(*, gwd, name, id_number, contents, order_code=None,
+                      today=None):
+    """(filename, bytes) for one package's DECLARATION OF ORIGINALITY. Same
+    identity rules as build(): everything is READ from the boards, nothing is
+    signed by hand, and an unprintable field is a hard error."""
+    day = (today or date.today()).strftime("%d/%m/%Y")
+    order = str(order_code or "").strip()
+    goods_ln = goods_lines(contents)
+    goods = " / ".join(goods_ln)
+    _check(name, (("name on the parcel", name), ("ID number", id_number),
+                  ("Amazon order number", order), ("contents", goods)))
+
+    p = _Page()
+    L, R = MARGIN + 20, PAGE_W - MARGIN - 20
+    ttl, tsz = "DECLARATION OF ORIGINALITY", 15
+    tx = (PAGE_W - _w(ttl, tsz, True)) / 2
+    p.text(tx, 120, ttl, tsz, bold=True)
+    p.line(tx, 124, tx + _w(ttl, tsz, True), 124, w=1.1, grey=0)
+
+    _filled(p, "Name:", str(name).strip(), 190, end=L + 250)
+    _filled(p, "ID number:", str(id_number).strip() or "—", 190, x=L + 268)
+    _filled(p, "I declare that the parcel number:", gwd, 250, end=R - 60)
+    # The order number is what an officer can actually check against Amazon —
+    # printed only when we know it, never as an empty rule pretending to a fact.
+    y = 305
+    if order:
+        _filled(p, "bought from Amazon.com under order number:", order, y)
+        y += 55
+    if not goods_ln:
+        _filled(p, "containing", "(not itemised)", y)
+        y += 55
+    else:
+        x0 = _filled(p, "containing", goods_ln[0], y)
+        for extra in goods_ln[1:8]:
+            y += 26
+            p.line(x0, y + 4, R, y + 4, w=0.9, grey=0.15)
+            p.text(max(x0 + 4, (x0 + R) / 2 - _w(extra, 11, True) / 2), y - 1,
+                   extra, 11, bold=True)
+        if len(goods_ln) > 8:
+            y += 26
+            p.text(x0 + 4, y - 1, f"and {len(goods_ln) - 8} more item(s)", 10)
+        y += 55
+    y = _para(p, ORIGINALITY_BODY, L, y, R - L) + 60
+    _sign_block(p, name, day, min(y, PAGE_H - 120))
+    return (f"{gwd} - originality.pdf",
+            _pdf(p, f"Declaration of originality {gwd}"))

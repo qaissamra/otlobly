@@ -702,6 +702,73 @@ def declaration_attachment(gwd):
     return (f"{g} - declaration{ext}", data, "application/pdf")
 
 
+# The second paper: GAASH asks for a "הצהרת מקוריות" (declaration of
+# originality) whenever customs doubts that branded goods are genuine. Same
+# rules as DECL_AUTO — written fresh from the boards at send time, never filed.
+ORIG_AUTO = "orig:auto"
+
+
+def originality_build(gwd):
+    """One package's declaration of ORIGINALITY as (filename, bytes), or
+    ValueError with a printable reason."""
+    import declaration
+    _declaration_fill_titles(gwd)               # blank PO titles → real names
+    return declaration.build_originality(
+        gwd=gwd, name=parcel_name(gwd), id_number=id_number_for_email(gwd),
+        contents=package_contents(gwd), order_code=package_order_code(gwd))
+
+
+def originality_attachment(gwd):
+    """(filename, bytes, ctype) built right now — what ORIG_AUTO resolves to at
+    send time, or None when the parcel cannot be papered."""
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return None
+    try:
+        fn, data = originality_build(g)
+    except Exception:  # noqa — unprintable name, or no name on the parcel
+        return None
+    return (f"{g} - originality.pdf", data, "application/pdf")
+
+
+def originality_make(gwd, save=False):
+    """Can this package be papered with an originality declaration? Mirrors
+    declaration_make: builds it, throws the bytes away, names the reason."""
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a tracking number", "gwd": g}
+    try:
+        fn, data = originality_build(g)
+    except ValueError as e:                     # a field that cannot be printed
+        return {"ok": False, "error": str(e), "gwd": g}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": f"could not build it: {str(e)[:120]}",
+                "gwd": g}
+    name = f"{g} - originality"
+    if not save:
+        return {"ok": True, "gwd": g, "name": name, "id": ORIG_AUTO}
+    with db.connect() as c:
+        old = [dict(r) for r in c.execute(
+            "SELECT id, filename FROM gaash_ids WHERE name=?", (name,))]
+    for o in old:
+        ids_remove(o["id"])
+    res = ids_add(name, fn, data, folder="declaration")
+    return {**res, "name": name, "gwd": g}
+
+
+def auto_attachment(doc_id, gwd):
+    """The bytes behind one AUTO sentinel for one parcel, or None if `doc_id`
+    is not a sentinel at all. One place, so a new paper is wired once."""
+    if doc_id == DECL_AUTO:
+        return declaration_attachment(gwd)
+    if doc_id == ORIG_AUTO:
+        return originality_attachment(gwd)
+    return None
+
+
+AUTO_DOCS = (DECL_AUTO, ORIG_AUTO)
+
+
 def migrate_decl_auto():
     """Point threads that still reference a FILED declaration at DECL_AUTO,
     then clear out the filed copies nothing points at any more.
@@ -3099,6 +3166,56 @@ def package_contents(gwd):
     return out
 
 
+_AMZ_ORDER = re.compile(r"\b\d{3}-\d{7}-\d{7}\b")
+
+
+def package_order_code(gwd):
+    """The Amazon order number this package came out of, or "".
+
+    An originality declaration is only checkable if it names the order an
+    officer can look up. Leluxe parcels carry it in the ClickUp ORDER card's
+    name ("Order # 112-0296508-3951454") one or two levels above the item row;
+    Purchases parcels carry it on the PO itself."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return ""
+    try:
+        row = _leluxe_row_for(g)
+    except Exception:  # noqa
+        row = None
+    if row:
+        seen, node = set(), row
+        for _ in range(4):                      # item → package → order → list
+            hay = str(node.get("name") or "")
+            d = node.get("data") or {}
+            for v in (d.get("fields") or {}).values():
+                hay += " " + str(v or "")
+            m = _AMZ_ORDER.search(hay)
+            if m:
+                return m.group(0)
+            pid = node.get("parent_local_id")
+            if not pid or pid in seen:
+                break
+            seen.add(pid)
+            try:
+                with db.connect() as c:
+                    r = c.execute("SELECT id, parent_local_id, name, data_json "
+                                  "FROM leluxe_orders WHERE id=?",
+                                  (pid,)).fetchone()
+            except Exception:  # noqa
+                break
+            if not r:
+                break
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                d = {}
+            node = {"id": r["id"], "parent_local_id": r["parent_local_id"],
+                    "name": r["name"], "data": d}
+    po, _pk = _po_package(g)
+    return str((po or {}).get("amazon_order_number") or "").strip()
+
+
 _TITLE_FETCH_CAP = 12                           # metered lookups per declaration
 
 
@@ -3420,9 +3537,9 @@ def _step_attachments(th, members=None):
         # the declaration is rebuilt from the boards for THIS email — so a name
         # or an ID corrected after enrollment is on the follow-up, and nothing
         # is kept on disk between sends
-        if doc_id == DECL_AUTO:
+        if doc_id in AUTO_DOCS:
             for m in (members or thread_members(th)):
-                got = declaration_attachment(m)
+                got = auto_attachment(doc_id, m)
                 if got:
                     out.append(got)
             continue
