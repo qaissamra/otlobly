@@ -311,8 +311,10 @@ The table bar carrying the **Columns** control rendered *after* the rows. Measur
 running preview with 61 orders: **y = 2,953px**. The control that unhides a column sat ~2,800px
 below the top of the page, so "hidden by default" meant "gone". The bar now renders before the
 header on **every** DataTable — Purchases, To order, In cart, Package prep, Orders, Customers,
-all verified. The bulk bar stays last: it is `position: sticky` to the bottom of the viewport
-and was never out of reach.
+all verified. The bulk bar stays last — but the claim made here, that it was `position: sticky`
+to the bottom of the viewport and so never out of reach, was **WRONG**: `.ds-table`'s
+`overflow: hidden` had already broken it (measured at 2843px in a 900px viewport). Corrected in
+section 11.
 
 ### Q-016 · one serializer was starving the board — fixed
 
@@ -413,3 +415,89 @@ identical, and the suite fails if a NUL comes back.
 | views | 1 | 3, each with its own URL |
 | cells with unreadable text | 0 | 0 |
 | Purchases | 4 views, 22 rows | unchanged |
+
+## 11. Batch B5 - the sticky layer never worked (2026-09-08)
+
+> fix the sub packages the title fill all the row and the move wrong when i scrool sidewides
+> **test it** - also remove the owned amount column you should just add the abilty to hide or
+> view cloums
+
+"Test it" was the operative word: every number below was measured in the running board.
+
+### Q-021 - one CSS rule disabled every sticky element in every table
+
+`.ds-table { overflow: hidden }` makes the table a scroll container, so each
+`position: sticky` descendant sticks to a box that never scrolls - i.e. scrolls away with the
+page. Measured at `scrollY = 1326` on the 61-row Orders board:
+
+| | measured | after |
+|---|---|---|
+| column headers | `top: -76px` | parked at 95px |
+| the bar with the **Columns** control | `top: -115px` | parked at 56px |
+| the bulk bar (Delete selected) | `top: 2843px`, viewport 900px | 846px |
+
+**That is the answer to "you should just add the abilty to hide or view cloums."** The ability
+shipped in Batch B3; he could not reach it, because the bar carrying it scrolled off the top.
+
+`overflow: clip` clips identically, keeps the rounded corners, and does NOT create a scroll
+container. One keyword, three fixes.
+
+**A correction to Batch B3.** Its PR, its entry in section 9 above, and a comment in `table.js`
+all claimed the bulk bar "is sticky to the bottom of the viewport, so it is never out of
+reach." That was false when written - the same `overflow: hidden` had already broken it. All
+three have been corrected.
+
+### Q-022 - the row expansion was pinned by JavaScript, a frame late
+
+`DS.tableSync` set `transform: translateX(scrollLeft)` on every `.ds-tr-exp` on every scroll
+event. Geometrically right (it held at viewport x=0 at every offset) but it runs after the
+browser has painted the scrolled frame, so it visibly lagged - the owner's "the move wrong
+when i scrool sidewides".
+
+The comment there said `position: sticky` could not work because the containing block gave it
+"nothing to stick against". Right about the symptom, wrong about the cause: `.ds-table-body`
+had no width rule, so it was 1122px (the scrollport) while its rows were 1624px
+(`max-content`) - a one-screen-wide sticky box had **zero travel**. Giving the body
+`width: max-content; min-width: 100%` makes sticky hold it natively, on the compositor.
+
+That is not a new idea: `web/index.html`'s `.bt-wrap` rules have used exactly this shape since
+the legacy board - `width:max-content;min-width:100%` at every nesting level plus
+`position:sticky;inset-inline-start:0`, with a comment warning that an intermediate `overflow`
+"would hijack the pin's sticky scroll box". Which is precisely what `.ds-table` was doing.
+
+### Q-023 - a sub-table's first column swallowed the panel
+
+Width-less columns became `1fr`, so a product title took **956px of a 1062px panel** and left
+Qty stranded at the far edge. Not an Orders bug - `purchases.js:106`, `:140`, `:406` and
+`fulfillment.js:236` all leave their first column unsized. `DS.subTable` now emits
+`minmax(0, var(--ds-pu-flex, 620px))`: it grows to a readable width and stops, and shrinks on
+a narrow window (measured 556px at a 1000px viewport). Fixed-width columns are untouched.
+
+### Q-024 - `defaultHidden` still could not change on a column that already shipped
+
+Batch B4's `known` list let a **newly added** hidden column reach an existing layout. It could
+not help a column that already existed and was now being hidden - the layout had seen it, so
+it was never re-seeded, and "Still owed" stayed visible. `seedVersion` closes that: bump it and
+every `defaultHidden` is applied once more on top of whatever the user had hidden. It only ever
+ADDS to `hidden`, so it can never yank back a column they chose to show.
+
+### Also fixed, found during the sweep
+
+- **`DS.empty` silently dropped `hint`.** It only read `o.text`, and both Sales boards pass
+  `hint:` - so their empty states shipped without their guidance line. It accepts either now.
+- **An error state could not wrap.** `.ds-error-state` had no width cap; under a `max-content`
+  body a long server message would give an errored table its own horizontal scrollbar. Capped
+  at 640px. Latent - nothing sets `o.error` today.
+
+### Measured after
+
+| | before | after |
+|---|---|---|
+| board width | 1,576px | **1,520px** (Still owed hidden) |
+| expansion during sideways scroll | JS, one frame late | native sticky, held at 0 at every offset |
+| product title in an expansion | 956px | 620px, Qty beside it |
+| headers / Columns bar / bulk bar while scrolled | all off-screen | 95px / 56px / 846px |
+
+Not verifiable this session: the ~1000px pass. With the Browser pane hidden the page stops
+laying out at that emulated size and every rect reads 0 - the same artifact that produced two
+false readings during the original QA. The 1400x900 pass above is complete and real.

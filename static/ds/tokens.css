@@ -84,6 +84,11 @@
   /* ---- shell ---- */
   --ds-sidebar-w: 232px;
   --ds-topbar-h: 56px;
+  --ds-table-bar-h: 39px;      /* the row-count + Columns + density strip */
+  /* Where a table's sticky chrome parks. Defaults to the app's own sticky topbar so
+     the column headers land UNDER it rather than behind it; a page that hosts a table
+     somewhere else overrides this on the table. */
+  --ds-table-top: var(--ds-topbar-h);
   --ds-content-max: 1400px;
   --ds-icon: 16px;             /* inline */
   --ds-icon-nav: 20px;         /* sidebar */

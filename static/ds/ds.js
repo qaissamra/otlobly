@@ -114,7 +114,11 @@
       rendered with no padding, no borders and no overflow control. One builder now.
       cols: [{ label, w, align:"end", render(row) }] */
   DS.subTable = (cols, rows, label) => {
-    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,1fr)")).join(" ");
+    // A width-less column used to be `1fr`, so it swallowed every spare pixel: a product
+    // title got 956px of a 1062px panel and left Qty stranded at the far edge. It now grows
+    // to a comfortable reading width and stops. Fixed-width columns are untouched, so a
+    // wide sub-table (the parcel table on Orders) keeps its shape.
+    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,var(--ds-pu-flex,620px))")).join(" ");
     return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${label ? ` aria-label="${esc(label)}"` : ""}>`
       + `<div class="ds-pu-sub-head" role="row">${cols.map((c) => `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`
       + rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`).join("")
@@ -265,7 +269,7 @@
   DS.skeleton = (o) => { o = o || {}; const n = o.rows || 3; const ws = o.widths || ["100%", "80%", "60%"]; return `<div class="ds-skeletons" aria-busy="true" aria-label="Loading">${Array.from({ length: n }, (_, i) => `<span class="ds-skeleton" style="width:${ws[i % ws.length]};margin:6px 0"></span>`).join("")}</div>`; };
   DS.stat = (o) => { o = o || {}; return `<div${attrs({ class: cls("ds-stat", o.cls), title: o.title })}><span class="ds-stat-label">${esc(o.label)}</span><span class="${cls("ds-stat-value", o.mono && "ds-mono")}"${o.tone ? ` style="color:var(--ds-${o.tone}-ink)"` : ""}>${o.html || esc(o.value)}</span>${o.hint ? `<span class="ds-stat-hint">${esc(o.hint)}</span>` : ""}</div>`; };
   DS.kpis = (stats) => `<div class="ds-kpis">${(stats || []).map((s) => `<div class="ds-kpi">${DS.stat(s)}</div>`).join("")}</div>`;
-  DS.empty = (o) => { o = o || {}; return `<div${attrs({ class: cls("ds-empty", o.cls), id: o.id })}>${DS.icon(o.icon || "inbox", { size: "xl" })}<div class="ds-empty-title">${esc(o.title || "Nothing here yet")}</div>${o.text ? `<div class="ds-empty-text">${esc(o.text)}</div>` : ""}${o.action ? DS.button(Object.assign({ variant: "primary" }, o.action)) : ""}</div>`; };
+  DS.empty = (o) => { o = o || {}; return `<div${attrs({ class: cls("ds-empty", o.cls), id: o.id })}>${DS.icon(o.icon || "inbox", { size: "xl" })}<div class="ds-empty-title">${esc(o.title || "Nothing here yet")}</div>${o.text || o.hint ? `<div class="ds-empty-text">${esc(o.text || o.hint)}</div>` : ""}${o.action ? DS.button(Object.assign({ variant: "primary" }, o.action)) : ""}</div>`; };
   DS.errorState = (o) => { o = o || {}; return `<div class="ds-error-state" role="alert">${DS.icon("exclamation-triangle")}<span>${esc(o.text || "Something went wrong.")}</span><span class="ds-spacer" style="flex:1"></span>${o.retry ? DS.button(Object.assign({ label: "Retry", size: "sm", icon: "arrow-path" }, o.retry)) : ""}</div>`; };
   DS.feed = (o) => { o = o || {}; return `<div class="ds-feed">${(o.items || []).map((it) => `<div class="ds-feed-item"><span class="ds-feed-icon">${DS.icon(it.icon || "clock", { size: 14 })}</span><div><div>${it.html || esc(it.text)}</div>${it.by ? `<div class="ds-muted" style="font-size:11px">${esc(it.by)}</div>` : ""}</div><span class="ds-feed-when" title="${esc(DS.fmt ? DS.fmt.title(it.when) : it.when)}">${esc(DS.fmt ? DS.fmt.relative(it.when) : it.when)}</span></div>`).join("")}</div>`; };
 

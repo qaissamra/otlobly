@@ -203,7 +203,7 @@
 .ds-empty-title { font: var(--ds-w-bold) var(--ds-t-md)/1.3 var(--ds-font); color: var(--ds-ink); }
 .ds-empty-text { max-width: 420px; font-size: var(--ds-t-sm); }
 .ds-empty .ds-btn { margin-top: var(--ds-s2); }
-.ds-error-state { display: flex; align-items: center; gap: var(--ds-s2); padding: var(--ds-s3) var(--ds-s4); border: 1px solid var(--ds-danger-line); background: var(--ds-danger-bg); color: var(--ds-danger-ink); border-radius: var(--ds-r-sm); font-size: var(--ds-t-sm); }
+.ds-error-state { max-inline-size: 640px; display: flex; align-items: center; gap: var(--ds-s2); padding: var(--ds-s3) var(--ds-s4); border: 1px solid var(--ds-danger-line); background: var(--ds-danger-bg); color: var(--ds-danger-ink); border-radius: var(--ds-r-sm); font-size: var(--ds-t-sm); }
 
 /* ---------- page header ---------- */
 .ds-pagehead { display: flex; flex-direction: column; gap: var(--ds-s2); padding: var(--ds-s4) 0 var(--ds-s3); }
@@ -328,9 +328,24 @@ dialog.ds-dialog[open] { display: flex; }
    DataTable (static/ds/table.js) — CSS-grid rows, sticky header strip whose
    scrollLeft mirrors the body scroller, sticky start/end columns, compact rows.
    ========================================================================== */
-.ds-table { --ds-cols: 1fr; --ds-view-w: 100%; position: relative; border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-card); overflow: hidden; }
-.ds-table-headclip { position: sticky; top: var(--ds-table-top, 0px); z-index: var(--ds-z-sticky); overflow: hidden; background: var(--ds-bg2); border-bottom: 1px solid var(--ds-line); }
+/* `clip`, NOT `hidden`. Both clip the same way and keep the rounded corners, but
+   `hidden` makes this a scroll container, and then EVERY position:sticky descendant
+   sticks to a box that never scrolls - i.e. scrolls away with the page. Measured on a
+   61-row board: the column headers ended up at -76px, the Columns bar at -115px, and
+   the bulk bar at 2843px in a 900px viewport. All three were unreachable. */
+/* --ds-view-w is the scrollport's width in px, written by DS.tableMount and kept up to
+   date by its ResizeObserver. The 100% here is only the pre-mount frame - and note it
+   now means the full SCROLL width, not the viewport, since .ds-table-body became
+   max-content. Nothing renders a table without mounting it (DS.tableRender mounts on
+   the next statement, before paint), so it is never seen; do not rely on it. */
+.ds-table { --ds-cols: 1fr; --ds-view-w: 100%; position: relative; border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-card); overflow: clip; }
+.ds-table-headclip { position: sticky; top: calc(var(--ds-table-top, 0px) + var(--ds-table-bar-h, 0px)); z-index: var(--ds-z-sticky); overflow: hidden; background: var(--ds-bg2); border-bottom: 1px solid var(--ds-line); }
 .ds-table-head, .ds-tr, .ds-table-foot { display: grid; grid-template-columns: var(--ds-cols); width: max-content; min-width: 100%; }
+/* Same width as the rows it holds. Without this the body is only as wide as the
+   scrollport, so a one-screen-wide sticky expansion has ZERO travel inside its
+   containing block and sticky silently does nothing. min-width keeps an empty
+   table's empty state full width. */
+.ds-table-body { width: max-content; min-width: 100%; }
 .ds-table-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 .ds-table-scroll::-webkit-scrollbar { height: 10px; }
 .ds-table-scroll::-webkit-scrollbar-thumb { background: var(--ds-line-strong); border-radius: 5px; border: 2px solid var(--ds-card); }
@@ -382,10 +397,16 @@ dialog.ds-dialog[open] { display: flex; }
 .is-open .ds-exp-btn { background: var(--ds-bg3); color: var(--ds-ink); }
 .ds-exp-btn .ds-icon { transition: transform var(--ds-dur-fast) var(--ds-ease); }
 .is-open .ds-exp-btn .ds-icon { transform: rotate(90deg); }
-.ds-tr-exp { width: var(--ds-view-w, 100%); padding: var(--ds-s3) var(--ds-s4); padding-inline-start: 44px; background: var(--ds-bg2); border-bottom: 1px solid var(--ds-line); will-change: transform; }
+/* One screen wide and held still while the row grid scrolls sideways under it. This
+   used to be done by setting transform:translateX(scrollLeft) from the scroll event,
+   which paints a frame late and visibly lags. Real sticky does it on the compositor
+   now that .ds-table-body is wide enough to stick against. */
+.ds-tr-exp { position: sticky; inset-inline-start: 0; width: var(--ds-view-w, 100%); padding: var(--ds-s3) var(--ds-s4); padding-inline-start: 44px; background: var(--ds-bg2); border-bottom: 1px solid var(--ds-line); }
 .ds-table-foot { background: var(--ds-bg2); border-top: 1px solid var(--ds-line); font-weight: var(--ds-w-bold); font-size: var(--ds-t-sm); }
 .ds-table-foot .ds-td { height: 34px; background: var(--ds-bg2); }
-.ds-table-bar { display: flex; align-items: center; gap: var(--ds-s2); padding: 6px 10px; border-bottom: 1px solid var(--ds-line); font-size: var(--ds-t-sm); color: var(--ds-muted); background: var(--ds-card); }
+/* Sticky: it carries the Columns control, and on a long board the owner scrolled past
+   it and could never get back to it without returning to the top of the page. */
+.ds-table-bar { position: sticky; top: var(--ds-table-top, 0px); z-index: var(--ds-z-sticky); display: flex; align-items: center; gap: var(--ds-s2); min-height: var(--ds-table-bar-h); padding: 6px 10px; border-bottom: 1px solid var(--ds-line); font-size: var(--ds-t-sm); color: var(--ds-muted); background: var(--ds-card); }
 .ds-table-bar .ds-spacer { flex: 1; }
 .ds-table-comfortable { --ds-row: var(--ds-row-comfortable); }
 .ds-table-state { padding: var(--ds-s4); }
