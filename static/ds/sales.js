@@ -108,7 +108,9 @@
       // sits above the rows where it can be found.
       m ? { key: "deposit", label: "Deposit", w: 100, align: "end", defaultHidden: true,
         sortVal: (o) => o.deposit_usd || 0, render: (o) => ctx.depositCell(o) } : null,
-      m ? { key: "remaining", label: "Still owed", w: 104, align: "end",
+      // hidden by default (owner, 2026-09-08). Amount stays; this one is derivable
+      // from it and the deposit, and the board is long enough already.
+      m ? { key: "remaining", label: "Still owed", w: 104, align: "end", defaultHidden: true,
         sortVal: (o) => (o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd || 0),
         render: (o) => { const v = o.remaining_usd != null ? o.remaining_usd : o.amount_to_collect_usd;
           return v == null ? D.dash() : `<b class="ds-num">${esc(money(v))}</b>`; } } : null,
@@ -196,6 +198,9 @@
     if (!el) return;
     D.tableRender(el, {
       id: "od_orders",
+      // 1 = Batch B5 hid "Still owed". Bump whenever a defaultHidden CHANGES on a
+      // column that already shipped, or saved layouts keep the old default forever.
+      seedVersion: 1,
       columns: orderColumns(ctx),
       rows,
       rowKey: (o) => o.order_id,

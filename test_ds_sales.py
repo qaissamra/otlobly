@@ -55,6 +55,7 @@ def main():
     ful = (DS / "fulfillment.js").read_text(encoding="utf-8")
     table = (DS / "table.js").read_text(encoding="utf-8")
     shell = (DS / "shell.js").read_text(encoding="utf-8")
+    tokens = (DS / "tokens.css").read_text(encoding="utf-8")
     css = (DS / "ds.css").read_text(encoding="utf-8")
     idx = (HERE / "web" / "index.html").read_text(encoding="utf-8")
     rep = (HERE / "report.py").read_text(encoding="utf-8")
@@ -182,11 +183,48 @@ def main():
           "await loadPurchases()" in idx and idx.count("fetch(\"/api/purchases\")") == 1)
     check("a GWD is searchable from the Orders search box", "pk.tracking_number||\"\"" in idx)
 
-    # ---- 11. purchases.js is text again -------------------------------------
+    # ---- 11. Batch B5: the sticky layer actually sticks ---------------------
+    # `overflow: hidden` made .ds-table a scroll container that never scrolls, so EVERY
+    # sticky descendant scrolled away with the page. Measured on the 61-row board: headers
+    # at -76px, the Columns bar at -115px, the bulk bar at 2843px in a 900px viewport.
+    tbl_rule = re.search(r"\n\.ds-table \{([^}]*)\}", css).group(1)
+    check("the table clips WITHOUT becoming a scroll container",
+          "overflow: clip" in tbl_rule and "overflow: hidden" not in tbl_rule)
+    check("the bar carrying the Columns control is sticky",
+          "position: sticky" in re.search(r"\.ds-table-bar \{([^}]*)\}", css).group(1))
+    check("the column headers park below it, not behind it",
+          "var(--ds-table-bar-h" in re.search(r"\.ds-table-headclip \{([^}]*)\}", css).group(1))
+    check("and the offsets come from tokens, not magic numbers",
+          "--ds-table-top: var(--ds-topbar-h)" in tokens and "--ds-table-bar-h:" in tokens)
+
+    # the expansion is held by CSS now, not by a transform written on every scroll event
+    expr = re.search(r"\.ds-tr-exp \{([^}]*)\}", css).group(1)
+    check("the row expansion is position: sticky", "position: sticky" in expr)
+    check("pinned with a logical property (a physical `left` fails the DS lint)",
+          "inset-inline-start: 0" in expr and "left:" not in expr)
+    check("the will-change hint went with the transform", "will-change" not in expr)
+    check("the body is as wide as its rows, or sticky has nothing to travel in",
+          "width: max-content" in re.search(r"\.ds-table-body \{([^}]*)\}", css).group(1))
+    check("an empty table still fills the viewport",
+          "min-width: 100%" in re.search(r"\.ds-table-body \{([^}]*)\}", css).group(1))
+    sync = re.search(r"DS\.tableSync = \(scroller\) => \{(.*?)\n  \};", table, re.S).group(1)
+    check("nothing writes a transform on scroll any more",
+          "transform" not in code_only(sync) and "translateX" not in code_only(sync))
+    check("an error message wraps instead of making its own scrollbar",
+          "max-inline-size: 640px" in re.search(r"\.ds-error-state \{([^}]*)\}", css).group(1))
+
+    # a sub-table's flexible column stops growing before it swallows the panel
+    check("a width-less sub-table column is capped, not 1fr",
+          "minmax(0,var(--ds-pu-flex,620px))" in ds and "minmax(0,1fr)" not in ds)
+    check("Still owed is hidden, not deleted", "defaultHidden" in cols.get("remaining", ""))
+    check("DS.empty no longer drops the `hint` its callers pass",
+          "o.text || o.hint" in ds and 'hint: "Change the search' in sales)
+
+    # ---- 12. purchases.js is text again -------------------------------------
     raw = (DS / "purchases.js").read_bytes()
     check("purchases.js carries no NUL byte — grep can read it again", b"\x00" not in raw)
 
-    # ---- 12. it runs --------------------------------------------------------
+    # ---- 13. it runs --------------------------------------------------------
     node = shutil.which("node")
     if not node:
         print("  -- node not found: skipping the executed check")

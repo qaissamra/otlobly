@@ -19,6 +19,7 @@
        loading: false, error: null, retry(), empty: { title, text, action },
        footer: { key: html }, page: { from, to, total, onPrev(), onNext() }, density: "compact"|"comfortable",
        onStateChange(state)                            // width / order / hidden / sort / density (for the router later)
+       seedVersion: n                                  // bump when a column's defaultHidden CHANGES, so saved layouts pick it up once
      })
    Column types: id · text · number · money · date · status · attention · actions · bool.
    ========================================================================== */
@@ -49,18 +50,25 @@
       // seeded once without touching the choices they made.
       const all = (this.o.columns || []).map((c) => c.key);
       const dflt = (this.o.columns || []).filter((c) => c.defaultHidden).map((c) => c.key);
+      // `known` covers a column ADDED as defaultHidden. It cannot cover a column that
+      // already existed and has now BEEN MADE defaultHidden - the layout has seen it, so
+      // it is never re-seeded and the new default reaches nobody who has used the board.
+      // `seedVersion` is how a page says "the defaults changed": bump it and every default
+      // is applied once more, on top of whatever else the user had hidden. It only ever
+      // ADDS to `hidden`, so it cannot yank back a column they chose to show.
+      const wantV = this.o.seedVersion || 0, haveV = s.seed || 0;
       let seed;
-      if (!s.hidden) seed = dflt;                       // never seen this table
-      else if (!s.known) seed = dflt;                   // layout predates `known` — seed once
+      if (!s.hidden || !s.known) seed = dflt;           // new table, or a layout predating `known`
+      else if (haveV < wantV) seed = s.hidden.concat(dflt.filter((k) => !s.hidden.includes(k)));
       else seed = s.hidden.concat(dflt.filter((k) => !s.known.includes(k) && !s.hidden.includes(k)));
-      this.state = { w: s.w || {}, hidden: seed, known: all, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
+      this.state = { w: s.w || {}, hidden: seed, known: all, seed: wantV, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
       // Stamp `known` now, not on the next change. Otherwise a layout saved before
       // this existed is re-seeded on EVERY load, so a column the user deliberately
       // un-hid folds itself away again each time they open the page.
-      if (!s.known) { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } }
+      if (!s.known || haveV < wantV) { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } }
     }
     save() { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } if (this.o.onStateChange) this.o.onStateChange(this.state); }
-    reset() { this.state = { w: {}, hidden: [], known: (this.o.columns || []).map((c) => c.key), order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
+    reset() { this.state = { w: {}, hidden: [], known: (this.o.columns || []).map((c) => c.key), seed: this.o.seedVersion || 0, order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
     columns() {
       const base = this.o.columns.slice();
       if (this.state.order) { const idx = new Map(this.state.order.map((k, i) => [k, i])); base.sort((a, b) => (idx.has(a.key) ? idx.get(a.key) : 1e6 + this.o.columns.indexOf(a)) - (idx.has(b.key) ? idx.get(b.key) : 1e6 + this.o.columns.indexOf(b))); }
@@ -150,8 +158,14 @@
     /** ABOVE the rows, not below them (Batch B3). It carries the Columns control,
         and under a 61-row board that put the only way to unhide a column ~2,800px
         down the page - the owner reported columns as "gone" because the escape
-        hatch was unreachable. The bulk bar stays at the end: it is sticky to the
-        bottom of the viewport, so it is never out of reach. */
+        hatch was unreachable.
+        Moving it was not enough, and the claim that first stood here - that the
+        bulk bar "is sticky to the bottom of the viewport, so it is never out of
+        reach" - was WRONG. `.ds-table` was `overflow: hidden`, which made it a
+        scroll container that never scrolls, so this bar, the bulk bar and the
+        column headers all quietly scrolled away with the page. Measured: this bar
+        at -115px and the bulk bar at 2843px in a 900px viewport. `overflow: clip`
+        fixed all three; both bars are `position: sticky` in ds.css. */
     bar() {
       const p = this.o.page; const n = (this.o.rows || []).length;
       const count = p ? `${DS.fmt.number(p.from)}–${DS.fmt.number(p.to)} of ${DS.fmt.number(p.total)}` : `${DS.fmt.number(n)} ${n === 1 ? "row" : "rows"}`;
@@ -207,12 +221,19 @@
   DS.tableSync = (scroller) => {
     const table = scroller.closest(".ds-table"); const clip = table && table.querySelector(".ds-table-headclip");
     if (clip) clip.scrollLeft = scroller.scrollLeft;
-    /* Row expansions are one screen wide and must stay put while the row grid scrolls sideways.
-       `position: sticky` cannot pin them (their containing block is the full-width body, so there is
-       nothing to stick against) — the same lesson the GAASH workflows table learned. Translating by
-       the scroll offset is what actually holds them still, in both directions. */
-    const x = scroller.scrollLeft;
-    scroller.querySelectorAll(".ds-tr-exp").forEach((e) => { e.style.transform = x ? `translateX(${x}px)` : ""; });
+    /* Row expansions used to be held still here, by setting transform:translateX(scrollLeft)
+       on every scroll event. That paints a frame after the browser has already drawn the
+       scrolled rows, so the expansion visibly lagged and jittered behind them. The old comment
+       said `position: sticky` could not pin them because their containing block gave them
+       "nothing to stick against" — true at the time, but the real cause was that
+       `.ds-table-body` was only as wide as the scrollport while its rows were `max-content`,
+       so a one-screen-wide box had ZERO travel inside its containing block. The body now has
+       the rows' width and sticky holds them natively, on the compositor.
+       This is the same shape the legacy board has used all along - see web/index.html's
+       `.bt-wrap` rules: `width:max-content;min-width:100%` on every nesting level plus
+       `position:sticky;inset-inline-start:0` on the pinned part, with a comment warning that
+       an intermediate `overflow` would hijack the sticky scroll box. Exactly what
+       `.ds-table`'s `overflow:hidden` was doing here. */
     scroller.classList.toggle("is-scrolled", Math.abs(scroller.scrollLeft) > 1);
     scroller.classList.toggle("has-more", Math.abs(scroller.scrollLeft) + scroller.clientWidth < scroller.scrollWidth - 1);
   };
