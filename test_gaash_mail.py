@@ -1542,6 +1542,13 @@ def main():
     except ValueError:
         _bad = True
     check("an Arabic name is refused, never printed as question marks", _bad)
+    # Owner, 08/09/2026: "remove that it's for personal import". 23 watches in
+    # one box is not a personal import, and claiming it on the paper that
+    # answers "are these genuine" only invites customs to disbelieve the rest.
+    check("the originality paper never claims a personal import",
+          "personal" not in _decl.ORIGINALITY_BODY.lower()
+          and b"personal" not in gm.originality_attachment("GWD900900900")[1])
+
     _del_thread("GWD900900900")
 
     print("— grouped conversations (one email, several parcels of one order) —")
