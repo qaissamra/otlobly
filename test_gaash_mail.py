@@ -1545,6 +1545,54 @@ def main():
     # Owner, 08/09/2026: "remove that it's for personal import". 23 watches in
     # one box is not a personal import, and claiming it on the paper that
     # answers "are these genuine" only invites customs to disbelieve the rest.
+    # 📎 the proof page. Owner, 08/09/2026, with the Amazon order on screen:
+    # "attach this image to the file". Inside the same PDF, because GAASH's
+    # upload page takes ONE file per document slot — a screenshot sent beside
+    # the declaration has nowhere to land.
+    def _png(w, h, rgba=False):
+        """A tiny real PNG, written by hand (no image library on the server)."""
+        import struct as _s, zlib as _z
+        ch = 4 if rgba else 3
+        rows = b"".join(b"\x00" + bytes([200, 40, 90] + ([255] if rgba else []))
+                        * w for _ in range(h))
+        def chunk(t, b):
+            return (_s.pack(">I", len(b)) + t + b
+                    + _s.pack(">I", _z.crc32(t + b) & 0xFFFFFFFF))
+        return (b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", _s.pack(">IIBBBBB", w, h, 8, 6 if rgba else 2,
+                                         0, 0, 0))
+                + chunk(b"IDAT", _z.compress(rows)) + chunk(b"IEND", b""))
+
+    check("a pasted RGBA screenshot is read without any image library",
+          _decl.read_png(_png(4, 3, rgba=True))[1:] == (4, 3, 3))
+    check("...and a plain RGB one too",
+          _decl.read_png(_png(4, 3))[1:] == (4, 3, 3))
+    check("junk is refused, never half-drawn onto a customs paper",
+          _decl.read_png(b"not a png") is None)
+    import purchases as _pur
+    _pur.IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    (_pur.IMAGE_DIR / "decl-proof.png").write_bytes(_png(40, 20))
+    pdb2 = _pur.load()
+    for _po in pdb2["purchase_orders"]:
+        if _po.get("po_id") == "PO-DECL":
+            _po["attachments"] = ["decl-proof.png"]
+    _pur.save(pdb2)
+    check("the PO's order screenshot is what rides behind the declaration",
+          [c for _b, c in gm.annex_images("GWD900900900")]
+          == ["Amazon order 111-D — order confirmation"])
+    one_page = gm.originality_attachment("GWD900900900")[1]
+    check("the proof really is a second page of the SAME pdf",
+          one_page.count(b"/Type/Page/") == 2
+          and b"attached to this declaration" in one_page)
+    check("...and with nothing to attach the paper says so honestly",
+          b"available on request" in _decl.build_originality(
+              gwd="GWD900900900", name="X", id_number="1", contents=[])[1])
+    check("a picture that cannot be read is skipped, never fatal",
+          _decl.build_originality(gwd="GWD900900900", name="X", id_number="1",
+                                  contents=[], annex=[(b"junk", "x")])[1]
+          .count(b"/Type/Page/") == 1)
+    (_pur.IMAGE_DIR / "decl-proof.png").unlink()
+
     check("the originality paper never claims a personal import",
           "personal" not in _decl.ORIGINALITY_BODY.lower()
           and b"personal" not in gm.originality_attachment("GWD900900900")[1])
