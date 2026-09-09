@@ -531,3 +531,34 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-fl-profit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--ds-s6); padding-block: var(--ds-s3) var(--ds-s1); }
 .ds-fl-profit .ds-stat-value { font-size: var(--ds-t-xl); }
 .ds-fl-cost { inline-size: 150px; font: var(--ds-w-bold) var(--ds-t-xl)/1.2 var(--ds-font); }
+
+/* ── Leluxe orders (Batch F1) — the row expansion is a stack of PARCELS, each a
+   head line plus its products in a `.ds-pu-sub` grid. A parcel's own facts
+   (GAASH stage, deadline, documents) live on the head; a product's live on its
+   row, so nothing has to be blanked to keep one shared grid honest. ── */
+.ds-lx-name { display: inline-flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; }
+.ds-lx-exp { display: flex; flex-direction: column; gap: var(--ds-s3); }
+.ds-lx-parcel { border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-bg); overflow: clip; }
+.ds-lx-parcel-head { display: flex; align-items: center; gap: var(--ds-s2); flex-wrap: wrap;
+  padding: var(--ds-s2) var(--ds-s3); min-block-size: 34px; }
+.ds-lx-parcel.is-open > .ds-lx-parcel-head { border-block-end: 1px solid var(--ds-line); }
+.ds-lx-parcel-head .ds-exp-btn { flex: 0 0 auto; }
+.ds-lx-parcel.is-open > .ds-lx-parcel-head .ds-exp-btn .ds-icon { transform: rotate(90deg); }
+.ds-lx-parcel-tn { font: var(--ds-w-bold) var(--ds-t-sm)/1.2 var(--ds-font-mono); min-inline-size: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-lx-parcel-head .ds-muted { font-size: var(--ds-t-xs); }
+.ds-lx-parcel-pills { display: inline-flex; align-items: center; gap: var(--ds-s2); flex-wrap: wrap;
+  margin-inline-start: auto; }
+.ds-lx-parcel .ds-pu-sub { border: 0; border-radius: 0; }
+.ds-lx-none { padding: var(--ds-s3); font-size: var(--ds-t-sm); }
+.ds-lx-add { padding: var(--ds-s2) var(--ds-s3); }
+.ds-lx-exp-foot { display: flex; align-items: center; gap: var(--ds-s2); }
+.ds-lx-exp-foot .ds-spacer { flex: 1; }
+.ds-lx-orphans { margin-block-start: var(--ds-s4); border: 1px solid var(--ds-line);
+  border-radius: var(--ds-r-sm); background: var(--ds-card); }
+.ds-lx-orphans-h { padding: var(--ds-s2) var(--ds-s3); border-block-end: 1px solid var(--ds-line);
+  font-size: var(--ds-t-xs); font-weight: var(--ds-w-bold); }
+.ds-lx-orphan { display: flex; align-items: center; gap: var(--ds-s2); cursor: pointer;
+  padding: var(--ds-s2) var(--ds-s3); font-size: var(--ds-t-sm); min-block-size: 30px; }
+.ds-lx-orphan + .ds-lx-orphan { border-block-start: 1px solid var(--ds-line); }
+.ds-lx-orphan:hover { background: var(--ds-bg2); }

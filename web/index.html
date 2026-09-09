@@ -18,6 +18,7 @@
 <script src="/static/ds/purchases.js"></script>
 <script src="/static/ds/fulfillment.js"></script>
 <script src="/static/ds/sales.js"></script>
+<script src="/static/ds/leluxe.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -452,7 +453,6 @@
      scrollLeft lxtSync keeps in step with the body. Grid vars per table:
      --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
-  .lx-cols{display:grid;grid-template-columns:var(--lxgrid,78px 100px 66px 98px 160px 112px 78px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3473,7 +3473,6 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // status button on every load/deploy ("the empty orange box" bug); clamping
 // at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "":  {key:"lx_colw",  varn:"--lxgrid",  head:".lx-colhead .lx-cols",   rows:"lxRows"},
   "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows"},
   "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows"},
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
@@ -3862,23 +3861,24 @@ function renderLeluxe(){
   const has=orders.length||orphans.length;
   $("lxEmpty").style.display=has?"none":"block";
   $("lxEmpty").textContent=(LX.orders||[]).length?"No orders match the filter.":"No orders yet — ＋ New order, or ⬇ Migrate from AZ (2).";
-  if(LX_SORT){
-    const {key,dir}=LX_SORT;
-    orders.sort((a,b)=>{ const va=lxSortVal(a,key), vb=lxSortVal(b,key);
-      return (typeof va==="string"?va.localeCompare(vb,undefined,{numeric:true}):va-vb)*dir; });
-  }
   const onlyBanner=LX_ONLY?`<div class="panel" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">👁 <b>Showing ${LX_ONLY.size} just-migrated order${LX_ONLY.size===1?"":"s"}</b><span class="spacer" style="flex:1"></span><button class="minibtn" onclick="LX_ONLY=null;renderLeluxe()">✕ show all</button></div>`:"";
-  // Σ totals footer — order count + product count + Σ Total Amount (₪)
-  const totAmt=orders.reduce((a,o)=>{ const v=Number(lxF(o,"total amount")); return a+(isNaN(v)?0:v); },0);
-  const totItems=orders.reduce((a,o)=>a+lxItemsOf(o).length,0);
-  const oTotals=orders.length?`<div class="poc-row bt-total">
-      <div class="bt-pin">Σ ${orders.length} طلب · ${totItems} منتج</div>
-      ${lxtCells("",{total:`<b style="font-size:var(--ds-t-sm)" title="مجموع Total Amount لكل الطلبات المعروضة · total of all shown orders">₪${Math.round(totAmt).toLocaleString()}</b>`})}
-    </div>`:"";
-  $("lxRows").innerHTML=onlyBanner
-    +(orders.length?lxtHead("","الطلب · order","name"):"")
-    +lxtWrap("",orders.map(lxCardHtml).join("")+orphans.map(lxOrphanRow).join("")+oTotals);
-  lxColwApply(); lxtGridApply("");
+  // Batch F1: the board itself is static/ds/leluxe.js (DS.lxOrders) — this is the
+  // bridge. It hands over the filtered orders and the state that must survive a
+  // re-render (which orders and parcels are open); a page module cannot see these
+  // top-level `let`s, exactly as with purchases.js and sales.js.
+  $("lxRows").innerHTML=onlyBanner+`<div id="lxBoard"></div>`+DS.lxOrders.orphans(orphans);
+  DS.lxOrders.render($("lxBoard"),{
+    orders, orphans,
+    isOpen:id=>LX_OPEN.isOpen(id),
+    // the DataTable hands back a string key; LX_OPEN is keyed by the numeric id
+    setOpen:(key,open)=>{ const id=Number(key); open?LX_OPEN.open(id):LX_OPEN.close(id); },
+    pkgOpen:k=>LX_PCOL.isOpen(k),
+    // carried over ONCE from the old lx_sort preference; from then on this board
+    // persists its own layout like every other DS table
+    sort:LX_SORT?{key:LX_SORT.key,dir:LX_SORT.dir===1?"asc":"desc"}:null,
+    empty:{title:(LX.orders||[]).length?"No orders match the filter":"No orders yet",
+           text:(LX.orders||[]).length?"Clear the search or the filters above.":"＋ New order, or 🔄 Sync from AZ (2)."},
+  });
 }
 // ── Packages view: every package as ONE flat row — real 📦 subtasks plus loose
 // products grouped by their GWD (same grouping the orders view shows) — with the
@@ -3918,17 +3918,6 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // a column never shows both languages (the ⊕ picker + sort tooltips route through
 // T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
-  "":[
-    {key:"profile", label:"الحساب · profile", w:78,  sort:"profile"},
-    {key:"status",  label:"الحالة · status",  w:100, min:84, sort:"status"},
-    {key:"total",   label:"الإجمالي · total",   w:66,  sort:"total"},
-    {key:"tracking",label:"التتبع · tracking",w:98,  sort:"tracking"},
-    {key:"gash",    label:"الجمارك · gash",    w:160, sort:"gash"},
-    {key:"deadline",label:"الموعد النهائي · deadline",w:112, sort:"gaash deadline", sortKey:"deadline"},
-    {key:"created", label:"أُنشئ · created", w:78,  sort:"created"},
-    {key:"due",     label:"تاريخ الاستحقاق · due date",w:78,  sort:"due"},
-    {key:"menu",    label:"",        w:28,  locked:true},
-  ],
   "p":[
     {key:"order",     label:"الطلب · order",       w:84,  sortable:true},
     {key:"profile",   label:"الحساب · profile",     w:64,  sortable:true},
@@ -4026,7 +4015,7 @@ const LXT_COLS={
     {key:"gwds",    label:"أرقام الطرود · GWD",       w:150},
   ],
 };
-const LXT_CLS={"":["lx-colhead","lx-cols"],"p":["lx-pcolhead","lx-pcols"],
+const LXT_CLS={"p":["lx-pcolhead","lx-pcols"],
                "k":["lx-kcolhead","lx-kcols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
                "en":["en-colhead","en-cols"],
@@ -5096,86 +5085,6 @@ function lxCountLbl(items){
   const s=items.reduce((a,it)=>{ const q=Number(lxF(it,"quantity ordered")); if(q>0){ any=true; return a+q; } return a+1; },0);
   return `${items.length} product${items.length===1?"":"s"}${any&&s!==items.length?` · ×${s}`:""}`;
 }
-function lxCardHtml(o){
-  const open=LX_OPEN.isOpen(o.id), pkgs=o.packages||[], loose=o.items||[];
-  const amt=lxF(o,"total amount");
-  // Purchases-style tracking strip: GWD + live GASH + 🛵 Gerizim + ⏳ deadline + gash date
-  const tr=lxTrackedRow(o);
-  const tn=tr?((tr.data&&tr.data.tracking_number)||lxF(tr,"tracking number")||""):"";
-  const gashDate=lxF(o,"gash date")||(tr&&lxF(tr,"gash date"));
-  const delivered=tr&&lxGzDone(tr);   // last-mile delivered → drop the countdown chips
-  // Header status is DISPLAY-ONLY (never edits the order task, never bulk): show the
-  // products' shared status when they all agree, else "mixed"; 0-product → order status.
-  const its=lxItemsOf(o), uStatus=[...new Set(its.map(i=>i.status).filter(Boolean))];
-  const headStatus=its.length?(uStatus.length===1
-      ?lxStatusPill(uStatus[0])
-      :tonePill("gray","mixed","products have different statuses — expand to see each"))
-    :lxStatusPill(o.status);
-  // header tracking: shared GWD if all agree, else "multiple"/"no tracking" —
-  // the order's OWN number and real packages' numbers count too (an order-level
-  // tn used to save fine but never show anywhere).
-  const ordTn=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();
-  const pkgTns=pkgs.map(pk=>String((pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"").trim());
-  const uTn=[...new Set([...its.map(i=>String(lxF(i,"tracking number")||(i.data&&i.data.tracking_number)||"").trim()),...pkgTns,ordTn].filter(Boolean))];
-  const headTn=uTn.length===1?`${poTn4(uTn[0],'var(--ds-t-xs)')}${lxCopyRawBtn(uTn[0])}`
-    :uTn.length>1?`<span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7" title="products have different tracking numbers">📦 multiple tracking</span>`
-    :`<span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`;
-  const oMenu=popMenu([
-    [`✏️ تعديل الطلب · Edit order`,`lxOpenEditor('order',${o.id},null)`],
-    [`🚚 رقم التتبع للطلب · Set tracking number`,`lxOrderSetTracking(${o.id})`],
-    uTn.length===1?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(uTn[0])}')`]:null,
-    uTn.length?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('order',${o.id})`]:null,
-    pkgs.length?[`📦⤴ نظّم الطرود في ClickUp · Organize in ClickUp`,`lxAz2Organize(${o.id})`]:null,
-    [`＋ إضافة طرد · Add package`,`lxOpenEditor('package',null,${o.id})`],
-    [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${o.id})`],
-    [`🗑 إخفاء · hide`,`lxDelete(${o.id})`,true],
-  ]);
-  const head=`<div class="po-head"><div class="po-title" title="انقر لعرض كل التفاصيل · click for full order details"
-      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('order',${o.id})" style="cursor:pointer">
-      <div class="bt-pin">
-        <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxToggle(${o.id})">${open?"▾":"▸"}</span>
-        ${lxDot(o)}${lxConfPill(o.sync_state==="conflict"?o:[...(o.packages||[]),...lxItemsOf(o)].find(r=>r.sync_state==="conflict"))}
-        <b class="po-name" style="font-family:ui-monospace,Menlo,monospace;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${poEsc(o.name)}">${lxShortName(o.name)}</b>
-        ${lxCopyBtn(o.name)}
-        ${lxThumbs(lxItemsOf(o))}
-        ${gzRollup(lxOrderGwds(o))}
-      </div>
-      ${lxtCells("",{
-        profile: lxProfileCell(lxOrderAcct(o)),
-        status: headStatus,
-        total: amt!=null?`<b style="font-size:var(--ds-t-sm)" title="Total Amount (₪)">₪${Number(amt).toLocaleString()}</b>`:"",
-        tracking: headTn,
-        gash: lxMergedStatusPill(tr)||lxNoDataPill(tr),
-        deadline: `${tr?lxDeadlinePill(tr,true)+lxDocsPill(tr):""}${gashDate&&!delivered?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(o))}</span>`:""}`,
-        created: o.date_created?`<span class="muted2" style="font-size:var(--ds-t-xs)" title="date created (set automatically on the day the order is made)">⊕ ${lxDate(o.date_created)}</span>`:"",
-        due: delivered?"":lxDueChip(o.due_date,lxIsDone(o)),
-        menu: oMenu,
-      })}
-    </div></div>`;
-  if(!open) return `<div class="po-card" id="lxo${o.id}">${head}</div>`;
-  // same one-row-per-parcel model the 📦 Packages view uses — nothing is filtered
-  // out here: the card is where an empty/odd package is inspected and cleaned up
-  const prows=lxPkgRows(o);
-  // all-untracked flat list still gets a one-shot "set tracking" bar (the visual
-  // "no tracking" group only exists once at least one product is tracked)
-  const looseBar=loose.length?`<div class="pkg-head"><div class="pkg-title-row" style="cursor:default">
-      <span class="bt-pin">
-        <span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>
-        <span class="muted2" style="font-size:var(--ds-t-xs)">${lxCountLbl(loose)}</span>
-        <button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${loose.map(it=>it.id).join(",")}],'','${poEsc(ordTn)}')">🚚 set tracking</button>
-      </span>
-    </div></div>`:"";
-  const body=`<div class="po-body">
-    ${prows.map(r=>r.flat
-      ? `<div class="pkg open">${looseBar}<div class="pkg-body">${r.items.map(it=>lxItemRow(it)).join("")}</div></div>`
-      : (r.pk?lxPkgHtml(o,r.pk,r.items):lxVPkgHtml(o,{tn:r.tn,items:r.items}))).join("")}
-    <div style="display:flex;gap:8px;padding:8px 4px 2px">
-      <button class="po-btn" onclick="lxOpenEditor('package',null,${o.id})">＋ Add package</button>
-      <span class="spacer" style="flex:1"></span>
-      <button class="po-btn danger" title="hide from this page only — the ClickUp task is NOT deleted" onclick="lxDelete(${o.id})">🗑 hide</button>
-    </div></div>`;
-  return `<div class="po-card open" id="lxo${o.id}">${head}${body}</div>`;
-}
 // ── One row per PHYSICAL PARCEL (one GWD = one shipment, same rule the
 // Purchases board states in poMergeDupTracking). The server hands us two
 // legitimate shapes for the same parcel and neither side is wrong:
@@ -5232,109 +5141,9 @@ function lxVisualPkgs(o){
   return [...groups.entries()].sort((a,b)=>(a[0]?0:1)-(b[0]?0:1)).map(([tn,items])=>({tn,items}));
 }
 function lxVPkgToggle(key){ LX_PCOL.toggle(key); renderLeluxe(); }
-function lxVPkgHtml(o,g){
-  const key=`v${o.id}:${g.tn}`, collapsed=!LX_PCOL.isOpen(key);
-  // pills read from the first enriched product in the group (they carry the GWD)
-  const en=g.items.find(lxEnriched)||g.items[0];
-  const gashDate=g.items.map(it=>lxF(it,"gash date")).find(Boolean);
-  const gashStatus=lxGashRollup(g.items);
-  const ordTn=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();  // prefill for set-tracking
-  const gIds=g.items.map(it=>it.id).join(",");
-  if(g.items.length===1){
-    // one product in the package → merge into a single combined row (no duplicate pills)
-    const it=g.items[0], qty=lxF(it,"quantity ordered");
-    return `<div class="pkg open"><div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full product details"
-      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-      <div class="bt-pin">
-        ${lxThumb(lxAmz(it),44)}
-        ${g.tn?`<b class="pkg-title" style="font-size:var(--ds-t-sm);flex:0 0 auto">📦 ${poEsc(g.tn)}</b>${lxCopyRawBtn(g.tn)}`:`<span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7;flex:0 0 auto" title="no GAASH tracking number yet">📦 no tracking</span>`}
-        <div class="poc-name" style="flex:1;min-width:0;display:flex;align-items:center;gap:4px">
-          <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
-          <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
-        </div>
-        ${qty!=null?`<span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-        ${lxCfPill("rd status",lxF(it,"rd status"))}
-      </div>
-      ${lxtCells("",{
-        profile: lxProfileCell(lxAcctChain(it,o)),
-        status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
-        gash: lxGashCell(en,gashStatus,g.tn),
-        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,lxIsDone(it))}</span>`:""}`,
-        due: lxGzDone(en)?"":lxDueChip(it.due_date,lxIsDone(it)),
-        menu: popMenu([
-          [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
-          [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
-          [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
-          g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null, g.tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(g.tn)}')`]:null,
-          [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
-        ]),
-      })}
-    </div></div></div>`;
-  }
-  const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;lxVPkgToggle('${poEsc(key)}')" style="cursor:pointer">
-      <div class="bt-pin">
-        <span class="caret">${collapsed?"▸":"▾"}</span>
-        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${g.tn?poEsc(g.tn):"no tracking"}</b>${g.tn?lxCopyRawBtn(g.tn):""}
-        <span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto">${lxCountLbl(g.items)}</span>
-        ${lxThumbs(g.items)}
-        ${g.tn?"":`<button class="minibtn" style="flex:0 0 auto" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${gIds}],'','${poEsc(ordTn)}')">🚚 set tracking</button>`}
-      </div>
-      ${lxtCells("",{
-        profile: lxProfileCell(lxAcctChain(g.items,o)),
-        gash: lxGashCell(en,gashStatus,g.tn),
-        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${gashDate&&!lxGzDone(en)?`<span title="gash date">${lxDueChip(gashDate,true)}</span>`:""}`,
-        menu: popMenu([
-          [`🚚 تعيين رقم التتبع للكل (${g.items.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(g.tn||"")}','${poEsc(ordTn)}')`],
-          g.tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(g.tn)}')`]:null,
-          g.tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(g.tn)}')`]:null, g.tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(g.tn)}')`]:null,
-        ]),
-      })}
-    </div></div>`;
-  const body=collapsed?"":`<div class="pkg-body">${g.items.map(it=>lxItemRow(it,null,{inPkg:true})).join("")}</div>`;
-  return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
-}
 // `items` = the parcel's products as lxPkgRows resolved them (the package's own
 // children PLUS any loose product absorbed by matching tracking) — defaults to
 // the package's own so every other caller is unchanged.
-function lxPkgHtml(o,pk,items){
-  const collapsed=!LX_PCOL.isOpen(pk.id);
-  items=items||pk.items||[];
-  const tn=lxPkgTn(pk);
-  // an absorbed shell is often empty — fall back to the products for the pills
-  const en=lxEnriched(pk)?pk:(items.find(lxEnriched)||pk);
-  const gashStatus=lxGashRollup([pk,...items]);
-  const gashDate=lxF(pk,"gash date")||items.map(it=>lxF(it,"gash date")).find(Boolean);
-  const head=`<div class="pkg-head"><div class="pkg-title-row" title="انقر لعرض كل التفاصيل · click for full package details"
-      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('package',${pk.id})" style="cursor:pointer">
-      <div class="bt-pin">
-        <span class="caret" title="expand / collapse" onclick="event.stopPropagation();lxPkgToggle(${pk.id})">${collapsed?"▸":"▾"}</span>
-        ${lxDot(pk)}${lxConfPill(pk)}
-        <b class="pkg-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">📦 ${tn?poEsc(tn):"no tracking"}</b>${tn?lxCopyRawBtn(tn):""}
-        <span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto">${lxCountLbl(items)}</span>
-        ${lxThumbs(items)}
-      </div>
-      ${lxtCells("",{
-        profile: lxProfileCell(lxAcctChain(items,pk,o)),
-        gash: lxGashCell(en,gashStatus,tn),
-        deadline: `${lxDeadlinePill(en)}${lxDocsPill(en)}${lxDueChip(gashDate,false)}`,
-        menu: popMenu([
-          [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o.id})`],
-          [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
-          tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-          tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
-          tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
-          [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
-          [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
-        ]),
-      })}
-    </div></div>`;
-  const body=collapsed?"":`<div class="pkg-body">
-    ${items.map(it=>lxItemRow(it,null,{pkgTn:tn})).join("")||`<div class="muted2" style="padding:6px 10px;font-size:var(--ds-t-sm)">no products yet</div>`}
-    <div style="padding:6px 10px 2px"><button class="po-btn" onclick="lxOpenEditor('item',null,${pk.id})">＋ Add product</button></div>
-  </div>`;
-  return `<div class="pkg${collapsed?"":" open"}">${head}${body}</div>`;
-}
 // first-3-words clip, like the Purchases rows (Amazon titles are a paragraph)
 function lxShort3(s){ const w=(s||"").trim().split(/\s+/); return w.length<=3?(s||"").trim():w.slice(0,3).join(" ")+"…"; }
 function lxCopyTitle(btn){ const t=btn.dataset.t||""; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copied ✓ "+lxShort3(t))).catch(()=>toast(t)); }
@@ -5385,44 +5194,11 @@ function lxItemRow(it,parentO,opts){
       })}
     </div>`;
   }
-  return `<div class="poc-row" title="انقر لعرض كل التفاصيل · click for full product details"
-    onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-    <div class="bt-pin">
-      ${lxThumb(img,44)}
-      <div class="poc-name" style="flex:1;min-width:0;display:flex;align-items:center;gap:4px">
-        <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
-        <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
-      </div>
-      ${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:var(--ds-t-xs);cursor:pointer;border:1px solid var(--line);flex:0 0 auto" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}
-      ${qty!=null?`<span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
-      ${lxCfPill("rd status",lxF(it,"rd status"))}
-    </div>
-    ${lxtCells("",{
-      profile: lxProfileCell(lxAcctChain(it,parentO)),
-      status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
-      // a package child whose GWD lives on the package row (the usual ClickUp
-      // shape) inherits it MUTED — never "no tracking" under a tracked header;
-      // an item's own tn (same or divergent) stays normal weight
-      tracking: opts.inPkg?"":(tn?`${poTn4(tn,'var(--ds-t-xs)')}${lxCopyRawBtn(tn)}`
-        :opts.pkgTn?`<span style="opacity:.7" title="من الطرد · from the package">${poTn4(opts.pkgTn,'var(--ds-t-xs)')}</span>${lxCopyRawBtn(opts.pkgTn)}`
-        :`<span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7" title="no GAASH tracking number yet">📦 no tracking</span>`),
-      gash: opts.inPkg?"":lxCfPill("gash status",lxF(it,"gash status")),
-      due: lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it)),
-      menu: itMenu,
-    })}
-  </div>`;
-}
-function lxOrphanRow(r){
-  return `<div class="po-card"><div class="po-head"><div class="po-title" style="cursor:pointer"
-      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('${poEsc(r.kind)}',${r.id})">
-      ${lxDot(r)}${lxConfPill(r)}
-      <b class="po-name" title="${poEsc(r.name)}">${lxShortName(r.name)}</b>
-      ${lxCopyBtn(r.name)}
-      ${tonePill("amber",r.kind+" w/o parent","its parent order/package isn't in this list",{style:"font-size:var(--ds-t-xs)"})}
-      ${lxStatusSelect(r)}
-      <span class="spacer" style="flex:1"></span>
-      <button class="minibtn" onclick="lxOpenEditor('${poEsc(r.kind)}',${r.id},null)">✏️</button>
-    </div></div></div>`;
+  // The tree branch (order card → parcel → product) moved to
+  // static/ds/leluxe.js in Batch F1. What is left is the flat PRODUCTS
+  // board ("p"), still on the LXT engine until F2 — every caller passes
+  // {cols:true}, so reaching here means a caller this migration missed.
+  return "";
 }
 function lxOpenEditor(kind,rowId,parentLocalId){
   const row=rowId?lxFind(rowId):null;
