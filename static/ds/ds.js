@@ -374,6 +374,34 @@
     const upd = o.updated ? `<span class="ds-updated" title="${esc(DS.fmt.title(o.updated))}">Updated ${esc(DS.fmt.relative(o.updated))}</span>` : "";
     return `<header class="ds-pagehead">${crumbs ? `<nav class="ds-crumbs" aria-label="Breadcrumb">${crumbs}</nav>` : ""}<div class="ds-pagehead-row"><h1>${esc(o.title)}</h1>${o.badge || ""}<span class="ds-spacer"></span>${sec}${over.length ? DS.menu({ items: over, button: { icon: "ellipsis-horizontal", ariaLabel: "More actions" } }) : ""}${o.primary ? DS.button(Object.assign({ variant: "primary" }, o.primary)) : ""}</div>${stats || upd ? `<div class="ds-pagehead-stats">${stats}${upd}</div>` : ""}${o.below || ""}</header>`;
   };
+  /** DS.paintHost(host, html) - swap a chrome host's markup without stealing the caret.
+      A page header and its filter bar carry live counts, so they are re-rendered on
+      every keystroke; `innerHTML` then destroys the very <input> the person is typing
+      into, focus falls to <body> and the caret resets, so only the FIRST letter of a
+      search ever lands. Carry the focused field across the swap - its value exactly as
+      TYPED, not as the page normalised it (trimmed, lower-cased), plus the selection -
+      and hand focus back. Anything that is not a focused field in this host is
+      untouched, so a caller can use it wherever it uses innerHTML today. */
+  DS.paintHost = (host, html) => {
+    const el = typeof host === "string" ? document.getElementById(host) : host;
+    if (!el) return null;
+    const a = document.activeElement;
+    let keep = null;
+    if (a && a.id && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) {
+      keep = { id: a.id, value: a.value, start: null, end: null };
+      try { keep.start = a.selectionStart; keep.end = a.selectionEnd; } catch (e) { /* number/date inputs */ }
+    }
+    el.innerHTML = html;
+    if (keep) {
+      const n = el.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(keep.id) : keep.id));
+      if (n) {
+        if (n.value !== keep.value) n.value = keep.value;
+        n.focus();
+        if (keep.start != null) { try { n.setSelectionRange(keep.start, keep.end); } catch (e) { /* unsupported type */ } }
+      }
+    }
+    return el;
+  };
   /** DS.filterBar({search:{...},views:[{key,label,count,active,onclick}],chips:[{label,value,active,onclick,onremove}],add:{onclick},clear:{onclick},right:[html]}) */
   DS.filterBar = (o) => {
     o = o || {};

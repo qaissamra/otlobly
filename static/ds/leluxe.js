@@ -44,7 +44,7 @@
      one failure this program has already paid for twice (Batch B → B3, and
      the owner's "do not remove anything"). Nothing here is defaultHidden. */
   const COLS = (ctx) => [
-    { key: "name", label: "الطلب · order", w: 330, min: 200, pin: "start", sortable: true,
+    { key: "name", label: "الطلب · order", w: 330, min: 200, pin: "start", locked: true, sortable: true,
       sortVal: (o) => String(o.name || "").toLowerCase(),
       render: (o) => nameCell(ctx, o) },
     { key: "profile", label: "الحساب · profile", w: 100, sortable: true,
@@ -336,7 +336,7 @@
        follows.
      ==================================================================== */
   const PCOLS = () => [
-    { key: "product", label: "المنتج · product", w: 330, min: 200, pin: "start", sortable: true,
+    { key: "product", label: "المنتج · product", w: 330, min: 200, pin: "start", locked: true, sortable: true,
       render: (r) => j(W.lxThumb(W.lxAmz(r.it), 30),
         `<span class="ds-truncate" title="${esc(r.it.name || "")}">${esc(W.lxShort3(r.it.name))}</span>`,
         `<button class="lx-copy" title="copy the full product title" data-t="${esc(r.it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) },
@@ -491,7 +491,7 @@
   const fmt2 = (n) => (Math.round(n * 100) / 100).toLocaleString();
 
   const KCOLS = () => [
-    { key: "package", label: "الطرد · package", w: 340, min: 190, pin: "start", sortable: true,
+    { key: "package", label: "الطرد · package", w: 340, min: 190, pin: "start", locked: true, sortable: true,
       render: (r) => packageCell(r) },
     { key: "order", label: "الطلب · order", w: 126, sortable: true, render: (r) => kOrderCell(r) },
     { key: "profile", label: "الحساب · profile", w: 100, sortable: true,

@@ -29,8 +29,15 @@
   const esc = DS.esc, attrs = DS.attrs, cls = DS.cls;
   const TABLES = (DS._tables = DS._tables || {});
   const KEY = (id) => "ds_table_" + id;
+  /** The pages mark "this row has no value here" with a "~" sentinel in `sortVal`,
+      on the assumption that "~" sorts after every letter - true of ASCII (`"~" > "z"`),
+      NOT of the locale-aware compare below, where punctuation collates FIRST. So every
+      one of those columns put the blanks at the TOP of an ascending sort. Hoist the
+      sentinel here, next to the null handling it belongs with, rather than in 35 call
+      sites: blank is blank however a page spells it, and blank sorts last. */
+  const blank = (v) => v == null || v === "" || (typeof v === "string" && /^~+$/.test(v));
   const cmp = (a, b) => {
-    const an = a == null || a === "", bn = b == null || b === "";
+    const an = blank(a), bn = blank(b);
     if (an && bn) return 0; if (an) return 1; if (bn) return -1;
     if (typeof a === "number" && typeof b === "number") return a - b;
     const na = Number(a), nb = Number(b);
@@ -227,6 +234,22 @@
       row the user had touched by hand still won. Call this whenever the page sets the open
       set wholesale. */
   DS.tableResetOpen = (id) => { const t = TABLES[id]; if (!t) return; t.open.clear(); if (t.closed) t.closed.clear(); };
+  /** Expand or collapse EVERY row, whatever `expandable.open(row)` would say. A page's
+      "Expand / Collapse every order" is exactly the row chevron applied to all rows at
+      once, so it belongs in the same `open`/`closed` overrides the chevron writes -
+      a board whose rows open from the table's own state (not from a page store) could
+      not otherwise be reached, and the menu item did nothing. Returns false when the
+      table has no expandable rows, so a page can hide a control that cannot act. */
+  DS.tableSetAllOpen = (id, open) => {
+    const t = TABLES[id];
+    if (!t || !t.o.expandable) return false;
+    t.open.clear(); t.closed = t.closed || new Set(); t.closed.clear();
+    (t.rows() || []).forEach((r, i) => (open ? t.open : t.closed).add(t.key(r, i)));
+    t.rerender();
+    return true;
+  };
+  /** Whether a table can expand its rows at all (used to hide a dead control). */
+  DS.tableExpandable = (id) => !!(TABLES[id] && TABLES[id].o.expandable);
   DS.tableSelected = (id) => (TABLES[id] ? Array.from(TABLES[id].selected) : []);
   DS.tableState = (id) => (TABLES[id] ? TABLES[id].state : null);
   DS.tableSync = (scroller) => {
@@ -270,7 +293,10 @@
       case "show": { t.state.hidden = t.state.hidden.filter((k) => k !== key); t.save(); t.rerender(); break; }
       case "toggleCol": { if (t.state.hidden.includes(key)) t.state.hidden = t.state.hidden.filter((k) => k !== key); else t.state.hidden.push(key); t.save(); t.rerender(); DS.tableEv(id, "colcfg", null, ev); break; }
       case "colcfg": { const anchor = ev && ev.currentTarget && ev.currentTarget.getBoundingClientRect ? ev.currentTarget.getBoundingClientRect() : { left: ev.clientX, bottom: ev.clientY };
-        const cols = t.columns(); const html = `<div class="ds-colcfg"><div class="ds-menu-head">Columns</div>${cols.map((c, i) => `<div class="ds-colcfg-row">${DS.switch({ checked: c.locked || !t.state.hidden.includes(c.key), label: c.label, disabled: !!c.locked, onchange: `DS.tableEv('${id}','toggleCol',${JSON.stringify(c.key)},event)` })}${!c.pin ? DS.button({ icon: "chevron-up", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} up`, disabled: i === 0 || !!cols[i - 1].pin, onclick: `DS.tableEv('${id}','moveUp',${JSON.stringify(c.key)},event)` }) + DS.button({ icon: "chevron-down", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} down`, disabled: i === cols.length - 1 || !!cols[i + 1].pin, onclick: `DS.tableEv('${id}','moveDown',${JSON.stringify(c.key)},event)` }) : ""}</div>`).join("")}<div class="ds-colcfg-foot">${DS.button({ label: "Reset layout", size: "sm", icon: "arrow-uturn-left", onclick: `DS.tableEv('${id}','reset',null,event)` })}</div></div>`;
+        // A column with no label has nothing to say for itself - the row-actions "⋯"
+        // column is the only one - and it is locked besides, so it listed as a blank
+        // row with a dead switch at the bottom of the menu. Structure, not a choice.
+        const cols = t.columns().filter((c) => c.label); const html = `<div class="ds-colcfg"><div class="ds-menu-head">Columns</div>${cols.map((c, i) => `<div class="ds-colcfg-row">${DS.switch({ checked: c.locked || !t.state.hidden.includes(c.key), label: c.label, disabled: !!c.locked, onchange: `DS.tableEv('${id}','toggleCol',${JSON.stringify(c.key)},event)` })}${!c.pin ? DS.button({ icon: "chevron-up", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} up`, disabled: i === 0 || !!cols[i - 1].pin, onclick: `DS.tableEv('${id}','moveUp',${JSON.stringify(c.key)},event)` }) + DS.button({ icon: "chevron-down", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} down`, disabled: i === cols.length - 1 || !!cols[i + 1].pin, onclick: `DS.tableEv('${id}','moveDown',${JSON.stringify(c.key)},event)` }) : ""}</div>`).join("")}<div class="ds-colcfg-foot">${DS.button({ label: "Reset layout", size: "sm", icon: "arrow-uturn-left", onclick: `DS.tableEv('${id}','reset',null,event)` })}</div></div>`;
         DS.menuClose(); const host = DS.menuOpenAt([], anchor.left, anchor.bottom + 4, { label: "Column settings" }); host.querySelector(".ds-menu-list").innerHTML = html; break; }
       case "moveUp": case "moveDown": { const order = t.columns().map((c) => c.key); const i = order.indexOf(key); const j = kind === "moveUp" ? i - 1 : i + 1; if (j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; t.state.order = order; t.save(); t.rerender(); DS.tableEv(id, "colcfg", null, ev); break; }
       case "reset": { t.reset(); DS.menuClose(); t.rerender(); break; }

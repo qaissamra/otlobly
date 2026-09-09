@@ -294,7 +294,7 @@
         D.select({ id: "odBatch", value: ctx.batch, options: ctx.batchOptions, placeholder: "All batches", size: "sm", onchange: "odFilter('batch',this.value)", ariaLabel: "Filter by batch" }),
       ],
     });
-    el.innerHTML = header + bar;
+    D.paintHost(el, header + bar);   // keeps the caret in the search box (DS.paintHost)
   };
 
   // ---------------------------------------------------------------- customers
@@ -387,6 +387,6 @@
           title: "Only customers with an order in the To-order queue" },
       ] : null,
     });
-    el.innerHTML = header + bar;
+    D.paintHost(el, header + bar);   // keeps the caret in the search box (DS.paintHost)
   };
 })();

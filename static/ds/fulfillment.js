@@ -154,7 +154,7 @@
     if (!el) return;
     const kind = ctx.view;
     const cols = [
-      { key: "customer", label: "Customer", w: 230, pin: "start", sortVal: (o) => (o.customer || "~").toLowerCase(),
+      { key: "customer", label: "Customer", w: 230, pin: "start", locked: true, sortVal: (o) => (o.customer || "~").toLowerCase(),
         render: (o) => `<span class="ds-pu-id">${D.avatar({ name: o.customer || "?" })}<span class="ds-fl-who">${text(o.customer)}<span class="ds-mono ds-muted">${esc(o.order_id)}</span></span></span>` },
       { key: "products", label: "Products", w: 190, sortVal: (o) => (o.items || []).length, render: (o) => thumbs(o.items) },
       ctx.money ? { key: "amount", label: "Amount", w: 110, align: "end", sortVal: (o) => o.amount_to_collect_usd || 0,
@@ -220,7 +220,7 @@
     const el = typeof mount === "string" ? document.getElementById(mount) : mount;
     if (!el) return;
     const cols = [
-      { key: "customer", label: "Customer", w: 250, pin: "start", sortVal: (o) => (o.customer || "~").toLowerCase(),
+      { key: "customer", label: "Customer", w: 250, pin: "start", locked: true, sortVal: (o) => (o.customer || "~").toLowerCase(),
         render: (o) => `<span class="ds-pu-id">${D.avatar({ name: o.customer || "?" })}<span class="ds-fl-who">${text(o.customer)}<span class="ds-mono ds-muted">${esc(o.order_id)}</span></span></span>` },
       { key: "phone", label: "Phone", w: 150, sortVal: (o) => o.phone || "~", render: (o) => mono(o.phone) },
       { key: "products", label: "Products", w: 220, sortVal: (o) => (o.items || []).length, render: (o) => thumbs(o.items, 6) },
@@ -296,7 +296,7 @@
     const view = ctx.view;
     const t = (c) => c.totals || {};
     const cols = [
-      { key: "customer", label: "Customer", w: 230, pin: "start", sortVal: (c) => (c.name || c.phone || "~").toLowerCase(),
+      { key: "customer", label: "Customer", w: 230, pin: "start", locked: true, sortVal: (c) => (c.name || c.phone || "~").toLowerCase(),
         render: (c) => `<span class="ds-pu-id">${D.avatar({ name: c.name || c.phone || "?" })}<span class="ds-fl-who">${text(c.name || c.phone)}${(c.orders && c.orders.length > 1) || c.n_orders > 1 ? `<span class="ds-muted">${esc(num((c.orders || []).length || c.n_orders))} orders</span>` : ""}</span></span>` },
       { key: "phone", label: "Phone", w: 150, sortVal: (c) => c.phone || "~", render: (c) => mono(c.phone) },
       { key: "pieces", label: "Pieces", w: 110, align: "end", sortVal: (c) => (c.n_received != null ? c.n_received / Math.max(1, c.n_items) : 1),

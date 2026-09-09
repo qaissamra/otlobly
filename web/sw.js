@@ -3,7 +3,11 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v15";         // v15: a sub-table's flexible column could resolve to
+const CACHE = "otl-off-v16";         // v16: Purchases QA - caret kept in the search box,
+                                     //      expand/collapse reaches every board, blanks
+                                     //      sort last, identity columns locked, .az-modal
+                                     //      panels take Escape and focus.
+                                     // v15: a sub-table's flexible column could resolve to
                                      // 0 and vanish (ds.js, purchases.js, leluxe.js).
                                      // v14: every tab and view pill was dead — DS.tabs
                                      // double-escaped its own onclick (ds.js).

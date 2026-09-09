@@ -205,11 +205,11 @@
 
   function ordersBoard(ctx, mount, list) {
     const cols = [
-      { key: "po", label: "Purchase order", w: 190, pin: "start", sortVal: (p) => p.po_id,
+      { key: "po", label: "Purchase order", w: 190, pin: "start", locked: true, sortVal: (p) => p.po_id,
         render: (p) => `<span class="ds-pu-id"><b>${esc(p.po_id)}</b>${(p.amazon_order_number || "").trim()
           ? `<span class="ds-mono ds-muted" title="Amazon order ${esc(p.amazon_order_number)}">\u2026${esc(p.amazon_order_number.trim().slice(-4))}</span>${W.lxCopyRawBtn(p.amazon_order_number.trim())}` : ""}</span>` },
       { key: "oname", label: "Order name", w: 150, sortVal: (p) => (p.ship_to || "~").toLowerCase(), render: (p) => text(p.ship_to) },
-      { key: "profile", label: "Buying account", w: 128, title: PROFILE_HELP, sortVal: (p) => (p.profile_box || "~").toLowerCase(), render: (p) => W.poProfileCell(p) },
+      { key: "profile", label: ctx.boxTerm, w: 128, title: PROFILE_HELP, sortVal: (p) => (p.profile_box || "~").toLowerCase(), render: (p) => W.poProfileCell(p) },
       { key: "customers", label: "Customers", w: 170, sortVal: (p) => (W.poWho(p) || "~").toLowerCase(), render: (p) => text(W.poWho(p)) },
       { key: "items", label: "Items", w: 70, align: "end", sortVal: (p) => p.n_items || 0, render: (p) => `<span class="ds-num">${esc(num(p.n_items || 0))}</span>` },
       { key: "packages", label: "Packages", w: 84, align: "end", sortVal: (p) => (p.packages || []).length, render: (p) => `<span class="ds-num">${esc(num((p.packages || []).length))}</span>` },
@@ -249,11 +249,11 @@
     const rows = [];
     list.forEach((p) => (p.packages || []).forEach((pk, pi) => rows.push([p, pk, pi])));
     const cols = [
-      { key: "pkg", label: "Package", w: 230, pin: "start", sortVal: ([p, pk]) => `${p.po_id} ${String(pk.package_no).padStart(3, "0")}`, render: ([p, pk]) => pkgCell(ctx, p, pk) },
+      { key: "pkg", label: "Package", w: 230, pin: "start", locked: true, sortVal: ([p, pk]) => `${p.po_id} ${String(pk.package_no).padStart(3, "0")}`, render: ([p, pk]) => pkgCell(ctx, p, pk) },
       { key: "order", label: "Order", w: 104, sortVal: ([p]) => p.po_id,
         render: ([p]) => D.button({ label: p.po_id, size: "sm", variant: "ghost", title: `Open ${p.po_id}`, onclick: `event.stopPropagation();poJumpOrder('${esc(p.po_id)}')` }) },
-      { key: "oname", label: "Order name", w: 140, sortVal: ([p]) => (p.ship_to || "~").toLowerCase(), render: ([p]) => text(p.ship_to) },
-      { key: "profile", label: "Buying account", w: 128, title: PROFILE_HELP, sortVal: ([p]) => (p.profile_box || "~").toLowerCase(), render: ([p]) => W.poProfileCell(p) },
+      { key: "oname", label: "Order name", defaultHidden: true, w: 140, sortVal: ([p]) => (p.ship_to || "~").toLowerCase(), render: ([p]) => text(p.ship_to) },
+      { key: "profile", label: ctx.boxTerm, defaultHidden: true, w: 128, title: PROFILE_HELP, sortVal: ([p]) => (p.profile_box || "~").toLowerCase(), render: ([p]) => W.poProfileCell(p) },
       { key: "customer", label: "Customer", w: 150, sortVal: ([, pk]) => (W.pkgWho(pk) || "~").toLowerCase(), render: ([, pk]) => text(W.pkgWho(pk)) },
       ctx.money ? { key: "est", label: "Est. cost", w: 110, align: "end", sortVal: ([, pk]) => W.pkgEstTotal(pk).sum, render: ([, pk]) => est(W.pkgEstTotal(pk)) } : null,
       { key: "arrival", label: "Arrival", w: 106, sortVal: ([, pk]) => String(pk.arrival || "~"), render: ([, pk]) => W.pkgDatePill(pk) || D.dash() },
@@ -263,9 +263,9 @@
       { key: "customs", label: "Customs", w: 150, sortable: false, render: ([, pk]) => W.pkgGaashPill(pk) || D.dash() },
       { key: "deadline", label: "Deadline", w: 112, sortable: false, render: ([p, pk, pi]) => W.pkgDeadlinePill(p, pk, pi) || D.dash() },
       { key: "docs", label: "Documents", w: 96, sortable: false, render: ([p, pk, pi]) => W.pkgDocsPill(p, pk, pi) || D.dash() },
-      { key: "lastmile", label: "Last mile", w: 130, sortable: false, render: ([, pk]) => W.pkgGerizimCell(pk, (pk.tracking_number || "").trim()) || D.dash() },
-      { key: "idnum", label: "ID number", w: 122, sortVal: ([, pk]) => W.pkgIdNumber(pk) || "~", render: ([, pk]) => W.idNumCell(W.pkgIdNumber(pk)) || D.dash() },
-      { key: "rd", label: "RD number", w: 112, sortVal: ([, pk]) => (pk.rd_number || "~").toLowerCase(), render: ([p, pk, pi]) => W.pkgRdCell(p, pk, pi) || D.dash() },
+      { key: "lastmile", label: "Last mile", defaultHidden: true, w: 130, sortable: false, render: ([, pk]) => W.pkgGerizimCell(pk, (pk.tracking_number || "").trim()) || D.dash() },
+      { key: "idnum", label: "ID number", defaultHidden: true, w: 122, sortVal: ([, pk]) => W.pkgIdNumber(pk) || "~", render: ([, pk]) => W.idNumCell(W.pkgIdNumber(pk)) || D.dash() },
+      { key: "rd", label: "RD number", defaultHidden: true, w: 112, sortVal: ([, pk]) => (pk.rd_number || "~").toLowerCase(), render: ([p, pk, pi]) => W.pkgRdCell(p, pk, pi) || D.dash() },
     ].filter(Boolean).concat(cfCols(ctx), [
       // Status is pinned: on this board it is the thing the owner scans for, and it
       // used to sit off the right-hand edge with its pills cut in half (item 8).
@@ -275,7 +275,7 @@
     const totEst = rows.reduce((a, [, pk]) => a + W.pkgEstTotal(pk).sum, 0);
     const nItems = rows.reduce((a, [, pk]) => a + (pk.items || []).length, 0);
     D.tableRender(mount, {
-      id: "po_packages", ariaLabel: "Packages", columns: cols, rows,
+      id: "po_packages", seedVersion: 1, ariaLabel: "Packages", columns: cols, rows,
       rowKey: ([p, pk]) => `${p.po_id}#${pk.package_no}`,
       // A flat board is for scanning: nothing is open until it is asked for.
       expandable: { render: ([p, pk, pi]) => productGrid(ctx, p, pk, pi), open: () => false },
@@ -298,11 +298,11 @@
     const rows = productRows(list);
     const co = (it) => W.poOrderMap()[(it.customer_order_id || "").trim()];
     const cols = [
-      { key: "product", label: "Product", w: 280, pin: "start", sortVal: ([, , , it]) => (it.title || it.asin || "").toLowerCase(), render: ([, , , it]) => productName(it) },
+      { key: "product", label: "Product", w: 280, pin: "start", locked: true, sortVal: ([, , , it]) => (it.title || it.asin || "").toLowerCase(), render: ([, , , it]) => productName(it) },
       { key: "order", label: "Order", w: 104, sortVal: ([p]) => p.po_id,
         render: ([p]) => D.button({ label: p.po_id, size: "sm", variant: "ghost", title: `Open ${p.po_id}`, onclick: `event.stopPropagation();poJumpOrder('${esc(p.po_id)}')` }) },
-      { key: "oname", label: "Order name", w: 140, sortVal: ([p]) => (p.ship_to || "~").toLowerCase(), render: ([p]) => text(p.ship_to) },
-      { key: "profile", label: "Buying account", w: 128, title: PROFILE_HELP, sortVal: ([p]) => (p.profile_box || "~").toLowerCase(), render: ([p]) => W.poProfileCell(p) },
+      { key: "oname", label: "Order name", defaultHidden: true, w: 140, sortVal: ([p]) => (p.ship_to || "~").toLowerCase(), render: ([p]) => text(p.ship_to) },
+      { key: "profile", label: ctx.boxTerm, defaultHidden: true, w: 128, title: PROFILE_HELP, sortVal: ([p]) => (p.profile_box || "~").toLowerCase(), render: ([p]) => W.poProfileCell(p) },
       { key: "package", label: "Package", w: 150, sortVal: ([, pk]) => pk.package_no, render: ([, pk]) => gwdCell(pk) },
       { key: "pkgstatus", label: "Package status", w: 156, sortVal: ([, pk]) => pk.otlobly_status || "~", render: ([, pk]) => ctx.pkgStatusPill(pk) || D.dash() },
       { key: "customer", label: "Customer", w: 150, sortVal: ([, , , it]) => (it.customer_name || "~").toLowerCase(),
@@ -319,7 +319,7 @@
       { key: "due", label: "Due", w: 106, sortVal: ([, pk]) => { const d = W.poPkgDue(pk); return d ? Date.parse(d) || Infinity : Infinity; },
         render: ([p, pk, pi]) => W.poPkgDueCell(p, pk, pi) || D.dash() },
       { key: "qty", label: "Qty", w: 60, align: "end", sortVal: ([, , , it]) => Number(it.qty) || 1, render: ([, , , it]) => `<span class="ds-num">${esc(num(it.qty || 1))}</span>` },
-      { key: "idnum", label: "ID number", w: 122, sortVal: ([, , , it]) => (co(it) || {}).id_number || "~", render: ([, , , it]) => W.idNumCell((co(it) || {}).id_number) || D.dash() },
+      { key: "idnum", label: "ID number", defaultHidden: true, w: 122, sortVal: ([, , , it]) => (co(it) || {}).id_number || "~", render: ([, , , it]) => W.idNumCell((co(it) || {}).id_number) || D.dash() },
     ].filter(Boolean).concat(cfCols(ctx), [
       { key: "exception", label: "Exception", w: 136, pin: "end", sortable: false, render: ([, , , it]) => ctx.excChip(it) || D.dash() },
       { key: "actions", label: "", w: 52, type: "actions", pin: "end", locked: true, sortable: false,
@@ -327,7 +327,7 @@
     ]);
     const totQty = rows.reduce((a, [, , , it]) => a + (Number(it.qty) || 1), 0);
     D.tableRender(mount, {
-      id: "po_products", ariaLabel: "Products", columns: cols, rows,
+      id: "po_products", seedVersion: 1, ariaLabel: "Products", columns: cols, rows,
       rowKey: ([p, pk, , , ii]) => `${p.po_id}#${pk.package_no}#${ii}`,
       onRowClick: ([p, , pi]) => W.pkgInfoOpen(p.po_id, pi),
       empty: { title: "No products match this filter" },
@@ -363,7 +363,7 @@
     }).sort((a, b) => (a.name === NO_CUSTOMER ? 1 : b.name === NO_CUSTOMER ? -1 : a.name.localeCompare(b.name, undefined, { numeric: true })));
 
     const cols = [
-      { key: "customer", label: "Customer", w: 230, pin: "start", sortVal: (r) => (r.name === NO_CUSTOMER ? "~~~" : r.name.toLowerCase()),
+      { key: "customer", label: "Customer", w: 230, pin: "start", locked: true, sortVal: (r) => (r.name === NO_CUSTOMER ? "~~~" : r.name.toLowerCase()),
         render: (r) => (r.name === NO_CUSTOMER
           ? D.attention({ kind: "missing_name", detail: "no customer", title: "These products are not linked to a customer yet" })
           : `<span class="ds-pu-id">${D.avatar({ name: r.name })}${text(r.name)}</span>`) },
@@ -381,14 +381,14 @@
           ? (r.info.wa ? `<a class="ds-mono" href="https://wa.me/${esc(r.info.wa)}" target="_blank" rel="noopener" title="Message on WhatsApp">${esc(r.info.phone)}</a>` : `<span class="ds-mono">${esc(r.info.phone)}</span>`)
           : D.dash()) },
       { key: "city", label: "City", w: 130, sortVal: (r) => (r.info || {}).city || "~", render: (r) => text((r.info || {}).city) },
-      { key: "idnum", label: "ID number", w: 122, sortVal: (r) => (r.info || {}).id_number || "~", render: (r) => W.idNumCell((r.info || {}).id_number) || D.dash() },
+      { key: "idnum", label: "ID number", defaultHidden: true, w: 122, sortVal: (r) => (r.info || {}).id_number || "~", render: (r) => W.idNumCell((r.info || {}).id_number) || D.dash() },
       { key: "ostatus", label: "Order status", w: 150, pin: "end", sortable: false,
         render: (r) => (r.orders.length === 1 ? W.statusPill(r.orders[0].status)
           : r.orders.length > 1 ? `<span class="ds-muted">${esc(num(r.orders.length))} orders</span>` : D.dash()) },
     ].filter(Boolean);
 
     D.tableRender(mount, {
-      id: "po_customers", ariaLabel: "Customers", columns: cols, rows, rowKey: (r) => r.name,
+      id: "po_customers", seedVersion: 1, ariaLabel: "Customers", columns: cols, rows, rowKey: (r) => r.name,
       expandable: { render: (r) => customerDetail(ctx, r), open: (r) => !ctx.custCollapsed(r.name) },
       onToggle: (key) => ctx.custToggle(key),
       empty: { title: "No customers match this filter" },
@@ -461,9 +461,13 @@
         { label: "Check all shipping", icon: "truck", title: "Re-check every GAASH number, skipping what you already received or sent", onclick: "poCheckAllShipping(this)" },
         { label: "Estimate all costs", icon: "calculator", title: "Price every product that has no estimate yet", onclick: "poEstimateAll(this)" },
         { label: "Import from ClickUp", icon: "arrow-down-tray", onclick: "importClickup(this)" },
-        { divider: true },
-        { label: "Expand every order", icon: "chevron-double-right", onclick: "poViewAll(true)" },
-        { label: "Collapse every order", icon: "chevron-double-left", onclick: "poViewAll(false)" },
+        // Products is one row per product with nothing to open; offering these there
+        // is a control that does nothing when you press it.
+        ...(ctx.canExpand === false ? [] : [
+          { divider: true },
+          { label: "Expand every row", icon: "chevron-double-right", onclick: "poViewAll(true)" },
+          { label: "Collapse every row", icon: "chevron-double-left", onclick: "poViewAll(false)" },
+        ]),
       ],
     });
     const bar = D.filterBar({
@@ -474,6 +478,6 @@
       add: { onclick: "poFilterAdd()", label: "Add filter" },
       clear: { show: !!ctx.hasFilters, onclick: "poFilterClear()" },
     });
-    el.innerHTML = header + bar;
+    D.paintHost(el, header + bar);   // keeps the caret in the search box (DS.paintHost)
   };
 })();
