@@ -348,7 +348,7 @@
 
   // ---------------------------------------------------------------- page header
   /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
-  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers"]);
+  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers", "gaashmail"]);
 
   function paint() {
     // syncTab() reaches this from a page's own tab switch, which can fire during boot -

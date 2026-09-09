@@ -22,14 +22,14 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `customers` | 👤 Customers | T1 (+T2 profile) | Sales › Customers | `customers.jpg` | **migrated** (Batch B) |
 | `metaleads` | 📣 Leads | T1 | Sales › Leads | `leads.jpg` | not started |
 | `bulksearch` | 🔎 Bulk search | T1 | Shipping › Tracking | `bulk-search.jpg`, `bulk-search-results.jpg` | not started |
-| `gaashmail` › conv | 💬 Conversations | T1 (+T2 thread) | Shipping › GAASH mail | `gaash-mail-conversations.jpg` | not started |
-| `gaashmail` › ov | 🧭 Overview | T4 | Shipping › GAASH mail › Overview | `gaash-mail-overview.jpg` | not started |
-| `gaashmail` › seq | ⚙️ Workflows | T1 (+T3 builder) | Shipping › GAASH mail › Workflows | `gaash-mail-workflows.jpg` | not started |
-| `gaashmail` › tpl | 📝 Templates | T1 (+T3 editor) | Shipping › GAASH mail › Templates | `gaash-mail-templates.jpg` | not started |
-| `gaashmail` › ready | 🩺 Readiness | T1 | Shipping › GAASH mail › Readiness (feeds Needs attention) | `gaash-mail-readiness.jpg` | not started |
-| `gaashmail` › docs | 📄 Docs | T1 | Shipping › GAASH mail › Docs (feeds Needs attention) | `gaash-mail-docs.jpg` | not started |
-| `gaashmail` › fcast | 🔮 Forecast | T4 | Shipping › GAASH mail › Forecast | `gaash-mail-forecast.jpg` | not started |
-| `gaashmail` › dash | 📊 Analyze | T4 | Shipping › GAASH mail › Analyze | `gaash-mail-analyze.jpg` | not started |
+| `gaashmail` › conv | 💬 Conversations | T1 (+T2 thread) | Shipping › GAASH mail | `gaash-mail-conversations.jpg` | **migrated** (Batch C) — the thread body stays legacy markup inside the row (Phase 5) |
+| `gaashmail` › ov | 🧭 Overview | T4 | Shipping › GAASH mail › Overview | `gaash-mail-overview.jpg` | **migrated** (Batch C) |
+| `gaashmail` › seq | ⚙️ Workflows | T1 (+T3 builder) | Shipping › GAASH mail › Workflows | `gaash-mail-workflows.jpg` | **migrated** (Batch C) — the builder itself is Phase 5 |
+| `gaashmail` › tpl | 📝 Templates | T1 (+T3 editor) | Shipping › GAASH mail › Templates | `gaash-mail-templates.jpg` | **migrated** (Batch C), editor on DS fields |
+| `gaashmail` › ready | 🩺 Readiness | T1 | Shipping › GAASH mail › Readiness (feeds Needs attention) | `gaash-mail-readiness.jpg` | **migrated** (Batch C) |
+| `gaashmail` › docs | 📄 Docs | T1 | Shipping › GAASH mail › Docs (feeds Needs attention) | `gaash-mail-docs.jpg` | **migrated** (Batch C) — the upload wizard (`gu*`) is Phase 5 |
+| `gaashmail` › fcast | 🔮 Forecast | T4 | Shipping › GAASH mail › Forecast | `gaash-mail-forecast.jpg` | **migrated** (Batch C), queue + cases |
+| `gaashmail` › dash | 📊 Analyze | T4 | Shipping › GAASH mail › Analyze | `gaash-mail-analyze.jpg` | **migrated** (Batch C) |
 | `flags` | 🚩 Flags | T1 | Needs attention (open flags, Phase 2 ✓) + Settings › Integrations (inboxes; routed at `#/settings/inboxes` until Phase 7) | `flags.jpg` | in progress |
 | `deposits` | 💵 Deposits | T1 (+T3 entry) | Finance › Deposits | `deposits.jpg` | not started |
 | `pnl` | 📊 P&L | T4 | Finance › P&L | `pnl.jpg` | not started |
@@ -75,7 +75,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `.iconbtn` · `.qchip` · `.chip` | CSS ≈L235 / 267 / 330 | `Button icon` · `Tag` · `Tabs` | merge | not started |
 | LXT table engine (`LX_TABLES` L3594, `LXT_COLS` L4045, `lxtHead` L4452, `lxtCells` L4497) — 15 tables | JS L4045–4955 | `DS.tableRender` (`table.js`) | superseded — the new engine adds selection + bulk bar, end-pinned status/actions, keyboard, skeleton/empty/error, typed cells | **built** (0 of 15 tables migrated) |
 | `neTable` / `NE_COLS` (To order) | JS L7385–7400 | `DataTable` | delete after migration | not started |
-| 20 raw `<table>` (P&L ×7, Settings ×3, platform ×3, Team, Activity, Picking, Deposits-by-customer, To order, GM templates, GM analyze) | markup + JS | `DataTable` | delete | not started |
+| 20 raw `<table>` (P&L ×7, Settings ×3, platform ×3, Team, Activity, Picking, Deposits-by-customer, To order, GM templates, GM analyze) | markup + JS | `DataTable` | delete | in progress — GM analyze is a DataTable (Batch C) |
 | `.pill` rule pair (L287 vs L963) + `statusPill` L2443 · `tonePill` L9578 · `hexPill` L9581 · `solidPill` L9588 · `gaashBucketPill` · `lxStatusPill` · `lxCfPill` + 12 domain builders + 48 raw literals | JS/CSS | `DS.badge` + `DS.attention` behind `status.js` | merge (one rule, one helper) | **built** — registry covers all 35 live ClickUp statuses + every order status; 0 call sites migrated |
 | `fld()` L2449 (two CSS homes: `.po-meta .field`, `.ne-meta .field`) | JS/CSS | `Stat` / meta strip | keep, one CSS home | not started |
 | `editCell()` L2462 | JS | `DataTable` inline edit | keep | not started |
@@ -86,7 +86,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `toast()` L2065 (single slot, no variants, 379 calls) | JS | `DS.toast` (+ `.success/.error/.warn/.info`, queue of 3, `role=status`, optional action) | keep, extend | **built** (0 of 379 migrated) |
 | `.empty` (21) + 475 ad-hoc `muted2` empty states | CSS | `EmptyState` | merge | not started |
 | `#pageTitle` + global `#sub` (L1035, written at L2362) + 44 `<h2>` + 21 `.toolbar` | markup | `PageHeader` (breadcrumb, stats, one primary) | merge | not started |
-| tabs ×3 (GAASH mail 8 tabs, Purchases 5-segment, quote chips) + `.chips` rows | markup | `Tabs` | merge | not started |
+| tabs ×3 (GAASH mail 8 tabs, Purchases 5-segment, quote chips) + `.chips` rows | markup | `Tabs` | merge | in progress — GAASH mail's strip is `DS.tabs` (Batch C); Purchases/Leluxe segments still hand-styled |
 | search boxes ×5 (2 `.search`, 3 inline) + 14 `.cu-search` + Purchases filter builder | markup/JS | `FilterBar` (+ `Combobox`) | merge | not started |
 | emoji icons (2,168 glyphs, 191 distinct) | everywhere | `DS.icon` + `icons.svg` — 135 Heroicons v2 outline, MIT | replace | **built** (0 of 2,168 replaced) |
 | formatters `money` ×3 (L2053, 4765, 10612) · `money0` · `fmt` · `cfNum` · `lxGm` · `relTime` L7199 · `agoTxt` L10055 · `gmAgo` L11572 · `fmtDue` L9563 · `lxDate` L3252 · `cfFmtDate` L9373 | JS | `DS.fmt.money / number / date / relative` (Intl, `en-US`) | merge | **built** (0 of 13 migrated) |
@@ -630,3 +630,75 @@ busy first.
 Purchases, Orders and Package prep all gate on it. A read-only user would see every editor,
 every ⋯ action and every Tools item enabled. Low risk today — `leluxeBtn` is gated on
 `admin_actions` — but it is a real gap.
+
+
+## Batch C — GAASH mail, all eight tabs (2026-09-10)
+
+`static/ds/gaash.js` holds `DS.gaash`; every tab of the page draws through it. `web/index.html`
+keeps what only it can do — the fetches with their honest failure paths, the thread body a
+conversation opens into, the workflow builder, the rule editor, the wizards and the modals —
+and hands each board a `ctx`. **618 lines left index.html**; the LXT `wf` table is out of all
+four registries with its grid rule, `GM_STATE` (a colour registry) is gone in favour of
+`DS.status`'s `gmThread` map, and the last raw `<table>` on the page (Analyze) is a DataTable.
+
+**The page chrome, by the brief's rules.** `DS.pageHeader` with Shipping › GAASH mail, six
+numbers (conversations · active · replies to read · awaiting approval · missing documents ·
+cleared), **one** primary (Enroll packages), **two** visible secondaries (Check replies, Check
+tracking) and the rest behind ⋯ — the legacy toolbar showed five. The safe-mode / LIVE strip is
+a new `DS.callout`, and it carries the control that changes the state it reports: **Freeze
+all / Resume all** sits in the strip, not in a toolbar; an account's auth error carries **Update
+password** the same way. Q-007 (the 23px tab strip) is closed: the page's own strip is `DS.tabs`
+(34px) for the classic layout, hidden under the new shell exactly as before; `gaashmail` joined
+`OWN_HEADER`, so the shell contributes only the tabs.
+
+**Conversations is a board whose row opens into the thread.** The card list is a DataTable —
+parcel, products (the boards' photos, new here), status, progress, name on parcel, GAASH
+status, last message, last activity, next email, sender, opened, workflow, needs attention —
+with Open · Cleared · All views (the old ✅ fold became a view), a search box the list never
+had, and quick filters for unread replies, awaiting approval and missing documents. Clicking a
+row opens the thread **under it**, one at a time: the body is the same `gmChatHtml()` the old
+right-hand pane drew, painted by id, so nothing about sending changed. The reply box survives
+both repaint paths (the 60s poll's list re-render and the chat repaint) with its text, focus
+and caret — `DS.paintHost` on both. Every thread action is also in the row's ⋯ menu.
+
+**Workflows** keeps all thirteen columns of `LXT_COLS.wf` at the same labels; On/Off is a real
+`DS.switch`; the expansion is two `DS.subTable`s (enrolled · suggested, with Approve all /
+Dismiss all) built from the same board models Bulk search uses; the triggers below it are a
+second DataTable. **Readiness** has its five views with counts and lands on All when nobody is
+blocked (the old page landed on an empty list). **Docs** keeps the 🧾 by-order / 📦 flat toggle
+(remembered in `otl_gmdocs_view`): by order, parcels of one order sit together as a tie run
+with an **Enroll all N** button on the first, whatever the sort; the documents state is the
+registry's `docs` badge; **Check all (N)** keeps its Stop. **Forecast** keeps queue + cases as
+one pane with two views; the prediction pills stay index.html's (`test_gaash_forecast.py`
+forbids `gaashBucketPill` there). **Templates** is a table plus the editor on DS fields.
+
+**Capabilities kept**, checked tab by tab against the old renderers: every column, every
+per-row action, the group-enroll of a multi-parcel order, the readiness auto-clear tag, the
+upload wizard entry, the docs bulk check with Stop, the forecast recompute and AZ (2) columns
+buttons, template edit/delete, workflow edit/clone/archive, rule toggle/edit/delete, the
+overview drill-downs (sent / opened / replied) and the KPI tiles. Nothing was removed; the
+per-group fold in the Docs by-order view became a sort-stable tie run.
+
+Measured at 1400×900 on a copy of the live data (31 conversations, 46 readiness parcels,
+11 docs parcels, 32 cases): **0 controls under 24px** on every tab (the thread body's 19 —
+three 18px action buttons and sixteen 9–12px link/copy/resend buttons, all pre-existing — got
+the 24px floor), **0 values truncated without a tooltip** (25 truncated on Conversations, every
+one recoverable), 6 font sizes, all DS steps (13.02 is `.ds-mono`, 22 the KPI value), no
+horizontal page overflow. `run_all_tests.sh`: **63 passed** (new `test_ds_gaash.py`, 96 of whose
+checks fail on the pre-Batch-C tree). Lint: emoji 1952 → 1727, raw buttons 463 → 402, raw
+tables 19 → 18, colour registries 13 → 12, hex literals 490 → 469 — the baseline is pinned there.
+
+**Two things worth carrying forward:**
+1. **A test that slices the file on a function name is a hidden anchor.** `test_gaash_forecast.py`
+   used `function gmDocsStatePill(` as the END of the Forecast block; deleting that function
+   made the slice run to the end of the file and two unrelated checks fail. Repointed to
+   `function gmDocsMode(`. Grep the tests for every function you delete, not just the ones you
+   rename.
+2. **`gmRuleSummary` returns escaped HTML.** Fed through `esc()` again it printed `&quot;`
+   literally in the trigger column. Same family as `lxShortName` (Batch F1): when a page module
+   reuses a legacy builder, check whether it hands back text or markup.
+
+**Still legacy on this page (Phase 5):** the thread body's own controls (`.gm-chat`), the
+workflow builder, the rule editor, the enroll wizard and its LXT `en` picker (it shares
+`bsModelRow` with Bulk search, so it moves with Tracking), the accounts panel, the changes
+popup, the stat drill-down modal, and the 16 native dialogs.

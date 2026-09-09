@@ -3,7 +3,9 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v20";         // v20: the Columns panel could open off the
+const CACHE = "otl-off-v21";         // v21: Batch C - GAASH mail on the design system
+                                     //      (static/ds/gaash.js is new; ds.js/ds.css/shell.js changed)
+                                     // v20: the Columns panel could open off the
                                      //      bottom of the window with "Reset layout"
                                      //      unreachable; strip columns sized for 32px.
                                      // v19: one thumbnail everywhere, product photos
@@ -38,7 +40,7 @@ const CACHE = "otl-off-v20";         // v20: the Columns panel could open off th
 /* Static design-system assets: same network-first rule as the shell, but cached on install too so the
    offline copy of /app is never served without its stylesheet. */
 const DS_ASSETS = ["/static/ds/tokens.css","/static/ds/ds.css","/static/ds/status.js",
-  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/shell.js","/static/ds/purchases.js","/static/ds/fulfillment.js","/static/ds/sales.js","/static/ds/leluxe.js","/static/ds/icons.svg"];
+  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/shell.js","/static/ds/purchases.js","/static/ds/fulfillment.js","/static/ds/sales.js","/static/ds/leluxe.js", "/static/ds/gaash.js","/static/ds/icons.svg"];
 const NO_STORE = ["/api/backup","/api/po_image","/api/customer_image","/api/leluxe/image",
   "/api/gaash/idfile","/api/gaash/attachment","/api/gaash/px/","/api/gaash/r/",
   "/api/product_image","/api/az/"];   // PII scans, multi-MB zip, SerpAPI-credit scrape, pixels, job pollers

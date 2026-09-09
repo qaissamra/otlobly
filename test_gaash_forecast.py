@@ -431,8 +431,12 @@ def test_ui_wired():
     print("— UI wiring (all four points) —")
     html = (HERE / "web" / "index.html").read_text(encoding="utf-8")
     nows = html.replace(" ", "")
-    check("1. the tab button exists", 'id="gmTabFcast"' in html)
-    check("   …and is bilingual", 'data-ar="🔮 التوقعات"' in html)
+    # Batch C (docs/ux-restructure): the tab strip is drawn by static/ds/gaash.js, so
+    # the button's id lives in that file's tab list; English only for now (D2), so the
+    # old bilingual data-ar check became "it is labelled".
+    ds = (HERE / "static" / "ds" / "gaash.js").read_text(encoding="utf-8")
+    check("1. the tab exists in the page's tab list", 'key: "fcast", label: "Forecast"' in ds and 'fcast: "gmTabFcast"' in ds)
+    check("   …and is labelled", 'label: "Forecast"' in ds)
     check("2. the pane exists", 'id="gmFcastPane"' in html)
     check("3. 'fcast' is in the reopen whitelist",
           '"docs","fcast","dash"' in nows or '"fcast"' in nows.split('gm_tab')[1][:400])
@@ -444,7 +448,9 @@ def test_ui_wired():
           "async function gmFcastRender(" in html and "function gmFcastDraw(" in html)
     # the board rule: never hand-roll `<span class="pill" style="…">` — every
     # pill must come from tonePill/hexPill/solidPill so one change restyles all
-    block = html.split("═══ 🔮 Forecast")[1].split("function gmDocsStatePill(")[0]
+    # the block ends where the Docs bridge begins (gmDocsStatePill left with Batch C:
+    # the docs state is DS.status.badge("docs", …) now)
+    block = html.split("═══ 🔮 Forecast")[1].split("function gmDocsMode(")[0]
     check("pills go through the sanctioned helpers",
           "tonePill(" in block and "hexPill(" in block)
     check("…and none are hand-rolled", '<span class="pill"' not in block)
