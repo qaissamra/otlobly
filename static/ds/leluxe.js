@@ -1,14 +1,15 @@
 /* ============================================================================
    Otlobly design system — Leluxe boards (static/ds/leluxe.js)
-   Batches F1 and F2 of the UX restructure: the ⌚ Leluxe ORDERS board (F1) and
-   PRODUCTS board (F2) leave the LXT engine (LX_TABLES / LXT_COLS / LXT_CLS
-   entries "" and "p") for DS.tableRender — the same move Purchases made in
-   Phase 3 and Orders/Customers in Batch B. Packages ("k") and bulk search
-   ("bs") still run on LXT — F3.
+   Batch F of the UX restructure: the ⌚ Leluxe ORDERS (F1), PRODUCTS (F2) and
+   PACKAGES (F3) boards leave the LXT engine (LX_TABLES / LXT_COLS / LXT_CLS
+   entries "", "p" and "k") for DS.tableRender — the same move Purchases made
+   in Phase 3 and Orders/Customers in Batch B. Bulk search ("bs") is the last
+   LXT table on this page.
 
-   What this file owns: `DS.lxOrders` (one row per ORDER, nine columns, its
-   parcels and their products in the expansion) and `DS.lxProducts` (every
-   product standalone, with grouping and same-order tie runs). Everything a cell shows is
+   What this file owns: `DS.lxOrders` (one row per ORDER, its parcels and their
+   products in the expansion), `DS.lxProducts` (every product standalone, with
+   grouping and same-order tie runs) and `DS.lxPackages` (one row per physical
+   parcel, with its estimated value and the customs pills). Everything a cell shows is
    still built by the app's own functions on `window` — statuses stay editable,
    the GAASH pills stay live, the ⋯ menus keep every action — so this is a
    change of TABLE, not of behaviour.
@@ -463,6 +464,147 @@
       g.keys.forEach((v, i) => {
         const mount = document.getElementById("lxpG" + i);
         if (mount) productTable(mount, ctx, "lxp__" + i, g.map.get(v) || [], null);
+      });
+    },
+  };
+
+  /* ========================================================================
+     Batch F3 — the PACKAGES board (LXT table "k"). One row per PHYSICAL PARCEL
+     with its estimated value, the customs pills, and the ✉ clearance-mail pill.
+
+     Row-level status editing follows the rule the legacy board set and the
+     owner asked for: a real 📦 subtask edits ITS OWN ClickUp task; a loose
+     group of exactly ONE product edits that product; a multi-product group
+     stays READ-ONLY, because one control must never bulk-write N tasks.
+
+     The app sorts (LXT_SORT["k"], the preference this board already had) and
+     `onSort` is passed so the DataTable renders the order it is given — the
+     same arrangement as the products board.
+     ==================================================================== */
+  const fmt2 = (n) => (Math.round(n * 100) / 100).toLocaleString();
+
+  const KCOLS = () => [
+    { key: "package", label: "الطرد · package", w: 300, min: 190, pin: "start", sortable: true,
+      render: (r) => packageCell(r) },
+    { key: "order", label: "الطلب · order", w: 104, sortable: true, render: (r) => kOrderCell(r) },
+    { key: "profile", label: "الحساب · profile", w: 78, sortable: true,
+      render: (r) => W.lxProfileCell(W.lxKAcct(r)) },
+    { key: "value", label: "≈ القيمة · ≈ value", w: 92, align: "end", sortable: true,
+      render: (r) => valueCell(r) },
+    { key: "status", label: "الحالة · status", w: 134, min: 84, sortable: true,
+      render: (r) => kStatusCell(r) },
+    { key: "gash", label: "الجمارك · gash", w: 132,
+      render: (r) => { const en = enrichedOf(r);
+        return en ? (W.lxGashCell(en, W.lxGashRollup([r.pk, ...(r.items || [])]), r.tn) || "") : ""; } },
+    { key: "mail", label: "✉ البريد · ✉ mail", w: 64, render: (r) => W.lxMailPill(r.tn) || "" },
+    { key: "deadline", label: "الموعد · deadline", w: 116, render: (r) => kDeadlineCell(r) },
+    { key: "due", label: "الاستحقاق · due", w: 84, sortable: true,
+      render: (r) => { const en = enrichedOf(r);
+        if (en && W.lxGzDone(en)) return "";
+        const its = r.items || [], u = uniqStatuses(its);
+        return W.lxDueChip(W.lxKDue(r), its.length && u.length === 1 ? W.lxIsDone(its[0]) : false) || ""; } },
+    { key: "menu", label: "", w: 30, locked: true, pin: "end", render: (r) => kMenu(r) },
+  ];
+
+  const uniqStatuses = (its) => [...new Set((its || []).map((i) => i.status).filter(Boolean))];
+  // the pills read from the row that actually carries the GAASH enrichment: an
+  // absorbed shell is usually the empty one, so the products hold the live data
+  function enrichedOf(r) {
+    const its = r.items || [];
+    return (r.pk && W.lxEnriched(r.pk)) ? r.pk : (its.find(W.lxEnriched) || r.pk || its[0] || null);
+  }
+
+  function packageCell(r) {
+    const its = r.items || [];
+    return `<span class="ds-lx-name">`
+      + j(r.pk ? W.lxDot(r.pk) : "",
+          W.lxConfPill((r.pk && r.pk.sync_state === "conflict") ? r.pk : its.find((i) => i.sync_state === "conflict")),
+          `<b class="ds-lx-parcel-tn">📦 ${r.tn ? W.poTn4(r.tn) : `<span class="ds-muted" title="no GAASH tracking number yet">no tracking</span>`}</b>`,
+          r.tn ? W.lxCopyRawBtn(r.tn) : "",
+          W.lxThumbs(its),
+          `<span class="ds-muted">${esc(W.lxCountLbl(its))}</span>`)
+      + `</span>`;
+  }
+
+  function kOrderCell(r) {
+    if (r.o) return `<button class="pill ds-lx-orderpill" title="open ${esc(r.o.name || "")}"`
+      + ` onclick="event.stopPropagation();lxJumpOrder(${r.o.id})">${W.lxShortName(r.o.name)}</button>`;
+    return r.pk ? W.tonePill("amber", "w/o parent", "its parent order isn't in this list") : "";
+  }
+
+  function valueCell(r) {
+    const e = r.est; if (!e) return "";
+    const tip = `≈ قيمة الطرد · منتجات ₪${fmt2(e.items)}`
+      + (e.share > 0 ? ` + حصة شحن/جمارك ₪${fmt2(e.share)} (إجمالي الطلب ₪${fmt2(e.total)} − المنتجات، ÷ ${e.n} طرود)` : "")
+      + (e.unpriced ? ` · ${e.unpriced} منتج بلا سعر — قيمته داخل الحصة · ${e.unpriced} unpriced (absorbed in the split)` : "");
+    if (!(e.priced || e.share > 0)) return "";
+    return `<b title="${esc(tip)}">₪${esc(fmt2(e.sum))}</b>`
+      + (e.unpriced ? `<span class="ds-lx-unpriced" title="${esc(String(e.unpriced))} products with no individual price — their value sits inside the shipping/tax share">+${esc(String(e.unpriced))}?</span>` : "");
+  }
+
+  function kStatusCell(r) {
+    const its = r.items || [], u = uniqStatuses(its);
+    const mixed = u.length > 1
+      ? W.tonePill("gray", "mixed", "products have different statuses") : "";
+    if (r.pk) return W.lxStatusSelect(r.pk, W.lxKEffStatus(its, r.pk)) + mixed;
+    if (its.length === 1) return W.lxStatusSelect(its[0]);
+    return u.length === 1 ? W.lxStatusPill(u[0]) : mixed;
+  }
+
+  function kDeadlineCell(r) {
+    const en = enrichedOf(r), its = r.items || [], u = uniqStatuses(its);
+    const gashDate = (r.pk && W.lxF(r.pk, "gash date")) || its.map((it) => W.lxF(it, "gash date")).find(Boolean);
+    const done = en ? W.lxGzDone(en) : false;
+    const doneSt = its.length && u.length === 1 ? W.lxIsDone(its[0]) : false;
+    return j(en ? W.lxDeadlinePill(en) + W.lxDocsPill(en) : "",
+      gashDate && !done ? `<span title="gash date">${W.lxDueChip(gashDate, doneSt)}</span>` : "");
+  }
+
+  function kMenu(r) {
+    const pk = r.pk, its = r.items || [], tn = r.tn, o = r.o;
+    const ids = its.map((it) => it.id).join(",");
+    const ordTn = o ? trackingNumbers(o).own : "";
+    if (pk) return W.popMenu([
+      ["✏️ تعديل الطرد · Edit package", `lxOpenEditor('package',${pk.id},${o ? o.id : null})`],
+      ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${pk.id}],'${q(tn)}','')`],
+      tn ? ["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`] : null,
+      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
+      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
+      tn ? ["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('package',${pk.id})`] : null,
+      ["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${pk.id})`],
+      ["🗑 إخفاء · hide", `lxDelete(${pk.id})`, true],
+    ]);
+    return W.popMenu([
+      its.length ? [`🚚 تعيين رقم التتبع للكل (${its.length}) · Set tracking for all`,
+        `lxTrackingPrompt([${ids}],'${q(tn || "")}','${q(ordTn)}')`] : null,
+      tn ? ["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`] : null,
+      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
+      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
+    ]);
+  }
+
+  /* ctx = { rows (already filtered, valued and sorted), total, nItems,
+             sort, onSort(key,dir) }                                        */
+  DS.lxPackages = {
+    render(el, ctx) {
+      const rows = ctx.rows || [];
+      DS.tableRender(el, {
+        id: "lxk",
+        columns: KCOLS(),
+        rows,
+        rowKey: (r) => String(r.pk ? "pk" + r.pk.id : "tn" + (r.tn || "") + ":" + (r.o ? r.o.id : "0")),
+        rowTitle: (r) => r.pk ? "انقر لعرض كل التفاصيل · click for full package details"
+                              : "انقر للانتقال إلى الطلب · click to jump to the order",
+        onRowClick: (r) => { if (r.pk) W.lxInfoOpen("package", r.pk.id); else if (r.o) W.lxJumpOrder(r.o.id); },
+        sort: ctx.sort || null,
+        onSort: (key, dir) => ctx.onSort(key, dir),
+        empty: { title: "No packages match the filter" },
+        footer: rows.length ? {
+          package: `<b>Σ ${esc(String(rows.length))} طرد · ${esc(String(ctx.nItems || 0))} منتج</b>`,
+          value: `<b title="مجموع قيمة كل الطرود المعروضة · total of all shown packages">₪${esc(fmt2(ctx.total || 0))}</b>`,
+        } : null,
       });
     },
   };

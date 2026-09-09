@@ -585,3 +585,6 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
   border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-bg2);
   font-size: var(--ds-t-sm); }
 .ds-lx-groupfoot .ds-spacer { flex: 1; }
+/* Batch F3 — the packages board's "+N?" marker for products with no individual price. */
+.ds-lx-unpriced { color: var(--ds-warning-ink); font-size: var(--ds-t-xs); flex: 0 0 auto;
+  margin-inline-start: var(--ds-s1); }

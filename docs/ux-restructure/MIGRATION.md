@@ -424,3 +424,40 @@ and RD status pills; due chips; the ⋯ menu (edit · move to package · set tra
 shipping · **upload docs** · **check docs** · hide — the two customs actions are new here and
 match what F1 gave a product inside a parcel); the Σ footer (products · Σ quantity) in both
 the flat and grouped views; the group direction toggle and the "(none) last" section order.
+
+
+## Batch F3 — the Leluxe PACKAGES board (2026-09-09)
+
+`DS.lxPackages` joins the other two in `static/ds/leluxe.js`; `lxRenderPackages()` keeps the
+row building (parcel rows, the estimated-value split, the orphan packages) and hands the
+board over. The LXT `"k"` table is **deleted** from all three registries with its
+`.lx-kcols` grid rule, and `lxKRow` with it. **`LX_TABLES` is down to seven entries** — on
+this page only bulk search (`bs`) is still on the old engine.
+
+**What did NOT move, on purpose:** the value formula. `lxOrderPkgEst` / `lxOrphanPkgEst`
+still compute a package's estimate as Σ its priced products + an equal share of the order's
+overhead, and the cell still prints the full derivation in its tooltip plus the `+N?` marker
+for products with no individual price. A migration that quietly re-derived money would be
+the worst kind of regression on this board.
+
+**Row-level status editing keeps its rule** (owner's, from the packages-view work): a real
+📦 subtask edits ITS OWN ClickUp task; a loose group of exactly ONE product edits that
+product; a multi-product group stays read-only with a "mixed" pill, because one control must
+never bulk-write N tasks.
+
+Verified on a copy of the live data: **180 packages · 232 products · ≈ ₪78,756.16**, and the
+Σ footer says the same. That is the same 180 the legacy board drew — the "181" a quick
+`.poc-row` count gives includes the old totals row, which was itself a `.poc-row`. Sorting by
+value re-sorted through `LXT_SORT["k"]` with all 180 rows intact; 172 inline status editors;
+352 row menus. The ✉ mail column reads empty here because the snapshot carries **no**
+`leluxe_pkg_mail` records at all — injecting one temporarily proved the cell still paints its
+amber "waiting N days" pill.
+
+Measured: **8,010 controls, 0 under 24px · 105 truncated values, 0 without a tooltip ·
+4 font sizes**, all DS steps. Orders (157) and products (234) re-checked, unchanged.
+
+**`test_design_system.py` caught a real slip:** the new `+N?` marker used
+`var(--ds-warn-ink, #b45309)`. The suite forbids raw hex in `ds.css` — and the fallback was
+hiding that **`--ds-warn-ink` does not exist**; the token is `--ds-warning-ink`. This is
+Batch B2's trap #1 again (a `var()` with a fallback silently papering over a token that was
+never defined). Write `var(--ds-warning-ink)` with no fallback and let the lint fail loudly.
