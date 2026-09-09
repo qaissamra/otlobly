@@ -3,8 +3,9 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v8";          // v8: the clearance record — index.html grew the Gaash Case
-                                     // picker and the 📊 report, so the old shell must not linger.
+const CACHE = "otl-off-v9";          // v9: Batch F1 — the Leluxe orders board (+ leluxe.js, ds.css,
+                                     // index.html). v8: the clearance record — index.html grew the
+                                     // Gaash Case picker and the 📊 report, so the old shell must not linger.
                                      // v7: Batch B5 rewrote the table's sticky layer (ds.css,
                                      // table.js). v6: Batch B3 changed ds.js/table.js/sales.js — bumping
                                      // drops the old cache on activate, so a plain refresh is
@@ -14,7 +15,7 @@ const CACHE = "otl-off-v8";          // v8: the clearance record — index.html 
 /* Static design-system assets: same network-first rule as the shell, but cached on install too so the
    offline copy of /app is never served without its stylesheet. */
 const DS_ASSETS = ["/static/ds/tokens.css","/static/ds/ds.css","/static/ds/status.js",
-  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/shell.js","/static/ds/purchases.js","/static/ds/fulfillment.js","/static/ds/sales.js","/static/ds/icons.svg"];
+  "/static/ds/format.js","/static/ds/ds.js","/static/ds/table.js","/static/ds/shell.js","/static/ds/purchases.js","/static/ds/fulfillment.js","/static/ds/sales.js","/static/ds/leluxe.js","/static/ds/icons.svg"];
 const NO_STORE = ["/api/backup","/api/po_image","/api/customer_image","/api/leluxe/image",
   "/api/gaash/idfile","/api/gaash/attachment","/api/gaash/px/","/api/gaash/r/",
   "/api/product_image","/api/az/"];   // PII scans, multi-MB zip, SerpAPI-credit scrape, pixels, job pollers

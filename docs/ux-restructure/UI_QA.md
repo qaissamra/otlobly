@@ -501,3 +501,25 @@ ADDS to `hidden`, so it can never yank back a column they chose to show.
 Not verifiable this session: the ~1000px pass. With the Browser pane hidden the page stops
 laying out at that emulated size and every rect reads 0 - the same artifact that produced two
 false readings during the original QA. The 1400x900 pass above is complete and real.
+
+---
+
+## 12. Batch F1 — the Leluxe orders board (2026-09-09). Q-010, first third.
+
+Q-010 counted 386 undersized controls on this board; **Batch A had already taken it to 0**,
+so F1 is a migration, not a polish pass — the board moves off the LXT engine onto
+`DS.tableRender` (`static/ds/leluxe.js`). Measured after, at 1400×900, admin, on a copy of
+the live data (157 orders · 232 products): **1,695 controls, 0 under 24px; 94 truncated
+values, 0 without a tooltip; 5 font sizes, every one a DS step.**
+
+Two notes for whoever measures next:
+
+- **The harness this document describes (`docs/ux-restructure/tools/uiqa.js`) is not in the
+  repo.** §6 says to paste it from there; the file was never committed, so F1 measured with
+  an inline equivalent — same rules (scope to the one visible `#…View`, skip `.ds-sr`, walk
+  four ancestors for a `title`/`aria-label` before calling a value unreadable). Either commit
+  the harness or stop pointing at it.
+- **The Browser pane emulated a 1400×900 viewport but its own frame is 800×514, and `ref`
+  clicks then land in the wrong place** — a click aimed at the Sign-in button hit empty space
+  twice before this was obvious. Measure with emulation on (JS reads rects fine); click with
+  emulation off (`preset: "desktop"`).

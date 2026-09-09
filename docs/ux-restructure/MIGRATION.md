@@ -319,3 +319,60 @@ index.html for a control is measuring a shrinking file.
 Also in that rebase: the branch's own 18 literal `font-size:` values became `--ds-t-*` tokens.
 `lint-baseline.json` pins `font_size_literals: 0` after Batch B2, and a branch written before
 it reintroduces literals silently — check the lint before merging anything long-lived.
+
+
+## Batch F1 — the Leluxe ORDERS board (2026-09-09)
+
+`static/ds/leluxe.js` holds `DS.lxOrders`; the orders branch of `renderLeluxe()` in
+index.html is now a 16-line bridge passing a `ctx`. The LXT `""` table is **deleted** from
+all three registries (`LX_TABLES`, `LXT_COLS`, `LXT_CLS`) and its `.lx-cols` grid rule is
+gone. Four functions removed: `lxCardHtml`, `lxPkgHtml`, `lxVPkgHtml`, `lxOrphanRow`, plus
+the tree branch of `lxItemRow` (its `{cols:true}` branch stays — the products board is F2).
+213 lines out of index.html.
+
+**Three levels, two grids.** The legacy board pushed order rows, parcel heads and product
+rows through ONE column grid (`lxtCells("")`), which is why a product's tracking cell had to
+be *blanked* when its parcel carried the number — it was standing in an order's column. Now
+the order row lives on the DataTable's grid and each parcel's products live in their own
+`DS.subTable`, so a product shows its own tracking, gash status, RD status and quantity
+without pretending to be an order. The parcel head carries what belongs to the PARCEL: GWD,
+count, thumbs, GAASH stage, deadline, documents, and its own ⋯ menu.
+
+Measured on the migrated board (1400×900, admin, 157 orders / 232 products):
+
+| | before (audit, post-Batch-A) | after |
+|---|---|---|
+| controls under 24px | 0 | **0** (of 1,695) |
+| values truncated with no tooltip | 0 | **0** (94 truncated, every one has a tooltip) |
+| distinct font sizes | 4 | **5** — 11 · 12.5 · 13.02 · 14 · 17, all DS steps (13.02 is `.ds-mono`'s .93em) |
+| DS page header | no | still no — the Leluxe chrome (Tools menu, view switcher, filter builder) is F3's job |
+
+**Capabilities kept** (diffed column by column against `LXT_COLS[""]` before the PR, the
+check Batch B skipped): all nine columns at the same widths and labels, nothing
+`defaultHidden`; per-column sort; the Σ totals footer (orders · products · Σ Total Amount);
+the order ⋯ menu's eight actions; the parcel ⋯ menu; per-product inline status editing
+(`.statussel`), quantity, tracking with the muted inherited number, gash + RD pills, due
+chips; ＋ Add package / ＋ Add product / 🗑 hide; the "set tracking for all" bar on an
+untracked group; the just-migrated 👁 banner; the search box and the ClickUp-style filter
+builder (page chrome, untouched); LX_OPEN / LX_PCOL so open orders and open parcels survive
+a re-render. The old `lx_sort` preference seeds the new table once, then the board persists
+its own layout like every other DS table.
+
+**Two bugs this migration made, both caught before the PR:**
+
+1. **A test caught a lost capability, exactly as designed.** `test_gaash_docs_sent.py`
+   counts the eleven upload buttons; my first draft of the product menu dropped
+   "🪪 رفع مستندات لغاش · Upload docs" and "📄 فحص المستندات", which the legacy VIRTUAL parcel
+   gave every product inside it. The count went 11 → 10 and the suite failed. A product now
+   gets the customs actions on its own GWD **or the parcel's** — which is what it always
+   inherited. *A wiring test that counts is worth more than a test that renders.*
+2. **`lxShortName` returns escaped HTML, not text** (a muted `#` span + the last five
+   digits). Escaping it again printed `<span class="lx-hash">#</span>…` on every row. Its
+   sibling `lxShort3` returns PLAIN text and must stay escaped. When a legacy builder is
+   reused from a page module, check whether it hands back text or markup — the two are one
+   character apart in the call site and completely different on screen.
+
+**Still on LXT:** products (`p`), packages (`k`), bulk search (`bs`) — F2 and F3. The shared
+`.lx-colhead`/`.lx-cols` selector chains stay in index.html's CSS while those boards use the
+same machinery; deleting the orders fragments out of eleven-way selector lists is churn with
+real typo risk and no gain, so it happens when the last LXT board goes.
