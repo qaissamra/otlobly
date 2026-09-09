@@ -228,7 +228,10 @@ def read(config=None):
             "courier": cfg.get(config, "card.labels.courier", "Tracking"),
             "currency": cfg.get(config, "card.labels.currency", "USD"),
             "currency2": cfg.get(config, "card.labels.currency2", "AED"),
-            "box_term": cfg.get(config, "card.labels.box_term", "Profile"),
+            # The staff boards call this "Buying account" - the Amazon account an order
+            # was placed under - because "Profile" reads as a user profile to anyone new.
+            # A tenant that has typed its own term still keeps it.
+            "box_term": cfg.get(config, "card.labels.box_term", "Buying account"),
         },
         # Public-website section visibility (Shopify-style hide/show from Settings).
         "public_sections": public_sections(config),

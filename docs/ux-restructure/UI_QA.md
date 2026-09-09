@@ -787,3 +787,143 @@ and a fixed column must stay exactly its width. Five checks fail on the pre-fix 
 Note both new string checks run through `code_only()` — the fix's own comment quotes
 `minmax(0,1fr)` to explain itself, and a comment must never answer a question about what a
 file *builds*.
+
+---
+
+## §19 — The Purchases sweep (2026-09-09)
+
+Walking all four Purchases boards as a staff user, at 1100 (the owner's window), 1280 and
+1440. Nine defects: **three controls that did nothing**, two that quietly changed what you
+were looking at, four about what was on screen. All nine fixed in one batch; the checks live
+in `test_ds_purchases_qa.py` (**45 of them fail on the pre-fix tree**).
+
+### Q-033 — the search box lost focus after every keystroke
+
+Type one character and the `<input>` is destroyed and rebuilt: focus falls to `<body>`, the
+caret resets to 0, and the second character goes nowhere. Measured: `sameNode:false`,
+`activeEl:"BODY"`, `caret:0`.
+
+`poSearchInput` ([index.html:8443](web/index.html:8443)) re-renders the chrome on every
+`input` — the header's counts change with the query — and `P.chrome` rebuilt it with
+`innerHTML`. No debounce. It also wrote back the page's **normalised** copy of the query, so
+capitals were lower-cased under the cursor. The same shape sat on Sales → Orders (confirmed
+live) and Sales → Customers.
+
+Fixed with one helper, `DS.paintHost(host, html)`: it carries the focused field across the
+swap — its value **as typed**, plus the selection — and hands focus back. `cartCostInput`
+([index.html:6884](web/index.html:6884)) already showed the right instinct, updating one
+number instead of redrawing.
+
+### Q-034 — "Expand / Collapse every order" reached one board in four
+
+`poViewAll` only wrote `PO_VIEW`, the Orders board's store. Packages keeps its open rows in
+the table instance (`expandable.open: () => false` plus the chevron's own overrides) and
+Customers in `PO_CCOL`; neither moved. Products has nothing to expand and was offered the
+item regardless.
+
+Measured before: Packages 0→0, Customers 34→34, Orders 0→8. After: Packages 0→27→0,
+Customers 34→0→34, Orders 0→8→0, and Products no longer offers it.
+
+`DS.tableSetAllOpen(id, open)` puts the page-level control in the same `open`/`closed`
+overrides the row chevron writes — the only way to reach a board whose rows open from the
+table's own state. `DS.tableExpandable(id)` lets a page hide a control that cannot act.
+
+### Q-035 — a jump left the URL naming the old board
+
+`poJumpOrder` set `PO_BOARD_VIEW="orders"` without `DS.shell2.syncTab()`, which `poSetView`
+directly above it has, commented *"the board a link points at is the board that opens"*. So
+the address bar still said `…/purchase-orders/packages` while Orders was on screen — and a
+refresh took the stale hash at its word, overwrote `po_board_view` back to `packages`, and
+threw you back with the order closed. Verified end to end after the fix: jump → hash
+`…/orders` → refresh → Orders board, PO-0001 still open.
+
+### Q-036 — blanks sorted to the top
+
+The pages mark "no value here" with a `"~"` sentinel in `sortVal` (and `"~~~"` for the
+no-customer group), on the assumption that `~` sorts after every letter. True of ASCII
+(`"~" > "z"`); **not** of `table.js`'s comparator, which is
+`localeCompare(…, {sensitivity:"base"})`, where punctuation collates **first**. Direct proof:
+`cmp('~','amin') === -1`. **35 sortable columns** carried the sentinel — Purchases 17,
+Sales 10, Fulfillment 8 — and every one of them put the blanks at the top of an ascending
+sort.
+
+Hoisted into `cmp` next to the null handling rather than edited in 35 call sites: blank is
+blank however a page spells it, and blank sorts last. Behavioural proof, before and after:
+
+| | ascending |
+|---|---|
+| before | `blank, tilde, tilde3, amin, zoe` |
+| after | `amin, zoe, blank, tilde, tilde3` |
+
+### Q-037 — the row-identity column could be switched off
+
+`po`, `pkg`, `product`, `customer` on Purchases; `name`, `product`, `package` on Leluxe;
+`customer` ×3 on Fulfillment — all pinned, none `locked`. Switch off "Purchase order" and an
+order with no order name has nothing identifying it at all. Sales had locked its `who`
+column from the start, so the pattern already existed; eight columns never got it. All eight
+now carry `locked: true`, which `visible()` already honours — so a column a user had hidden
+comes back.
+
+### Q-038 — most of each board sat past the right edge
+
+At a 1100px window the scrollport is 822px. Three of the four boards shipped **every** column
+visible; only Orders folded anything (`lastmile`).
+
+| board | needed | 1100 | 1280 | 1440 |
+|---|---|---|---|---|
+| Packages | 2208 → **1576** | 9 cols off → **4** | 7 → **3** | 6 → **1** |
+| Products | 1836 → **1446** | 6 → **4** | 5 → **2** | 4 → **1** |
+| Customers | 1384 → **1262** | 3 → **2** | 1 → **0** | 0 → **0** |
+| Orders | 1432 (unchanged) | 4 | 2 | 1 |
+
+Folded only what **repeats a fact from the row's parent** (`oname`, `profile` — both shown one
+level up) or serves **one sub-task** (`idnum` at customs, `rd` at refund time, `lastmile` on
+the Tracking page). Nothing deleted — `defaultHidden`, per the owner's standing rule — and
+`seedVersion: 1` so saved layouts pick the change up once.
+
+**Orders is deliberately untouched**: every column on it is a distinct order-level fact, and
+at 1440 only one sits past the edge. At 1100 the Packages board still scrolls; it carries
+twelve genuine per-parcel facts and 822px cannot hold them.
+
+### Q-039 — the panels the boards open were not dialogs
+
+Nine actions — new order, edit order, open detail, edit/add package, edit/add product,
+package details, Register at Gerizim — open a legacy `div.az-modal.hidden`. Verified: Escape
+did nothing, focus never left `<body>` (so Tab walked the page *behind* the panel), no
+`role`, no `aria-modal`.
+
+All twenty-three share one exact shape, including
+`onclick="if(event.target===this)<close>()"`, so the shape is upgraded once instead of
+rewriting the panels: a `MutationObserver` on the `hidden` class sets `role="dialog"` and
+`aria-modal`, labels from `.az-head b`, moves focus to the box (not its first input — these
+open scrolled to the top and some are read-only detail), traps Tab, and restores focus to
+whatever opened it. **Escape calls `el.click()`**, which makes `event.target` the element
+itself and so runs each panel's own declared close — no list of close functions to keep in
+step. The test asserts all twenty-three still declare one.
+
+No body-wide subtree observer: all twenty-three are static markup, and re-scanning on every
+table render would be thousands of calls a minute on this page.
+
+### Q-040 — two small ones
+
+The Columns menu ended with a blank row and a dead switch — the row-actions column, which has
+no label and is locked. `colcfg` now lists only columns that have a name.
+
+The board said "Buying account" and the form it opened said "Profile". It is a white-label
+setting (`card.labels.box_term`), so the board reads it too — but Settings persists all four
+card labels whenever it is saved, so a config can be carrying the OLD shipped default without
+anyone having chosen it. `poBoxTerm()` treats that as unset, so the rename reaches every
+tenant that never picked a term; type any other word and boards and forms both follow it.
+The panel is now titled what the button that opens it is called.
+
+### Still open, not in this batch
+
+The filter builder is legacy markup (`po-btn`, `pop-menu`, a 🗑 emoji) inside the DS filter
+bar, and its 11-field list mixes English-only entries with two Arabic-first ones.
+
+### Not exercised, deliberately
+
+"Check all shipping", "Estimate all costs" and "Import from ClickUp" make real outbound calls
+to GAASH and ClickUp. Separately: "Send to ClickUp", "Attach a screenshot" and "Get tracking
+automatically" are hidden because `card_flags` is `{}` in the live config — they are switched
+off in Settings for the owner too, not just in a test copy.

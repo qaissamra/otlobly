@@ -1885,7 +1885,7 @@
 <!-- New order: one form to fill an Amazon purchase order (fields + products) in one go -->
 <div id="newOrderModal" class="az-modal hidden" onclick="if(event.target===this)noClose()">
   <div class="az-box" style="width:620px;max-width:96vw">
-    <div class="az-head"><b>🧾 طلب جديد · New order</b><span class="az-x" onclick="noClose()">✕</span></div>
+    <div class="az-head"><b>🧾 طلب شراء جديد · New purchase order</b><span class="az-x" onclick="noClose()">✕</span></div>
     <div style="padding:14px 16px;max-height:80vh;overflow:auto" id="noBody"></div>
   </div>
 </div>
@@ -8379,7 +8379,9 @@ function poSetView(v){ PO_BOARD_VIEW=v; try{ localStorage.setItem("po_board_view
   if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab();   // the board a link points at is the board that opens
 }
 function poJumpOrder(id){ PO_BOARD_VIEW="orders"; try{ localStorage.setItem("po_board_view","orders"); }catch(e){}
-  PO_VIEW[id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
+  PO_VIEW[id]="open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases();
+  // same rule as poSetView: the URL follows the board
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab(); }
 // customer-order lookup (order_id → report row): the quoted amount lives on the
 // CUSTOMER order (DATA.orders — already money-redacted per role server-side)
 let PO_OMAP=null, PO_OMAP_N=-1;
@@ -8448,6 +8450,7 @@ function poFilterClear(){ PO_FLT=[]; poFSave(); poRenderFilters(); renderPurchas
 // Everything the page module needs from this script, in one object.
 function poCtx(inAddCard){
   return {
+    boxTerm: poBoxTerm(),
     board: inAddCard?"orders":PO_BOARD_VIEW,
     money: PO_MONEY,
     addCard: !!inAddCard,
@@ -8470,11 +8473,26 @@ function poCtx(inAddCard){
     cfCell: (p,f)=>poCfCell(p,f),
   };
 }
+// One word for the Amazon account an order was placed under, on the boards AND in the
+// forms they open - the board said "Buying account" and the form it opened said
+// "Profile". It is a white-label setting, so the boards read it too; but Settings
+// persists all four card labels whenever it is saved, so a config can be carrying the
+// OLD shipped default without anyone having chosen it. Treat that as unset, so the
+// rename reaches every tenant that never picked a term. Type any other word in
+// Settings and the boards and the forms both follow it.
+function poBoxTerm(){
+  const t=((((QSETTINGS&&QSETTINGS.card_labels)||{}).box_term)||"").trim();
+  return (!t||t==="Profile")?"Buying account":t;
+}
 function poChromeCtx(){
   const late=POS.filter(p=>(p.packages||[]).some(pkgLate)).length;
   const notrk=POS.filter(p=>(p.packages||[]).some(pkgNoTracking)).length;
   return {
     board: PO_BOARD_VIEW, money: PO_MONEY, query: PO_QUERY, hasFilters: poFActive().length>0,
+    // Products is one row per product with nothing to open: offering "expand every"
+    // there is a control that cannot act, so the page module leaves it out.
+    canExpand: PO_BOARD_VIEW!=="products",
+    boxTerm: poBoxTerm(),
     stats: {
       orders: POS.length,
       packages: POS.reduce((a,p)=>a+(p.packages||[]).length,0),
@@ -9340,7 +9358,26 @@ function poSummaryPill(p){
 let PO_VIEW=(()=>{ try{ return JSON.parse(localStorage.getItem("po_view")||"{}"); }catch(e){ return {}; } })();
 function poIsOpen(p){ const v=PO_VIEW[p.po_id]; return v==="open"?true:v==="closed"?false:poNeedsAction(p); }
 function poToggleCard(id){ const p=poFind(id); PO_VIEW[id]=poIsOpen(p)?"closed":"open"; localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
-function poViewAll(open){ (POS||[]).forEach(p=>PO_VIEW[p.po_id]=open?"open":"closed"); localStorage.setItem("po_view",JSON.stringify(PO_VIEW)); renderPurchases(); }
+function poViewAll(open){
+  if(PO_BOARD_VIEW==="customers"){                                   // 👤 rows fold via PO_CCOL
+    PO_CCOL=new Set(open?[]:poCustNames());
+    try{ localStorage.setItem("po_ccol",JSON.stringify([...PO_CCOL])); }catch(e){}
+    DS.tableResetOpen("po_customers"); renderPurchases(); return;
+  }
+  if(PO_BOARD_VIEW==="packages"){                                    // 📦 rows fold in the table itself
+    DS.tableSetAllOpen("po_packages",open); return;
+  }
+  (POS||[]).forEach(p=>PO_VIEW[p.po_id]=open?"open":"closed");
+  localStorage.setItem("po_view",JSON.stringify(PO_VIEW));
+  DS.tableResetOpen("po_orders"); renderPurchases();
+}
+// every customer name the Customers board groups by — what "collapse every" has to name
+function poCustNames(){
+  const out=new Set();
+  (POS||[]).forEach(p=>(p.packages||[]).forEach(pk=>(pk.items||[]).forEach(it=>
+    out.add((it.customer_name||"").trim()||"\u0001none"))));
+  return [...out];
+}
 // ── ⋯ overflow menu (the only home for row actions; one open at a time) ──
 let PO_FILTER="all";
 // keep every board's sticky header aligned with its rows (safety re-sync)
@@ -9373,6 +9410,89 @@ document.addEventListener("click",e=>{ if(!e.target.closest(".pop")){
   const had=document.querySelector(".pop-menu.open");
   document.querySelectorAll(".pop-menu.open").forEach(popClose);
   if(had) popResync(); } });
+
+// ── .az-modal: the dialog behaviour the design system's <dialog> gets for free ──
+// Every panel this app opens from a board - new purchase order, edit order, package
+// details, edit product, Register at Gerizim - is a div.az-modal.hidden
+// toggled by a class. That gave them a backdrop click and nothing else: Escape did
+// not close them, focus never entered them (it stayed on <body>, so Tab walked the
+// page BEHIND the panel), and nothing announced them as dialogs. DS.modal has all of
+// it, but these panels are not DS.modal and rewriting twenty-two of them is not a
+// safe afternoon's work. They do share one exact shape, so upgrade the shape once.
+//
+// Closing goes through each panel's OWN declared handler: every one carries
+// onclick="if(event.target===this)<close>()", and el.click() makes `event.target`
+// the element itself - so Escape does precisely what clicking the backdrop does,
+// with no list of close functions to keep in step.
+(function azModalA11y(){
+  const OPENER=new WeakMap();
+  const box=m=>m.querySelector(".az-box")||m;
+  const focusables=m=>Array.from(box(m).querySelectorAll(
+    'a[href],button:not([disabled]),input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+  )).filter(el=>el.offsetParent!==null||el===document.activeElement);
+  const topmost=()=>{ const open=document.querySelectorAll(".az-modal:not(.hidden)"); return open[open.length-1]||null; };
+
+  let lastOpener=null;
+  // remember who opened it, so focus can go back there when it closes
+  document.addEventListener("mousedown",e=>{
+    const t=e.target&&e.target.closest&&e.target.closest("button,[onclick],[role=button],.ds-menu-item");
+    if(t&&!t.closest(".az-modal")) lastOpener=t;
+  },true);
+
+  function opened(m){
+    const b=box(m), head=m.querySelector(".az-head b");
+    if(lastOpener) OPENER.set(m,lastOpener);
+    m.setAttribute("role","dialog"); m.setAttribute("aria-modal","true");
+    if(head&&!m.getAttribute("aria-label")) m.setAttribute("aria-label",(head.textContent||"").trim());
+    if(!b.hasAttribute("tabindex")) b.setAttribute("tabindex","-1");
+    // Land focus on the panel itself, not on its first text box: these panels open
+    // scrolled to the top and some are read-only detail, so grabbing an input would
+    // yank the view and pop a keyboard on a phone. Tab from here reaches the fields.
+    const auto=b.querySelector("[autofocus]");
+    setTimeout(()=>{ try{ (auto||b).focus({preventScroll:true}); }catch(e){} },0);
+  }
+  function closed(m){
+    const back=OPENER.get(m); OPENER.delete(m);
+    if(back&&back.focus&&document.contains(back)){ try{ back.focus({preventScroll:true}); }catch(e){} }
+  }
+  // one observer for every panel, present and future
+  const obs=new MutationObserver(recs=>recs.forEach(r=>{
+    const m=r.target; if(!m.classList||!m.classList.contains("az-modal")) return;
+    const now=!m.classList.contains("hidden"), was=m.dataset.azOpen==="1";
+    if(now===was) return;
+    m.dataset.azOpen=now?"1":"";
+    now?opened(m):closed(m);
+  }));
+  function watch(){
+    document.querySelectorAll(".az-modal").forEach(m=>{
+      if(m.dataset.azWatch==="1") return;
+      m.dataset.azWatch="1"; m.dataset.azOpen=m.classList.contains("hidden")?"":"1";
+      obs.observe(m,{attributes:true,attributeFilter:["class"]});
+    });
+  }
+
+  document.addEventListener("keydown",e=>{
+    const m=topmost(); if(!m) return;
+    if(e.key==="Escape"){
+      e.preventDefault(); e.stopPropagation();
+      if(typeof m.onclick==="function"||m.getAttribute("onclick")) m.click();   // its own close handler
+      else { const x=m.querySelector(".az-x"); x?x.click():m.classList.add("hidden"); }
+      return;
+    }
+    if(e.key==="Tab"){                                    // keep Tab inside the panel
+      const f=focusables(m); if(!f.length) return;
+      const first=f[0], last=f[f.length-1];
+      if(e.shiftKey&&(document.activeElement===first||!box(m).contains(document.activeElement))){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); }
+    }
+  },true);
+
+  // All 22 panels are static markup in this file - none is ever created at runtime -
+  // so one pass is enough. (A body-wide subtree observer here would re-scan on every
+  // table render, which on this page is thousands of times a minute.)
+  watch();
+  document.addEventListener("DOMContentLoaded",watch);
+})();
 function popMenu(items){   // items: [ [icon+label, onclick, danger?], … | null to skip ]
   const rows=items.filter(Boolean).map(([lab,fn,danger])=>`<button class="pop-item${danger?' danger':''}" onclick="${fn};this.closest('.pop-menu').classList.remove('open')">${lab}</button>`).join("");
   return `<span class="pop"><button class="iconbtn" title="more actions" onclick="popToggle(this)">⋯</button><div class="pop-menu">${rows}</div></span>`;
@@ -9645,7 +9765,7 @@ function poEditClose(){ $("poEditModal").classList.add("hidden"); POE=null; rend
 function poeRender(){
   const p=poFind(POE); if(!p){ poEditClose(); return; }
   const F=(QSETTINGS&&QSETTINGS.card_flags)||{}, L=(QSETTINGS&&QSETTINGS.card_labels)||{};
-  const cur=L.currency||'USD', cur2=L.currency2||'AED', boxTerm=L.box_term||'Profile';
+  const cur=L.currency||'USD', cur2=L.currency2||'AED', boxTerm=poBoxTerm();
   $("poeBody").innerHTML=`
     <label class="fld">Amazon order #</label>
     <input class="mono" style="width:100%" value="${poEsc(p.amazon_order_number)}" placeholder="113-…" onchange="poeSet('amazon_order_number',this.value)">
@@ -9800,7 +9920,7 @@ function noPickImage(){
 function noRender(){
   if(!NO) return;
   const cur=((QSETTINGS&&QSETTINGS.card_labels)||{}).currency||'USD';
-  const boxTerm=((QSETTINGS&&QSETTINGS.card_labels)||{}).box_term||'Profile';
+  const boxTerm=poBoxTerm();
   const rows=NO.rows.map((r,i)=>`<div class="no-prow" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
       <input style="flex:2;min-width:150px" placeholder="🔗 رابط أمازون أو ASIN · paste link / ASIN" value="${poEsc(r.link||r.asin||'')}" onchange="noRowSet(${i},'link',this.value)">
       <input style="flex:2;min-width:120px" placeholder="اسم المنتج · name" value="${poEsc(r.title||'')}" onchange="noRowSet(${i},'title',this.value)">
