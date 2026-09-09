@@ -251,7 +251,13 @@
       document.addEventListener("keydown", (e) => {
         if (!_openMenu) return;
         const items = menuItemsOf(_openMenu.list); const i = items.indexOf(document.activeElement);
+        // A menu can carry a search field (the filter builder's two pickers do).
+        // Home/End/arrows belong to the text while the caret is in it; Escape and
+        // Tab still close the menu from anywhere.
+        const a = document.activeElement;
+        const typing = a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA") && _openMenu.list.contains(a);
         if (e.key === "Escape") { const b = _openMenu.btn; DS.menuClose(); b.focus(); e.preventDefault(); }
+        else if (typing && e.key !== "Tab") { /* the field keeps its own keys */ }
         else if (e.key === "ArrowDown") { (items[(i + 1) % items.length] || items[0]).focus(); e.preventDefault(); }
         else if (e.key === "ArrowUp") { (items[(i - 1 + items.length) % items.length] || items[0]).focus(); e.preventDefault(); }
         else if (e.key === "Home") { items[0] && items[0].focus(); e.preventDefault(); }

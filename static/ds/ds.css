@@ -420,6 +420,30 @@ dialog.ds-dialog[open] { display: flex; }
 .ds-colcfg-row .ds-btn { opacity: .6; }
 .ds-colcfg-row .ds-btn:hover { opacity: 1; }
 .ds-colcfg-foot { display: flex; gap: 6px; padding: 6px; border-top: 1px solid var(--ds-line); margin-top: 4px; }
+
+/* --- filter builder rows -----------------------------------------------------
+   One row per condition, under the filter bar. Every control in a row is a design
+   -system button, select or input, so this only has to lay them out - and the two
+   pickers open in the shared transient menu, so they only need their own list. */
+.ds-fltr { display: flex; flex-direction: column; gap: var(--ds-s2); margin-block: var(--ds-s1) var(--ds-s4); }
+.ds-fltr:empty { display: none; }
+.ds-fltr-row { display: flex; align-items: center; gap: var(--ds-s2); flex-wrap: wrap; }
+.ds-fltr-join { inline-size: 44px; text-align: end; color: var(--ds-muted); font: var(--ds-t-xs)/1.2 var(--ds-font); }
+/* .ds-input / .ds-select are `width: 100%` by design (they fill a form field), so
+   as flex items in a row they would each swallow it - the row wrapped onto three
+   lines. Each control in a filter row is sized for what it holds. */
+.ds-fltr-op { inline-size: 132px; flex: none; }
+.ds-fltr-text { inline-size: 170px; flex: none; }
+.ds-fltr-num { inline-size: 120px; flex: none; }
+.ds-fltr-date { inline-size: 154px; flex: none; }
+.ds-fltr-menu { display: flex; flex-direction: column; gap: 2px; min-inline-size: 232px; max-block-size: 320px; overflow: auto; }
+.ds-fltr-menu .ds-search { margin-block-end: var(--ds-s1); }
+.ds-fltr-item { justify-content: flex-start; }
+.ds-fltr-all { align-self: flex-start; }
+.ds-fltr-opt { display: flex; align-items: center; gap: var(--ds-s2); padding: 4px 6px; border-radius: var(--ds-r-sm); }
+.ds-fltr-opt:hover { background: var(--ds-bg3); }
+.ds-fltr-opt .ds-switch { flex: 1; }
+.ds-fltr-dot { inline-size: 8px; block-size: 8px; border-radius: var(--ds-r-pill); flex: none; }
 @media (max-width: 720px) { .ds-table { --ds-pin-cap: 160px; } }
 
 /* ---------------------------------------------------------------- Phase 2 shell

@@ -927,3 +927,39 @@ bar, and its 11-field list mixes English-only entries with two Arabic-first ones
 to GAASH and ClickUp. Separately: "Send to ClickUp", "Attach a screenshot" and "Get tracking
 automatically" are hidden because `card_flags` is `{}` in the live config — they are switched
 off in Settings for the owner too, not just in a test copy.
+
+### Q-041 — the filter builder (the one §19 left open)
+
+The rows under the filter bar were the last legacy surface on the page: `.pop`/`.pop-menu`
+popovers, a `.po-btn`, a bare `<select>` carrying an inline `font-size`, hand-rolled
+`<input>`s with inline widths, and a 🗑 emoji for "remove" — all sitting inside the design
+system's own filter bar, beside DS chips and DS buttons.
+
+Rebuilt on `DS.button` / `DS.select` / `DS.input` / `DS.numberInput` / `DS.datePicker`, with
+the remove control a real icon button (`icon:"trash"`, `aria-label` "Remove this filter").
+**`PO_FLT` — what a filter is and how it is stored — is untouched**, so saved filters keep
+working; only what you look at and click changed.
+
+Both pickers now open in **the transient menu the Columns button uses** (`DS.menuOpenAt`,
+then replace the list's markup — the pattern `colcfg` established). That is the point of the
+change, not just the paint: they inherit its placement, its viewport clamping, its
+click-outside **and its Escape**, which the legacy popover never had. `popToggle`/`popPlace`
+are no longer involved.
+
+Two things the rebuild turned up:
+
+* **A menu that carries a search field ate the keys typed into it.** The DS menu's keydown
+  handler claimed Home/End/arrows for menu navigation. It now leaves them to the caret while
+  a text field inside the menu has focus; Escape and Tab still close from anywhere.
+* **`.ds-input` and `.ds-select` are `width: 100%` by design** — correct for a form field,
+  wrong for a flex row, where each control swallowed the row and the filter wrapped onto
+  three lines (94px tall). Each control in a row is now sized for what it holds
+  (`flex: none`), and the row is a single 26px line.
+
+The field list also spoke two languages: nine entries English-only, two Arabic-first, under a
+board whose every column header is English. Now `Gerizim status` and `Registered at Gerizim`,
+and the buying-account field follows `poBoxTerm()` like the board column does.
+
+13 + 12 checks in `test_ds_purchases_qa.py`; **25 fail on the pre-fix tree**. The test also
+gained `between(src, a, b)` — a marker-safe slice, because the first version *crashed* with a
+`ValueError` on the old tree instead of failing, and everything after it never ran.
