@@ -223,7 +223,7 @@
       { key: "customer", label: "Customer", w: 250, pin: "start", locked: true, sortVal: (o) => (o.customer || "~").toLowerCase(),
         render: (o) => `<span class="ds-pu-id">${D.avatar({ name: o.customer || "?" })}<span class="ds-fl-who">${text(o.customer)}<span class="ds-mono ds-muted">${esc(o.order_id)}</span></span></span>` },
       { key: "phone", label: "Phone", w: 150, sortVal: (o) => o.phone || "~", render: (o) => mono(o.phone) },
-      { key: "products", label: "Products", w: 220, sortVal: (o) => (o.items || []).length, render: (o) => thumbs(o.items, 6) },
+      { key: "products", label: "Products", w: 244, sortVal: (o) => (o.items || []).length, render: (o) => thumbs(o.items, 6) },
       ctx.money ? { key: "revenue", label: "Revenue", w: 120, align: "end", sortVal: (o) => o.amount_to_collect_usd || 0,
         render: (o) => (o.amount_to_collect_usd != null ? `<b class="ds-num ds-pu-collect">${esc(money(o.amount_to_collect_usd))}</b>` : D.dash()) } : null,
     ].filter(Boolean).concat([

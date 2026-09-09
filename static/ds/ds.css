@@ -141,6 +141,9 @@
    the menu it opened. Found by the Phase 2 sidebar menus disappearing behind the nav. */
 .ds-menu[data-transient="1"] { z-index: var(--ds-z-menu); }
 .ds-menu-list { display: none; position: fixed; min-width: 180px; max-width: 320px; padding: 4px; margin: 0; list-style: none;
+  /* belt and braces: however long a menu's list grows, it stays inside the window
+     and scrolls rather than hanging off the bottom of the screen. */
+  max-block-size: min(70vh, 560px); overflow-y: auto;
   background: var(--ds-card); border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); box-shadow: var(--ds-e1); z-index: var(--ds-z-menu); }
 .ds-menu-list[data-open="1"] { display: block; }
 .ds-menu-item { display: flex; align-items: center; gap: var(--ds-s2); width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent;

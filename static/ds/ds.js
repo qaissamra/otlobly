@@ -297,6 +297,26 @@
     document.body.insertAdjacentHTML("beforeend", `<span class="ds-menu" id="${id}" data-transient="1" data-align="${o.align || "start"}" style="position:fixed;left:${Math.round(x)}px;top:${Math.round(y)}px;width:0;height:0"><button type="button" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(o.label || "Context menu")}" style="opacity:0;width:0;height:0;border:0;padding:0;margin:0;position:absolute"></button><div class="ds-menu-list" role="menu">${DS.menuItems(items)}</div></span>`);
     const host = $(id); DS.menuToggle(host.querySelector("button"), null); return host;
   };
+  /** Place the open menu against its button. Separate from opening it because a menu
+      whose CONTENT is injected afterwards - the Columns panel does exactly that, via
+      menuOpenAt with an empty list - was measured while it was still empty: `offsetHeight`
+      was ~0, so the "flip above when it would run off the bottom" branch never fired, and
+      the panel then grew past the edge of the window. At 1100x820 that put "Reset layout"
+      66px below the bottom of the screen, with no way to reach it. Anything that fills a
+      menu after opening it must call this again. */
+  DS.menuPlace = () => {
+    if (!_openMenu) return;
+    const { list, btn } = _openMenu;
+    const host = list.closest(".ds-menu") || list.parentElement;
+    const r = btn.getBoundingClientRect(); const w = list.offsetWidth, h = list.offsetHeight;
+    const align = (host && host.dataset.align) || "end";
+    const rtl = getComputedStyle(host || list).direction === "rtl";
+    let left = (align === "end") !== rtl ? r.right - w : r.left;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = r.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
+    list.style.left = left + "px"; list.style.top = top + "px";
+  };
   DS.menuToggle = (btn, ev) => {
     if (ev) { ev.stopPropagation(); ev.preventDefault(); }
     const host = btn.closest(".ds-menu"); const list = host && host.querySelector(".ds-menu-list");
@@ -304,12 +324,7 @@
     if (_openMenu && _openMenu.list === list) { DS.menuClose(); btn.focus(); return; }
     DS.menuClose();
     list.dataset.open = "1"; btn.setAttribute("aria-expanded", "true"); _openMenu = { list, btn };
-    const r = btn.getBoundingClientRect(); const w = list.offsetWidth, h = list.offsetHeight; const align = host.dataset.align || "end";
-    const rtl = getComputedStyle(host).direction === "rtl";
-    let left = (align === "end") !== rtl ? r.right - w : r.left;
-    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-    let top = r.bottom + 4; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
-    list.style.left = left + "px"; list.style.top = top + "px";
+    DS.menuPlace();
     const items = menuItemsOf(list); if (items[0]) items[0].focus();
     if (!_menuBound) {
       _menuBound = true;

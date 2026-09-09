@@ -1107,3 +1107,86 @@ age_days}`) carrying no products at all, so photos there need a serializer chang
 that polls constantly. `lxThumb` keeps its 34px info-panel and 44px default sizes — panel
 decoration, not a board cell beside another board cell. `.po-thumbs` is left in place, dead, as
 the one-release safety net.
+
+---
+
+## §21 — The sweep after the photo batch (2026-09-09)
+
+Every page and board in both workspaces, at 1100 / 1280 / 1440, driving each control rather
+than calling the function behind it. Three defects, two of them mine from the batch before,
+one pre-existing and worse than either.
+
+### Q-046 — the Columns panel could open off the bottom of the screen
+
+**The pre-existing one, and the serious one.** `DS.menuOpenAt` positions the list while it is
+still **empty** — the Columns panel fills it afterwards — so `offsetHeight` was ~0 when the
+"flip above when it would run off the bottom" branch was evaluated. It never fired, and the
+panel then grew past the edge of the window.
+
+Measured on Purchases → Orders at 1100×820: the panel ran from y=479 to **y=923**, 103px past
+the bottom of an 820px window. `position: fixed`, no scroll. **"Reset layout" sat at 886–912 —
+entirely off-screen and unreachable.** The one control that undoes a column mess could not be
+pressed.
+
+Placement is now its own step, `DS.menuPlace()`, called on open **and again** once the panel
+has content. `.ds-menu-list` also gained `max-block-size: min(70vh, 560px)` with `overflow-y`,
+so a long list — Sales → Orders has 18 columns — scrolls inside the window instead of hanging
+off it. After: the panel flips above the button (27→471), fully on screen, Reset reachable, and
+the 18-column list scrolls.
+
+### Q-047 — two columns were still sized for 24px photos
+
+Photos went 24–26px → 32px in the batch before, and two columns holding a **strip** were never
+resized with them. The casualty each time was the trailing count — the one part of a strip you
+cannot get by looking at it:
+
+| column | was | now | why |
+|---|---|---|---|
+| Sales → Orders, Products | 120 | **196** | four 32px photos are 140px with gaps; the `+1` and the count want ~30 more inside a cell that loses 20 to padding |
+| In cart, Products | 220 | **244** | that board deliberately shows six |
+
+The Sales one was doubly mine: an earlier edit meant to widen it to 168 was wrapped in a
+conditional that silently matched nothing, so it never applied — and 172 was still not enough.
+Measured, not guessed, the second time.
+
+### Q-048 — a harness that broke the page it was measuring
+
+Worth writing down because it cost a wrong diagnosis. The sweep defined `window.T` for "the
+visible table". `index.html` declares `function T(s)` — its **translator** — so every call to
+`T(...)` started returning a DOM element, and 14 cells rendered the literal text
+`[object HTMLDivElement]`. I read that as an app bug before checking my own instrumentation.
+
+Two rules out of it, both now in the probe: **namespace everything under one object**
+(`window.__qa`), because this page owns one-letter globals — `T`, `$`, `q`; and **`$` is a
+top-level `const`**, so it lives in the global *lexical* scope and not on `window` — a probe
+that resolves handlers through `window[name]` reports it missing. Verified the honest way, by
+clicking a control that uses it: it runs, no error.
+
+Also corrected: "a clipped photo" is not a defect — the strip is *meant* to clip. Only a
+clipped **count** is. Checking `lastElementChild` flagged both, which made Leluxe look broken
+when it was not.
+
+### The sweep itself
+
+Every page renders, no console errors, no dead or non-compiling controls anywhere.
+
+| | |
+|---|---|
+| Otlobly pages | Overview · Leads · Customers · Orders · To order · In cart · Purchase orders (4 boards) · Package prep · Tracking · GAASH mail · Deposits · P&L · Goals · Activity · Needs attention · Settings · Team |
+| Leluxe workspace | Orders · Products · Packages |
+| Columns menus | 7 boards: every column listed, no blank rows, identity locked everywhere, Reset reachable |
+| Expansions | 8 package grids, 21 nested product blocks, **every one directly under its own row**, 0 collapsed tracks |
+| Photos | every strip 32×32 `contain`, 0 legacy `.po-thumbs` still drawn, 0 clipped counts at any width |
+
+**Board widths after the batch** (scrollport 1162 at 1440):
+
+| board | needs | off at 1100 | 1280 | 1440 |
+|---|---|---|---|---|
+| PO Orders | 1382 | 3 | 1 | 1 |
+| PO Packages | 1646 | 4 | 3 | 2 |
+| PO Customers | 1322 | 2 | — | 0 |
+| Sales Orders | 1548 | — | 2 | 1 |
+| Leluxe Orders | 1396 | — | 3 | — |
+
+`run_all_tests.sh` = **62 passed · 0 failed**; the four new menu-placement checks fail on the
+pre-fix tree.

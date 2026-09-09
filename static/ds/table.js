@@ -302,7 +302,10 @@
         // column is the only one - and it is locked besides, so it listed as a blank
         // row with a dead switch at the bottom of the menu. Structure, not a choice.
         const cols = t.columns().filter((c) => c.label); const html = `<div class="ds-colcfg"><div class="ds-menu-head">Columns</div>${cols.map((c, i) => `<div class="ds-colcfg-row">${DS.switch({ checked: c.locked || !t.state.hidden.includes(c.key), label: c.label, disabled: !!c.locked, onchange: `DS.tableEv('${id}','toggleCol',${JSON.stringify(c.key)},event)` })}${!c.pin ? DS.button({ icon: "chevron-up", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} up`, disabled: i === 0 || !!cols[i - 1].pin, onclick: `DS.tableEv('${id}','moveUp',${JSON.stringify(c.key)},event)` }) + DS.button({ icon: "chevron-down", size: "sm", variant: "ghost", ariaLabel: `Move ${c.label} down`, disabled: i === cols.length - 1 || !!cols[i + 1].pin, onclick: `DS.tableEv('${id}','moveDown',${JSON.stringify(c.key)},event)` }) : ""}</div>`).join("")}<div class="ds-colcfg-foot">${DS.button({ label: "Reset layout", size: "sm", icon: "arrow-uturn-left", onclick: `DS.tableEv('${id}','reset',null,event)` })}</div></div>`;
-        DS.menuClose(); const host = DS.menuOpenAt([], anchor.left, anchor.bottom + 4, { label: "Column settings" }); host.querySelector(".ds-menu-list").innerHTML = html; break; }
+        DS.menuClose(); const host = DS.menuOpenAt([], anchor.left, anchor.bottom + 4, { label: "Column settings" });
+        host.querySelector(".ds-menu-list").innerHTML = html;
+        DS.menuPlace();   // it was placed while empty; it has a size now
+        break; }
       case "moveUp": case "moveDown": { const order = t.columns().map((c) => c.key); const i = order.indexOf(key); const j = kind === "moveUp" ? i - 1 : i + 1; if (j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; t.state.order = order; t.save(); t.rerender(); DS.tableEv(id, "colcfg", null, ev); break; }
       case "reset": { t.reset(); DS.menuClose(); t.rerender(); break; }
       case "density": { t.state.density = t.state.density === "comfortable" ? "compact" : "comfortable"; t.save(); t.rerender(); break; }
