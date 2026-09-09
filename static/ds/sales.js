@@ -231,10 +231,11 @@
           const list = parcels(ctx, o);
           if (!list.length) return prods;
           const parcelTbl = D.subTable([
-            { label: "Parcel", w: 150, render: ([po, pk, pi]) => {
+            { label: "Parcel", w: 236, render: ([po, pk, pi]) => {
               const g = (pk.tracking_number || "").trim();
-              return `<button type="button" class="ds-sl-gwd ds-mono" title="Open package ${esc(pk.package_no)} of ${esc(po.po_id)}"
-                onclick="event.stopPropagation();pkgInfoOpen('${esc(po.po_id)}',${pi})">${esc(g || "no GWD yet")}</button>`; } },
+              return `<span class="ds-pu-id"><button type="button" class="ds-sl-gwd ds-mono" title="Open package ${esc(pk.package_no)} of ${esc(po.po_id)}"
+                onclick="event.stopPropagation();pkgInfoOpen('${esc(po.po_id)}',${pi})">${esc(g || "no GWD yet")}</button>`
+                + D.thumbs(pk.items || [], { max: 2, total: false, empty: "", countWhenBlank: false }) + `</span>`; } },
             { label: "Purchase order", w: 130, render: ([po]) => mono(po.po_id) },
             { label: "Customs", w: 160, render: ([, pk]) => W.pkgGaashPill(pk) || D.dash() },
             { label: "Documents", w: 150, render: ([po, pk, pi]) => W.pkgDocsPill(po, pk, pi) || D.dash() },
@@ -300,12 +301,13 @@
   // ---------------------------------------------------------------- customers
   function custColumns(ctx) {
     return [
-      { key: "who", label: "Customer", w: 260, pin: "start", locked: true,
+      { key: "who", label: "Customer", w: 320, pin: "start", locked: true,
         sortVal: (c) => (c.name || "~").toLowerCase(),
         render: (c) => `<span class="ds-sl-who">
           ${c.vip ? D.tag({ label: "VIP", tone: "warning", icon: "star", title: "Marked as a VIP customer" }) : ""}
           <span class="ds-sl-name">${text(c.name)}</span>
-          <span class="ds-sl-phone">${c.whatsapp ? esc(c.whatsapp) : ""}</span></span>` },
+          <span class="ds-sl-phone">${c.whatsapp ? esc(c.whatsapp) : ""}</span></span>`
+          + D.thumbs(ctx.items ? ctx.items(c) : [], { max: 2, total: false, empty: "", countWhenBlank: false }) },
       // The old board's sortable ★ column. Batch B folded VIP into the name cell and
       // the row menu, which kept the capability but lost the one thing a column gives
       // you: sorting and scanning the whole list by it.

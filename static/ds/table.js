@@ -67,8 +67,13 @@
       let seed;
       if (!s.hidden || !s.known) seed = dflt;           // new table, or a layout predating `known`
       else if (haveV < wantV) seed = s.hidden.concat(dflt.filter((k) => !s.hidden.includes(k)));
+      // A bump can hide the column the table is currently SORTED by - sorting reads the
+      // column list, not the visible set, so the board would stay sorted by something
+      // with no header and no arrow to explain it. Drop the sort with the column.
       else seed = s.hidden.concat(dflt.filter((k) => !s.known.includes(k) && !s.hidden.includes(k)));
-      this.state = { w: s.w || {}, hidden: seed, known: all, seed: wantV, order: s.order || null, sort: s.sort || this.o.sort || null, density: s.density || this.o.density || "compact" };
+      let sort = s.sort || this.o.sort || null;
+      if (sort && sort.key && seed.includes(sort.key) && !(this.o.columns || []).some((c) => c.key === sort.key && c.locked)) sort = this.o.sort || null;
+      this.state = { w: s.w || {}, hidden: seed, known: all, seed: wantV, order: s.order || null, sort, density: s.density || this.o.density || "compact" };
       // Stamp `known` now, not on the next change. Otherwise a layout saved before
       // this existed is re-seeded on EVERY load, so a column the user deliberately
       // un-hid folds itself away again each time they open the page.
