@@ -531,7 +531,11 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-pu-th { padding: 6px var(--ds-s3); font: var(--ds-w-bold) var(--ds-t-xs)/1.2 var(--ds-font); color: var(--ds-muted); background: var(--ds-bg2); border-block-end: 1px solid var(--ds-line); position: sticky; inset-block-start: 0; }
 .ds-pu-td { padding: 7px var(--ds-s3); font: var(--ds-t-sm)/1.35 var(--ds-font); min-inline-size: 0; border-block-end: 1px solid var(--ds-line); overflow: hidden; }
 .ds-pu-sub-row:last-child .ds-pu-td { border-block-end: 0; }
-.ds-pu-sub-row:hover .ds-pu-td { background: var(--ds-bg2); }
+/* Only a row that actually opens something advertises itself. Every sub-row used to
+   highlight on hover, including the ones with no click at all - which is exactly how the
+   Leluxe products read as clickable for a week while doing nothing. */
+.ds-pu-sub-row.is-clickable .ds-pu-td { cursor: pointer; }
+.ds-pu-sub-row.is-clickable:hover .ds-pu-td { background: var(--ds-bg2); }
 .ds-pu-sub-foot { padding: var(--ds-s2) 0 0; }
 .ds-pu-sub-empty { padding: 7px var(--ds-s3); font: var(--ds-t-sm)/1.35 var(--ds-font); border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-card); }
 .ds-pu-pkg-open { margin-block-start: var(--ds-s3); padding-inline-start: var(--ds-s4); border-inline-start: 2px solid var(--ds-line); }
