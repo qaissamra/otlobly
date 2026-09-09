@@ -453,7 +453,6 @@
      scrollLeft lxtSync keeps in step with the body. Grid vars per table:
      --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
-  .lx-pcols{display:grid;grid-template-columns:var(--lxpgrid,84px 52px 104px 40px 104px 128px 100px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
   .dp-cols{display:grid;grid-template-columns:var(--dpgrid,96px 84px 64px 92px 86px 160px 96px 40px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3473,7 +3472,6 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // status button on every load/deploy ("the empty orange box" bug); clamping
 // at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "p": {key:"lx_pcolw", varn:"--lxpgrid", head:".lx-pcolhead .lx-pcols", rows:"lxRows"},
   "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows"},
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
   "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane"},
@@ -3795,57 +3793,44 @@ function renderLeluxe(){
     $("lxEmpty").style.display=shown.length?"none":"block";
     $("lxEmpty").textContent="No products match the filter.";
     if(!shown.length){ $("lxRows").innerHTML=""; return; }
-    // generic per-column sort (order/profile/qty/due) — sorted BEFORE grouping,
-    // so groups keep the sorted order inside; the same-order tie runs follow
-    // adjacency and simply don't show under a scattering sort (correct).
+    // Batch F2: the board is DS.lxProducts. The APP still sorts — the same
+    // LXT_SORT["p"] preference as before — because the same-order tie runs read
+    // adjacency off the FINAL order, so the table must render what it is given.
     lxtSortApply("p",shown,([it,o],key)=>{
       if(key==="qty") return Number(lxF(it,"quantity ordered"))||0;
       if(key==="due") return Number(it.due_date)||Infinity;
       if(key==="profile") return lxAcctSortVal(lxAcctChain(it,o));
+      if(key==="product") return String(it.name||"").toLowerCase();
       return ((o&&o.name)||"").toLowerCase();                  // order
     });
-    // rows with same-order ties: consecutive rows sharing a parent order render
-    // as one visual run — pill+×N on the first, └ marker + stripe on the rest
-    const prodRows=pairs=>pairs.map(([it,o],i)=>{
-      const oid=o?o.id:null, pid=i>0&&pairs[i-1][1]?pairs[i-1][1].id:null, nid=i<pairs.length-1&&pairs[i+1][1]?pairs[i+1][1].id:null;
-      const prev=oid!=null&&oid===pid, next=oid!=null&&oid===nid;
-      let tie="", tieN=0;
-      if(prev||next){ tie=prev?(next?"mid":"end"):"start";
-        if(tie==="start"){ tieN=1; for(let j=i+1;j<pairs.length&&pairs[j][1]&&pairs[j][1].id===oid;j++) tieN++; } }
-      return lxItemRow(it,o,{cols:true,tie,tieN});
-    }).join("");
-    // Σ totals footer: product count + Σ quantity in the qty column
-    const totQty=shown.reduce((a,[it])=>a+(Number(lxF(it,"quantity ordered"))||0),0);
-    const pTotals=`<div class="poc-row bt-total">
-        <div class="bt-pin">Σ ${shown.length} منتج · products</div>
-        ${lxtCells("p",{qty:`<b style="font-size:var(--ds-t-sm)" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
-      </div>`;
-    const pcolHead=lxtHead("p","المنتج · product");
-    if(!gfdef){
-      $("lxRows").innerHTML=pcolHead+lxtWrap("p",`<div class="pkg open"><div class="pkg-body">${prodRows(shown)}${pTotals}</div></div>`);
-      lxColwApply(); lxtGridApply("p");
-      return;
+    const rows=shown.map(([it,o])=>({it,o}));
+    const sp=LXT_SORT["p"];
+    const ctx={
+      rows,
+      sort:sp?{key:sp.key,dir:sp.dir===1?"asc":"desc"}:null,
+      onSort:(key,dir)=>{ if(!key) LXT_SORT["p"]=null; else lxtSortSet("p",key,dir==="asc"?1:-1);
+        try{ localStorage.setItem("lxt_sort_p",JSON.stringify(LXT_SORT["p"])); }catch(e){}
+        renderLeluxe(); },
+      group:null,
+    };
+    if(gfdef){
+      // sections by the chosen field — the same order the old grouped view used
+      const map=new Map();
+      rows.forEach(r=>{ const v=lxPairVal(r.it,r.o,gfdef); if(!map.has(v)) map.set(v,[]); map.get(v).push(r); });
+      const optOrder=lxFOptioned(gfdef.type)?lxFOptions(gfdef).map(x=>x.name):null;
+      const keys=[...map.keys()].sort((a,b)=>{
+        if(!a) return 1; if(!b) return -1;                     // (none) always last
+        let c; if(optOrder){ c=optOrder.indexOf(a)-optOrder.indexOf(b); }
+        else if(gfdef.type==="date"){ c=(Number(a)||0)-(Number(b)||0); }
+        else c=String(a).localeCompare(String(b),undefined,{numeric:true});
+        return LX_GROUP_DIR==="asc"?c:-c;
+      });
+      ctx.group={def:gfdef,keys,map,
+        key:v=>`g:${LX_GROUP}:${v}`,
+        open:k=>LX_PCOL.isOpen(k),
+        chip:v=>lxGroupChip(gfdef,v)};
     }
-    // group into sections by the chosen field
-    const groups=new Map();
-    shown.forEach(([it,o])=>{ const v=lxPairVal(it,o,gfdef); if(!groups.has(v)) groups.set(v,[]); groups.get(v).push([it,o]); });
-    const optOrder=lxFOptioned(gfdef.type)?lxFOptions(gfdef).map(x=>x.name):null;
-    const keys=[...groups.keys()].sort((a,b)=>{
-      if(!a) return 1; if(!b) return -1;                       // (none) always last
-      let c; if(optOrder){ c=optOrder.indexOf(a)-optOrder.indexOf(b); }
-      else if(gfdef.type==="date"){ c=(Number(a)||0)-(Number(b)||0); }
-      else c=String(a).localeCompare(String(b),undefined,{numeric:true});
-      return LX_GROUP_DIR==="asc"?c:-c;
-    });
-    $("lxRows").innerHTML=pcolHead+lxtWrap("p",keys.map(v=>{
-      const gk=`g:${LX_GROUP}:${v}`, collapsed=!LX_PCOL.isOpen(gk), rows=groups.get(v);
-      return `<div class="pkg${collapsed?"":" open"}"><div class="pkg-head"><div class="pkg-title-row" onclick="lxGroupToggle('${poEsc(gk)}')" style="cursor:pointer">
-          <span class="bt-pin"><span class="caret">${collapsed?"▸":"▾"}</span>
-          ${lxGroupChip(gfdef,v)}
-          <span class="muted2" style="font-size:var(--ds-t-xs)">${rows.length} product${rows.length===1?"":"s"}</span></span>
-        </div></div>${collapsed?"":`<div class="pkg-body">${prodRows(rows)}</div>`}</div>`;
-    }).join("")+pTotals);
-    lxColwApply(); lxtGridApply("p");
+    DS.lxProducts.render($("lxRows"),ctx);
     return;
   }
   // group semantics: EACH filter must be satisfied by at least one row of the
@@ -3918,17 +3903,6 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // a column never shows both languages (the ⊕ picker + sort tooltips route through
 // T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
-  "p":[
-    {key:"order",     label:"الطلب · order",       w:84,  sortable:true},
-    {key:"profile",   label:"الحساب · profile",     w:64,  sortable:true},
-    {key:"status",    label:"الحالة · status",      w:104, min:84},
-    {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
-    {key:"tracking",  label:"التتبع · tracking",    w:104},
-    {key:"gashstatus",label:"حالة الجمارك · gaash status",w:128},
-    {key:"rdstatus",  label:"حالة RD · rd status",   w:100},
-    {key:"due",       label:"الاستحقاق · due",         w:78,  sortable:true},
-    {key:"menu",      label:"",            w:28,  locked:true},
-  ],
   "k":[
     {key:"order",   label:"الطلب · order",   w:100, sortable:true},
     {key:"profile", label:"الحساب · profile",w:78,  sortable:true},
@@ -4015,7 +3989,7 @@ const LXT_COLS={
     {key:"gwds",    label:"أرقام الطرود · GWD",       w:150},
   ],
 };
-const LXT_CLS={"p":["lx-pcolhead","lx-pcols"],
+const LXT_CLS={
                "k":["lx-kcolhead","lx-kcols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
                "en":["en-colhead","en-cols"],
@@ -4024,6 +3998,8 @@ const LXT_CLS={"p":["lx-pcolhead","lx-pcols"],
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
 const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
+// "" and "p" are migrated boards (F1/F2) and are no longer in LX_TABLES, but their
+// SORT preference is still read by the bridges — keep them seeded here.
 ["","p","k","po","pok","pop","bs","wf","en","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
@@ -5149,57 +5125,6 @@ function lxShort3(s){ const w=(s||"").trim().split(/\s+/); return w.length<=3?(s
 function lxCopyTitle(btn){ const t=btn.dataset.t||""; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copied ✓ "+lxShort3(t))).catch(()=>toast(t)); }
 // once the last-mile courier delivered, all the countdowns/dates are moot
 function lxGzDone(row){ return !!(row&&row.data&&row.data.gerizim_status&&row.data.gerizim_status.bucket==="delivered"); }
-function lxItemRow(it,parentO,opts){
-  opts=opts||{};
-  const img=lxAmz(it), qty=lxF(it,"quantity ordered");
-  const tn=String(lxF(it,"tracking number")||(it.data&&it.data.tracking_number)||"").trim();
-  const ordTn=parentO?String((parentO.data&&parentO.data.tracking_number)||lxF(parentO,"tracking number")||"").trim():"";
-  const itMenu=popMenu([
-    [`✏️ تعديل المنتج · Edit product`,`lxOpenEditor('item',${it.id},null)`],
-    [`↔️ نقل إلى طرد · Move to package`,`lxMovePrompt(${it.id})`],
-    [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${it.id}],'${poEsc(tn)}','${poEsc(ordTn||opts.pkgTn||"")}')`],
-    tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-    [`🗑 إخفاء · hide`,`lxDelete(${it.id})`,true],
-  ]);
-  const nameCell=`<div class="poc-name" style="flex:1;min-width:140px;display:flex;align-items:center;gap:4px">
-      <span title="${poEsc(it.name)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(lxShort3(it.name))}</span>
-      <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
-    </div>`;
-  // split "Products" view: same fixed-column, resizable grid as the orders header
-  if(opts.cols){
-    const tnCell=tn?`${poTn4(tn,'var(--ds-t-xs)')}${lxCopyRawBtn(tn)}`
-      :`<span class="muted2" style="font-size:var(--ds-t-xs);opacity:.7" title="no GAASH tracking number yet">📦 —</span>`;
-    // same-order run: tie=start|mid|end (adjacent rows sharing one order) — the
-    // run's first row keeps the order pill (+×N), the rest show a └ same marker
-    const tie=opts.tie||"";
-    const orderCell=parentO
-      ?(tie==="mid"||tie==="end"
-        ?`<span class="muted2" style="font-size:var(--ds-t-xs);cursor:pointer;white-space:nowrap" title="نفس طلب السطر أعلاه · same order as the row above — ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">└ نفس الطلب</span>`
-        :`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:var(--ds-t-xs);cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>${opts.tieN>1?`<span class="muted2" style="font-size:var(--ds-t-xs)" title="${opts.tieN} products in this order">×${opts.tieN}</span>`:""}`)
-      :"";
-    const profile=lxAcctChain(it,parentO);
-    return `<div class="poc-row lx-prow${tie?" lx-tied":""}" title="انقر لعرض كل التفاصيل · click for full product details"
-      onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;lxInfoOpen('item',${it.id})" style="cursor:pointer">
-      <div class="bt-pin">${lxThumb(img,32)}${nameCell}</div>
-      ${lxtCells("p",{
-        order: orderCell,
-        profile: lxProfileCell(profile),
-        status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
-        qty: qty!=null?`<span class="muted2" style="font-size:var(--ds-t-xs)" title="Quantity ordered">×${poEsc(qty)}</span>`:"",
-        tracking: tnCell,
-        gashstatus: lxCfPill("gash status",lxF(it,"gash status")),
-        rdstatus: lxCfPill("rd status",lxF(it,"rd status")),
-        due: lxGzDone(it)?"":lxDueChip(it.due_date,lxIsDone(it)),
-        menu: itMenu,
-      })}
-    </div>`;
-  }
-  // The tree branch (order card → parcel → product) moved to
-  // static/ds/leluxe.js in Batch F1. What is left is the flat PRODUCTS
-  // board ("p"), still on the LXT engine until F2 — every caller passes
-  // {cols:true}, so reaching here means a caller this migration missed.
-  return "";
-}
 function lxOpenEditor(kind,rowId,parentLocalId){
   const row=rowId?lxFind(rowId):null;
   let k=row?row.kind:(kind||"order"); if(k==="parent") k="order";

@@ -42,8 +42,11 @@
 .ds-btn-danger:hover { background: var(--ds-danger-bg); }
 .ds-btn-danger.ds-btn-solid { background: var(--ds-danger-dot); border-color: var(--ds-danger-dot); color: var(--ds-on-solid); }
 .ds-btn-sm { height: var(--ds-control-sm); padding: 0 var(--ds-s2); font-size: var(--ds-t-sm); gap: var(--ds-s1); border-radius: 7px; }
-.ds-btn-icon { width: var(--ds-control); padding: 0; }
-.ds-btn-icon.ds-btn-sm { width: var(--ds-control-sm); }
+/* An icon button is a SQUARE: `width` alone lets a flex parent shrink it, which is how the
+   table bar's density toggle measured 18x26 — under the 24px floor Batch A set. min-inline-size
+   plus flex:0 0 auto holds it on every board that puts one in a flex row. */
+.ds-btn-icon { width: var(--ds-control); min-inline-size: var(--ds-control); flex: 0 0 auto; padding: 0; }
+.ds-btn-icon.ds-btn-sm { width: var(--ds-control-sm); min-inline-size: var(--ds-control-sm); }
 .ds-btn:disabled, .ds-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; pointer-events: none; }
 .ds-btn.is-loading { position: relative; color: transparent !important; pointer-events: none; }
 .ds-btn.is-loading::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid currentColor; border-color: var(--ds-muted) transparent var(--ds-muted) var(--ds-muted); border-radius: 50%; animation: ds-spin .7s linear infinite; }
@@ -562,3 +565,23 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
   padding: var(--ds-s2) var(--ds-s3); font-size: var(--ds-t-sm); min-block-size: 30px; }
 .ds-lx-orphan + .ds-lx-orphan { border-block-start: 1px solid var(--ds-line); }
 .ds-lx-orphan:hover { background: var(--ds-bg2); }
+
+/* ── Leluxe products (Batch F2) — the order a product belongs to, its tie runs,
+   and the collapsible group sections. A grouped view is one table per section
+   sharing a single saved layout, so the sections cannot drift apart. ── */
+.ds-lx-orderpill { background: var(--ds-bg2); color: var(--ds-ink); border: 1px solid var(--ds-line);
+  font-size: var(--ds-t-xs); cursor: pointer; min-block-size: 24px; }
+.ds-lx-tie { cursor: pointer; white-space: nowrap; font-size: var(--ds-t-xs); }
+.ds-lx-tie:hover { color: var(--ds-ink); }
+.ds-tr.ds-lx-tied .ds-lx-tie { opacity: .9; }
+.ds-lx-group { border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-card);
+  margin-block-end: var(--ds-s3); overflow: clip; }
+.ds-lx-group-head { display: flex; align-items: center; gap: var(--ds-s2); cursor: pointer;
+  padding: var(--ds-s2) var(--ds-s3); min-block-size: 34px; }
+.ds-lx-group.is-open > .ds-lx-group-head { border-block-end: 1px solid var(--ds-line); }
+.ds-lx-group.is-open > .ds-lx-group-head .ds-exp-btn .ds-icon { transform: rotate(90deg); }
+.ds-lx-group-head .ds-muted { font-size: var(--ds-t-xs); }
+.ds-lx-groupfoot { display: flex; align-items: center; gap: var(--ds-s2); padding: var(--ds-s2) var(--ds-s3);
+  border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-bg2);
+  font-size: var(--ds-t-sm); }
+.ds-lx-groupfoot .ds-spacer { flex: 1; }

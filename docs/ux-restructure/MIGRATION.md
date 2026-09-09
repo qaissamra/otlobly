@@ -376,3 +376,51 @@ its own layout like every other DS table.
 `.lx-colhead`/`.lx-cols` selector chains stay in index.html's CSS while those boards use the
 same machinery; deleting the orders fragments out of eleven-way selector lists is churn with
 real typo risk and no gain, so it happens when the last LXT board goes.
+
+
+## Batch F2 — the Leluxe PRODUCTS board (2026-09-09)
+
+`DS.lxProducts` joins `DS.lxOrders` in `static/ds/leluxe.js`; the products branch of
+`renderLeluxe()` is a bridge. The LXT `"p"` table is **deleted** from all three registries
+with its `.lx-pcols` grid rule, and `lxItemRow` — the last renderer either board used — is
+gone. Its `LXT_SORT["p"]` entry stays seeded: the bridge still reads that preference.
+
+**Two things this board has that no other DS board has, both kept:**
+
+1. **Same-order tie runs.** Consecutive rows sharing a parent order render as one visual run
+   — the order pill and ×N on the first, "└ نفس الطلب" on the rest, each still clickable
+   back to the order. Adjacency is a property of the FINAL row order, so the **app sorts**
+   (the same `LXT_SORT["p"]` the board always used) and hands the module rows in the order
+   they will appear; `onSort` is passed precisely so the DataTable renders what it is given
+   instead of sorting behind us. Sort by quantity and the runs mostly dissolve — that is
+   correct, and it is what the legacy board did too (77 tie markers under the default sort,
+   16 under quantity).
+2. **Grouping by any field**, with collapsible sections. A DataTable has no group rows and
+   two tables cannot share an `id`, so a grouped view is **one table per section**. Sections
+   would drift apart on width/hide/order, so the layout lives in one canonical key
+   (`ds_table_lxp`) that is copied into each section's key before it renders.
+
+**The trap under that:** `DS.table` **reuses a registered table** and only calls `load()`
+when it has no state — `TABLES[o.id] ? Object.assign(TABLES[o.id], {o}) : new Table(o)`.
+Writing the localStorage key is therefore not enough for a section that has already
+rendered once: hiding a column in one section reached exactly one other. Clearing
+`t.state` (the component's own signal for "reload") before rendering is what makes the
+shared layout real. **Remember this for any page that renders several tables of one kind.**
+
+**Also fixed here, and it lands on every DS board:** `.ds-btn-icon` set only `width`, so a
+flex parent could squeeze it — the table bar's density toggle measured **18×26**, under the
+24px floor Batch A set. It now carries `min-inline-size` and `flex: 0 0 auto`. That was the
+single undersized control on this board; with it, **0 of 11,069**.
+
+Measured after (Leluxe products, on a copy of the live data — 234 products across 12 status
+groups): **11,069 controls, 0 under 24px · 144 truncated values, 0 without a tooltip ·
+4 font sizes (11 · 12.5 · 14 · 17), all DS steps.** The orders board re-measured 0 undersized
+after the shared CSS change. The packages board is untouched and still legacy (181 rows) — F3.
+
+**Capabilities kept:** all nine columns at their labels and widths, none hidden; the pinned
+product column with thumb, clipped title and 📋 copy-full-title; the order pill / tie marker;
+profile chain; inline status editing; quantity; tracking with 📦 — when absent; gaash status
+and RD status pills; due chips; the ⋯ menu (edit · move to package · set tracking · check
+shipping · **upload docs** · **check docs** · hide — the two customs actions are new here and
+match what F1 gave a product inside a parcel); the Σ footer (products · Σ quantity) in both
+the flat and grouped views; the group direction toggle and the "(none) last" section order.

@@ -523,3 +523,20 @@ Two notes for whoever measures next:
   clicks then land in the wrong place** — a click aimed at the Sign-in button hit empty space
   twice before this was obvious. Measure with emulation on (JS reads rects fine); click with
   emulation off (`preset: "desktop"`).
+
+---
+
+## 13. Batch F2 — the Leluxe products board (2026-09-09). Q-010, second third.
+
+Measured on a copy of the live data, 234 products, 12 status groups: **11,069 controls,
+**0** under 24px · 144 truncated values, **0** without a tooltip · 4 font sizes, all DS steps.
+
+The one undersized control was **not** this board's: `.ds-btn-icon` set only `width`, so any
+flex parent could squeeze it, and the DataTable bar's density toggle rendered 18×26. Fixed in
+`ds.css` with `min-inline-size` + `flex: 0 0 auto` — **it lands on every DS board**, the same
+shape of shared fix Batch A made.
+
+Measurement caveat, stated plainly: the Browser pane was **hidden** for these readings
+(`innerWidth` read 0 while element rects still resolved). Element-level numbers held up
+across a reload and matched the visible-pane readings taken for F1, so they are reported —
+but a pane-visible re-measure is the one that counts if these are ever disputed.
