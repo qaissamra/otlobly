@@ -229,7 +229,30 @@ def main():
         check(f"  .{k} is sized so the row cannot wrap", bool(m) and "flex: none" in m.group(1))
     check("  an empty builder takes no room", ".ds-fltr:empty { display: none; }" in css_txt)
 
-    # ---- 11. it runs, and it behaves ---------------------------------------
+    # ---- 11. a package's products sit UNDER that package --------------------
+    # They used to be appended after the whole package table, each under a heading
+    # naming the package you then had to scroll back up to find. Open two packages of
+    # a twelve-package order and their products were nowhere near their rows.
+    pkg = between(pur, "function packageGrid(ctx, p) {", "function pkgMenu(")
+    check("packageGrid exists", bool(pkg))
+    check("  a package's products are the ROW's content, not the table's",
+          "expand: ([pk, pi]) =>" in pkg)
+    check("  nothing is appended after the grid any more",
+          "ds-pu-pkg-open" not in pkg and "Products in package ${esc(pk.package_no)}" not in pkg)
+    check("  the nested grid still names itself for a screen reader",
+          "label: `Products in package ${pk.package_no}`" in pur)
+    for name, src in (("purchases.js", pur), ("ds.js", ds)):
+        check(f"  {name}'s sub-table builder can nest a row's own content",
+              "ds-pu-sub-exp" in code_only(src))
+    m = re.search(r"\.ds-pu-sub-exp \{([^}]*)\}", (DS / "ds.css").read_text(encoding="utf-8"), re.S)
+    check("  the nested block spans every track of its parent grid",
+          bool(m) and "grid-column: 1 / -1" in m.group(1))
+    # customerDetail groups BY PURCHASE ORDER — there is no parent row for those to sit
+    # under, so that one keeps its heading. A later cleanup must not strip the wrong one.
+    cust = between(pur, "function customerDetail(ctx, r) {", "P.togglePkg")
+    check("  the Customers expansion keeps its per-order grouping", "ds-pu-pkg-open" in cust)
+
+    # ---- 12. it runs, and it behaves ---------------------------------------
     node = shutil.which("node")
     if not node:
         print("  -- node not found: skipping the executed checks")
@@ -266,6 +289,12 @@ def main():
           asc: order("asc"), desc: order("desc"),
           setAllOpen: typeof D.tableSetAllOpen, expandable: typeof D.tableExpandable,
           painted: host.innerHTML,
+          // a row's nested content lands between the rows, not after the table
+          nestOrder: (D.subTable([{{label:"A", render:(r)=>String(r.n)}}], [{{n:1}},{{n:2}}],
+              {{label:"nest", expand:(r)=>"<i>kids of "+r.n+"</i>"}})
+            .match(/ds-pu-sub-row|ds-pu-sub-exp/g) || []).join(","),
+          // and the old positional label still works, so every other caller is untouched
+          strLabel: /aria-label="plain"/.test(D.subTable([{{label:"A", render:()=>"x"}}], [{{}}], "plain")),
           keptValue: fresh.value, keptFocus: fresh.focused, keptCaret: (fresh.sel||[]).join(","),
         }}));
         """
@@ -283,6 +312,9 @@ def main():
             check("  a table can open or close all of its rows", o["setAllOpen"] == "function")
             check("  and can say whether it has any to open", o["expandable"] == "function")
             check("  paintHost still writes the new markup", o["painted"] == "<em>repainted</em>")
+            check(f"  a row's children land right after that row ({o['nestOrder']})",
+                  o["nestOrder"] == "ds-pu-sub-row,ds-pu-sub-exp,ds-pu-sub-row,ds-pu-sub-exp")
+            check("  and a plain string label still works for every other caller", o["strLabel"] is True)
             check("  ...keeps the text as it was TYPED, not as the page normalised it",
                   o["keptValue"] == "Wa")
             check("  ...hands focus back", o["keptFocus"] is True)

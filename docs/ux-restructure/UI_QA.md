@@ -963,3 +963,39 @@ and the buying-account field follows `poBoxTerm()` like the board column does.
 13 + 12 checks in `test_ds_purchases_qa.py`; **25 fail on the pre-fix tree**. The test also
 gained `between(src, a, b)` — a marker-safe slice, because the first version *crashed* with a
 `ValueError` on the old tree instead of failing, and everything after it never ran.
+
+### Q-042 — a package's products were not under that package
+
+Reported from a screenshot: expand a purchase order and you get the package table, and then,
+*after the whole table*, a stack of blocks — "Products in package 1", "Products in package
+2" — each under a heading naming the package you had to scroll back up to find. On a
+twelve-package order the products of package 1 sat below the row for package 12.
+
+`packageGrid` composed it that way literally:
+
+```js
+return grid(cols, tuples, {...})
+  + open.map(([pk, pi]) => `<div class="ds-pu-pkg-open"><h4>Products in package …</h4>…`)
+  + `<div class="ds-pu-sub-foot">${add}</div>`;
+```
+
+The heading existed *because* the products were detached — it was the workaround, not the
+design. Both sub-table builders now take an `expand(row)` that renders a row's own nested
+content directly under it, as a `grid-column: 1 / -1` item spanning every track (the rows are
+`display: contents`, so the grid is the only thing that can place it). The heading is gone
+with the reason for it; the nested grid still carries `Products in package N` as its
+`aria-label`.
+
+Measured after: each nested block starts exactly at its row's bottom edge (gap 0px), indented
+16px behind a rule, and the DOM order is row · products · row · products. Closing one package
+removes only its own block.
+
+**Everywhere else was already right, and was checked:** Leluxe's order expansion nests each
+parcel's products inside that parcel's own wrapper; Sales' expansion holds two *sibling*
+tables (products on the order, parcels carrying it) with no parent/child to break; To order
+and In cart have one table each. `customerDetail` keeps `.ds-pu-pkg-open` deliberately — it
+groups by purchase order, and there is no parent row for those groups to sit under, so a
+later cleanup must not strip that one too. There is a check for exactly that.
+
+`DS.subTable`'s third argument now accepts `{label, expand}` as well as a plain label string,
+so the four existing callers are untouched — asserted, not assumed.
