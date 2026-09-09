@@ -1,12 +1,14 @@
 /* ============================================================================
-   Otlobly design system — Leluxe, the orders board (static/ds/leluxe.js)
-   Batch F1 of the UX restructure: the ⌚ Leluxe ORDERS board leaves the LXT
-   engine (LX_TABLES[""] / LXT_COLS[""] / LXT_CLS[""]) for DS.tableRender, the
-   same move Purchases made in Phase 3 and Orders/Customers in Batch B.
-   The products ("p") and packages ("k") boards still run on LXT — F2 and F3.
+   Otlobly design system — Leluxe boards (static/ds/leluxe.js)
+   Batches F1 and F2 of the UX restructure: the ⌚ Leluxe ORDERS board (F1) and
+   PRODUCTS board (F2) leave the LXT engine (LX_TABLES / LXT_COLS / LXT_CLS
+   entries "" and "p") for DS.tableRender — the same move Purchases made in
+   Phase 3 and Orders/Customers in Batch B. Packages ("k") and bulk search
+   ("bs") still run on LXT — F3.
 
-   What this file owns: the board (one row per ORDER, nine columns) and the row
-   expansion (its parcels, each with its products). Everything a cell shows is
+   What this file owns: `DS.lxOrders` (one row per ORDER, nine columns, its
+   parcels and their products in the expansion) and `DS.lxProducts` (every
+   product standalone, with grouping and same-order tie runs). Everything a cell shows is
    still built by the app's own functions on `window` — statuses stay editable,
    the GAASH pills stay live, the ⋯ menus keep every action — so this is a
    change of TABLE, not of behaviour.
@@ -304,6 +306,165 @@
         total: `<b title="مجموع Total Amount لكل الطلبات المعروضة · total of all shown orders">${esc(money(Math.round(totalAmt)))}</b>`,
       } : null,
     });
+  };
+
+  /* ========================================================================
+     Batch F2 — the PRODUCTS board (LXT table "p").
+     Every product standalone, with its parent order named beside it. Two
+     things here are not in any other DS board and both are kept:
+
+     · SAME-ORDER TIE RUNS. Consecutive rows sharing a parent order render as
+       one visual run — the order pill and ×N on the first row, "└ نفس الطلب"
+       on the rest. Adjacency depends on the FINAL row order, so the app sorts
+       (LXT_SORT["p"], the preference the board already had) and this file is
+       handed the rows in the order they will appear. That is why `onSort` is
+       passed: with it the DataTable renders the given order instead of
+       sorting behind our back.
+     · GROUPING by any field, with collapsible sections. A DataTable has no
+       group rows and two tables cannot share an id, so a grouped view is a
+       table PER SECTION. They would drift apart on width/hide/order, so the
+       layout is kept in one canonical key and copied into each section's key
+       before it renders — resize a column in one section and every section
+       follows.
+     ==================================================================== */
+  const PCOLS = () => [
+    { key: "product", label: "المنتج · product", w: 330, min: 200, pin: "start", sortable: true,
+      render: (r) => j(W.lxThumb(W.lxAmz(r.it), 30),
+        `<span class="ds-truncate" title="${esc(r.it.name || "")}">${esc(W.lxShort3(r.it.name))}</span>`,
+        `<button class="lx-copy" title="copy the full product title" data-t="${esc(r.it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) },
+    { key: "order", label: "الطلب · order", w: 104, sortable: true, render: (r) => orderCell(r) },
+    { key: "profile", label: "الحساب · profile", w: 78, sortable: true,
+      render: (r) => W.lxProfileCell(W.lxAcctChain(r.it, r.o)) },
+    { key: "status", label: "الحالة · status", w: 118, min: 84,
+      render: (r) => j(W.lxDot(r.it), W.lxConfPill(r.it), W.lxStatusSelect(r.it)) },
+    { key: "qty", label: "الكمية · qty", w: 52, align: "end", sortable: true,
+      render: (r) => { const q2 = W.lxF(r.it, "quantity ordered");
+        return q2 == null || q2 === "" ? "" : `<span class="ds-muted" title="Quantity ordered">×${esc(q2)}</span>`; } },
+    { key: "tracking", label: "التتبع · tracking", w: 110,
+      render: (r) => { const tn = itemTn(r.it);
+        return tn ? W.poTn4(tn, "var(--ds-t-xs)") + W.lxCopyRawBtn(tn)
+          : `<span class="ds-muted" title="no GAASH tracking number yet">📦 —</span>`; } },
+    { key: "gashstatus", label: "حالة الجمارك · gaash status", w: 132,
+      render: (r) => W.lxCfPill("gash status", W.lxF(r.it, "gash status")) || "" },
+    { key: "rdstatus", label: "حالة RD · rd status", w: 104,
+      render: (r) => W.lxCfPill("rd status", W.lxF(r.it, "rd status")) || "" },
+    { key: "due", label: "الاستحقاق · due", w: 84, sortable: true,
+      render: (r) => W.lxGzDone(r.it) ? "" : (W.lxDueChip(r.it.due_date, W.lxIsDone(r.it)) || "") },
+    { key: "menu", label: "", w: 30, locked: true, pin: "end", render: (r) => productMenu(r) },
+  ];
+
+  const itemTn = (it) =>
+    String(W.lxF(it, "tracking number") || (it.data && it.data.tracking_number) || "").trim();
+
+  // The run's first row keeps the order pill (+ ×N); the rest say "same order"
+  // and stay clickable, so a product never loses the way back to its order.
+  function orderCell(r) {
+    if (!r.o) return "";
+    if (r.tie === "mid" || r.tie === "end")
+      return `<span class="ds-muted ds-lx-tie" title="نفس طلب السطر أعلاه · same order as the row above — ${esc(r.o.name || "")}"`
+        + ` onclick="event.stopPropagation();lxJumpOrder(${r.o.id})">└ نفس الطلب</span>`;
+    return `<button class="pill ds-lx-orderpill" title="open ${esc(r.o.name || "")}"`
+      + ` onclick="event.stopPropagation();lxJumpOrder(${r.o.id})">${W.lxShortName(r.o.name)}</button>`
+      + (r.tieN > 1 ? `<span class="ds-muted" title="${esc(String(r.tieN))} products in this order">×${esc(String(r.tieN))}</span>` : "");
+  }
+
+  function productMenu(r) {
+    const it = r.it, tn = itemTn(it);
+    const ordTn = r.o ? trackingNumbers(r.o).own : "";
+    return W.popMenu([
+      ["✏️ تعديل المنتج · Edit product", `lxOpenEditor('item',${it.id},null)`],
+      ["↔️ نقل إلى طرد · Move to package", `lxMovePrompt(${it.id})`],
+      ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${it.id}],'${q(tn)}','${q(ordTn)}')`],
+      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
+      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
+      ["🗑 إخفاء · hide", `lxDelete(${it.id})`, true],
+    ]);
+  }
+
+  // [{it,o}] in final order -> the same rows carrying their tie marks
+  function withTies(pairs) {
+    return pairs.map((r, i) => {
+      const id = r.o ? r.o.id : null;
+      const prevId = i > 0 && pairs[i - 1].o ? pairs[i - 1].o.id : null;
+      const nextId = i < pairs.length - 1 && pairs[i + 1].o ? pairs[i + 1].o.id : null;
+      const prev = id != null && id === prevId, next = id != null && id === nextId;
+      let tie = "", tieN = 0;
+      if (prev || next) {
+        tie = prev ? (next ? "mid" : "end") : "start";
+        if (tie === "start") { tieN = 1; for (let k = i + 1; k < pairs.length && pairs[k].o && pairs[k].o.id === id; k++) tieN++; }
+      }
+      return Object.assign({}, r, { tie, tieN });
+    });
+  }
+
+  const LAYOUT = "ds_table_lxp";                 // the one layout every section shares
+  function seedLayout(id) {
+    try {
+      const v = localStorage.getItem(LAYOUT);
+      if (v && id !== "lxp") localStorage.setItem("ds_table_" + id, v);
+    } catch (e) { /* private mode */ }
+    // DS.table REUSES a registered table and only calls load() when it has no
+    // state — so writing the key is not enough for a section that has already
+    // rendered once. Clearing `state` is how the component itself asks for a
+    // reload, and without it a column hidden in one section reached no other.
+    const t = DS.tableGet && DS.tableGet(id);
+    if (t) t.state = null;
+  }
+  function keepLayout(state, rerender) {
+    try { localStorage.setItem(LAYOUT, JSON.stringify(state)); } catch (e) { /* private mode */ }
+    if (rerender) rerender();
+  }
+
+  function productTable(el, ctx, id, rows, footer) {
+    seedLayout(id);
+    DS.tableRender(el, {
+      id, columns: PCOLS(), rows: withTies(rows),
+      rowKey: (r) => String(r.it.id),
+      rowTitle: () => "انقر لعرض كل التفاصيل · click for full product details",
+      rowClass: (r) => r.tie ? "ds-lx-tied" : "",
+      onRowClick: (r) => W.lxInfoOpen("item", r.it.id),
+      sort: ctx.sort || null,
+      onSort: (key, dir) => ctx.onSort(key, dir),   // the app sorts, so ties stay true
+      empty: { title: "No products match the filter" },
+      footer: footer || null,
+      onStateChange: (st) => keepLayout(st, null),
+    });
+  }
+
+  /* ctx = { rows:[{it,o}] already filtered, sort, onSort(key,dir),
+             group:{def,keys,map,chip(v),open(k),key(v)} | null }          */
+  DS.lxProducts = {
+    render(el, ctx) {
+      const rows = ctx.rows || [];
+      const totQty = rows.reduce((a, r) => a + (Number(W.lxF(r.it, "quantity ordered")) || 0), 0);
+      const foot = {
+        product: `<b>Σ ${esc(String(rows.length))} منتج · products</b>`,
+        qty: `<b title="مجموع الكميات · total quantity">×${esc(String(totQty))}</b>`,
+      };
+      if (!ctx.group) {
+        el.innerHTML = `<div id="lxpBoard"></div>`;
+        productTable(document.getElementById("lxpBoard"), ctx, "lxp", rows, foot);
+        return;
+      }
+      const g = ctx.group;
+      el.innerHTML = g.keys.map((v, i) => {
+        const open = g.open(g.key(v)), n = (g.map.get(v) || []).length;
+        return `<div class="ds-lx-group${open ? " is-open" : ""}">
+          <div class="ds-lx-group-head" onclick="lxGroupToggle('${q(g.key(v))}')">
+            <button type="button" class="ds-exp-btn" aria-expanded="${open ? "true" : "false"}"
+              aria-label="${open ? "Collapse" : "Expand"} group">${DS.icon("chevron-right", { size: 14 })}</button>
+            ${g.chip(v)}
+            <span class="ds-muted">${esc(String(n))} product${n === 1 ? "" : "s"}</span>
+          </div>
+          ${open ? `<div id="lxpG${i}"></div>` : ""}</div>`;
+      }).join("") + `<div class="ds-lx-groupfoot"><b>Σ ${esc(String(rows.length))} منتج · products</b>`
+        + `<span class="ds-spacer"></span><b title="مجموع الكميات · total quantity">×${esc(String(totQty))}</b></div>`;
+      g.keys.forEach((v, i) => {
+        const mount = document.getElementById("lxpG" + i);
+        if (mount) productTable(mount, ctx, "lxp__" + i, g.map.get(v) || [], null);
+      });
+    },
   };
 
   /* Orphans — rows the sync could not hang off an order. They are not orders,
