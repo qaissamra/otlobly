@@ -306,6 +306,13 @@
           ${c.vip ? D.tag({ label: "VIP", tone: "warning", icon: "star", title: "Marked as a VIP customer" }) : ""}
           <span class="ds-sl-name">${text(c.name)}</span>
           <span class="ds-sl-phone">${c.whatsapp ? esc(c.whatsapp) : ""}</span></span>` },
+      // The old board's sortable ★ column. Batch B folded VIP into the name cell and
+      // the row menu, which kept the capability but lost the one thing a column gives
+      // you: sorting and scanning the whole list by it.
+      { key: "vip", label: "★ VIP", w: 84, align: "center",
+        // 1 for a VIP, as the old board scored it - so descending puts them on top,
+        // the way descending does on every other column.
+        sortVal: (c) => (c.vip ? 1 : 0), render: (c) => ctx.vipCell(c) },
       { key: "city", label: "City", w: 130, sortVal: (c) => (c.city || "~").toLowerCase(),
         render: (c) => ctx.cityCell(c) },
       { key: "orders", label: "Orders", w: 90, align: "end",
