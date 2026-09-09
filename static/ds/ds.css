@@ -427,6 +427,14 @@ dialog.ds-dialog[open] { display: flex; }
    when the flag is off. The legacy sidebar and top bar are hidden rather than
    removed: their nodes still carry every role and feature gate the new nav reads. */
 body.ds-shell-on #sidebar, body.ds-shell-on .main > .topbar { display: none; }
+/* Leluxe and GAASH mail draw their own view/tab strip. The shell draws the same
+   tabs above it, so under the new layout the page showed the strip TWICE - and the
+   two could disagree, because only the shell's follows the address bar. Hide the
+   page's copy for the same reason the legacy sidebar is hidden: the shell owns
+   navigation now. The classic layout still shows it, untouched.
+   Both strips carry an inline `display:inline-flex`, so this needs !important the
+   way .ds-hidden does - a stylesheet rule alone cannot beat a style attribute. */
+body.ds-shell-on #lxSegTabs, body.ds-shell-on #gmTabs { display: none !important; }
 body.ds-shell-on .ds-sidebar { flex: 0 0 var(--ds-sidebar-w); z-index: var(--ds-z-sticky); }
 body.ds-shell-on .wrap { max-width: var(--ds-content-max); padding-block-start: 0; }
 body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: var(--ds-z-sticky); }
@@ -486,6 +494,16 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-sl-id { font-family: var(--ds-font-mono); font-weight: 700; font-size: var(--ds-t-xs); flex: 0 0 auto; }
 .ds-sl-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-sl-phone { font-family: var(--ds-font-mono); font-size: var(--ds-t-xs); color: var(--ds-muted); flex: 0 0 auto; }
+/* The VIP cell. A star that toggles, so it is a real target (24px minimum, Batch A)
+   and not a bare glyph with an onclick. Hollow when off, so the column reads at a
+   glance without colour alone carrying the meaning. */
+.ds-vip { display: inline-flex; align-items: center; justify-content: center;
+  min-width: var(--ds-control-sm); min-height: var(--ds-control-sm);
+  border-radius: var(--ds-r-sm); cursor: pointer; color: var(--ds-muted);
+  line-height: 1; user-select: none; }
+.ds-vip.on { color: var(--ds-warning-ink); }
+.ds-vip:hover { background: var(--ds-warning-bg); color: var(--ds-warning-ink); }
+.ds-vip:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 1px; }
 /* One order can be split across parcels, and each keeps its own number and its own
    status. They sit in a row and the cell clips; the full list is in the tooltip and
    the row's expansion carries one line per parcel. */

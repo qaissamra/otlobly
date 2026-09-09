@@ -120,7 +120,9 @@
   // Sub-tabs a route can address. Each one is "the page's own tab strip", so a
   // link can land on GAASH mail's Docs tab or the Purchases packages board.
   const TABS = {
-    gaashmail: { keys: ["conv", "ov", "seq", "tpl", "ready", "docs", "fcast", "dash"],
+    // Same order as the page's own strip (index.html #gmTabs) - they used to disagree,
+    // so "Templates" was the 4th tab in the shell and the 7th on the page.
+    gaashmail: { keys: ["conv", "ov", "seq", "ready", "docs", "fcast", "tpl", "dash"],
       labels: { conv: "Conversations", ov: "Overview", seq: "Workflows", tpl: "Templates", ready: "Readiness", docs: "Docs", fcast: "Forecast", dash: "Analyze" },
       get: () => A().gmTab, set: (t) => window.gmTab && window.gmTab(t) },
     orders: { keys: ["orders", "packages", "products"],
@@ -306,6 +308,10 @@
   const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers"]);
 
   function paint() {
+    // syncTab() reaches this from a page's own tab switch, which can fire during boot -
+    // before mount() has created the shell. Nothing to paint yet, and $("dsPageHead")
+    // would be null.
+    if (!$("dsPageHead")) return;
     const v = A().view || "orders";
     const it = BY_VIEW[v] || { label: v, key: v };
     const g = GROUP_OF[it.key];
@@ -342,10 +348,13 @@
   }
 
   S.stage = (key) => { const s = STAGES.find((x) => x.key === key); if (s) { store.set("ds_stage", key); S.go(s.path); } };
-  S.tab = (key) => { const t = TABS[A().view]; if (t) { t.set(key); syncHash(); } };
+  S.tab = (key) => { const t = TABS[A().view]; if (t) { t.set(key); syncHash(); paint(); } };
   /** A page switched one of its own tabs without going through the shell - make the
-      address say so, so the tab a link points at is the tab that opens. */
-  S.syncTab = () => { if (S.enabled()) syncHash(); };
+      address say so, so the tab a link points at is the tab that opens, AND repaint
+      the strip. syncHash() alone was not enough: it sets `applying` so its own
+      hashchange is ignored, so paint() never ran and the strip kept highlighting the
+      tab you left - the page said Products while the shell still said Packages. */
+  S.syncTab = () => { if (S.enabled()) { syncHash(); paint(); } };
 
   // ---------------------------------------------------------------- global search
   let POS_CACHE = null, SEARCH_ROWS = [], SEARCH_I = -1;

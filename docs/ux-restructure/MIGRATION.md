@@ -461,3 +461,81 @@ Measured: **8,010 controls, 0 under 24px · 105 truncated values, 0 without a to
 hiding that **`--ds-warn-ink` does not exist**; the token is `--ds-warning-ink`. This is
 Batch B2's trap #1 again (a `var()` with a fallback silently papering over a token that was
 never defined). Write `var(--ds-warning-ink)` with no fallback and let the lint fail loudly.
+
+
+## Batch G: the QA sweep's five defects (2026-09-09)
+
+Not a migration — a walk of every staff page as a normal user, on a live-data snapshot,
+after Batches A–F. Five defects, all of them things a migration left behind rather than
+things a migration broke.
+
+### 1. "Reset layout" showed the columns the page hides on purpose
+
+`Table.reset()` set `hidden: []`. Every Columns dropdown has a **Reset layout** button, and
+one click turned the Orders board from 12 columns into 19 and its row from 1166px into
+2294px — twice the frame — with no way back but hiding seven columns by hand. It now
+re-seeds `hidden` from `defaultHidden`, exactly as a first visit does in `load()`.
+
+Verified: Orders restores its 7 defaults, Customers its 4.
+
+### 2. The three Leluxe boards kept the pre-Batch-B2 column widths
+
+`leluxe.js` inherited the legacy `LXT_COLS` pixel widths; `purchases.js` had been
+re-measured for the type scale Batch B2 introduced. Like-for-like: `profile` 78 vs 128,
+`due` 84 vs 106, `status` 100–118 vs 160. Because the widths are fixed pixels the damage was
+identical at 1024, 1280 and 1440 — this was never a small-screen problem.
+
+Widths are now set from measured content: the 90th-percentile cell and the header label,
+plus the cell's padding. Sizing to the *widest* row would have made the boards absurd (one
+`deadline` cell needs 287px), so genuine outliers still ellipsis — with a tooltip.
+
+| board | truncated headers | truncated cells | unreadable (no tooltip) |
+|---|---|---|---|
+| Leluxe orders | 5 → **0** | 455 → **23** | 8 → **0** |
+| Leluxe products | 5 → **0** | 763 → **31** | 0 → 0 |
+| Leluxe packages | 4 → **0** | 594 → **63** | 0 → 0 |
+
+The 8 unreadable ones were ClickUp statuses (`recieved no rd`) cut with nothing to hover:
+`lxStatusPill` now carries its own text as a `title`. The same one-line defect on the
+Purchases packages board (`62 days late`, 4 cells) is fixed by giving `pkgDatePill` a tip —
+the promised date, which is more useful than repeating the truncated text.
+
+**No default visibility was changed.** Widening pushes the Leluxe boards past the frame, and
+hiding a column to buy that back is the owner's call, not a side effect of a bug fix.
+
+### 3 + 4. Leluxe and GAASH mail: the tab strip was drawn twice, and went stale
+
+`OWN_HEADER` lists the views that draw their own `DS.pageHeader`; `leluxe` and `gaashmail`
+are not in it, so the shell drew a tab strip *and* the page drew its own. Under the new
+layout the two disagreed — and on GAASH mail they were **in a different order**, so
+Templates was the 4th tab in one strip and the 7th in the other.
+
+Two causes, two fixes:
+
+- `lxSetView` and `gmTab` never called `DS.shell2.syncTab()` (the four other tab-switchers
+  do). They do now.
+- `syncTab()` itself only called `syncHash()` — which sets `applying = true` so its own
+  `hashchange` is ignored, so `paint()` never ran and the strip kept highlighting the tab
+  you left. `syncTab()` and `S.tab()` now repaint. **This was the real bug**; the two
+  missing call sites only made it visible.
+
+The page's own strip is hidden under `body.ds-shell-on`, the same way the legacy sidebar and
+top bar are — the shell owns navigation. It needs `!important`: both strips carry an inline
+`display:inline-flex`, which a stylesheet rule cannot beat. The classic layout still shows
+the page's strip, untouched. `TABS.gaashmail` is reordered to match `#gmTabs`.
+
+### 5. Customers got its ★ VIP column back
+
+Batch B kept every VIP *capability* — the tag in the name cell, the header count, the row
+menu's "Mark as VIP" — but dropped the **column**, so the list could no longer be sorted or
+scanned by it, and it was not in the Columns dropdown to bring back. It is a column again,
+sortable, second from the left, with the old click-to-toggle star. `sortVal` scores a VIP
+as `1` exactly as the old board did, so descending puts them on top like every other column.
+
+The star is a real target (26px, `role="button"`, `aria-pressed`, Enter/Space) rather than
+the old bare glyph with an `onclick`. The name-cell tag stays: it is what still says "VIP"
+when someone hides the column.
+
+**Trap for the next batch:** `test_design_system.py` requires every `ds.css` selector to
+contain `.ds-` and forbids emoji anywhere in `ds.css`. `.cu-vip` and a `★` in a comment both
+failed it. Name it `.ds-vip`, and keep the star out of the stylesheet.

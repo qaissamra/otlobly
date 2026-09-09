@@ -557,3 +557,68 @@ audit ranked worst are all on the design system. What is left on this page is bu
 fallback was also hiding that the token name was wrong (`--ds-warning-ink`) — the same trap
 Batch B2 logged. **Never give a `var(--ds-…)` a hex fallback; the fallback is what stops you
 finding out the token does not exist.**
+
+
+## 15. Batch G — the full-app QA sweep (2026-09-09)
+
+Not a batch of the programme: a walk of every staff page as a normal user, on a live-data
+snapshot, checking what the owner asked — "does every page still look right, does the
+dropdown show everything, are all the old columns still there".
+
+### The column-parity method (reuse this)
+
+Extract the legacy registry from the commit **before** each migration and diff the key sets
+against the live table:
+
+```
+git show <migration-commit>^:web/index.html   # then parse LXT_COLS / NE_COLS
+DS.tableGet(id).columns().map(c => c.key)     # in the browser
+```
+
+Result: every Leluxe and Purchases column survived (several renamed — `pcust`→`customer`,
+`gashstatus`→`customs`, `gerizim`→`lastmile`, `rdnum`→`rd`, `status`→`exception`). Purchase
+orders legitimately moved its per-parcel facts to the Packages tab (Phase 3's stated
+design). Orders lost the `whatsapp` **column** but its content became the row's "More
+actions" menu, which MIGRATION.md documents. **Customers had genuinely lost `★ VIP`** — see
+Batch G in MIGRATION.md.
+
+### Q-025 — "Reset layout" un-hid every defaultHidden column
+
+`Table.reset()` set `hidden: []` rather than re-seeding from `defaultHidden`. Affected every
+migrated board. **Closed** in Batch G.
+
+### Q-026 — the Leluxe boards were never re-measured for the Batch B2 type scale
+
+They kept the legacy LXT pixel widths. 455 / 763 / 594 truncated cells and 5 / 5 / 4
+truncated headers, identical at 1024, 1280 and 1440 because the widths are fixed. **Closed**
+in Batch G (0 / 0 / 0 headers, 23 / 31 / 63 cells, 0 unreadable).
+
+### Q-027 — `DS.shell2.syncTab()` rewrote the address but never repainted the strip
+
+It called `syncHash()` only, and `syncHash` sets `applying = true` so its own `hashchange`
+is ignored — `paint()` never ran. Visible on Leluxe and GAASH mail because those two also
+never called `syncTab` at all. **Closed** in Batch G.
+
+### Dropdowns: healthy
+
+Every Columns picker lists exactly the columns its table registers — od_orders 19/19,
+po_orders 12/12, po_packages 17/17, cu_list 10/10 (11/11 with VIP), lxo/lxp/lxk 10/10,
+pp_ready 9/9 — each with reorder arrows and Reset layout. Row menus are intact, and the
+Leluxe boards' legacy `.pop-menu` is `position:fixed; z-index:99`, so the table's
+`overflow:hidden` never clips it.
+
+**Still open, not defects:** every board's Columns list ends with a nameless locked switch
+(the actions column has `label: ""`), and that header carries a dangling `title="Sort by "`.
+The Leluxe boards still use the legacy `popToggle` menus while the rest use `DS.menu`.
+
+### Measurement traps that produced false positives before they were caught
+
+- Transient menu hosts are removed on a `setTimeout(…, 0)`. Counting `.ds-menu` in the same
+  call shows a leak that is not there.
+- Sorting re-renders asynchronously. Read the rows in a **later** tool call, or you will
+  report "clicking the header does nothing".
+- A hidden Browser pane throttles timers, so anything waiting on one stalls.
+- The pane's screenshot renderer has no colour-emoji font — real emoji look like tofu boxes.
+  Check the codepoints in the DOM before reporting a broken glyph.
+- Flask caches `web/index.html`: restart the preview server after editing it, or you are
+  measuring the file you replaced ten minutes ago.

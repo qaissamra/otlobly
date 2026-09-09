@@ -1634,7 +1634,7 @@
         <h2 style="font-size:var(--ds-t-md);margin:0">📦 Orders</h2>
         <span class="muted2" id="lxCount" style="font-size:var(--ds-t-sm)"></span>
         <span class="spacer"></span>
-        <span style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden" title="طريقة العرض · view">
+        <span id="lxSegTabs" style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden" title="طريقة العرض · view">
           <button class="minibtn" id="lxSegOrders" style="border:0;border-radius:0" onclick="lxSetView('orders')">▤ Orders</button>
           <button class="minibtn" id="lxSegProducts" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('products')" title="flat products list (like ClickUp's subtasks-as-separate-tasks)">⫶ Products</button>
           <button class="minibtn" id="lxSegPkgs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('packages')" title="كل الطرود في جدول واحد مع قيمة كل طرد · every package as one row with its estimated value (Σ products' Total Amount)">📦 Packages</button>
@@ -3132,7 +3132,10 @@ function lxDate(ms){ if(!ms) return ""; const d=new Date(Number(ms)); return isN
 function lxStatusPill(s){
   if(!s) return "";
   const def=((LX.schema&&LX.schema.statuses)||[]).find(x=>x.status===s), c=(def&&def.color)||"#8d8d8d";
-  return `<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55">${poEsc(s)}</span>`;
+  // The title is not decoration: a long ClickUp status ("recieved no rd") is wider
+  // than the column, and the pill was the one truncating cell on the board with no
+  // way at all to read the rest of it.
+  return `<span class="pill" title="${poEsc(s)}" style="background:${c}22;color:${c};border:1px solid ${c}55">${poEsc(s)}</span>`;
 }
 // Clickable status pill → searchable colored dropdown (same pattern as the
 // Purchases pkgCuSelect) — change the ClickUp status without opening the card.
@@ -3683,7 +3686,8 @@ let LX_VIEW=localStorage.getItem("lx_view")||"orders";
 let LX_ONLY=null, LX_LAST_MIGRATED=[];   // restrict the grid to just-migrated order ids
 let LX_DASH_UNIT=localStorage.getItem("lx_dash_unit")||"products";
 let LX_DASH_METRIC=localStorage.getItem("lx_dash_metric")||"count";
-function lxSetView(v){ LX_VIEW=v; try{ localStorage.setItem("lx_view",v); }catch(e){} renderLeluxe(); }
+function lxSetView(v){ LX_VIEW=v; try{ localStorage.setItem("lx_view",v); }catch(e){} renderLeluxe();
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab(); }   // the tab a link points at is the tab that opens
 function lxDashUnit(u){ LX_DASH_UNIT=u; try{ localStorage.setItem("lx_dash_unit",u); }catch(e){} renderLeluxe(); }
 function lxDashMetric(m){ LX_DASH_METRIC=m; try{ localStorage.setItem("lx_dash_metric",m); }catch(e){} renderLeluxe(); }
 // shared filtered set — Orders view and the Dashboard aggregate the SAME orders,
@@ -9228,9 +9232,13 @@ function pkgDeadlinePill(p,pk,pi){
 function pkgDatePill(pk){
   if(pkgStatus(pk)==="DELIVERED") return '';          // the GAASH pill already says it
   const n=dueDays(pk&&pk.arrival); if(n==null) return '';
-  if(n<0)  return tonePill("red", n===-1?"1 day late":`${-n} days late`);
-  if(n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`));
-  return tonePill("amber", `Arrives ${fmtDue(pk.arrival)}`);
+  // "62 days late" is wider than the column, and these three pills were the only
+  // truncating cells on the Packages board with nothing to hover — the tip carries
+  // the promised date, which is what you actually want when the count is cut off.
+  const tip=`Promised ${fmtDue(pk.arrival)}`;
+  if(n<0)  return tonePill("red", n===-1?"1 day late":`${-n} days late`, tip);
+  if(n<=7) return tonePill("green", n===0?"Arrives today":(n===1?"Arrives tomorrow":`Arrives in ${n} days`), tip);
+  return tonePill("amber", `Arrives ${fmtDue(pk.arrival)}`, tip);
 }
 function pkgGaashPill(pk){
   const tip=pkgTrackTip(pk);
@@ -10007,6 +10015,12 @@ function cuCtx(){
       ? `<span class="ds-mono" title="ID number on file${c.id_image?" · photo too":""}">${poEsc(c.id_number)}</span>`
       : (c.id_image ? DS.tag({label:"Photo only", icon:"identification", title:"An ID photo is on file but no number was typed"})
                     : DS.attention({kind:"missing_id", title:"No ID on file — customs needs one before the parcel can clear"})),
+    // Batch B kept the VIP mark but lost the COLUMN, so the list could no longer be
+    // sorted or scanned by it. Same click-to-toggle star as the old board; the row
+    // menu keeps its worded entry for anyone who prefers it.
+    vipCell: c=> cuCanEdit()
+      ? `<span class="ds-vip${c.vip?" on":""}" role="button" tabindex="0" aria-pressed="${c.vip?"true":"false"}" title="VIP — اضغط للتبديل · click to toggle" onclick="event.stopPropagation();cuVipToggle('${poEsc(c.customer_id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();cuVipToggle('${poEsc(c.customer_id)}')}">${c.vip?"★":"☆"}</span>`
+      : (c.vip?`<span class="ds-vip on" title="Marked as a VIP customer">★</span>`:DS.dash()),
     rowMenu: c=>[
       {label:"Open the profile", icon:"user", onclick:`showProfile('${poEsc(c.customer_id)}')`},
       {label:"Edit customer", icon:"pencil-square", onclick:`editCustomer('${poEsc(c.customer_id)}')`},
@@ -10593,6 +10607,7 @@ function gmTab(t){
   if(t==="docs") gmDocsRender();
   if(t==="fcast") gmFcastRender();
   if(t==="dash") gmDashLoad();
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab();   // the tab a link points at is the tab that opens
 }
 function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
   return hexPill(c,T(l)); }

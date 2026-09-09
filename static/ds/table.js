@@ -68,7 +68,11 @@
       if (!s.known || haveV < wantV) { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } }
     }
     save() { try { localStorage.setItem(KEY(this.id), JSON.stringify(this.state)); } catch (e) { /* private mode */ } if (this.o.onStateChange) this.o.onStateChange(this.state); }
-    reset() { this.state = { w: {}, hidden: [], known: (this.o.columns || []).map((c) => c.key), seed: this.o.seedVersion || 0, order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
+    /** "Reset layout" means the layout the PAGE ships with, not "show me all 19 columns".
+        It used to set `hidden: []`, so one click turned Orders from 12 columns into 19 and
+        the row from 1166px into 2294px - and the only way back was hiding seven of them by
+        hand. Re-seed from `defaultHidden`, exactly as a first visit does in load(). */
+    reset() { this.state = { w: {}, hidden: (this.o.columns || []).filter((c) => c.defaultHidden).map((c) => c.key), known: (this.o.columns || []).map((c) => c.key), seed: this.o.seedVersion || 0, order: null, sort: this.o.sort || null, density: this.o.density || "compact" }; this.save(); }
     columns() {
       const base = this.o.columns.slice();
       if (this.state.order) { const idx = new Map(this.state.order.map((k, i) => [k, i])); base.sort((a, b) => (idx.has(a.key) ? idx.get(a.key) : 1e6 + this.o.columns.indexOf(a)) - (idx.has(b.key) ? idx.get(b.key) : 1e6 + this.o.columns.indexOf(b))); }
