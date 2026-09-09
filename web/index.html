@@ -453,7 +453,6 @@
      scrollLeft lxtSync keeps in step with the body. Grid vars per table:
      --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
-  .lx-kcols{display:grid;grid-template-columns:var(--lxkgrid,100px 78px 86px 134px 128px 60px 110px 78px 28px);gap:6px;align-items:center;flex:0 0 auto}
   .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
   .dp-cols{display:grid;grid-template-columns:var(--dpgrid,96px 84px 64px 92px 86px 160px 96px 40px);gap:6px;align-items:center;flex:0 0 auto}
   .ct-cols{display:grid;grid-template-columns:var(--ctgrid,80px 96px 120px 150px 56px 88px);gap:6px;align-items:center;flex:0 0 auto}
@@ -3472,7 +3471,6 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // status button on every load/deploy ("the empty orange box" bug); clamping
 // at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "k": {key:"lx_kcolw", varn:"--lxkgrid", head:".lx-kcolhead .lx-kcols", rows:"lxRows"},
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
   "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane"},
   "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl"},
@@ -3903,17 +3901,6 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // a column never shows both languages (the ⊕ picker + sort tooltips route through
 // T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
-  "k":[
-    {key:"order",   label:"الطلب · order",   w:100, sortable:true},
-    {key:"profile", label:"الحساب · profile",w:78,  sortable:true},
-    {key:"value",   label:"≈ القيمة · ≈ value", w:86,  sortable:true},
-    {key:"status",  label:"الحالة · status",  w:134, min:84, sortable:true},
-    {key:"gash",    label:"الجمارك · gash",    w:128},
-    {key:"mail",    label:"✉ البريد · ✉ mail",  w:60},
-    {key:"deadline",label:"الموعد · deadline",w:110},
-    {key:"due",     label:"الاستحقاق · due",     w:78,  sortable:true},
-    {key:"menu",    label:"",        w:28,  locked:true},
-  ],
   "bs":[    // 🔎 Bulk search results (mixed Purchases + Leluxe rows)
     {key:"found",    label:"موجود في · found in",   w:120, sortable:true},
     {key:"oname",    label:"الاسم · order name",    w:120, sortable:true},
@@ -3990,7 +3977,6 @@ const LXT_COLS={
   ],
 };
 const LXT_CLS={
-               "k":["lx-kcolhead","lx-kcols"],
                "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
                "en":["en-colhead","en-cols"],
                "dp":["dp-colhead","dp-cols"],
@@ -3998,7 +3984,7 @@ const LXT_CLS={
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
 const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
-// "" and "p" are migrated boards (F1/F2) and are no longer in LX_TABLES, but their
+// "", "p" and "k" are migrated boards (F1/F2/F3) and are no longer in LX_TABLES, but their
 // SORT preference is still read by the bridges — keep them seeded here.
 ["","p","k","po","pok","pop","bs","wf","en","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
@@ -4349,84 +4335,17 @@ function lxRenderPackages(){
   $("lxEmpty").style.display=rows.length?"none":"block";
   $("lxEmpty").textContent=(LX.orders||[]).length?"No packages match the filter.":"No orders yet — ＋ New order, or ⬇ Migrate from AZ (2).";
   if(!rows.length){ $("lxRows").innerHTML=""; return; }
+  // Batch F3: the board is DS.lxPackages. The APP still sorts — the same
+  // LXT_SORT["k"] preference as before — so the table renders what it is given.
   lxtSortApply("k",rows,lxKSortVal);
-  // Σ totals footer — ClickUp's group rollup row
-  const totals=`<div class="poc-row bt-total">
-      <div class="bt-pin">Σ ${rows.length} طرد · ${nItems} منتج</div>
-      ${lxtCells("k",{value:`<b style="font-size:var(--ds-t-sm)" title="مجموع قيمة كل الطرود المعروضة · total of all shown packages">₪${(Math.round(tot*100)/100).toLocaleString()}</b>`})}
-    </div>`;
-  $("lxRows").innerHTML=lxtHead("k","الطرد · package")
-    +lxtWrap("k",`<div class="pkg open"><div class="pkg-body">${rows.map(lxKRow).join("")}${totals}</div></div>`);
-  lxColwApply();
-  lxtGridApply("k");
-}
-function lxKRow(r){
-  const o=r.o, pk=r.pk, its=r.items||[], tn=r.tn, e=r.est;
-  // pills read from the package row itself, else the first enriched product (it
-  // carries the GWD data). An absorbed shell is usually the EMPTY one — the live
-  // GAASH/Gerizim/deadline data sits on the products — so only prefer the package
-  // when it is the row actually carrying that enrichment.
-  const en=(pk&&lxEnriched(pk))?pk:(its.find(lxEnriched)||pk||its[0]||null);
-  const u=[...new Set(its.map(i=>i.status).filter(Boolean))];
-  // Row-level status editing (Purchases parity, owner request): a real package
-  // subtask edits ITS OWN ClickUp task; a loose group of ONE product edits that
-  // product. Multi-product groups stay read-only — one control must never bulk-
-  // write N tasks (same rule as the order-card header). Writes are mirror-only
-  // (lxSetStatus → working list); the real AZ (2) stays behind az2_push.
-  const mixedHint=u.length>1?tonePill("gray","mixed","products have different statuses"):"";
-  const statusBit=pk?lxStatusSelect(pk,lxKEffStatus(its,pk))+mixedHint
-    :its.length===1?lxStatusSelect(its[0])
-    :u.length===1?lxStatusPill(u[0])
-    :mixedHint;
-  const fmt=n=>(Math.round(n*100)/100).toLocaleString();
-  const estTip=`≈ قيمة الطرد · منتجات ₪${fmt(e.items)}`+
-    (e.share>0?` + حصة شحن/جمارك ₪${fmt(e.share)} (إجمالي الطلب ₪${fmt(e.total)} − المنتجات، ÷ ${e.n} طرود)`:"")+
-    (e.unpriced?` · ${e.unpriced} منتج بلا سعر — قيمته داخل الحصة · ${e.unpriced} unpriced (absorbed in the split)`:"");
-  const estCell=(e.priced||e.share>0)?`<b style="font-size:var(--ds-t-sm)" title="${poEsc(estTip)}">₪${fmt(e.sum)}</b>${e.unpriced?`<span style="color:var(--warn);font-size:var(--ds-t-xs);flex:0 0 auto" title="${e.unpriced} products with no individual price — their value sits inside the shipping/tax share">+${e.unpriced}?</span>`:""}`:"";
-  const gashDate=(pk&&lxF(pk,"gash date"))||its.map(it=>lxF(it,"gash date")).find(Boolean);
-  const gashStatus=lxGashRollup([pk,...its]);
-  const done=lxGzDone(en), doneSt=its.length&&u.length===1?lxIsDone(its[0]):false;
-  const due=lxKDue(r);
-  const ordTn=o?String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim():"";
-  const gIds=its.map(it=>it.id).join(",");
-  const menu=pk?popMenu([
-      [`✏️ تعديل الطرد · Edit package`,`lxOpenEditor('package',${pk.id},${o?o.id:null})`],
-      [`🚚 تعيين رقم التتبع · Set tracking`,`lxTrackingPrompt([${pk.id}],'${poEsc(tn)}','')`],
-      tn?[`📧 بريد التخليص · Clearance email`,`lxMailCompose('${poEsc(tn)}',${o?o.id:0})`]:null,
-      tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
-      tn?[`🚚 تسجيل في جيرزيم · Register at Gerizim`,`lxGzFor('package',${pk.id})`]:null,
-      [`＋ إضافة منتج · Add product`,`lxOpenEditor('item',null,${pk.id})`],
-      [`🗑 إخفاء · hide`,`lxDelete(${pk.id})`,true],
-    ]):popMenu([
-      its.length?[`🚚 تعيين رقم التتبع للكل (${its.length}) · Set tracking for all`,`lxTrackingPrompt([${gIds}],'${poEsc(tn||"")}','${poEsc(ordTn)}')`]:null,
-      tn?[`📧 بريد التخليص · Clearance email`,`lxMailCompose('${poEsc(tn)}',${o?o.id:0})`]:null,
-      tn?[`🔎 تتبع الشحنة · Check shipping`,`lxCheckShipping('${poEsc(tn)}')`]:null,
-      tn?[`🪪 رفع مستندات لغاش · Upload docs`,`gaashUploadOpenGwd('${poEsc(tn)}')`]:null, tn?[`📄 فحص المستندات · Check docs`,`lxCheckDocs('${poEsc(tn)}')`]:null,
-    ]);
-  const click=pk?`lxInfoOpen('package',${pk.id})`:(o?`lxJumpOrder(${o.id})`:"");
-  const cells={
-    order: o?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:var(--ds-t-xs);cursor:pointer;border:1px solid var(--line)" title="open ${poEsc(o.name)}" onclick="event.stopPropagation();lxJumpOrder(${o.id})">${lxShortName(o.name)}</button>`
-      :(pk?tonePill("amber","w/o parent","its parent order isn't in this list",{style:"font-size:var(--ds-t-xs)"}):""),
-    profile: lxProfileCell(lxKAcct(r)),
-    value: estCell,
-    status: statusBit,
-    gash: lxGashCell(en,gashStatus,tn),
-    mail: lxMailPill(tn),
-    deadline: `${en?lxDeadlinePill(en)+lxDocsPill(en):""}${gashDate&&!done?`<span title="gash date">${lxDueChip(gashDate,doneSt)}</span>`:""}`,
-    due: done?"":lxDueChip(due,doneSt),
-    menu,
-  };
-  return `<div class="poc-row lx-krow" title="${pk?"انقر لعرض كل التفاصيل · click for full package details":"انقر للانتقال إلى الطلب · click to jump to the order"}"
-    ${click?`onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${click}"`:""} style="cursor:pointer">
-    <div class="bt-pin">
-      ${pk?lxDot(pk):""}${lxConfPill((pk&&pk.sync_state==="conflict")?pk:its.find(i=>i.sync_state==="conflict"))}
-      <b class="pkg-title" style="font-size:var(--ds-t-sm)">📦 ${tn?poTn4(tn):`<span class="muted2" style="font-weight:600;opacity:.75" title="no GAASH tracking number yet">no tracking</span>`}</b>${tn?lxCopyRawBtn(tn):""}
-      ${lxThumbs(its)}
-      <span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto">${lxCountLbl(its)}</span>
-    </div>
-    ${lxtCells("k",cells)}
-  </div>`;
+  const sk=LXT_SORT["k"];
+  DS.lxPackages.render($("lxRows"),{
+    rows, total:tot, nItems,
+    sort:sk?{key:sk.key,dir:sk.dir===1?"asc":"desc"}:null,
+    onSort:(key,dir)=>{ if(!key) LXT_SORT["k"]=null; else lxtSortSet("k",key,dir==="asc"?1:-1);
+      try{ localStorage.setItem("lxt_sort_k",JSON.stringify(LXT_SORT["k"])); }catch(e){}
+      renderLeluxe(); },
+  });
 }
 // ── Clearance email per package + hand-marked reply tracking (✉ pills). One
 // GWD per email ON PURPOSE — GAASH's answer then maps 1:1 to a package row.

@@ -540,3 +540,20 @@ Measurement caveat, stated plainly: the Browser pane was **hidden** for these re
 (`innerWidth` read 0 while element rects still resolved). Element-level numbers held up
 across a reload and matched the visible-pane readings taken for F1, so they are reported —
 but a pane-visible re-measure is the one that counts if these are ever disputed.
+
+---
+
+## 14. Batch F3 — the Leluxe packages board (2026-09-09). Q-010 closed.
+
+Measured on a copy of the live data (180 packages · 232 products): **8,010 controls, 0 under
+24px · 105 truncated values, 0 without a tooltip · 4 font sizes, all DS steps.**
+
+With F1 (orders), F2 (products) and F3 (packages), **Q-010 is closed** — the three boards the
+audit ranked worst are all on the design system. What is left on this page is bulk search
+(`bs`), a small paste-and-look view.
+
+`test_design_system.py` earned its keep here: the new `+N?` marker shipped
+`var(--ds-warn-ink, #b45309)`, and the suite's "no raw hex in ds.css" rule caught it. The
+fallback was also hiding that the token name was wrong (`--ds-warning-ink`) — the same trap
+Batch B2 logged. **Never give a `var(--ds-…)` a hex fallback; the fallback is what stops you
+finding out the token does not exist.**
