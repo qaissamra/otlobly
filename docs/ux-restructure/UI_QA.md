@@ -672,3 +672,101 @@ still visible. 60 suites, 0 failures.
 Enumerating "the Tools menu" with `#leluxeView .pop-menu .pop-item` returns **every** row menu
 on the board as well — hundreds of entries. Scope to the toolbar (`.toolbar .pop-menu`) or you
 will drown the transcript in status-picker options.
+
+
+## 17. Leluxe write permissions — the gate belongs on the actions (2026-09-09)
+
+The follow-up MIGRATION.md deferred out of Batch H: the Leluxe view never consulted a
+permission, while Purchases, Orders and Package prep all gate their write paths.
+
+### Q-031 — every Leluxe control was enabled for anyone who could open the page
+
+**Two things were true, and only one of them was a hole.**
+
+*The server was never the hole.* All 22 `/api/leluxe/*` write routes already carry
+`@auth.require("admin_actions")` + `@auth.require_feature("leluxe")`. Driven with real
+sessions, all 35 route/method pairs answer **403** to both a `fulfillment` and a `sales`
+user. The one exception is deliberate and documented in its own docstring:
+`GET /api/leluxe/field_options` sits on `edit_fulfillment` so the 🚩 Flags picker can colour
+a profile code without pulling `/api/leluxe/orders` (~800 KB). It reads a cached schema and
+writes nothing. So the UI was never the only thing standing between a non-admin and the data.
+
+*The client was.* Nothing on the page asked. **Closed:** one helper, `lxCanEdit()`, plus
+`lxGuard()` on every write path — the control is hidden **and** the function refuses.
+
+### The gate is `admin_actions`, not `CAN_EDIT`
+
+The obvious move — copy `CAN_EDIT` from the other boards — is the wrong one here, and it
+matters the day this page opens up. `CAN_EDIT` is `edit_order`; Leluxe's server routes require
+`admin_actions`. Today both are admin-only so the two are indistinguishable, but a role with
+`edit_order` and no `admin_actions` would get a fully lit board where every click 403s. So
+`lxCanEdit()` returns `CAN_ADMIN`, mirroring exactly what the server enforces — one line to
+change if the server ever relaxes, instead of a hunt through 40 call sites.
+
+### What is gated
+
+| | |
+|---|---|
+| write functions guarded (`lxGuard`) | **41** — every `lx*` that POSTs to `/api/leluxe/*`, plus `lxOpenEditor`, `lxMailCompose`, `lxGoalSettingsOpen`, whose modals exist only to write |
+| toolbar + ⚙ Tools items hidden (`applyRole`) | **13** |
+| ⋯ menus gated (`static/ds/leluxe.js`) | **5** — order, parcel (both shapes), expansion product, products board, packages board |
+| also gated | status dropdown → plain pill · product thumbs (a door into the editor) · the info popup's action row · the expansion's ＋ Add package / 🗑 hide footer · the ✉ clearance-mail pill · the first-run 🔌 Connect / ⬇ Import card |
+| deliberately left | 📄 Check docs, 🩺 Diagnose sync, 👁 Last sync changes, 🕑 Activity log — reads |
+
+`popMenu()` now returns `""` when nothing survives its filter, so a gated-out row gets no ⋯
+button instead of one that opens an empty popup. That helps every board, not only this one.
+
+Two cross-system actions in the Leluxe menus — `gaashUploadOpenGwd` and `lxGzFor` — are hidden
+here but **not** guarded at the function: they have their own callers on the 📄 Docs tab under
+the GAASH system's own `edit_fulfillment` gate, and guarding them on Leluxe's rule would break
+that. The menu item is Leluxe's to hide; the function is not Leluxe's to own.
+
+### Verified after
+
+Driven headless against a snapshot of live data — a real `fulfillment` login for the role
+gate, then an admin board re-rendered read-only for the row gates.
+
+| | admin | read-only |
+|---|---|---|
+| `lxOpenEditor` sites on the board | 1382 | **0** |
+| `lxDelete` | 567 | **0** |
+| `lxTrackingPrompt` | 381 | **0** |
+| `lxCheckShipping` | 353 | **0** |
+| `gaashUploadOpenGwd` | 254 | **0** |
+| `lxMovePrompt` | 207 | **0** |
+| status dropdowns (`.statussel`) | 207 | **0** (shown as pills) |
+| ＋ Add product | 297 | **0** |
+| `lxAz2Organize` | 60 | **0** |
+| 📄 Check docs (a read) | 254 | **254** |
+| ⋯ buttons | 483 | 254 — the 229 with nothing left render no ⋯ at all |
+| board still rendered | 42 268 nodes | 15 162 nodes |
+
+- Real `fulfillment` session: `lxCanEdit()` false, `leluxeBtn` hidden, **13/13** write controls
+  hidden, the 3 read-only Tools items still shown.
+- Console bypass: **35** write functions called directly with `CAN_ADMIN=false` — **zero**
+  POSTs escaped, zero JS errors, the guard toast fired, and none of the editor / goal-settings
+  / move modals opened.
+- `bash run_all_tests.sh` — 60 passed, 0 failed, same as baseline.
+
+### Found in passing, NOT fixed — a live one, unlike this
+
+`gaashMailBtn` is gated on `edit_fulfillment`, so a fulfillment user **can open the 📧 GAASH
+mail page today**, and its `⟳ AZ (2) columns` button calls `gmCaseCols()` →
+`POST /api/leluxe/discover_source`, which requires `admin_actions`. That button 403s for the
+very role the page is opened to. Unlike Q-031 this is reachable right now. It is left alone on
+purpose: the fix is either to hide the button or to move the endpoint to `edit_fulfillment`,
+and which one is right is a decision about what fulfillment is allowed to do — not a
+refactor. Same class as Q-031, different page, needs an owner's answer.
+
+### Measurement traps
+
+- **The page's globals are `let`, not `window` properties.** `window.CAN_ADMIN = false` creates
+  a *different* variable and changes nothing; a bare `CAN_ADMIN = false` assigns the real
+  binding through the scope chain. The same applies to `ME`, `LX` and `VIEW` — reading
+  `window.ME.role` returns `undefined` and looks like a broken session. Function declarations
+  *do* land on `window`, which is why `lxCanEdit()` is the honest thing to probe.
+- **`offsetParent === null` proves nothing inside a hidden view.** `#leluxeView` is hidden for
+  a non-admin, so every descendant reads "hidden" and a passing check means nothing. Test the
+  element's own `style.display`.
+- Log out before logging in as the second user — `/login` redirects an authenticated session
+  to `/app`, and the form the script is filling in is not there.

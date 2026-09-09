@@ -37,6 +37,14 @@
   // The app's own escaper for anything going into an inline onclick — poEsc is
   // what every legacy row uses, so a quote in an order name behaves the same.
   const q = (s) => W.poEsc(String(s == null ? "" : s));
+  /* May this session CHANGE anything? Leluxe's write routes are admin-only on
+     the server (app.py: @auth.require("admin_actions")), and W.lxCanEdit() is
+     the app's single mirror of that. Read at RENDER time off `window`, like
+     every other app function this file calls — a capability is not state, so
+     it does not belong in ctx, and three ctx objects cannot drift apart.
+     `w(...)` drops a menu entry for a reader; popMenu() drops the whole ⋯
+     button when nothing survives, so no row grows a dead menu. */
+  const w = (entry) => (W.lxCanEdit() ? entry : null);
 
   /* ---------------------------------------------------------------- columns
      Mirrors LXT_COLS[""] one for one — same keys, same labels, same widths, in
@@ -136,14 +144,14 @@
   function orderMenu(o) {
     const { list } = trackingNumbers(o);
     return W.popMenu([
-      ["✏️ تعديل الطلب · Edit order", `lxOpenEditor('order',${o.id},null)`],
-      ["🚚 رقم التتبع للطلب · Set tracking number", `lxOrderSetTracking(${o.id})`],
-      list.length === 1 ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(list[0])}')`] : null,
-      list.length ? ["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('order',${o.id})`] : null,
-      (o.packages || []).length ? ["📦⤴ نظّم الطرود في ClickUp · Organize in ClickUp", `lxAz2Organize(${o.id})`] : null,
-      ["＋ إضافة طرد · Add package", `lxOpenEditor('package',null,${o.id})`],
-      ["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${o.id})`],
-      ["🗑 إخفاء · hide", `lxDelete(${o.id})`, true],
+      w(["✏️ تعديل الطلب · Edit order", `lxOpenEditor('order',${o.id},null)`]),
+      w(["🚚 رقم التتبع للطلب · Set tracking number", `lxOrderSetTracking(${o.id})`]),
+      list.length === 1 ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(list[0])}')`]) : null,
+      list.length ? w(["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('order',${o.id})`]) : null,
+      (o.packages || []).length ? w(["📦⤴ نظّم الطرود في ClickUp · Organize in ClickUp", `lxAz2Organize(${o.id})`]) : null,
+      w(["＋ إضافة طرد · Add package", `lxOpenEditor('package',null,${o.id})`]),
+      w(["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${o.id})`]),
+      w(["🗑 إخفاء · hide", `lxDelete(${o.id})`, true]),
     ]);
   }
 
@@ -186,13 +194,13 @@
       // parcel gave every product inside it the customs actions, and a product
       // that inherits its parcel's GWD can be papered exactly the same way.
       menu: W.popMenu([
-        ["✏️ تعديل المنتج · Edit product", `lxOpenEditor('item',${it.id},null)`],
-        ["↔️ نقل إلى طرد · Move to package", `lxMovePrompt(${it.id})`],
-        ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${it.id}],'${q(tn)}','${q(pkgTn || ordTn || "")}')`],
-        gwd ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(gwd)}')`] : null,
-        gwd ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(gwd)}')`] : null,
+        w(["✏️ تعديل المنتج · Edit product", `lxOpenEditor('item',${it.id},null)`]),
+        w(["↔️ نقل إلى طرد · Move to package", `lxMovePrompt(${it.id})`]),
+        w(["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${it.id}],'${q(tn)}','${q(pkgTn || ordTn || "")}')`]),
+        gwd ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(gwd)}')`]) : null,
+        gwd ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(gwd)}')`]) : null,
         gwd ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(gwd)}')`] : null,
-        ["🗑 إخفاء · hide", `lxDelete(${it.id})`, true],
+        w(["🗑 إخفاء · hide", `lxDelete(${it.id})`, true]),
       ]),
       _click: `lxInfoOpen('item',${it.id})`,
     };
@@ -203,7 +211,7 @@
     const rows = items.map((it) => productRow(it, pkgTn, ordTn));
     const cols = PROD_COLS.map((c) => Object.assign({}, c, { render: (r) => r[c.key] }));
     return DS.subTable(cols, rows, "products")
-      + (addTo ? `<div class="ds-lx-add">${DS.button({ label: "＋ Add product", size: "sm",
+      + (addTo && W.lxCanEdit() ? `<div class="ds-lx-add">${DS.button({ label: "＋ Add product", size: "sm",
           onclick: `lxOpenEditor('item',null,${addTo})` })}</div>` : "");
   }
 
@@ -220,19 +228,19 @@
     const ids = items.map((it) => it.id).join(",");
     const ordTn = trackingNumbers(o).own;
     const menu = pk ? W.popMenu([
-        ["✏️ تعديل الطرد · Edit package", `lxOpenEditor('package',${pk.id},${o.id})`],
-        ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${pk.id}],'${q(tn)}','')`],
-        tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
-        tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+        w(["✏️ تعديل الطرد · Edit package", `lxOpenEditor('package',${pk.id},${o.id})`]),
+        w(["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${pk.id}],'${q(tn)}','')`]),
+        tn ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`]) : null,
+        tn ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`]) : null,
         tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
-        tn ? ["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('package',${pk.id})`] : null,
-        ["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${pk.id})`],
-        ["🗑 إخفاء · hide", `lxDelete(${pk.id})`, true],
+        tn ? w(["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('package',${pk.id})`]) : null,
+        w(["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${pk.id})`]),
+        w(["🗑 إخفاء · hide", `lxDelete(${pk.id})`, true]),
       ]) : W.popMenu([
-        [`🚚 تعيين رقم التتبع للكل (${items.length}) · Set tracking for all`,
-          `lxTrackingPrompt([${ids}],'${q(tn)}','${q(ordTn)}')`],
-        tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
-        tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+        w([`🚚 تعيين رقم التتبع للكل (${items.length}) · Set tracking for all`,
+          `lxTrackingPrompt([${ids}],'${q(tn)}','${q(ordTn)}')`]),
+        tn ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`]) : null,
+        tn ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`]) : null,
         tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
       ]);
     const toggle = pk ? `lxPkgToggle(${pk.id})` : `lxVPkgToggle('${q(key)}')`;
@@ -246,7 +254,7 @@
       <b class="ds-lx-parcel-tn">📦 ${tn ? esc(tn) : "no tracking"}</b>${tn ? W.lxCopyRawBtn(tn) : ""}
       <span class="ds-muted">${esc(W.lxCountLbl(items))}</span>
       ${W.lxThumbs(items)}
-      ${!tn && items.length ? `<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="event.stopPropagation();lxTrackingPrompt([${ids}],'','${q(ordTn)}')">🚚 set tracking</button>` : ""}
+      ${!tn && items.length && W.lxCanEdit() ? `<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="event.stopPropagation();lxTrackingPrompt([${ids}],'','${q(ordTn)}')">🚚 set tracking</button>` : ""}
       <span class="ds-lx-parcel-pills">
         ${en ? W.lxGashCell(en, gashStatus, tn) : ""}
         ${en ? W.lxDeadlinePill(en) + W.lxDocsPill(en) : ""}
@@ -267,19 +275,19 @@
             ? `<div class="ds-lx-parcel-head">
                  <span class="ds-muted" title="no GAASH tracking number yet">📦 no tracking</span>
                  <span class="ds-muted">${esc(W.lxCountLbl(p.items))}</span>
-                 ${p.items.length ? `<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${p.items.map((i) => i.id).join(",")}],'','${q(ordTn)}')">🚚 set tracking</button>` : ""}
+                 ${p.items.length && W.lxCanEdit() ? `<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${p.items.map((i) => i.id).join(",")}],'','${q(ordTn)}')">🚚 set tracking</button>` : ""}
                </div>`
             : parcelHead(ctx, o, p))
         + (open ? productGrid(p.items || [], p.tn || (p.pk ? W.lxPkgTn(p.pk) : ""), ordTn, p.pk ? p.pk.id : 0) : "")
         + `</div>`;
     }).join("");
     return `<div class="ds-lx-exp">${body}
-      <div class="ds-lx-exp-foot">
+      ${W.lxCanEdit() ? `<div class="ds-lx-exp-foot">
         ${DS.button({ label: "＋ Add package", size: "sm", onclick: `lxOpenEditor('package',null,${o.id})` })}
         <span class="ds-spacer"></span>
         ${DS.button({ label: "🗑 hide", size: "sm", variant: "danger",
           title: "hide from this page only — the ClickUp task is NOT deleted", onclick: `lxDelete(${o.id})` })}
-      </div></div>`;
+      </div>` : ""}</div>`;
   }
 
   /* -------------------------------------------------------------- the board
@@ -373,13 +381,13 @@
     const it = r.it, tn = itemTn(it);
     const ordTn = r.o ? trackingNumbers(r.o).own : "";
     return W.popMenu([
-      ["✏️ تعديل المنتج · Edit product", `lxOpenEditor('item',${it.id},null)`],
-      ["↔️ نقل إلى طرد · Move to package", `lxMovePrompt(${it.id})`],
-      ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${it.id}],'${q(tn)}','${q(ordTn)}')`],
-      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
-      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      w(["✏️ تعديل المنتج · Edit product", `lxOpenEditor('item',${it.id},null)`]),
+      w(["↔️ نقل إلى طرد · Move to package", `lxMovePrompt(${it.id})`]),
+      w(["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${it.id}],'${q(tn)}','${q(ordTn)}')`]),
+      tn ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`]) : null,
+      tn ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`]) : null,
       tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
-      ["🗑 إخفاء · hide", `lxDelete(${it.id})`, true],
+      w(["🗑 إخفاء · hide", `lxDelete(${it.id})`, true]),
     ]);
   }
 
@@ -565,22 +573,22 @@
     const ids = its.map((it) => it.id).join(",");
     const ordTn = o ? trackingNumbers(o).own : "";
     if (pk) return W.popMenu([
-      ["✏️ تعديل الطرد · Edit package", `lxOpenEditor('package',${pk.id},${o ? o.id : null})`],
-      ["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${pk.id}],'${q(tn)}','')`],
-      tn ? ["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`] : null,
-      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
-      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      w(["✏️ تعديل الطرد · Edit package", `lxOpenEditor('package',${pk.id},${o ? o.id : null})`]),
+      w(["🚚 تعيين رقم التتبع · Set tracking", `lxTrackingPrompt([${pk.id}],'${q(tn)}','')`]),
+      tn ? w(["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`]) : null,
+      tn ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`]) : null,
+      tn ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`]) : null,
       tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
-      tn ? ["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('package',${pk.id})`] : null,
-      ["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${pk.id})`],
-      ["🗑 إخفاء · hide", `lxDelete(${pk.id})`, true],
+      tn ? w(["🚚 تسجيل في جيرزيم · Register at Gerizim", `lxGzFor('package',${pk.id})`]) : null,
+      w(["＋ إضافة منتج · Add product", `lxOpenEditor('item',null,${pk.id})`]),
+      w(["🗑 إخفاء · hide", `lxDelete(${pk.id})`, true]),
     ]);
     return W.popMenu([
-      its.length ? [`🚚 تعيين رقم التتبع للكل (${its.length}) · Set tracking for all`,
-        `lxTrackingPrompt([${ids}],'${q(tn || "")}','${q(ordTn)}')`] : null,
-      tn ? ["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`] : null,
-      tn ? ["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`] : null,
-      tn ? ["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`] : null,
+      its.length ? w([`🚚 تعيين رقم التتبع للكل (${its.length}) · Set tracking for all`,
+        `lxTrackingPrompt([${ids}],'${q(tn || "")}','${q(ordTn)}')`]) : null,
+      tn ? w(["📧 بريد التخليص · Clearance email", `lxMailCompose('${q(tn)}',${o ? o.id : 0})`]) : null,
+      tn ? w(["🔎 تتبع الشحنة · Check shipping", `lxCheckShipping('${q(tn)}')`]) : null,
+      tn ? w(["🪪 رفع مستندات لغاش · Upload docs", `gaashUploadOpenGwd('${q(tn)}')`]) : null,
       tn ? ["📄 فحص المستندات · Check docs", `lxCheckDocs('${q(tn)}')`] : null,
     ]);
   }

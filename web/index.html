@@ -2157,6 +2157,18 @@ async function applyRole(){
   // Leluxe: the owner's Amazon-bulk side business — admin-only (VISA labels,
   // buyer accounts) and Otlobly-only via the feature flag.
   hide("leluxeBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
+  // …and the same permission again on the Leluxe page's own WRITE controls. The
+  // door above is not the gate: every /api/leluxe/* write route requires
+  // admin_actions (app.py), so these must ask for exactly what the server asks
+  // for — see lxCanEdit(). Everything not listed here is a read (🩺 Diagnose,
+  // 👁 Last sync changes, 🕑 Activity log) and stays. The ⋯ row menus and the
+  // status dropdowns re-check lxCanEdit() on every render, so they need no id.
+  ["lxNewBtn",        // ＋ New order
+   "lxTrackBtn","lxImgBtn","lxSyncBtn","lxSyncRevBtn","lxMigrateBtn","lxAutoPullBtn",
+   "lxAz2OrgAllBtn","lxDedupeBtn","lxDiscoverBtn","lxGoalSetBtn",
+   "lxConfBtn",      // ⚖ conflicts — the panel is nothing but Keep/Use buttons
+   "lxAz2HistBtn"    // ⤴ push history — likewise: a list of Undo buttons
+  ].forEach(id=>hide(id, p.includes("admin_actions") && FEAT.leluxe!==false));
   // 🏆 Goals: the owner's cross-business campaign (ClickUp AZ lists + Purchases) —
   // money + ClickUp internals, so admin-only and Otlobly-only like Leluxe.
   hide("goalsBtn", p.includes("admin_actions") && FEAT.leluxe!==false);
@@ -2998,6 +3010,24 @@ const LX_PIN_ORDER=["name","name on packagee","visa","who paid","total amount","
 const LX_PIN_PKG=["tracking number","gash status","gash date","date sent","opened box"];
 const LX_PIN_ITEM=["quantity ordered","total amount","rd status","wallet/watch","brand","states"];
 const LX_PINS={order:LX_PIN_ORDER,parent:LX_PIN_ORDER,package:LX_PIN_PKG,item:LX_PIN_ITEM};
+// ── Who may CHANGE anything on this page ────────────────────────────────────
+// Leluxe is admin-only ON THE SERVER: every /api/leluxe/* write route in app.py
+// carries @auth.require("admin_actions") + @auth.require_feature("leluxe"). So
+// the UI gate is admin_actions — NOT CAN_EDIT (edit_order), which the other
+// boards use: gating on edit_order would light up buttons the server then 403s.
+// One place, mirroring one server contract, so the day this page opens to
+// another role the client follows by changing this line and nothing else.
+// Read at CALL time, never captured — applyRole() fills CAN_ADMIN after boot,
+// and the local no-auth dashboard leaves it true on purpose.
+function lxCanEdit(){ return CAN_ADMIN; }
+// Every Leluxe write path starts here, so a console call gets no further than
+// the UI does. The boards' rule (Purchases, Orders, pkgprep): gate the CONTROL
+// and guard the FUNCTION — hiding a button is a courtesy, not a permission.
+function lxGuard(){
+  if(lxCanEdit()) return true;
+  toast(T("🔒 للقراءة فقط · read-only — Leluxe changes need an admin account"));
+  return false;
+}
 async function loadLeluxe(){
   let d; try{ d=await (await fetch("/api/leluxe/orders")).json(); }catch(e){ d=null; }
   if(!d||!d.ok){ toast("Couldn't load Leluxe"); return; }
@@ -3017,6 +3047,7 @@ async function loadLeluxe(){
 // page's poRefreshTracking: the 30-min TTL server-side makes repeats cheap.
 let LX_TRK_AUTO=false;
 async function lxAutoTracking(){
+  if(!lxCanEdit()) return;                 // background sweep: no click, so no toast
   if(LX_TRK_AUTO) return;
   LX_TRK_AUTO=true;
   try{
@@ -3046,7 +3077,7 @@ function lxSetupCard(){
       <div class="muted2" style="font-size:var(--ds-t-sm);margin-bottom:8px">One-time: reads the list's statuses, custom fields and dropdown options. Use the <b>working copy</b> list <code>AZ (2) (copy) = 901524467099</code> (never the original AZ (2) <code>901520351506</code>, which stays read-only). Then press <b>↙ Pull</b> to load the orders.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="lx_listid" placeholder="ClickUp list id" value="${(LX&&LX.list_id)||"901524467099"}" style="width:190px">
-        <button class="accent" onclick="lxDiscover(this)">🔌 Connect</button>
+        ${lxCanEdit()?`<button class="accent" onclick="lxDiscover(this)">🔌 Connect</button>`:`<span class="muted2" style="font-size:var(--ds-t-sm)">🔒 an admin has to connect the list</span>`}
       </div>`;
     return;
   }
@@ -3054,12 +3085,13 @@ function lxSetupCard(){
     el.style.display="block";
     el.innerHTML=`<h2 style="font-size:var(--ds-t-md);margin:0 0 6px">⬇ First run — bring everything over</h2>
       <div class="muted2" style="font-size:var(--ds-t-sm);margin-bottom:8px">Imports every task from the list — all statuses (done included), every custom field, tags, descriptions and images. Re-running later only picks up ClickUp-side changes.</div>
-      <button class="accent" onclick="lxImport(this)">⬇ Import everything from ClickUp</button>`;
+      ${lxCanEdit()?`<button class="accent" onclick="lxImport(this)">⬇ Import everything from ClickUp</button>`:`<span class="muted2" style="font-size:var(--ds-t-sm)">🔒 an admin has to run the first import</span>`}`;
     return;
   }
   el.style.display="none";
 }
 async function lxDiscover(btn){
+  if(!lxGuard()) return;
   const lid=(($("lx_listid")&&$("lx_listid").value.trim())||(LX&&LX.list_id)||"").trim();
   if(!lid){ toast("Enter the ClickUp list id first"); return; }
   if(btn) btn.disabled=true;
@@ -3070,6 +3102,7 @@ async function lxDiscover(btn){
   loadLeluxe();
 }
 async function lxImport(btn){
+  if(!lxGuard()) return;
   if(btn) btn.disabled=true;
   const pr=$("lxProgress"); pr.style.display="block";
   pr.textContent="⏳ Pulling tasks from ClickUp…";
@@ -3102,7 +3135,7 @@ function lxChip(sync,disabled){
   const pend=(sync.dirty||0)+(sync.pushing||0), err=sync.error||0, conf=sync.conflict||0;
   let html;
   if(disabled) html=tonePill("amber","⏸ push disabled");
-  else if(err) html=tonePill("red",`⚠ ${err} failed`,(sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))+` <button class="minibtn" onclick="lxRetry(this)">Retry</button>`;
+  else if(err) html=tonePill("red",`⚠ ${err} failed`,(sync.last_errors||[]).map(e=>`${e.name}: ${e.error}`).join("\n"))+(lxCanEdit()?` <button class="minibtn" onclick="lxRetry(this)">Retry</button>`:"");
   else if(pend) html=tonePill("amber",`↻ ${pend} syncing…`);
   else html=tonePill("green","✓ all synced");
   // both-sides changes waiting on a manual pick — shown alongside any state above
@@ -3128,6 +3161,7 @@ function lxPollStart(){
   },5000);
 }
 async function lxRetry(btn){
+  if(!lxGuard()) return;
   if(btn) btn.disabled=true;
   let r; try{ r=await post("/api/leluxe/push",{}); }catch(e){ r={}; }
   if(btn) btn.disabled=false;
@@ -3151,6 +3185,9 @@ function lxStatusPill(s){
 // change handler still writes THIS row (row.id).
 function lxStatusSelect(row,disp){
   const own=row.status||"", s=(disp!==undefined?(disp||""):own), sts=((LX.schema&&LX.schema.statuses)||[]);
+  // Read-only: the SAME pill the board already uses for a display-only status,
+  // so the row still reads correctly — it just stops being a dropdown.
+  if(!lxCanEdit()) return lxStatusPill(s);
   const def=sts.find(x=>x.status===s), c=(def&&def.color)||"#8d8d8d";
   const derived=!!s&&s!==own;
   const rows=sts.map(st=>`<button class="pop-item cu-item"${st.status===s?' style="font-weight:800"':''}
@@ -3167,6 +3204,7 @@ function lxStatusSelect(row,disp){
     </div></span>`;
 }
 async function lxSetStatus(id,status){
+  if(!lxGuard()) return;
   const row=lxFind(id);
   if(row){ row.status=status; row.sync_state="dirty"; }
   renderLeluxe();                                   // optimistic
@@ -3411,8 +3449,11 @@ function lxThumbs(items,max){
   const shown=uniq.slice(0,max), extra=uniq.length-shown.length;
   const cell=u=>{
     const inner=u.img?`<img src="${poEsc(u.img)}">`:`<span class="noimg"></span>`;
-    const tip=u.img?(u.n>1?`×${u.n} · `:"")+u.names.join(" · "):"no image — click to add an ASIN";
-    return `<span title="${poEsc(tip)}" style="cursor:pointer;display:inline-flex;position:relative;flex:0 0 auto" onclick="event.stopPropagation();lxOpenEditor('item',${u.it.id},null)">${inner}${u.n>1?`<span class="xn">×${u.n}</span>`:""}</span>`;
+    // The thumb is a shortcut INTO the editor, so a reader gets the picture
+    // and the names without the click that leads nowhere.
+    const ed=lxCanEdit();
+    const tip=u.img?(u.n>1?`×${u.n} · `:"")+u.names.join(" · "):(ed?"no image — click to add an ASIN":"no image");
+    return `<span title="${poEsc(tip)}" style="${ed?"cursor:pointer;":""}display:inline-flex;position:relative;flex:0 0 auto"${ed?` onclick="event.stopPropagation();lxOpenEditor('item',${u.it.id},null)"`:""}>${inner}${u.n>1?`<span class="xn">×${u.n}</span>`:""}</span>`;
   };
   return `<span class="po-thumbs">${shown.map(cell).join("")}${extra>0?`<span class="more">+${extra}</span>`:""}</span>`;
 }
@@ -4399,11 +4440,14 @@ async function lxMailLoad(){
 function lxMailDays(rec){ const t=Date.parse((rec&&rec.sent_at)||""); return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000)); }
 function lxMailPill(tn){
   const rec=tn?LX_MAIL[tn]:null; if(!rec||!rec.sent_at) return "";
-  if(rec.replied_at) return `<span class="pill" style="cursor:pointer;color:#15803d;background:#ecfdf5;border:1px solid #86efac;flex:0 0 auto" title="غاش ردّت ${poEsc(rec.replied_at.slice(0,10))} (أُرسل ${poEsc(rec.sent_at.slice(0,10))}${rec.sent_count>1?` ×${rec.sent_count}`:""}) — انقر للتراجع · replied — click to unmark" onclick="event.stopPropagation();lxMailReply('${poEsc(tn)}',false)">✉ ✓</span>`;
+  // Clicking it MARKS the reply (a write) — read-only keeps the pill, loses the click.
+  const ed=lxCanEdit(), clk=(fn)=>ed?` onclick="event.stopPropagation();${fn}"`:"", cur=ed?"cursor:pointer;":"";
+  if(rec.replied_at) return `<span class="pill" style="${cur}color:#15803d;background:#ecfdf5;border:1px solid #86efac;flex:0 0 auto" title="غاش ردّت ${poEsc(rec.replied_at.slice(0,10))} (أُرسل ${poEsc(rec.sent_at.slice(0,10))}${rec.sent_count>1?` ×${rec.sent_count}`:""})${ed?" — انقر للتراجع · replied — click to unmark":" · replied"}"${clk(`lxMailReply('${poEsc(tn)}',false)`)}>✉ ✓</span>`;
   const d=lxMailDays(rec)||0, c=d>=5?"#dc2626":d>=2?"#d97706":"#6b7280";
-  return `<span class="pill" style="cursor:pointer;color:${c};background:${c}1a;border:1px solid ${c}55;flex:0 0 auto" title="أُرسل ${poEsc(rec.sent_at.slice(0,10))} إلى ${poEsc(rec.to_email||"?")}${rec.sent_count>1?` (×${rec.sent_count})`:""} — بلا رد منذ ${d} يوم، انقر عند وصول الرد · sent, ${d}d no reply — click when they answer" onclick="event.stopPropagation();lxMailReply('${poEsc(tn)}',true)">✉ ${d}d</span>`;
+  return `<span class="pill" style="${cur}color:${c};background:${c}1a;border:1px solid ${c}55;flex:0 0 auto" title="أُرسل ${poEsc(rec.sent_at.slice(0,10))} إلى ${poEsc(rec.to_email||"?")}${rec.sent_count>1?` (×${rec.sent_count})`:""} — بلا رد منذ ${d} يوم${ed?"، انقر عند وصول الرد · sent, "+d+"d no reply — click when they answer":` · sent, ${d}d no reply`}"${clk(`lxMailReply('${poEsc(tn)}',true)`)}>✉ ${d}d</span>`;
 }
 async function lxMailReply(tn,replied){
+  if(!lxGuard()) return;
   const r=await post("/api/leluxe/pkgmail/reply",{gwd:tn,replied});
   if(r&&r.ok){ LX_MAIL[tn]=r.rec; toast(replied?"رد غاش مسجّل ✓ · reply marked":"أُلغي الرد · unmarked"); renderLeluxe(); }
   else toast((r&&r.error)||"failed");
@@ -4411,6 +4455,7 @@ async function lxMailReply(tn,replied){
 // Compose (bulk modal): To/CC/Subject prefilled from Settings → 🪪 Clearance
 // email; {gwd} / {upload_link} / {customer} filled for THIS package only.
 async function lxMailCompose(tn,orderId){
+  if(!lxGuard()) return;                    // the modal's only purpose is to send
   tn=(tn||"").trim(); if(!tn){ toast("Add the GWD tracking number first"); return; }
   if(!QSETTINGS){ try{ QSETTINGS=await (await fetch("/api/settings")).json(); }catch(e){ QSETTINGS={}; } }
   const cs=(QSETTINGS&&QSETTINGS.clearance)||{};
@@ -4440,6 +4485,7 @@ async function lxMailCompose(tn,orderId){
 }
 // Open-in-Mail / Copy — both stamp the send (the pill starts aging from now).
 async function lxMailGo(tn,copy){
+  if(!lxGuard()) return;
   const to=(($("clmTo")||{}).value||"").trim(), cc=(($("clmCc")||{}).value||"").trim();
   const subject=($("clmSubject")||{}).value||"", body=($("clmBody")||{}).value||"";
   if(!to&&!copy){ toast("اكتب عنوان البريد أولاً · type the To address (save a default in Settings)"); return; }
@@ -4925,6 +4971,7 @@ async function glWebhook(action,btn){
 }
 // ── 🎯 Goal settings modal (⋮ menu / the Goal view button) ──
 function lxGoalSettingsOpen(){
+  if(!lxGuard()) return;                    // every control in it saves
   $("lxGoalSetModal").classList.remove("hidden");
   lxGoalSetRender();
 }
@@ -4981,6 +5028,7 @@ async function lxGoalSetRender(){
     </div>`;
 }
 async function lxGoalSetSave(btn){
+  if(!lxGuard()) return;
   const grab=k=>[...document.querySelectorAll(`#lxGoalSetBody input[data-grp="${k}"]:checked`)].map(i=>i.value);
   const body={goal_usd:+$("lxgGoal").value||0, ready_tag:$("lxgTag").value.trim(),
     acct_min_usd:+$("lxgMin").value||0, acct_max_usd:+$("lxgMax").value||0,
@@ -4993,6 +5041,7 @@ async function lxGoalSetSave(btn){
   else toast((r&&r.error)||"save failed");
 }
 async function lxGoalDigest(send,btn){
+  if(!lxGuard()) return;
   btn.disabled=true;
   let r; try{ r=await post("/api/leluxe/goal_digest",{send:!!send}); }catch(e){ r=null; }
   btn.disabled=false;
@@ -5002,6 +5051,7 @@ async function lxGoalDigest(send,btn){
   if(send) toast(r.ok?"📨 sent — check Telegram":"⚠ "+(r.error||"send failed"));
 }
 async function lxGoalBackfill(btn){
+  if(!lxGuard()) return;
   btn.disabled=true; btn.textContent="🔍 dry-run…";
   let rep; try{ rep=await post("/api/leluxe/goal_backfill",{dry_run:true}); }catch(e){ rep=null; }
   btn.disabled=false; btn.textContent="🩹 Fix historic dates";
@@ -5092,6 +5142,7 @@ function lxCopyTitle(btn){ const t=btn.dataset.t||""; (navigator.clipboard?navig
 // once the last-mile courier delivered, all the countdowns/dates are moot
 function lxGzDone(row){ return !!(row&&row.data&&row.data.gerizim_status&&row.data.gerizim_status.bucket==="delivered"); }
 function lxOpenEditor(kind,rowId,parentLocalId){
+  if(!lxGuard()) return;
   const row=rowId?lxFind(rowId):null;
   let k=row?row.kind:(kind||"order"); if(k==="parent") k="order";
   LX_EDIT={id:rowId||null, kind:k, parent_local_id:row?row.parent_local_id:parentLocalId};
@@ -5145,6 +5196,7 @@ function lxRowPayload(row,newFields){
 // sequential posts (each marks the row dirty → syncs to ClickUp), optimistic
 // repaint, one reload at the end. Empty tn clears the field.
 async function lxSetTrackingRows(rowIds,tn,opts){
+  if(!lxGuard()) return {ok:0,fail:0};      // callers read .ok — never hand back undefined
   opts=opts||{}; const key=lxTnKey(); tn=(tn||"").trim(); let ok=0,fail=0;
   for(const id of rowIds){ const r=lxFind(id); if(!r) continue;
     try{ const res=await post("/api/leluxe/order",lxRowPayload(r,{[key]:tn}));
@@ -5158,6 +5210,7 @@ async function lxSetTrackingRows(rowIds,tn,opts){
   return {ok,fail};
 }
 function lxTrackingPrompt(rowIds,current,orderTn){
+  if(!lxGuard()) return;
   const v=prompt("رقم التتبع (GWD…) — يُطبَّق على كل المنتجات المحددة · tracking number for the selected product(s)\nفارغ = مسح · empty = clear",current||orderTn||"");
   if(v!==null) lxSetTrackingRows(rowIds,v.trim());
 }
@@ -5165,6 +5218,7 @@ function lxTrackingPrompt(rowIds,current,orderTn){
 // product that has no tracking yet (products that already have one keep theirs —
 // give a product a different GWD and it re-groups into its own 📦).
 async function lxOrderSetTracking(id){
+  if(!lxGuard()) return;
   const o=lxFind(id); if(!o) return;
   const key=lxTnKey(), cur=String((o.data&&o.data.tracking_number)||lxF(o,"tracking number")||"").trim();
   const v=prompt("رقم تتبع الطلب (GWD…) — يُحفظ على الطلب ويُطبَّق على كل المنتجات بدون تتبع\norder tracking number — saved on the order + applied to every product without one\nفارغ = مسح رقم الطلب · empty = clear the order's number",cur);
@@ -5210,6 +5264,7 @@ function lxRowImgs(row){
 // call must NEVER read as "✓ refreshed". Own fetch (not post()): Flask errors
 // return HTML and the shared helper would swallow the status.
 async function lxCheckShipping(gwd){
+  if(!lxGuard()) return;
   const pr=$("lxProgress"); pr.style.display="block";
   pr.innerHTML=`<span class="spin"></span> 🔎 <b>${poEsc(gwd)}</b> — فحص غاش + جيرزيم · checking GAASH + Gerizim…`;
   let r=null;
@@ -5382,7 +5437,8 @@ function lxInfoOpen(kind,id){
     </div>`:"";
   const descTxt=String(d.description||"").replace(LX_IMG_MD,"").trim();
   const descSec=descTxt?`<div class="muted2" style="font-size:var(--ds-t-sm);white-space:pre-wrap;margin-top:10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 11px" dir="auto">${poEsc(descTxt)}</div>`:"";
-  const addBtns=k==="order"
+  const canEd=lxCanEdit();
+  const addBtns=!canEd?"":k==="order"
     ?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('package',null,${row.id})">＋ إضافة طرد · Add package</button>
       <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`
     :k==="package"?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`:"";
@@ -5400,12 +5456,12 @@ function lxInfoOpen(kind,id){
     ${descSec}
     ${imgSec}
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
-      ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckShipping('${poEsc(tn)}')">🔎 تتبع الشحنة · Check shipping</button>`:""}
-      ${tn?`<button class="po-btn" onclick="lxInfoClose();lxMailCompose('${poEsc(tn)}',${order?order.id:(k==="order"?row.id:0)})">📧 بريد التخليص · Clearance email</button>`:""}
-      ${tn?`<button class="po-btn" onclick="lxInfoClose();gaashUploadOpenGwd('${poEsc(tn)}')">🪪 رفع مستندات · Upload docs</button>`:""}
+      ${tn&&canEd?`<button class="po-btn" onclick="lxInfoClose();lxCheckShipping('${poEsc(tn)}')">🔎 تتبع الشحنة · Check shipping</button>`:""}
+      ${tn&&canEd?`<button class="po-btn" onclick="lxInfoClose();lxMailCompose('${poEsc(tn)}',${order?order.id:(k==="order"?row.id:0)})">📧 بريد التخليص · Clearance email</button>`:""}
+      ${tn&&canEd?`<button class="po-btn" onclick="lxInfoClose();gaashUploadOpenGwd('${poEsc(tn)}')">🪪 رفع مستندات · Upload docs</button>`:""}
       ${tn?`<button class="po-btn" onclick="lxInfoClose();lxCheckDocs('${poEsc(tn)}')">📄 فحص المستندات · Check docs</button>`:""}
-      ${gzGwds.length?`<button class="po-btn" onclick="lxGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:""}
-      <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>
+      ${gzGwds.length&&canEd?`<button class="po-btn" onclick="lxGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:""}
+      ${canEd?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>`:""}
       ${addBtns}
     </div>`;
   $("lxInfoModal").classList.remove("hidden");
@@ -5496,6 +5552,7 @@ function lxCollectFields(){
   return out;
 }
 async function lxSave(btn){
+  if(!lxGuard()) return;
   const name=$("lx_name").value.trim();
   if(!name){ toast("Enter a name"); return; }
   const payload={kind:LX_EDIT.kind, name, status:$("lx_status").value,
@@ -5529,6 +5586,7 @@ async function lxSave(btn){
   else { lxEditClose(); toast("Saved ✓ syncing to ClickUp ↗"); }
 }
 async function lxItemImage(btn){
+  if(!lxGuard()) return;
   if(!LX_EDIT||!LX_EDIT.id) return;
   const rid=LX_EDIT.id, asin=(($("lx_asin_quick")||{}).value||"").trim();
   if(!asin){ toast("Enter an ASIN first"); return; }
@@ -5544,6 +5602,7 @@ let LX_MIG_SRC="";   // AZ (2) source list id captured by lxMigrateAsk for lxMig
 // The execute is instant (local-only); the working-list ClickUp twin tasks are
 // deleted by a background queue — the 🧹 chip counts them down (lxChip).
 async function lxDedupe(btn){
+  if(!lxGuard()) return;
   btn.disabled=true;
   let r; try{ r=await post("/api/leluxe/dedupe",{dry_run:true}); }catch(e){ r={}; }
   btn.disabled=false;
@@ -5571,6 +5630,7 @@ async function lxDedupe(btn){
   await loadLeluxe(); lxPollStart();
 }
 function lxMigrateAsk(btn){   // Tools-menu entry: ask the source list (once) + since-date, then migrate
+  if(!lxGuard()) return;
   let src=(LX&&LX.source_list_id)||"";
   if(!src){   // never set on this deployment yet — ask once, defaulting to the real AZ (2)
     src=prompt("رقم قائمة AZ (2) الأصلية — يُنسخ منها فقط ولا تُعدَّل أبداً\nAZ (2) SOURCE list id — copied FROM (read-only), never changed","901520351506");
@@ -5585,6 +5645,7 @@ function lxMigrateAsk(btn){   // Tools-menu entry: ask the source list (once) + 
   lxMigrate(btn);
 }
 async function lxMigrate(btn){
+  if(!lxGuard()) return;
   let since=$("lxMigrateSince").value;
   if(!since){ since=new Date(Date.now()-7*864e5).toISOString().slice(0,10); $("lxMigrateSince").value=since; }
   if(!confirm(`Copy AZ (2) orders created on/after ${since} into this working list?\n\nAZ (2) is only READ — never changed.`)) return;
@@ -5613,6 +5674,7 @@ async function lxMigrate(btn){
 // Sync just syncs (new-order window = last 30 days); the review mode moved to
 // its own explicit Tools item below.
 function lxSyncAsk(btn){
+  if(!lxGuard()) return;
   const src=(LX&&LX.source_list_id)||"901520351506";
   LX_MIG_SRC=src;
   if(!$("lxMigrateSince").value)
@@ -5622,6 +5684,7 @@ function lxSyncAsk(btn){
 }
 // 🛡 the old careful flow, now opt-in by NAME so nobody lands in it by accident
 function lxSyncReviewAsk(btn){
+  if(!lxGuard()) return;
   const src=(LX&&LX.source_list_id)||"901520351506";
   LX_MIG_SRC=src;
   const def=$("lxMigrateSince").value||new Date(Date.now()-30*864e5).toISOString().slice(0,10);
@@ -5642,6 +5705,7 @@ function lxAutoPullLabel(){
     :`⏱ ${T("مزامنة تلقائية · Auto-sync")}: <b style="color:var(--muted)">OFF</b>`;
 }
 async function lxAutoPullToggle(btn){
+  if(!lxGuard()) return;
   const ap=(LX&&LX.auto_pull)||{};
   const to=!ap.enabled;
   let r; try{ r=await post("/api/leluxe/auto_pull",{enabled:to,minutes:ap.minutes||30}); }catch(e){ r={}; }
@@ -5652,6 +5716,7 @@ async function lxAutoPullToggle(btn){
 }
 let LX_SYNC_REVIEW=false;   // 🛡 review-everything choice for the next sync run
 async function lxSync(btn){
+  if(!lxGuard()) return;
   let since=$("lxMigrateSince").value;
   if(!since){ since=new Date(Date.now()-30*864e5).toISOString().slice(0,10); $("lxMigrateSince").value=since; }
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="⏳ Reading AZ (2)…";
@@ -5688,6 +5753,7 @@ async function lxSync(btn){
 // running by itself. Same batches-of-10 server side; the button is its own
 // progress readout so nothing blocks the banner.
 async function lxTrackNow(btn){
+  if(!lxGuard()) return;
   btn.disabled=true;
   let tc=0,trem=1;
   while(trem>0){ btn.textContent=`🚚 ${T("جارٍ التحديث · updating")}… ${tc}`;
@@ -5749,7 +5815,7 @@ async function lxDiagOpen(){
            <span class="muted2" style="font-size:var(--ds-t-xs);flex:0 0 auto">${lxMs(o.date_created)}</span>
            <a href="https://app.clickup.com/t/${poEsc(o.id)}" target="_blank" rel="noopener" title="${T("افتح في كليك أب · open in ClickUp")}">↗</a>
          </div>`).join("")}</div>
-      <div style="margin-top:8px"><button class="po-btn accent" onclick="lxImportOlder(this)">📥 ${T("استوردها الآن · Import them now")} (${miss.length})</button></div>`:""}`;
+      ${lxCanEdit()?`<div style="margin-top:8px"><button class="po-btn accent" onclick="lxImportOlder(this)">📥 ${T("استوردها الآن · Import them now")} (${miss.length})</button></div>`:""}`:""}`;
   bulkFoot(`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("قراءة فقط — لم يُكتب شيء · read-only, nothing was written")}</span>
     <span class="spacer"></span><button class="po-btn" onclick="bulkClose()">${T("إغلاق · Close")}</button>`);
 }
@@ -5758,6 +5824,7 @@ let LX_DIAG=null;
 // NORMAL sync (applies changes — never the 🛡 park-everything mode) with `since`
 // set to the OLDEST missing order, so nothing older sneaks in unannounced.
 async function lxImportOlder(btn){
+  if(!lxGuard()) return;
   const miss=(LX_DIAG&&LX_DIAG.az2_unlinked_orders)||[];
   if(!miss.length) return;
   const oldest=miss.reduce((a,o)=>Math.min(a,Number(o.date_created)||Infinity),Infinity);
@@ -5795,7 +5862,7 @@ async function lxSyncReportOpen(){
   // AZ (2) (CAS-guarded server-side against the value shown here).
   const keptHtml=(r.kept||[]).map(row=>{
     const sd=(row.diffs||[]).find(d=>d.field==="status");
-    const pushBtn=(sd&&row.task_id)?`<button class="minibtn" id="az2p_${row.id}" onclick="event.stopPropagation();lxAz2Push(${row.id},'${poEsc(String(sd.remote??""))}','${poEsc(String(sd.local??""))}')" title="write YOUR status into the AZ (2) task — tagged + commented there, undo in AZ (2) push history">⤴ Push to AZ (2)</button>`:"";
+    const pushBtn=(sd&&row.task_id&&lxCanEdit())?`<button class="minibtn" id="az2p_${row.id}" onclick="event.stopPropagation();lxAz2Push(${row.id},'${poEsc(String(sd.remote??""))}','${poEsc(String(sd.local??""))}')" title="write YOUR status into the AZ (2) task — tagged + commented there, undo in AZ (2) push history">⤴ Push to AZ (2)</button>`:"";
     return `<div${jump(row.order_id)}><div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)">
       <div style="font-weight:800;font-size:var(--ds-t-sm);margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${kindIcon[row.kind]||"🛍"} ${poEsc(row.name||"")}${row.order&&row.order!==row.name?` <span class="muted2" style="font-weight:600">· ${poEsc(row.order)}</span>`:""}
         ${row.syncing?tonePill("amber","⏳ UPLOADING TO CLICKUP"):""}<span style="flex:1"></span>${pushBtn}</div>
@@ -5820,6 +5887,7 @@ async function lxSyncReportOpen(){
 // ── ⤴ Push to AZ (2): the one manual write path into Faisal's list. One row,
 //    one field (status), CAS-guarded server-side, journalled, undoable. ──
 async function lxAz2Push(rowId,remoteNow,mine){
+  if(!lxGuard()) return;
   if(!confirm(`Push YOUR status to AZ (2)?\n\nClickUp now: ${remoteNow||"—"}\nYours:        ${mine||"—"}\n\nThe AZ (2) task gets the "otl-push" tag + a comment, and you can undo this from Tools → AZ (2) push history.`)) return;
   const b=$("az2p_"+rowId); if(b){ b.disabled=true; b.textContent="⤴ pushing…"; }
   let r; try{ r=await post("/api/leluxe/az2_push",{row_id:rowId,expected_remote:remoteNow}); }catch(e){ r={}; }
@@ -5838,6 +5906,7 @@ function lxAz2Sum(r){ return `${r.creates_pkg||0} new 📦 · ${r.moves||0} move
   +(r.skipped_empty?` · ${r.skipped_empty} empty skipped`:"")
   +((r.skipped||[]).length?` · ${(r.skipped||[]).length} skipped`:""); }
 async function lxAz2Organize(orderId,quiet){
+  if(!lxGuard()) return {ok:false};         // callers read .ok — never hand back undefined
   let d; try{ d=await post("/api/leluxe/az2_organize",{order_id:orderId,dry_run:true}); }catch(e){ d={}; }
   if(!d.ok){ if(!quiet) toast(d.error||"Couldn't plan the organize"); return {ok:false,error:d.error}; }
   const total=(d.creates_pkg||0)+(d.moves||0)+(d.renames||0)+(d.creates_item||0)+(d.field_sets||0)+(d.due_sets||0)+(d.prunes||0)+(d.adopts||0)+(d.status_sets||0)+(d.extra_deletes||0);
@@ -5849,6 +5918,7 @@ async function lxAz2Organize(orderId,quiet){
   return {ok:true,rep:r};
 }
 async function lxAz2OrganizeAll(btn){
+  if(!lxGuard()) return;
   const tn=pk=>String((pk.data&&pk.data.tracking_number)||lxF(pk,"tracking number")||"").trim();
   const orders=((LX&&LX.orders)||[]).filter(o=>(o.packages||[]).some(pk=>tn(pk)));
   if(!orders.length){ toast("لا يوجد طلبات بطرود متتبَّعة · no orders with tracked 📦 packages"); return; }
@@ -5888,6 +5958,7 @@ async function lxAz2HistoryOpen(){
 }
 function enLblGlobal(s){ return String(s||"").split("·").pop().trim(); }
 async function lxAz2Undo(pushId,btn){
+  if(!lxGuard()) return;
   if(!confirm("Undo this push? The old value is written back to AZ (2).\n(Aborts safely if AZ (2) changed since the push.)")) return;
   btn.disabled=true; btn.textContent="↩ undoing…";
   let r; try{ r=await post("/api/leluxe/az2_undo",{push_id:pushId}); }catch(e){ r={}; }
@@ -5967,6 +6038,7 @@ function lxConflictRender(list){
   }).join("");
 }
 async function lxResolveField(oi,fi,side){
+  if(!lxGuard()) return;
   const o=LX_CONF[oi]; if(!o) return; const cf=(o.conflicts||[])[fi]; if(!cf) return;
   let r; try{ r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choices:{[cf.field]:side}}); }catch(e){ r={}; }
   if(!r.ok){ toast(r.error||"resolve failed"); return; }
@@ -5974,6 +6046,7 @@ async function lxResolveField(oi,fi,side){
   await lxConflictReload();
 }
 async function lxResolveOrder(oi,side){
+  if(!lxGuard()) return;
   const o=LX_CONF[oi]; if(!o) return;
   let r; try{ r=await post("/api/leluxe/resolve_conflict",{row_id:o.row_id,choice:side}); }catch(e){ r={}; }
   if(!r.ok){ toast(r.error||"resolve failed"); return; }
@@ -5982,6 +6055,7 @@ async function lxResolveOrder(oi,side){
 }
 // bulk: one decision for EVERY parked row (after scanning the list)
 async function lxResolveAllRows(side){
+  if(!lxGuard()) return;
   if(!LX_CONF.length) return;
   const q=side==="remote"
     ?`استخدام قيم ClickUp لكل ${LX_CONF.length} عنصر؟ · Use the ClickUp value for ALL ${LX_CONF.length} rows?`
@@ -5996,6 +6070,7 @@ async function lxResolveAllRows(side){
   await lxConflictReload();
 }
 async function lxRefreshTracking(btn){
+  if(!lxGuard()) return;
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🚚 Live GAASH tracking…";
   let rem=1,tc=0,ga=0,sk=0,total=0,prev=Infinity,stall=0;
   const bad=new Set();                           // non-GAASH numbers, for the owner to clean
@@ -6025,6 +6100,7 @@ async function lxRefreshTracking(btn){
   }
 }
 async function lxFetchImages(btn){
+  if(!lxGuard()) return;
   btn.disabled=true; const pr=$("lxProgress"); pr.style.display="block"; pr.textContent="🖼 Fetching Amazon photos…";
   let rem=1,done=0;
   while(rem>0){ let r; try{ r=await post("/api/leluxe/migrate",{phase:"images"}); }catch(e){ break; }
@@ -6034,6 +6110,7 @@ async function lxFetchImages(btn){
   btn.disabled=false; loadLeluxe();
 }
 async function lxImgUpload(input){
+  if(!lxGuard()) return;
   if(!LX_EDIT||!LX_EDIT.id) return;
   const rid=LX_EDIT.id;
   for(const file of input.files){
@@ -6054,6 +6131,7 @@ function lxPkgLabel(pk){
   return `📦 ${tn?poEsc(tn):"no tracking"} · ${n} product${n===1?"":"s"}`;
 }
 function lxMovePrompt(itemId){
+  if(!lxGuard()) return;
   const path=lxFindPath(itemId);
   if(!path||!path.order){ toast("This product isn't inside an order."); return; }
   const it=path.row, order=path.order;
@@ -6095,6 +6173,7 @@ function lxMoveQtyPreview(){
 }
 function lxMoveClose(){ $("lxMoveModal").classList.add("hidden"); LX_MOVE=null; }
 async function lxMoveDo(destId,newPkg){
+  if(!lxGuard()) return;
   if(!LX_MOVE) return;
   const body={id:LX_MOVE.it.id};
   if(newPkg) body.new_package=true; else body.parent_local_id=destId;
@@ -6106,6 +6185,7 @@ async function lxMoveDo(destId,newPkg){
   loadLeluxe(); lxPollStart();
 }
 async function lxDelete(id){
+  if(!lxGuard()) return;
   if(!confirm("Hide this from the Leluxe page? The ClickUp task is NOT touched.")) return;
   let r; try{ r=await post("/api/leluxe/order/delete",{id}); }catch(e){ r={}; }
   if(!r.ok){ toast(r.error||"Couldn't hide"); return; }
@@ -9374,6 +9454,7 @@ document.addEventListener("click",e=>{ if(!e.target.closest(".pop")){
   document.querySelectorAll(".pop-menu.open").forEach(popClose);
   if(had) popResync(); } });
 function popMenu(items){   // items: [ [icon+label, onclick, danger?], … | null to skip ]
+  if(!items.filter(Boolean).length) return "";   // nothing survived a permission gate → no ⋯ at all
   const rows=items.filter(Boolean).map(([lab,fn,danger])=>`<button class="pop-item${danger?' danger':''}" onclick="${fn};this.closest('.pop-menu').classList.remove('open')">${lab}</button>`).join("");
   return `<span class="pop"><button class="iconbtn" title="more actions" onclick="popToggle(this)">⋯</button><div class="pop-menu">${rows}</div></span>`;
 }

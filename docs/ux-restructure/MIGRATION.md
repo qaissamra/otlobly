@@ -626,7 +626,12 @@ which returns at its busy guard if a fetch is already in flight — so the refre
 *and* nothing would clear the "Loading the goal…" it had just caused. `lxGoalRefresh()` checks
 busy first.
 
-**Left for its own task:** `CAN_EDIT` is never consulted anywhere in the Leluxe view, while
-Purchases, Orders and Package prep all gate on it. A read-only user would see every editor,
-every ⋯ action and every Tools item enabled. Low risk today — `leluxeBtn` is gated on
-`admin_actions` — but it is a real gap.
+**Left for its own task — now done, see UI_QA.md §17 (Q-031).** `CAN_EDIT` was never consulted
+anywhere in the Leluxe view, while Purchases, Orders and Package prep all gate on it. A
+read-only user would see every editor, every ⋯ action and every Tools item enabled. Low risk
+today — `leluxeBtn` is gated on `admin_actions` — but it was a real gap.
+
+Closed by `lxCanEdit()` / `lxGuard()`: 41 write functions guarded, 13 toolbar controls and 5 ⋯
+menus gated. Note the correction that task turned up — the gate is **`admin_actions`, not
+`CAN_EDIT`**, because that is what every `/api/leluxe/*` write route already enforces. The
+server side was never relying on the UI: all 35 route/method pairs 403 for a non-admin.
