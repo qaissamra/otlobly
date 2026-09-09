@@ -714,3 +714,76 @@ compiles it with `new Function` — it fails with the original `SyntaxError` on 
 **Drive the control, not the function it calls.** A handler that is never clicked is a handler
 that is never tested; calling its target proves the target works and says nothing about the
 wiring. Every UI check from here on clicks the actual element.
+
+
+## 18. Q-032 — a sub-table's flexible column could resolve to zero (2026-09-09)
+
+The owner expanded a Leluxe order and asked "does this look right to you?" The product column
+was **gone** — no name, no `المنتج · product` header, a clipped thumbnail — and the last two
+columns had overflowed off the edge.
+
+### The mechanism
+
+Both sub-table builders sized a width-less column as `minmax(0, …)`. CSS Grid resolves a
+flexible track **down to its minimum before it will overflow**, so whenever the fixed columns
+did not fit, the column carrying the row's identity was deleted outright while the fixed ones
+kept their pixels. `.ds-pu-sub` has had `overflow-x: auto` all along — but a 0-width track *is*
+a fitting layout as far as grid is concerned, so the escape hatch never got its turn.
+
+The expansion cannot borrow the table's horizontal scroll room: `.ds-tr-exp` is
+`position:sticky` with `width: var(--ds-view-w)`, and `--ds-view-w` is the **scrollport's**
+client width, written by `DS.tableMount` ([table.js:252](static/ds/table.js:252)). Usable width
+for a sub-table is therefore:
+
+```
+usable ≈ window − 340        (capped at 1292 by --ds-content-max)
+```
+
+Measured 726px at a 1100px window, which matches.
+
+### Measured, at a 1100px window
+
+| board | sub-tables with a 0-width track — before | after |
+|---|---|---|
+| Leluxe orders expansion | **6 of 6** | **0** |
+| Purchases orders expansion | **8** | **0** |
+| Sales orders expansion | 0 | 0 |
+
+Confirmed identical (0 everywhere) at 1100, 1280 and 1440.
+
+### Two causes, one class
+
+1. **Batch G's fault.** I widened `PROD_COLS` from 676px → 886px of fixed columns by copying
+   the widths from the full-width Products *board* into a **nested** sub-table. Re-measured
+   properly this time — 90th-percentile natural content width across 30 expanded parcels —
+   which showed Batch G had over-declared `rd` by **75px**, `status` by 38 and `gash` by 22
+   while under-declaring the columns that actually needed room. Now 858px, and `product`
+   carries `min: 220`.
+2. **Older and worse.** `packageGrid` ([purchases.js:155](static/ds/purchases.js:155)) declares
+   1272px of fixed columns against a ~1292px ceiling, so its Package identity column had at
+   most 20px on the widest monitor and **0 below a ~1612px window** — since Phase 3, on every
+   realistic screen, unreported. It reaches this through a private copy of the builder, so the
+   floor had to be added in both files.
+
+### How to measure content width (the trap Batch G fell into)
+
+`cell.scrollWidth` is **clamped by `.ds-pu-td { overflow: hidden }`** — it reports the width you
+already declared, so measuring it tells you your own guess back. Clone the sub-table into an
+off-screen host, set every track to `max-content` and `overflow: visible`, then read the
+resolved `gridTemplateColumns`. That is the only number that reflects the content.
+
+### Q-032 closed
+
+Width-less columns are now `minmax(${c.min || 160}px, var(--ds-pu-flex,620px))` in both
+builders — `min` meaning what it already means on a DataTable column
+([table.js:82](static/ds/table.js:82)). Below the floor the sub-table **scrolls**, which is
+what it was always meant to do.
+
+`test_ds_sales.py` previously pinned the literal `minmax(0,var(--ds-pu-flex,620px))`, which
+held the zero in place. It now asserts the property instead: the emitted `--ds-pu-cols` is
+parsed and the flexible track's minimum must be **greater than zero**, `min` must override it,
+and a fixed column must stay exactly its width. Five checks fail on the pre-fix builders.
+
+Note both new string checks run through `code_only()` — the fix's own comment quotes
+`minmax(0,1fr)` to explain itself, and a comment must never answer a question about what a
+file *builds*.
