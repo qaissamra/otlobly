@@ -540,6 +540,104 @@ def forecast_queue(now=None):
     }
 
 
+# --------------------------------------------------------------------------- #
+# 📊 How long GAASH took, and which case type clears fastest
+#
+# CALENDAR days here, deliberately — the owner's rule: "sent today, released
+# fourteen days later is fourteen". That is NOT the working-day clock the
+# forecast above runs on, and the two must not be confused: work_gap() answers
+# "how long until the next sweep", this answers "how long did they hold it".
+# Both raw instants are kept on every row, so the holiday deduction the owner
+# wants later ("four of those days were GAASH holidays") can be applied to all
+# of this history at once instead of only from the day it ships.
+# --------------------------------------------------------------------------- #
+CASE_MIN_N = 5              # below this, report the count, never a median
+NO_CASE = "(no case)"
+
+
+def _released_at(ent):
+    """When GAASH let this parcel go — the LAST K2 on its timeline, the same
+    rule clearance_transition trains on. None when it never cleared."""
+    evs = normalize_events((ent or {}).get("events"))
+    k2 = [e for e in evs if e["code"] == CLEARED_CODE]
+    return k2[-1]["ts"] if k2 else None
+
+
+def case_report(now=None):
+    """Every parcel we handed to GAASH, how long it then took, grouped by case.
+
+    ONE sent_to_gaash_map() + ONE corpus read + ONE name/board map — the same
+    batching contract forecast_queue() keeps. No network."""
+    import gaash_mail
+    sent = gaash_mail.sent_to_gaash_map()
+    clr = gaash_mail.clearance_map()
+    names = gaash_mail.parcel_name_map()
+    boards = gaash_mail.parcel_board_map()
+    corpus = _corpus()
+
+    rows, weird = [], []
+    for gwd, (iso, src) in sorted(sent.items()):
+        if not iso:
+            continue
+        t0 = _parse_ts(iso)
+        if t0 is None:
+            continue
+        case = ((clr.get(gwd) or {}).get("case_name") or "").strip() or NO_CASE
+        r = {"gwd": gwd, "name": (names.get(gwd) or "")[:70],
+             "board": boards.get(gwd) or "", "case": case,
+             "sent_at": iso, "sent_src": src, "released_at": "", "days": None}
+        t1 = _released_at(corpus.get(gwd))
+        if t1 is None:
+            r["reason"] = "not cleared yet"
+            rows.append(r)
+            continue
+        r["released_at"] = t1.isoformat(timespec="seconds")
+        days = (t1 - t0).days
+        if days < 0:
+            # cleared BEFORE we wrote to GAASH — a real thing (someone else's
+            # paperwork got there first). Counted visibly, never averaged in.
+            r["reason"] = "released before we sent"
+            weird.append(r)
+            continue
+        r["days"] = days
+        rows.append(r)
+
+    by_case = {}
+    for r in rows:
+        if r.get("days") is None:
+            continue
+        by_case.setdefault(r["case"], []).append(r["days"])
+    opts = {}
+    try:
+        import leluxe
+        opts = {o["name"]: o.get("color") or "" for o in leluxe.case_options(refresh=False)}
+    except Exception:  # noqa - colours are decoration; the numbers are not
+        pass
+
+    cases = []
+    for name, vals in by_case.items():
+        ready = len(vals) >= CASE_MIN_N
+        cases.append({"case": name, "color": opts.get(name, ""), "n": len(vals),
+                      "ready": ready,
+                      "p50": round(_pct(vals, .5), 1) if ready else None,
+                      "p90": round(_pct(vals, .9), 1) if ready else None,
+                      "fastest": min(vals), "slowest": max(vals)})
+    # the comparison is the point, so the fastest READY case leads; unready
+    # ones sort after it by size, since they are the ones needing more parcels
+    cases.sort(key=lambda c: (0 if c["ready"] else 1,
+                              c["p50"] if c["ready"] else -c["n"]))
+    rows.sort(key=lambda r: (0 if r.get("days") is not None else 1,
+                             -(r.get("days") or 0), r["gwd"]))
+    done = [r for r in rows if r.get("days") is not None]
+    return {"ok": True, "unit": "calendar days", "min_n": CASE_MIN_N,
+            "rows": rows + weird, "cases": cases, "weird": len(weird),
+            "counts": {"sent": len(rows) + len(weird), "cleared": len(done),
+                       "waiting": len(rows) - len(done)},
+            "overall": {"n": len(done),
+                        "p50": round(_pct([r["days"] for r in done], .5), 1) if done else None,
+                        "p90": round(_pct([r["days"] for r in done], .9), 1) if done else None}}
+
+
 if __name__ == "__main__":   # quick look: python3 forecast.py
     m = build_model()
     print(json.dumps({k: v for k, v in m.items() if k != "weekday"},

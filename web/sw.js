@@ -3,7 +3,9 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v7";          // v7: Batch B5 rewrote the table's sticky layer (ds.css,
+const CACHE = "otl-off-v8";          // v8: the clearance record — index.html grew the Gaash Case
+                                     // picker and the 📊 report, so the old shell must not linger.
+                                     // v7: Batch B5 rewrote the table's sticky layer (ds.css,
                                      // table.js). v6: Batch B3 changed ds.js/table.js/sales.js — bumping
                                      // drops the old cache on activate, so a plain refresh is
                                      // enough. Batch B and B2 did NOT bump, and the stale copy

@@ -294,3 +294,28 @@ nothing displayed; the WhatsApp templates became a labelled menu instead of a ba
 **Known, not fixed here:** Orders still renders 8 distinct font sizes (was 7). The board
 itself is on the DS scale; the remainder come from `statusSelect`'s inline styles and the
 KPI cards above the board, which are legacy markup this batch did not touch.
+
+
+## A migrated page module is a legitimate home for a legacy button (2026-09-09)
+
+Rebasing the clearance-record branch (PR #151) onto post-Batch-B main surfaced a rule the
+migration has to state out loud: **a feature test that counts buttons must scan
+`static/ds/*.js` as well as `web/index.html`.**
+
+`test_gaash_docs_sent.py` guards the structural fix behind "Sent to Gaash" — documents could
+reach GAASH from **eleven** buttons and only four recorded anything, so the record moved into
+`gaashUploadOpenGwd`, the funnel they all share, and the suite fails if a call site ever grows
+a private opt-out. It counted those eleven in index.html alone. Phase 3 then moved the
+Purchases board into `static/ds/purchases.js` and its "Upload documents to GAASH" row action
+went with it — ten in index.html, one in the page module. The button never disappeared; the
+count did.
+
+The suite now reads index.html **plus every `static/ds/*.js`** for the counting checks (the
+structural checks stay scoped to index.html, where the funnel itself lives) and prints the
+number it found, so the next drop says *what* it dropped to. Expect the same repoint in every
+later batch: as Leluxe, GAASH mail, Leads, Deposits and Tracking move, any test that greps
+index.html for a control is measuring a shrinking file.
+
+Also in that rebase: the branch's own 18 literal `font-size:` values became `--ds-t-*` tokens.
+`lint-baseline.json` pins `font_size_literals: 0` after Batch B2, and a branch written before
+it reintroduces literals silently — check the lint before merging anything long-lived.
