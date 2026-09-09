@@ -167,6 +167,14 @@ def server_writer():
 # ── the wiring guarantee: every button reaches the stamp ─────────────────────
 def ui_wiring_guarantee():
     src = (HERE / "web" / "index.html").read_text(encoding="utf-8")
+    # A button may now live in a design-system page module instead of
+    # index.html — the UX restructure moved the Purchases board into
+    # static/ds/purchases.js, and its "Upload documents to GAASH" row action
+    # went with it. The guarantee is about the BUTTONS, not about the file
+    # they sit in, so count across both.
+    pages = "\n".join(p.read_text(encoding="utf-8")
+                      for p in sorted((HERE / "static" / "ds").glob("*.js")))
+    ui = src + "\n" + pages
 
     check("the per-board stamp hook is gone (it is what the 7 Leluxe buttons lacked)",
           "GUD_STAMP" not in src and "stampCb" not in src)
@@ -179,12 +187,12 @@ def ui_wiring_guarantee():
 
     # every call site passes ONE argument — a second one would be a private
     # per-caller behaviour, which is exactly how seven buttons drifted silently
-    sites = re.findall(r"gaashUploadOpenGwd\((.*?)\)[;\"'`]", src)
+    sites = re.findall(r"gaashUploadOpenGwd\((.*?)\)[;\"'`]", ui)
     sites = [s for s in sites if "function" not in s]
     check(f"every gaashUploadOpenGwd call site takes only a GWD ({len(sites)} sites)",
           sites and all("," not in s for s in sites))
-    check("all eleven upload buttons still exist",
-          len(sites) + len(re.findall(r"gaashUploadOpen\('", src)) >= 11)
+    buttons = len(sites) + len(re.findall(r"gaashUploadOpen\('", ui))
+    check(f"all eleven upload buttons still exist ({buttons} found)", buttons >= 11)
 
     # the popup's own buttons may only go through the stamping handler
     body = src[src.index("function gaashUploadOpenGwd("):]
