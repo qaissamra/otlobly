@@ -117,7 +117,13 @@
       select, a menu or a button inside the row still wins. Batch F1 moved the Leluxe
       products into this grid and set `_click` on every row, but nothing ever read it -
       the rows kept their hover highlight and stopped opening anything. */
-  DS.subTable = (cols, rows, label) => {
+  /** DS.subTable(cols, rows, label | {label, expand(row)}) — `expand` is a row's own
+      nested content (the products of a package), placed directly UNDER that row rather
+      than after the whole table. purchases.js carries a copy of this builder; both have
+      to learn the same things until that copy is retired. */
+  DS.subTable = (cols, rows, o) => {
+    const opt = typeof o === "string" || o == null ? { label: o } : o;
+    const label = opt.label;
     // A width-less column used to be `1fr`, so it swallowed every spare pixel: a product
     // title got 956px of a 1062px panel and left Qty stranded at the far edge. It now grows
     // to a comfortable reading width and stops. Fixed-width columns are untouched, so a
@@ -139,7 +145,11 @@
         const open = click ? ` class="ds-pu-sub-row is-clickable" role="row"`
           + ` onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${esc(click)}"`
           : ` class="ds-pu-sub-row" role="row"`;
-        return `<div${open}>${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`;
+        const cells = `<div${open}>${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`;
+        // A row's own nested content spans every track, so it reads as belonging to the
+        // row above it rather than to the table as a whole.
+        const ex = opt.expand ? (opt.expand(r) || "") : "";
+        return ex ? cells + `<div class="ds-pu-sub-exp">${ex}</div>` : cells;
       }).join("")
       + `</div>`;
   };

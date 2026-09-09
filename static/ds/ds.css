@@ -562,6 +562,11 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-pu-sub-row.is-clickable:hover .ds-pu-td { background: var(--ds-bg2); }
 .ds-pu-sub-foot { padding: var(--ds-s2) 0 0; }
 .ds-pu-sub-empty { padding: 7px var(--ds-s3); font: var(--ds-t-sm)/1.35 var(--ds-font); border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-card); }
+/* A row's OWN nested content — the products of a package — directly under that row.
+   `1 / -1` spans every track of the parent grid, so the nested table lays out on its
+   own terms; the rule and the indent say which row it belongs to. */
+.ds-pu-sub-exp { grid-column: 1 / -1; margin-inline-start: var(--ds-s4); padding-inline-start: var(--ds-s4);
+  padding-block: var(--ds-s2) var(--ds-s3); border-inline-start: 2px solid var(--ds-line); }
 .ds-pu-pkg-open { margin-block-start: var(--ds-s3); padding-inline-start: var(--ds-s4); border-inline-start: 2px solid var(--ds-line); }
 .ds-pu-pkg-open h4 { display: flex; align-items: center; gap: var(--ds-s2); margin: 0 0 var(--ds-s2); font: var(--ds-w-bold) var(--ds-t-sm)/1.2 var(--ds-font); color: var(--ds-muted); }
 .ds-pu-empty { padding: var(--ds-s4); color: var(--ds-muted); font-size: var(--ds-t-sm); display: flex; align-items: center; gap: var(--ds-s3); }

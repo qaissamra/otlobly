@@ -97,8 +97,17 @@
     const tpl = cols.map((c) => (c.w ? c.w + "px" : `minmax(${c.min || 160}px,var(--ds-pu-flex,620px))`)).join(" ");
     const head = `<div class="ds-pu-sub-head" role="row">${cols.map((c) =>
       `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`;
-    const body = rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) =>
-      `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`).join("");
+    // `o.expand(row)` is a row's OWN nested content — the products of a package — and it
+    // belongs directly under that row. It used to be appended after the whole table, so
+    // opening two packages of a twelve-package order left their products stacked at the
+    // bottom, each under a heading naming the package you had to scroll back up to find.
+    // `grid-column: 1 / -1` spans every track, so the nested grid lays out on its own terms.
+    const body = rows.map((r) => {
+      const cells = `<div class="ds-pu-sub-row" role="row">${cols.map((c) =>
+        `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`;
+      const ex = o.expand ? (o.expand(r) || "") : "";
+      return ex ? cells + `<div class="ds-pu-sub-exp">${ex}</div>` : cells;
+    }).join("");
     return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${o.label ? ` aria-label="${esc(o.label)}"` : ""}>${head}${body}</div>`;
   }
 
@@ -160,10 +169,13 @@
       { key: "act", label: "", w: 44, render: ([pk, pi]) => D.menu({ items: pkgMenu(ctx, p, pk, pi), button: { icon: "ellipsis-horizontal", size: "sm", variant: "ghost", ariaLabel: "Package actions" } }) },
     ].filter(Boolean);
     const tuples = pkgs.map((pk, pi) => [pk, pi]);
-    const open = tuples.filter(([pk]) => ctx.pkgOpen(p.po_id, pk.package_no));
-    return grid(cols, tuples, { label: `Packages in ${p.po_id}` })
-      + open.map(([pk, pi]) => `<div class="ds-pu-pkg-open"><h4>Products in package ${esc(pk.package_no)}</h4>${productGrid(ctx, p, pk, pi)}</div>`).join("")
-      + `<div class="ds-pu-sub-foot">${add}</div>`;
+    // Open a package and its products appear UNDER it. The heading that used to name
+    // which package they belonged to is gone with the reason for it: the nesting says
+    // so, and the nested grid still carries `Products in package N` as its aria-label.
+    return grid(cols, tuples, {
+      label: `Packages in ${p.po_id}`,
+      expand: ([pk, pi]) => (ctx.pkgOpen(p.po_id, pk.package_no) ? productGrid(ctx, p, pk, pi) : ""),
+    }) + `<div class="ds-pu-sub-foot">${add}</div>`;
   }
 
   function pkgMenu(ctx, p, pk, pi) {
