@@ -622,3 +622,53 @@ The Leluxe boards still use the legacy `popToggle` menus while the rest use `DS.
   Check the codepoints in the DOM before reporting a broken glyph.
 - Flask caches `web/index.html`: restart the preview server after editing it, or you are
   measuring the file you replaced ten minutes ago.
+
+
+## 16. Batch H — the Leluxe workspace and its dead controls (2026-09-09)
+
+Follow-up to §15: the owner walked the page himself and hit what the sweep had only measured.
+
+### Q-028 — the workspace switcher was a label, not a mode
+
+`S.workspace()` derived "Leluxe" from the current view, so the switcher named one workspace
+while the nav under it belonged to another. **Closed:** `otl_ws` is stored state, the sidebar
+has a Leluxe branch built from `LX_GROUPS`, and `syncWs()` keeps the two honest on every
+route change.
+
+### Q-029 — `DS.subTable` rows advertised a click they did not have
+
+`_click` was set on every Leluxe product row and read by nothing; the hover highlight applied
+to *all* sub-rows, clickable or not. **Closed:** `subTable` honours `_click`, and the hover
+is scoped to `.is-clickable`.
+
+### Q-030 — a DataTable's expand overrides outlive the page's own open-set
+
+`Table.open` / `Table.closed` are per-instance and `DS.table` reuses the instance, so a page
+that drives expansion from its own store could reset that store and watch nothing happen on
+any row the user had toggled by hand. **Closed:** `DS.tableResetOpen(id)`.
+
+**Watch for this pattern.** Any board with `expandable.open` + its own open-store has the same
+trap. Today that is Leluxe orders; Purchases and Orders drive expansion from the table itself,
+so they are unaffected — but the next migration that adds an "expand all" needs this call.
+
+### Verified after
+
+| | before | after |
+|---|---|---|
+| Leluxe workspace nav items | 13 (full Otlobly menu) | **5** |
+| product row inside an expansion | dead | opens the item panel |
+| ⊟ on a hand-expanded row | ignored | collapses |
+| ⊞ on a hand-collapsed row | ignored | expands |
+| order pill → jump | switched tab, no scroll | scrolls, row open, hash follows |
+| `⬇ Migrate from AZ (2)` | not in the menu | in the menu |
+| Goal tab heading | "📦 Orders" | "🎯 Goal" |
+| Goal tab: search / filters / ⊞⊟ | visible, inert | hidden |
+
+Classic layout re-checked and unchanged: 21 legacy nav buttons, the page's own tab strip
+still visible. 60 suites, 0 failures.
+
+### One more measurement trap
+
+Enumerating "the Tools menu" with `#leluxeView .pop-menu .pop-item` returns **every** row menu
+on the board as well — hundreds of entries. Scope to the toolbar (`.toolbar .pop-menu`) or you
+will drown the transcript in status-picker options.

@@ -220,6 +220,13 @@
   DS.table = (o) => { const t = TABLES[o.id] ? Object.assign(TABLES[o.id], { o }) : (TABLES[o.id] = new Table(o)); if (!TABLES[o.id].state) t.load(); return t.render(); };
   DS.tableRender = (el, o) => { el = typeof el === "string" ? document.getElementById(el) : el; el.innerHTML = DS.table(o); DS.tableMount(o.id); return TABLES[o.id]; };
   DS.tableGet = (id) => TABLES[id] || null;
+  /** Drop the table's own expand/collapse overrides so `expandable.open(row)` is the only
+      truth again. A chevron records its choice in `open`/`closed`, and DS.table REUSES the
+      instance across renders - so a page that drives expansion from its own store (Leluxe's
+      ⊞/⊟, "jump to order") reset that store and then watched nothing happen, because the
+      row the user had touched by hand still won. Call this whenever the page sets the open
+      set wholesale. */
+  DS.tableResetOpen = (id) => { const t = TABLES[id]; if (!t) return; t.open.clear(); if (t.closed) t.closed.clear(); };
   DS.tableSelected = (id) => (TABLES[id] ? Array.from(TABLES[id].selected) : []);
   DS.tableState = (id) => (TABLES[id] ? TABLES[id].state : null);
   DS.tableSync = (scroller) => {

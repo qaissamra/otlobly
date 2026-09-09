@@ -539,3 +539,94 @@ when someone hides the column.
 **Trap for the next batch:** `test_design_system.py` requires every `ds.css` selector to
 contain `.ds-` and forbids emoji anywhere in `ds.css`. `.cu-vip` and a `★` in a comment both
 failed it. Name it `.ds-vip`, and keep the star out of the stylesheet.
+
+
+## Batch H: the Leluxe workspace, and four controls that had stopped responding (2026-09-09)
+
+The owner's report was two sentences: *"in the leluxe workspace we need to fix the page,
+only keep the ones we use in leluxe — we do not have customers. Leluxe is a special case; if
+I added another workspace it would be normal"*, and *"I tried pressing a button in Leluxe and
+nothing happened"*.
+
+### The workspace was a label, not a mode
+
+`S.workspace()` was derived from the current view:
+
+```js
+S.workspace = () => (A().platform ? "Tatabu" : A().view === "leluxe" || A().view === "goals" ? "Leluxe" : "Otlobly");
+```
+
+So the switcher read "Leluxe" while the menu above it was the full Otlobly nav — Leads,
+Customers, Orders, Fulfillment, Deposits, P&L — and it forgot itself the moment you stepped
+anywhere else. Leluxe is a live mirror of one ClickUp list with **no customer, quote, deposit
+or cash collection** (AUDIT.md §Leluxe), so most of that menu is noise inside it.
+
+It is a stored setting now (`otl_ws`), and the sidebar has a third branch built the way `PLAT`
+already builds Tatabu's. Chosen by the owner: **Leluxe · Tracking · GAASH mail · Goals ·
+Activity** — the pages that actually touch Leluxe data (bulk search covers Purchases *and*
+Leluxe; `gaash_mail._SOURCES = ("leluxe","purchases")`; the Goals campaign counts the Le Luxe
+list). Overview and Needs attention sit it out, as they already do in platform mode.
+
+**`NAV` is untouched on purpose.** `test_ds_shell.py` regex-scans the *whole file* for
+`{ key: "…", label: "…", items: [` and requires exactly five groups in flow order, so a second
+literal of that shape anywhere in `shell.js` fails the suite. `LX_GROUPS` stores keys and
+resolves them against `ALL` at render time — same trick as `PLAT`, and it keeps every
+role/feature gate (`FEAT.leluxe`, `admin_actions`) in the one place `visible()` already owns.
+
+`syncWs(view)` hangs off `paint()`, the one hook every route change passes through, so the
+sidebar can always reach the page you are looking at: `leluxe` forces the Leluxe workspace,
+an Otlobly-only page forces Otlobly, and the pages the two share — plus Settings, Team, Trash,
+Flags, Needs attention — leave it alone. Without that, a deep link to `#/sales/customers` left
+a Leluxe sidebar with no way back to the page on screen.
+
+`render()`'s `sig` gained the workspace. It is a JSON signature that short-circuits the
+repaint, so without that line the groups changed and the sidebar never redrew.
+
+### The four dead controls — three of them Batch F1 regressions
+
+None of this was a missing function: all 143 handlers in the Leluxe region resolve. It was
+wiring that F1 left behind when the board moved onto the DataTable.
+
+1. **Product rows inside an expanded order did nothing.** `leluxe.js` sets
+   `_click: lxInfoOpen('item',ID)` on every row, and `DS.subTable` never read it — the
+   property appears nowhere else in the repo. The rows still highlighted on hover, so they
+   advertised a click they did not have. `DS.subTable` now honours `_click` with the same
+   `closest('select,.pop,.caret,button,a,input,label,img')` guard the pre-F1 markup used, and
+   the hover highlight is scoped to `.is-clickable` so the other boards stop making the same
+   promise. No `tabindex`: the row is `display:contents`, generates no box and is not reliably
+   focusable — the row's own ⋯ menu carries the actions for the keyboard.
+
+2. **⊞ / ⊟ silently failed on any row you had touched by hand.** `lxExpandAll` resets
+   `LX_OPEN`, but `Table` keeps its own `open`/`closed` sets and `DS.table` **reuses the
+   instance**, so `this.open.has(k)` outlived every re-render and won. Expand a row by chevron,
+   press ⊟ — nothing. It worked after a page load, which is why it read as flaky. New
+   `DS.tableResetOpen(id)` drops those overrides so `expandable.open(row)` is the only truth
+   again; `lxExpandAll`, `lxJumpOrder` and `lxViewMigrated` all call it. `lxExpandAll` also
+   read `LX.orders` with no null guard.
+
+3. **"Jump to order" never scrolled.** Both callers did `getElementById("lxo"+id)`; F1
+   replaced those `<div class="po-card" id="lxo…">` cards with DataTable rows keyed by
+   `data-key`. Clicking an order pill on Products or Packages switched tab and left the page
+   exactly where it was. One `lxRowEl(id)` helper queries `#dst-lxo .ds-tr[data-key="…"]`.
+
+4. **`⬇ Migrate from AZ (2)` had lost its menu entry** while `lxMigrateAsk()`, its hidden
+   `#lxMigrateSince` input and two empty states that name the button were all still there. Put
+   back next to `🔄 Sync from AZ (2)` rather than deleting the strings that promise it.
+
+### Chrome that belonged to a board, not to every tab
+
+The panel header is one piece of static markup shared by all five tabs, so it said
+**"📦 Orders"** on the Goal tab and offered ⊞/⊟, a search box and a filter builder that tab
+reads nothing from. `lxChrome()` now names the tab you are on and shows only what acts: ⊞/⊟
+on Orders (only that board reads `LX_OPEN`), search and filters everywhere except Goal — the
+Board keeps both, because it *is* fed `lxFilteredOrders()`.
+
+The Goal `↻` also blanked the view: it set `LX_GOAL=null` and then called `lxGoalFetch(true)`,
+which returns at its busy guard if a fetch is already in flight — so the refresh was dropped
+*and* nothing would clear the "Loading the goal…" it had just caused. `lxGoalRefresh()` checks
+busy first.
+
+**Left for its own task:** `CAN_EDIT` is never consulted anywhere in the Leluxe view, while
+Purchases, Orders and Package prep all gate on it. A read-only user would see every editor,
+every ⋯ action and every Tools item enabled. Low risk today — `leluxeBtn` is gated on
+`admin_actions` — but it is a real gap.

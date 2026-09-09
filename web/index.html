@@ -1611,6 +1611,11 @@
           <button class="pop-item" id="lxImgBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxFetchImages(this)" title="fetch the Amazon photo for every product that has an ASIN but no image yet">🖼 Fetch images</button>
           <button class="pop-item" id="lxSyncBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncAsk(this)" title="اسحب وحدّث كل الطلبات من AZ (2) الأصلية بدون أسئلة — الجديد يُضاف، المتغيّر يُحدَّث، وتعارضات الجهتين تُعرض للمراجعة · pull + update every order from the real AZ (2), no questions asked — new added, changed updated, both-sides conflicts wait for your review (AZ (2) is only read)">🔄 Sync from AZ (2)</button>
           <button class="pop-item" id="lxSyncRevBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReviewAsk(this)" title="نفس المزامنة لكن كل تغيير يُعلَّق حتى توافق عليه — لا يُكتب شيء تلقائياً · same sync but EVERY change parks until you approve it — nothing is written automatically">🛡 Sync with review…</button>
+          <!-- The one-off copy-in, as opposed to the ongoing sync above. Its entry went
+               missing at some point while lxMigrateAsk() and two empty states kept pointing
+               at it ("＋ New order, or ⬇ Migrate from AZ (2)"), so the page promised a
+               button that was not there. -->
+          <button class="pop-item" id="lxMigrateBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxMigrateAsk(this)" title="انسخ طلبات AZ (2) المُنشأة بعد تاريخ معيّن إلى قائمة العمل — نسخ لمرة واحدة، وAZ (2) تُقرأ فقط · copy AZ (2) orders created on/after a date into the working list — a one-off copy; AZ (2) is only READ, never changed">⬇ Migrate from AZ (2)</button>
           <button class="pop-item" id="lxAutoPullBtn" onclick="lxAutoPullToggle(this)" title="مزامنة تلقائية من AZ (2) في الخلفية كل ٣٠ دقيقة — الحالات تبقى صحيحة بدون أي نقرة · background sync from AZ (2) every 30 minutes — statuses stay current with zero clicks">⏱ …</button>
           <button class="pop-item" id="lxDiagBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxDiagOpen()" title="لماذا لم تصل تغييرات كليك أب؟ — يقارن كل صف مع AZ (2) الحيّة ويشرح سبب التخطي · why hasn't a ClickUp change landed? compares every row against live AZ (2) and says what is blocking it (read-only)">🩺 Diagnose sync</button>
           <button class="pop-item" id="lxSyncRepBtn" onclick="this.closest('.pop-menu').classList.remove('open');lxSyncReportOpen()" title="كل ما غيّرته آخر مزامنة — الإضافات، تعديلاتك المحفوظة، والتغييرات حقلاً بحقل · everything the last sync did: additions, your kept edits, and field-by-field changes">👁 Last sync changes</button>
@@ -1631,7 +1636,7 @@
     <div id="lxProgress" class="panel" style="display:none;margin-bottom:12px;font-size:var(--ds-t-sm)"></div>
     <div class="panel">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-        <h2 style="font-size:var(--ds-t-md);margin:0">📦 Orders</h2>
+        <h2 id="lxHead" style="font-size:var(--ds-t-md);margin:0">📦 Orders</h2>
         <span class="muted2" id="lxCount" style="font-size:var(--ds-t-sm)"></span>
         <span class="spacer"></span>
         <span id="lxSegTabs" style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden" title="طريقة العرض · view">
@@ -1642,8 +1647,10 @@
           <button class="minibtn" id="lxSegGoal" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="lxSetView('goal')" title="هدف الشهر — التقدم، البروفايلات الجاهزة، الـ RD · the monthly goal game: progress, ready profiles, RD pipeline">🎯 Goal</button>
         </span>
         <span id="lxSeparate"></span>
-        <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
-        <button class="minibtn" onclick="lxExpandAll(false)" title="collapse all orders">⊟</button>
+        <span id="lxExpandBtns" style="display:inline-flex;gap:6px">
+          <button class="minibtn" onclick="lxExpandAll(true)" title="expand all orders">⊞</button>
+          <button class="minibtn" onclick="lxExpandAll(false)" title="collapse all orders">⊟</button>
+        </span>
         <input id="lxSearch" placeholder="search order #, product, tracking, VISA…" oninput="LX_ONLY=null;renderLeluxe()" style="width:240px;padding:4px 8px;font-size:var(--ds-t-sm)">
       </div>
       <!-- ClickUp-style filter builder: field · operator · values, rows AND-ed -->
@@ -3708,14 +3715,27 @@ function lxFilteredOrders(){
   const orphans=(LX.orphans||[]).filter(r=>match(r)&&(!active.length||gmatch(r,[r])));
   return {orders,orphans};
 }
+// The board's rows live in the DataTable now, keyed by data-key — the old
+// `id="lxo<N>"` cards went away with Batch F1 and both scroll targets went with them.
+function lxRowEl(id){
+  const host=$("dst-lxo");
+  return host ? host.querySelector('.ds-tr[data-key="'+String(id).replace(/"/g,'\\"')+'"]') : null;
+}
+// LX_OPEN is this page's open-set, but the DataTable ALSO remembers every chevron the
+// user clicked and that memory wins. Clear it whenever we set the open-set wholesale,
+// or ⊞/⊟ and the jumps silently do nothing to the rows you touched by hand.
+function lxOpenSync(){ if(window.DS&&DS.tableResetOpen) DS.tableResetOpen("lxo"); }
 function lxExpandAll(open){
+  if(!LX) return;                                   // same guard renderLeluxe has
   LX_OPEN.reset(open?(LX.orders||[]).map(o=>o.id):[]);
+  lxOpenSync();
   renderLeluxe();   // (expansion only affects the orders sub-view; a plain re-render is always right)
 }
 function lxJumpOrder(id){
   LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
-  LX_OPEN.open(id); renderLeluxe();
-  const el=document.getElementById("lxo"+id);
+  LX_OPEN.open(id); lxOpenSync(); renderLeluxe();
+  if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab();
+  const el=lxRowEl(id);
   if(el){ el.scrollIntoView({block:"start"}); window.scrollBy(0,-120); }
 }
 // Show ONLY the orders from the last Migrate run — expand + scroll + flash the first
@@ -3725,8 +3745,9 @@ function lxViewMigrated(){
   const s=$("lxSearch"); if(s) s.value="";                 // a stale search must not hide them
   LX_VIEW="orders"; try{ localStorage.setItem("lx_view","orders"); }catch(e){}
   LX_LAST_MIGRATED.forEach(id=>LX_OPEN.open(id));            // expand each new order
+  lxOpenSync();
   renderLeluxe();
-  const el=document.getElementById("lxo"+LX_LAST_MIGRATED[0]);
+  const el=lxRowEl(LX_LAST_MIGRATED[0]);
   if(el){ el.scrollIntoView({behavior:"smooth",block:"center"});
     el.style.outline="2px solid var(--accent)"; setTimeout(()=>{ el.style.outline=""; },1600); }
 }
@@ -3768,6 +3789,20 @@ function lxGroupChip(fdef,val){
   if(fdef.type==="date"){ const c=lxDueChip(val,false); return c||`<b class="pkg-title">${poEsc(val)}</b>`; }
   return `<b class="pkg-title" style="font-size:var(--ds-t-sm)">${poEsc(val)}</b>`;
 }
+// The panel header is one piece of static markup shared by all five tabs, so until now it
+// said "📦 Orders" on the Goal tab and offered ⊞/⊟, a search box and a filter builder that
+// tab reads nothing from. Name the tab you are on, and show only the controls that act.
+const LX_HEADS={orders:"📦 Orders",products:"⫶ Products",packages:"📦 Packages",dashboard:"📊 Board",goal:"🎯 Goal"};
+function lxChrome(){
+  const h=$("lxHead"); if(h) h.textContent=LX_HEADS[LX_VIEW]||LX_HEADS.orders;
+  // ⊞/⊟ drive LX_OPEN, which only the orders board reads.
+  const x=$("lxExpandBtns"); if(x) x.style.display=(LX_VIEW==="orders")?"inline-flex":"none";
+  // The Goal tab renders straight from /api/leluxe/goal — neither the search box nor the
+  // filter rows reach it. The Board tab IS fed lxFilteredOrders(), so both stay there.
+  const off=(LX_VIEW==="goal");
+  const s=$("lxSearch"); if(s) s.style.display=off?"none":"";
+  const f=$("lxFilters"); if(f) f.style.display=off?"none":"";
+}
 function renderLeluxe(){
   if(!LX) return;
   const q=($("lxSearch").value||"").trim().toLowerCase();
@@ -3777,6 +3812,7 @@ function renderLeluxe(){
   [["lxSegOrders","orders"],["lxSegProducts","products"],["lxSegPkgs","packages"],["lxSegDash","dashboard"],["lxSegGoal","goal"]].forEach(([bid,v])=>{
     const b=$(bid); if(b) b.classList.toggle("accent",LX_VIEW===v||(v==="orders"&&LX_VIEW!=="products"&&LX_VIEW!=="packages"&&LX_VIEW!=="dashboard"&&LX_VIEW!=="goal")); });
   lxRenderSeparate();
+  lxChrome();
   if(LX_VIEW==="goal"){ lxRenderGoal(); return; }
   if(LX_VIEW==="dashboard"){ lxRenderDashboard(lxFilteredOrders().orders); return; }
   if(LX_VIEW==="packages"){ lxRenderPackages(); return; }
@@ -4539,6 +4575,13 @@ async function lxGoalFetch(refresh){
   else if(!LX_GOAL) toast("Couldn't load the goal");
   if(LX_VIEW==="goal") renderLeluxe();
 }
+// The ↻ used to do `LX_GOAL=null; lxGoalFetch(true)`. If a fetch was already in flight,
+// lxGoalFetch returned at its busy guard — so the refresh was dropped AND the view was left
+// blank behind a "Loading the goal…" that nothing would clear. Check busy first.
+function lxGoalRefresh(){
+  if(LX_GOAL_BUSY) return;                          // one is already on its way
+  LX_GOAL=null; LX_GOAL_TS=0; lxGoalFetch(true);
+}
 function lxLocalToday(){ const t=new Date();
   return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; }
 function lxRenderGoal(){
@@ -4606,7 +4649,7 @@ function lxRenderGoal(){
       ${card("RD done — this month",lxGm(rd.done_month_usd),"money",`statuses: ${(st.rd_done||[]).join(", ")} — dated by the first status change`)}
       ${card("RD done — last month",lxGm(rd.done_last_month_usd),"money","what the daily Telegram digest reports")}
     </div>
-    <div class="lx-sec">👤 profiles firepower (az-tool) <button class="minibtn" style="margin-inline-start:8px" onclick="LX_GOAL=null;lxGoalFetch(true)" title="re-read profiles from az-tool now">↻</button></div>
+    <div class="lx-sec">👤 profiles firepower (az-tool) <button class="minibtn" style="margin-inline-start:8px" onclick="lxGoalRefresh()" title="re-read profiles from az-tool now">↻</button></div>
     <div class="lx-dash">${profCards}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center">
       <button class="minibtn" onclick="lxGoalSettingsOpen()">🎯 إعدادات الهدف · Goal settings</button>

@@ -38,6 +38,11 @@
   // ---------------------------------------------------------------- the flag
   const FLAG = "otl_shell";
   S.enabled = () => store.get(FLAG, "") === "ds";
+  // Which workspace's pages the sidebar shows. "" = Otlobly. This used to be derived from
+  // whichever view you happened to be on, so the switcher said "Leluxe" over the full
+  // Otlobly menu and forgot itself the moment you stepped anywhere else. It is a setting now.
+  const WS = "otl_ws";
+  S.ws = () => (A().platform ? "tatabu" : store.get(WS, "") === "leluxe" ? "leluxe" : "otlobly");
   S.set = (on) => {
     on ? store.set(FLAG, "ds") : store.del(FLAG);
     // A ?shell=new left in the address bar would switch it straight back on, so the
@@ -234,22 +239,50 @@
   // reached from (and left through) the workspace switcher.
   const PLAT = EXTRA.filter((it) => it.path.indexOf("/tatabu") === 0 && it.key !== "brokerprofile");
 
+  // Leluxe is the odd workspace: a live mirror of one ClickUp list with no customer, quote,
+  // deposit or cash collection, so most of the Otlobly menu is noise inside it. These are the
+  // pages that actually touch Leluxe data - bulk search covers Purchases AND Leluxe, GAASH
+  // mail enrols from both stores, the Goals campaign counts the Le Luxe list. Built by key
+  // from the same `ALL` the Otlobly nav uses, so a role/feature gate is only right in one
+  // place; a literal group array here would also trip test_ds_shell.py, which regex-scans the
+  // WHOLE file for `{ key: "...", label: "...", items: [` and requires exactly five.
+  const LX_GROUPS = [
+    { key: "lx", label: null, keys: ["leluxe"] },
+    { key: "shipping", label: "Shipping", keys: ["tracking", "gaash"] },
+    { key: "insights", label: "Insights", keys: ["goals", "activity"] },
+  ];
+  // Views that never move you between workspaces: the four Leluxe shares with Otlobly, plus
+  // the app-level pages the user menu reaches from either side. Everything not listed here
+  // and not `leluxe` is Otlobly-only and switches you back.
+  const WS_NEUTRAL = new Set(["bulksearch", "gaashmail", "goals", "activity",
+    "settings", "team", "trash", "flags", "attention"]);
+
   let sig = "";
   function render(force) {
     const plat = !!A().platform;
+    const ws = S.ws();
     const groups = plat
       ? [{ key: "platform", label: "Platform", open: true, items: PLAT.map((it) => ({ key: it.key, label: it.label, icon: it.icon, href: "#" + it.path })) }]
-      : NAV.map((g) => ({ key: g.key, label: g.label, open: store.get("ds_g_" + g.key, "1") === "1", items: navItems(g) })).filter((g) => g.items.length);
-    const home = !plat && visible(BY_VIEW.brain) ? [{ key: "overview", label: "Overview", icon: "squares-2x2", href: "#/overview" }] : [];
+      : ws === "leluxe"
+        ? LX_GROUPS.map((g) => ({ key: g.key, label: g.label,
+            open: g.label ? store.get("ds_g_" + g.key, "1") === "1" : true,
+            items: navItems({ items: g.keys.map((k) => ALL.find((it) => it.key === k)).filter(Boolean) }) })).filter((g) => g.items.length)
+        : NAV.map((g) => ({ key: g.key, label: g.label, open: store.get("ds_g_" + g.key, "1") === "1", items: navItems(g) })).filter((g) => g.items.length);
+    // Overview and Needs attention both aggregate Otlobly purchases/brain data, so they sit
+    // out the Leluxe workspace the same way they sit out platform mode.
+    const otl = !plat && ws !== "leluxe";
+    const home = otl && visible(BY_VIEW.brain) ? [{ key: "overview", label: "Overview", icon: "squares-2x2", href: "#/overview" }] : [];
     // Rebuilding the sidebar on every navigation would drop focus and flash; the
-    // signature says whether anything a user can see has actually changed.
-    const next = JSON.stringify([plat, groups, home, COUNTS.attention, (A().me || {}).username]);
+    // signature says whether anything a user can see has actually changed. The workspace
+    // belongs in it: without that, switching to Leluxe changed `groups` but the early
+    // return could still fire and the sidebar would never repaint.
+    const next = JSON.stringify([plat, ws, groups, home, COUNTS.attention, (A().me || {}).username]);
     if (next === sig && !force) return;
     sig = next;
     const html = D.sidebar({
       brand: brand(),
       groups: (home.length ? [{ key: "home", items: home }] : []).concat(groups),
-      attention: plat ? null : { label: "Needs attention", count: COUNTS.attention || null, onclick: "DS.shell2.go('/attention')" },
+      attention: otl ? { label: "Needs attention", count: COUNTS.attention || null, onclick: "DS.shell2.go('/attention')" } : null,
       workspace: { name: S.workspace(), onclick: "DS.shell2.workspaceMenu(this)" },
       user: userChip(),
     });
@@ -263,12 +296,22 @@
     return { name: me.name || me.username, role: me.role || "", onclick: "DS.shell2.userMenu(this)" };
   }
 
-  S.workspace = () => (A().platform ? "Tatabu" : A().view === "leluxe" || A().view === "goals" ? "Leluxe" : "Otlobly");
-  S.exitPlatform = () => { if (window.exitPlatform) window.exitPlatform(); S.go("/sales/orders"); };
+  const WS_LABEL = { tatabu: "Tatabu", leluxe: "Leluxe", otlobly: "Otlobly" };
+  S.workspace = () => WS_LABEL[S.ws()] || "Otlobly";
+  S.exitPlatform = () => { if (window.exitPlatform) window.exitPlatform(); S.setWs("otlobly"); S.go("/sales/orders"); };
+  S.setWs = (ws) => { ws === "leluxe" ? store.set(WS, "leluxe") : store.del(WS); };
+  /** The address changed - keep the workspace honest, so the sidebar can always reach the
+      page you are looking at. Only `leluxe` forces a workspace; the pages the two share and
+      the app-level ones leave it alone; anything else is Otlobly-only. */
+  function syncWs(v) {
+    if (A().platform || !v || WS_NEUTRAL.has(v)) return;
+    const want = v === "leluxe" ? "leluxe" : "otlobly";
+    if (S.ws() !== want) { S.setWs(want); render(); }
+  }
 
   S.workspaceMenu = (btn) => {
-    const items = [{ label: "Otlobly", icon: "building-storefront", onclick: A().platform ? "DS.shell2.exitPlatform()" : "DS.shell2.go('/sales/orders')" }];
-    if (visible(BY_VIEW.leluxe)) items.push({ label: "Leluxe", icon: "briefcase", onclick: "DS.shell2.go('/leluxe')" });
+    const items = [{ label: "Otlobly", icon: "building-storefront", onclick: A().platform ? "DS.shell2.exitPlatform()" : "DS.shell2.setWs('otlobly');DS.shell2.go('/sales/orders')" }];
+    if (visible(BY_VIEW.leluxe)) items.push({ label: "Leluxe", icon: "briefcase", onclick: "DS.shell2.setWs('leluxe');DS.shell2.go('/leluxe')" });
     if ($("brokersBtn") && $("brokersBtn").style.display !== "none") items.push({ label: "Tatabu console", icon: "building-office", onclick: "DS.shell2.go('/tatabu')" });
     D.menuOpenAt(items, btn.getBoundingClientRect().left, btn.getBoundingClientRect().top - 8, { align: "start", label: "Workspace" });
   };
@@ -312,6 +355,7 @@
     // before mount() has created the shell. Nothing to paint yet, and $("dsPageHead")
     // would be null.
     if (!$("dsPageHead")) return;
+    syncWs(A().view);            // every route change lands here - the one place to hook
     const v = A().view || "orders";
     const it = BY_VIEW[v] || { label: v, key: v };
     const g = GROUP_OF[it.key];

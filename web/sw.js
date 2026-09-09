@@ -3,7 +3,9 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v12";         // v12: Batch G — QA fixes (table.js Reset layout, leluxe.js
+const CACHE = "otl-off-v13";         // v13: Batch H — the Leluxe workspace (shell.js) + the four
+                                     // dead controls (ds.js, ds.css, table.js, index.html).
+                                     // v12: Batch G — QA fixes (table.js Reset layout, leluxe.js
                                      // widths, ds.css, shell.js, sales.js, index.html).
                                      // v11: Batch F3 — the Leluxe packages board. v10: Batch F2 —
                                      // the Leluxe products board (leluxe.js, ds.css,

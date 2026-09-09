@@ -112,7 +112,11 @@
       fulfillment copied it, and sales.js hand-rolled a near-miss - `.ds-pu-subrow`
       instead of `.ds-pu-sub-row`, and no `.ds-pu-td` at all - so the Orders expander
       rendered with no padding, no borders and no overflow control. One builder now.
-      cols: [{ label, w, align:"end", render(row) }] */
+      cols: [{ label, w, align:"end", render(row) }]
+      A row carrying `_click` becomes clickable, with the same guard the boards use so a
+      select, a menu or a button inside the row still wins. Batch F1 moved the Leluxe
+      products into this grid and set `_click` on every row, but nothing ever read it -
+      the rows kept their hover highlight and stopped opening anything. */
   DS.subTable = (cols, rows, label) => {
     // A width-less column used to be `1fr`, so it swallowed every spare pixel: a product
     // title got 956px of a 1062px panel and left Qty stranded at the far edge. It now grows
@@ -121,7 +125,15 @@
     const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,var(--ds-pu-flex,620px))")).join(" ");
     return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${label ? ` aria-label="${esc(label)}"` : ""}>`
       + `<div class="ds-pu-sub-head" role="row">${cols.map((c) => `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`
-      + rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`).join("")
+      + rows.map((r) => {
+        const click = r && r._click;
+        // No tabindex: the row is `display:contents`, so it generates no box and is not
+        // reliably focusable. The row's own ⋯ menu carries the same actions for the keyboard.
+        const open = click ? ` class="ds-pu-sub-row is-clickable" role="row"`
+          + ` onclick="if(event.target.closest('select,.pop,.caret,button,a,input,label,img'))return;${esc(click)}"`
+          : ` class="ds-pu-sub-row" role="row"`;
+        return `<div${open}>${cols.map((c) => `<div class="ds-pu-td${c.align === "end" ? " ds-num" : ""}" role="cell">${c.render(r) || ""}</div>`).join("")}</div>`;
+      }).join("")
       + `</div>`;
   };
   DS.kbd = (k) => `<kbd>${esc(k)}</kbd>`;
