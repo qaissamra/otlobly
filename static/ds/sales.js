@@ -94,7 +94,11 @@
       // and bled into the rows below. Batch B replaced that with a bare count, which
       // threw away the product itself. Photos: report.py carries item.image now, and
       // DS.thumbs falls back to the plain count for an order whose items have none.
-      { key: "items", label: "Products", w: 120, sortVal: (o) => (o.items || []).length,
+      // Measured, not guessed: four 32px photos are 140px with their gaps, and the "+1"
+      // and the trailing count want another ~30 inside a cell that loses 20 to padding.
+      // At 120 — and still at 172 — the count was the part being clipped away, and the
+      // count is the only thing in a strip you cannot get by looking at it.
+      { key: "items", label: "Products", w: 196, sortVal: (o) => (o.items || []).length,
         render: (o) => {
           const warn = o.needs_expand
             ? D.attention({ kind: "stale", detail: "a.co", title: "A short a.co link that still has to be expanded" }) : "";

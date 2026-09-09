@@ -3,7 +3,10 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v19";         // v19: one thumbnail everywhere, product photos
+const CACHE = "otl-off-v20";         // v20: the Columns panel could open off the
+                                     //      bottom of the window with "Reset layout"
+                                     //      unreachable; strip columns sized for 32px.
+                                     // v19: one thumbnail everywhere, product photos
                                      //      on seven more lists, Est. cost folded.
                                      // v18: a package's products render under that
                                      //      package, not after the whole table.

@@ -223,6 +223,25 @@ def main():
             check("no HTML entity survives into the handler source",
                   not any("&quot;" in c or "&amp;" in c for c in o2["calls"]))
 
+    # ---- a menu is placed AFTER it has a size ------------------------------
+    # DS.menuOpenAt positions the list while it is still EMPTY, and the Columns panel
+    # fills it afterwards — so `offsetHeight` was ~0, the "flip above when it would run
+    # off the bottom" branch never fired, and the panel then grew past the edge of the
+    # window. At 1100x820 that put "Reset layout" 66px below the bottom of the screen
+    # with no way to reach it.
+    dsjs = (DS / "ds.js").read_text(encoding="utf-8")
+    tbljs = (DS / "table.js").read_text(encoding="utf-8")
+    check("placement is its own step, so it can be redone", "DS.menuPlace = " in dsjs)
+    check("  opening a menu places it", "DS.menuPlace();" in dsjs)
+    colcfg = tbljs[tbljs.find('case "colcfg":'):tbljs.find('case "moveUp":')]
+    fill, place = colcfg.find(".innerHTML = html"), colcfg.find("DS.menuPlace()")
+    check("  and the Columns panel is placed after it is filled, not before",
+          fill >= 0 and place > fill)
+    # belt and braces: however long the list, it stays inside the window
+    m = re.search(r"\.ds-menu-list \{([^}]*)\}", css, re.S)
+    check("  a menu can never grow taller than the window",
+          bool(m) and "max-block-size" in m.group(1) and "overflow-y: auto" in m.group(1))
+
     print("――――――――――――――――――――――")
     print("PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     sys.exit(1 if fails else 0)
