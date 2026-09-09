@@ -49,6 +49,16 @@ def code_only(src):
     return "\n".join(re.sub(r"(^|\s)//.*$", "", ln) for ln in src.splitlines())
 
 
+def between(src, a, b):
+    """The text between two markers, or "" if either is missing — a check about code
+    that does not exist yet must FAIL, not kill the run with a traceback."""
+    i = src.find(a)
+    if i < 0:
+        return ""
+    j = src.find(b, i)
+    return src[i:j if j > 0 else len(src)]
+
+
 def check(name, cond):
     print(f"  {'OK ' if cond else 'XX '} {name}")
     if not cond:
@@ -183,7 +193,43 @@ def main():
     check("  and the panel is called what the button that opens it is called",
           "New purchase order</b>" in idx)
 
-    # ---- 10. it runs, and it behaves ---------------------------------------
+    # ---- 10. the filter builder is design-system controls -------------------
+    # It used to be legacy .pop/.po-btn/minibtn markup — with a bare <select> and a
+    # rubbish-bin emoji — sitting inside the design system's own filter bar.
+    fltr = between(idx, "function poFilterRow(f,i){", "function poFSetField(i,j){")
+    check("the filter row builder exists", bool(fltr))
+    for bad, why in (('class="pop"', "no legacy popover"), ("pop-menu", "no legacy pop menu"),
+                     ("po-btn", "no legacy button"), ("minibtn", "no legacy mini-button"),
+                     ("cu-item", "no legacy menu item"), ("cu-search", "no legacy search"),
+                     ("cu-ring", "no legacy colour ring"),
+                     ("<select", "no hand-rolled select"), ("<input", "no hand-rolled input")):
+        check(f"  the filter row builds {why}", bad not in code_only(fltr))
+    for good in ("DS.button(", "DS.select(", "DS.input(", "DS.numberInput(", "DS.datePicker("):
+        check(f"  it builds with {good}…)", good in fltr)
+    check("  remove is an icon button with a real label, not an emoji",
+          'icon:"trash"' in fltr and 'ariaLabel:"Remove this filter"' in fltr)
+    check("  both pickers open in the shared design-system menu",
+          "DS.menuOpenAt(" in between(idx, "function poFMenuOpen(", "function poFFieldMenu("))
+    check("  the row's own value label is plain text, since DS.button escapes it",
+          "function poFValLabel(sel)" in idx
+          and "poEsc" not in between(idx, "function poFValLabel(sel)", "function poFMenuOpen("))
+    # a menu that carries a search field must not eat the keys typed into it
+    check("a menu with a search field keeps its typing keys", "const typing = a &&" in ds)
+    # the field list speaks one language
+    flds = between(idx, "function poFields(){", "function poFdef(key)")
+    labels = re.findall(r'label:\s*"([^"]*)"', flds)
+    arabic = [l for l in labels if any("\u0600" <= ch <= "\u06ff" for ch in l)]
+    check(f"every filter field is named in one language (Arabic-first left: {arabic})", not arabic)
+    check("  and the buying-account field follows the same term as the board",
+          'label:poBoxTerm()+" · B##"' in flds)
+    # the DS controls are `width:100%` by design; in a flex row each must be sized
+    css_txt = (DS / "ds.css").read_text(encoding="utf-8")
+    for k in ("ds-fltr-op", "ds-fltr-text", "ds-fltr-num", "ds-fltr-date"):
+        m = re.search(r"\.%s \{([^}]*)\}" % k, css_txt)
+        check(f"  .{k} is sized so the row cannot wrap", bool(m) and "flex: none" in m.group(1))
+    check("  an empty builder takes no room", ".ds-fltr:empty { display: none; }" in css_txt)
+
+    # ---- 11. it runs, and it behaves ---------------------------------------
     node = shutil.which("node")
     if not node:
         print("  -- node not found: skipping the executed checks")

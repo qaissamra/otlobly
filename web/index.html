@@ -1186,7 +1186,7 @@
       <a class="dismiss" onclick="document.getElementById('poHelp').style.display='none'">Hide</a>
     </div>
     <!-- ClickUp-style filter builder: field, operator, values; rows AND-ed -->
-    <div id="poFilterBuilder" style="margin:2px 0 10px"></div>
+    <div id="poFilterBuilder" class="ds-fltr"></div>
     <div id="poTree"></div>
   </div>
 
@@ -8241,10 +8241,10 @@ function poFields(){
     {key:"gaash",label:"GAASH status",type:"status",
       options:PO_GAASH_BUCKETS.map(([b,l,c])=>({name:l,color:c})),
       vals:p=>pkgs(p).map(pk=>{ const t=tsObj(pk); return t&&t.bucket?gaashL(t.bucket):null; })},
-    {key:"gerizim",label:"جيرزيم · Gerizim",type:"status",
+    {key:"gerizim",label:"Gerizim status",type:"status",
       options:Object.keys(GZ_AR).map(b=>({name:gzL(b),color:GZ_HEX[b]||"#8d8d8d"})),
       vals:p=>pkgs(p).map(pk=>(pk.gerizim_status&&pk.gerizim_status.bucket)?gzL(pk.gerizim_status.bucket):null)},
-    {key:"gzreg",label:"مسجّل في جيرزيم · Registered at Gerizim",type:"checkbox",
+    {key:"gzreg",label:"Registered at Gerizim",type:"checkbox",
       vals:p=>pkgs(p).map(pk=>GZ_REG.has(String(pk.tracking_number||"").trim())||null)},
     {key:"otlobly",label:"Otlobly status",type:"status",
       options:CU_STATUSES.map(([n,c])=>({name:n,color:c})),
@@ -8254,7 +8254,7 @@ function poFields(){
       vals:p=>items(p).map(it=>it.status||null)},
     {key:"customer",label:"Customer",type:"text",
       vals:p=>[p.ship_to,...items(p).map(it=>it.customer_name)]},
-    {key:"box",label:"Profile · B##",type:"drop_down",
+    {key:"box",label:poBoxTerm()+" · B##",type:"drop_down",
       options:boxes.map(b=>({name:b,color:"#6b7488"})),
       vals:p=>[p.profile_box]},
     {key:"gwd",label:"Tracking number",type:"text",
@@ -8302,44 +8302,90 @@ function poRenderFilters(){
   // this box only holds the rows themselves.
   box.innerHTML=PO_FLT.map((f,i)=>poFilterRow(f,i)).join("");
 }
+// ── one filter row, in design-system controls ──────────────────────────────
+// The row used to be legacy markup — .pop/.pop-menu popovers, a .po-btn, a bare
+// <select> with an inline font-size, and a 🗑 emoji for "remove" — sitting inside
+// the design system's own filter bar. The behaviour and the stored shape of a
+// filter (PO_FLT) are unchanged; only what you look at and click is.
 function poFilterRow(f,i){
   const fdef=poFdef(f.field), t=fdef&&fdef.type;
-  const fieldSel=`<span class="pop">
-    <button class="po-btn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}">${fdef?poEsc(fdef.label):"Select filter"} ▾</button>
-    <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0">
-      <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)" onclick="event.stopPropagation()">
-      ${poFields().map((fd,j)=>`<button class="pop-item cu-item" onclick="poFSetField(${i},${j})"><b>${poEsc(fd.label)}</b></button>`).join("")}
-    </div></span>`;
-  if(!fdef) return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${fieldSel}
-    <button class="minibtn" title="remove filter" onclick="poFDel(${i})">🗑</button></div>`;
-  const opSel=`<select onchange="poFSet(${i},'op',this.value)" style="font-size:var(--ds-t-sm)">${lxOps(t)
-    .map(o=>`<option${o===f.op?" selected":""}>${o}</option>`).join("")}</select>`;
+  const fieldBtn=DS.button({ label:fdef?fdef.label:"Select field", iconEnd:"chevron-down",
+    size:"sm", title:"Choose what to filter on", onclick:`poFFieldMenu(${i},this,event)`,
+    attrs:{"data-fltr-field":String(i),"aria-haspopup":"menu"} });
+  const del=DS.button({ icon:"trash", iconOnly:true, variant:"ghost", size:"sm",
+    ariaLabel:"Remove this filter", title:"Remove this filter", onclick:`poFDel(${i})` });
+  const join=`<span class="ds-fltr-join">${i===0?"Where":"and"}</span>`;
+  if(!fdef) return `<div class="ds-fltr-row">${join}${fieldBtn}${del}</div>`;
+
+  const opSel=DS.select({ value:f.op, size:"sm", options:lxOps(t), ariaLabel:"Condition",
+    onchange:`poFSet(${i},'op',this.value)`, cls:"ds-fltr-op" });
   let valCtl="";
-  if(f.op==="is set"||f.op==="not set") valCtl="";
-  else if(lxFOptioned(t)){
-    const opts=fdef.options||[], sel=f.val||[];
-    valCtl=`<span class="pop">
-      <button class="po-btn" onclick="popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}">${lxFValLabel(sel)} ▾</button>
-      <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0" onclick="event.stopPropagation()">
-        <input class="cu-search" placeholder="Search…" oninput="cuFilter(this)">
-        <button class="pop-item" style="color:var(--accent);font-weight:700" onclick="poFSelAll(${i},this)">Select all</button>
-        ${opts.map((o,k)=>`<label class="pop-item cu-item" style="cursor:pointer">
-            <span class="cu-ring" style="border-color:${o.color||'#8d8d8d'}"></span><b>${poEsc(o.name)}</b>
-            <input type="checkbox"${sel.includes(o.name)?" checked":""} onchange="poFToggleVal(${i},${k},this)">
-          </label>`).join("")}
-      </div></span>`;
-  }
+  if(f.op==="is set"||f.op==="not set") valCtl="";        // the operator IS the value
+  else if(lxFOptioned(t))
+    valCtl=DS.button({ label:poFValLabel(f.val||[]), iconEnd:"chevron-down", size:"sm",
+      onclick:`poFValMenu(${i},this,event)`,
+      attrs:{"data-fltr-val":String(i),"aria-haspopup":"menu"} });
   else if(t==="number"||t==="currency")
-    valCtl=`<input type="number" step="any" value="${f.val!=null?poEsc(f.val):""}" onchange="poFSetVal(${i},this.value)" style="width:110px;font-size:var(--ds-t-sm)">`;
+    valCtl=DS.numberInput({ value:f.val!=null?f.val:"", size:"sm", step:"any", placeholder:"0",
+      ariaLabel:"Value", onchange:`poFSetVal(${i},this.value)`, cls:"ds-fltr-num" });
   else if(t==="date")
-    valCtl=`<input type="date" value="${poEsc(f.val||"")}" onchange="poFSetVal(${i},this.value)" style="font-size:var(--ds-t-sm)">`;
+    valCtl=DS.datePicker({ value:f.val||"", size:"sm", ariaLabel:"Date",
+      onchange:`poFSetVal(${i},this.value)`, cls:"ds-fltr-date" });
   else
-    valCtl=`<input value="${poEsc(f.val||"")}" placeholder="text…" oninput="poFSetVal(${i},this.value)" style="width:150px;font-size:var(--ds-t-sm)">`;
-  return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-    <span class="muted2" style="font-size:var(--ds-t-xs);width:42px;text-align:end">${i===0?"Where":"AND"}</span>
-    ${fieldSel} ${opSel} ${valCtl}
-    <button class="minibtn" title="remove filter" onclick="poFDel(${i})">🗑</button>
+    valCtl=DS.input({ value:f.val||"", size:"sm", placeholder:"Value", ariaLabel:"Value",
+      oninput:`poFSetVal(${i},this.value)`, cls:"ds-fltr-text" });
+
+  return `<div class="ds-fltr-row">${join}${fieldBtn}${opSel}${valCtl}${del}</div>`;
+}
+// The button's own text. DS.button escapes what it is given, so this returns PLAIN
+// text — lxFValLabel pre-escapes for the legacy Leluxe builder and stays as it is.
+function poFValLabel(sel){
+  return (sel&&sel.length)
+    ? sel.slice(0,2).join(", ")+(sel.length>2?` +${sel.length-2}`:"")
+    : "Select value";
+}
+// Both pickers open in the design system's own transient menu — the one the Columns
+// button uses — so they inherit its placement, its Escape, its click-outside and its
+// viewport clamping instead of the legacy popToggle/popPlace pair doing it again.
+function poFMenuOpen(btn,html,label){
+  DS.menuClose();
+  const r=btn.getBoundingClientRect();
+  const host=DS.menuOpenAt([],r.left,r.bottom+4,{label});
+  host.querySelector(".ds-menu-list").innerHTML=html;
+  const q=host.querySelector("input");            // land in the search box, not the list
+  if(q) setTimeout(()=>{ try{ q.focus(); }catch(e){} },0);
+  return host;
+}
+function poFFieldMenu(i,btn,ev){
+  if(ev) ev.stopPropagation();
+  const html=`<div class="ds-fltr-menu">
+    ${DS.search({placeholder:"Search fields",size:"sm",ariaLabel:"Search fields",oninput:"poFMenuFilter(this)"})}
+    ${poFields().map((fd,j)=>`<button type="button" role="menuitem" class="ds-menu-item ds-fltr-item"
+        onclick="DS.menuClose();poFSetField(${i},${j})">${poEsc(fd.label)}</button>`).join("")}
   </div>`;
+  poFMenuOpen(btn,html,"Choose a field");
+}
+function poFValMenu(i,btn,ev){
+  if(ev) ev.stopPropagation();
+  const fdef=poFdef(PO_FLT[i]&&PO_FLT[i].field); if(!fdef) return;
+  const opts=fdef.options||[], sel=PO_FLT[i].val||[];
+  const html=`<div class="ds-fltr-menu">
+    ${DS.search({placeholder:"Search options",size:"sm",ariaLabel:"Search options",oninput:"poFMenuFilter(this)"})}
+    ${DS.button({label:"Select all",size:"sm",variant:"ghost",onclick:`poFSelAll(${i},this)`,cls:"ds-fltr-all"})}
+    ${opts.map((o,k)=>`<div class="ds-fltr-opt">
+        <span class="ds-fltr-dot" style="background:${poEsc(o.color||"#8d8d8d")}"></span>
+        ${DS.switch({checked:sel.includes(o.name),label:o.name,onchange:`poFToggleVal(${i},${k},this)`})}
+      </div>`).join("")}
+  </div>`;
+  poFMenuOpen(btn,html,"Choose values");
+}
+// Type-to-narrow inside either menu. (The legacy cuFilter only knew `.cu-item`, and
+// searched every `.cu-item` in the popover's PARENT, not the popover.)
+function poFMenuFilter(inp){
+  const box=inp.closest(".ds-fltr-menu"); if(!box) return;
+  const q=(inp.value||"").trim().toLowerCase();
+  [...box.querySelectorAll(".ds-fltr-item,.ds-fltr-opt")].forEach(el=>{
+    el.style.display=(!q||el.textContent.toLowerCase().includes(q))?"":"none"; });
 }
 function poFSetField(i,j){
   const fd=poFields()[j]; if(!fd) return;
@@ -8354,14 +8400,13 @@ function poFSet(i,k,v){
 // value edits must NOT rebuild the builder — rebuilding steals focus mid-typing
 function poFSetVal(i,v){ if(!PO_FLT[i]) return; PO_FLT[i].val=v; poFSave(); renderPurchases(); }
 function poFDel(i){ PO_FLT.splice(i,1); poFSave(); poRenderFilters(); renderPurchases(); }
-function poFToggleVal(i,k,cb){
+function poFToggleVal(i,k,sw){
   const fdef=poFdef(PO_FLT[i].field), name=((fdef&&fdef.options||[])[k]||{}).name;
   if(name==null) return;
   let sel=PO_FLT[i].val||[];
   const ix=sel.indexOf(name); ix>=0?sel.splice(ix,1):sel.push(name);
   PO_FLT[i].val=sel; poFSave(); renderPurchases();
-  const btn=cb.closest(".pop").querySelector("button.po-btn");
-  if(btn) btn.innerHTML=lxFValLabel(sel)+" ▾";
+  poFValBtnSync(i);
 }
 function poFSelAll(i,el){
   const fdef=poFdef(PO_FLT[i].field), all=(fdef&&fdef.options||[]).map(o=>o.name);
@@ -8369,9 +8414,16 @@ function poFSelAll(i,el){
   PO_FLT[i].val=(cur.length===all.length)?[]:all.slice();
   poFSave(); renderPurchases();
   const on=PO_FLT[i].val.length>0;
-  [...el.closest(".pop-menu").querySelectorAll("input[type=checkbox]")].forEach(c=>c.checked=on);
-  const btn=el.closest(".pop").querySelector("button.po-btn");
-  if(btn) btn.innerHTML=lxFValLabel(PO_FLT[i].val)+" ▾";
+  const box=el.closest(".ds-fltr-menu");
+  if(box) [...box.querySelectorAll(".ds-switch")].forEach(sw=>sw.setAttribute("aria-checked",on?"true":"false"));
+  poFValBtnSync(i);
+}
+// The row is NOT re-rendered while its menu is open (that would close the menu the
+// person is still using), so the button that opened it keeps its own label in step.
+function poFValBtnSync(i){
+  const btn=document.querySelector(`[data-fltr-val="${i}"]`);
+  const span=btn&&btn.querySelector("span");
+  if(span) span.textContent=poFValLabel((PO_FLT[i]||{}).val||[]);
 }
 // Purchases view switcher: 🧾 Orders tree · 📦 Packages flat · ⫶ Products flat
 let PO_BOARD_VIEW=localStorage.getItem("po_board_view")||"orders";
