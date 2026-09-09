@@ -672,3 +672,45 @@ still visible. 60 suites, 0 failures.
 Enumerating "the Tools menu" with `#leluxeView .pop-menu .pop-item` returns **every** row menu
 on the board as well — hundreds of entries. Scope to the toolbar (`.toolbar .pop-menu`) or you
 will drown the transcript in status-picker options.
+
+
+## 17. Q-031 — every tab and view pill in the app was dead (2026-09-09)
+
+Reported the way real bugs are: *"the board packages products ..etc are not working"*.
+
+`DS.tabs` built its handler by pre-escaping the key's quotes and then handing the finished
+string to `attrs()`, which escapes it again:
+
+```js
+const on = (o.onchange || "").replace(/KEY/g, JSON.stringify(t.key).replace(/"/g, "&quot;"));
+```
+
+The attribute shipped as `onclick="…poSetView(&amp;quot;packages&amp;quot;)"`. The HTML parser
+decodes it once, so the JavaScript source the browser compiles is
+`poSetView(&quot;packages&quot;)` → **`Uncaught SyntaxError: Unexpected token '&'`**, and the
+control does nothing.
+
+**Introduced in Phase 1 (`bde1f5a`), so it had been true of every tab strip and view pill in
+the design system from the day it landed** — the Purchases Orders/Packages/Products/Customers
+pills, the Orders board's three views, To-order's four filters, Package prep's three views,
+the fulfillment stage pills, and every page-tab strip in the new shell.
+
+**Why nobody noticed for two days:** every page still carried its own legacy strip as a second,
+working control. Batch G hid Leluxe's and GAASH mail's (`body.ds-shell-on #lxSegTabs, #gmTabs`)
+because the shell already drew those tabs — which left the broken one as the only way to switch,
+and the bug finally had somewhere to show.
+
+**Why the suites missed it:** `test_ds_shell.py` asserts the tab *keys and labels*, never that
+the handler is runnable. And every browser check in §15 and §16 switched tabs by calling
+`lxSetView()` / `poSetView()` / `gmTab()` **directly instead of clicking the control** — which
+exercises everything except the one line that was broken.
+
+**Q-031 closed.** Substitute the key raw and let `attrs()` escape once. `test_design_system.py`
+gained a check that renders `DS.tabs`, decodes the attribute exactly as a browser does and
+compiles it with `new Function` — it fails with the original `SyntaxError` on the old code.
+
+### The lesson, in one line
+
+**Drive the control, not the function it calls.** A handler that is never clicked is a handler
+that is never tested; calling its target proves the target works and says nothing about the
+wiring. Every UI check from here on clicks the actual element.
