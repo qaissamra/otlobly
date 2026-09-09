@@ -80,33 +80,89 @@
     const x = o.onRemove ? `<button type="button" class="ds-tag-x" aria-label="Remove ${esc(o.label)}" onclick="${esc(o.onRemove)}">${DS.icon("x-mark", { size: 12 })}</button>` : "";
     return `<span${attrs({ class: cls("ds-tag", o.tone && `ds-tone-${o.tone}`, o.cls), title: o.title })}>${o.icon ? DS.icon(o.icon, { size: 12 }) : ""}<span>${esc(o.label)}</span>${x}</span>`;
   };
-  /** One product photo. `alt=""` on purpose: the title is already in the tooltip and
-      in the text next to it, so a screen reader must not read the product twice. */
-  DS.thumb = (it, alt) => {
+  /** DS.thumb(it, o) - one product photo. `o` may still be a plain string, which
+      means `alt`, so every existing caller is untouched.
+        o.src(it)      -> url        default it => it.image  (Leluxe keeps it at data.image)
+        o.label(it)    -> tooltip    default the title, else the ASIN
+        o.emptyLabel   tooltip when there is no photo
+        o.onclick      JS string; makes the slot a real <button>
+        o.n            merged-duplicate count; draws the xN badge when > 1
+        o.add          dashed "you can fill this in" box instead of the camera glyph
+      `alt=""` on purpose: the title is already in the tooltip and in the text next to
+      it, so a screen reader must not read the product twice. */
+  DS.thumb = (it, o) => {
     it = it || {};
-    const tip = alt || it.title || it.asin || "";
-    return it.image
-      ? `<img class="ds-pu-thumb" src="${esc(it.image)}" alt="" title="${esc(tip)}" loading="lazy">`
-      : `<span class="ds-pu-thumb" title="${esc(tip)}"></span>`;
+    // capture the string BEFORE reassigning `o` — an arrow written inline here would
+    // close over the new object and hand back "[object Object]"
+    const alt = typeof o === "string" ? o : null;
+    o = alt != null ? { label: () => alt } : (o || {});
+    const src = (o.src ? o.src(it) : it.image) || "";
+    // `emptyLabel` means "what to say when there is NO photo", so it has to win there —
+    // otherwise the product's name shadows it and Leluxe's slots stop telling anyone that
+    // clicking is how you attach an ASIN, which is the only reason those slots exist.
+    const tip = (!src && o.emptyLabel) ? o.emptyLabel
+      : ((o.label ? o.label(it) : (it.title || it.asin || "")) || "");
+    const box = src
+      ? `<img class="ds-thumb ds-pu-thumb" src="${esc(src)}" alt="" title="${esc(tip)}" loading="lazy">`
+      : `<span class="ds-thumb ds-pu-thumb ds-thumb-empty${o.add ? " ds-thumb-add" : ""}" title="${esc(tip)}"></span>`;
+    const badge = o.n > 1 ? `<span class="ds-thumb-n">\u00d7${esc(String(o.n))}</span>` : "";
+    // A bare photo needs no wrapper; a badge needs something positioned to hang off,
+    // and a click needs something focusable. Only pay for the wrapper when it earns it.
+    if (!badge && !o.onclick) return box;
+    return o.onclick
+      ? `<button type="button" class="ds-thumb-slot" title="${esc(tip)}" onclick="${esc(o.onclick)}">${box}${badge}</button>`
+      : `<span class="ds-thumb-slot">${box}${badge}</span>`;
   };
-  /** A row of product photos that says how many there are without spelling it out
-      twice. With no photos at all, a wall of empty grey squares says nothing that
-      the count does not - so the count goes alone.
-      Lived twice (fulfillment.js, and nearly a third time in sales.js) before it
-      moved here; every board that lists products must render them identically. */
+  /** DS.thumbs(items, o) - the row of product photos. One implementation: it lived
+      twice (fulfillment.js, nearly a third time in sales.js), then three more times
+      outside the design system (poThumbStrip, lxThumbs) with two sizes, two fits,
+      caps of 4/5/6 and dedupe in only half of them.
+        o.max            slots before "+K"      default 4
+        o.dedupe         merge by src, badge xN default true
+        o.countWhenBlank no photo ANYWHERE -> a plain count instead of a wall of
+                         empty squares. Default true - but Leluxe turns it OFF,
+                         because there an empty slot is not an absence, it is the
+                         button that opens the editor to attach an ASIN, and it is
+                         the only way in.
+        o.total          trailing muted item count             default true
+        o.empty          what [] renders as                    default DS.dash()
+        o.onclick(it)    -> JS string, per slot
+        o.src / o.label / o.emptyLabel / o.add   as DS.thumb; `label` also receives
+                         the merged group {n, items} so a caller can join the names.
+      Two numbers, deliberately: "+K" counts the distinct PHOTOS you cannot see,
+      the trailing total counts the item LINES on the order. They differ whenever a
+      customer buys the same thing twice, and both are worth knowing. */
   DS.thumbs = (items, o) => {
     items = items || []; o = o || {};
     const n = items.length;
-    if (!n) return DS.dash();
+    if (!n) return o.empty != null ? o.empty : DS.dash();
     const num = (v) => (DS.fmt ? DS.fmt.number(v) : String(v));
     const word = o.word || "product";
-    const names = items.map((it) => it.title || it.asin || "").filter(Boolean).join(" · ");
-    if (!items.some((it) => it.image))
+    const src = o.src || ((it) => it.image);
+    const name = (it) => it.title || it.asin || "";
+    const names = items.map(name).filter(Boolean).join(" \u00b7 ");
+    if (o.countWhenBlank !== false && !items.some((it) => src(it)))
       return `<span class="ds-muted" title="${esc(names)}">${esc(num(n))} ${esc(n === 1 ? word : word + "s")}</span>`;
-    const max = o.max || 5, more = n - max;
-    return `<span class="ds-fl-thumbs" title="${esc(names)}">${items.slice(0, max).map((it) => DS.thumb(it)).join("")}`
-      + (more > 0 ? `<span class="ds-fl-more">+${esc(num(more))}</span>` : "")
-      + `<span class="ds-muted">${esc(num(n))}</span></span>`;
+    // Group by photo. A slot with no photo never merges with another - two unphotographed
+    // products are two products, and on Leluxe they are two separate buttons.
+    const groups = [];
+    const byUrl = new Map();
+    items.forEach((it) => {
+      const u = src(it) || "";
+      if (o.dedupe !== false && u && byUrl.has(u)) { const g = byUrl.get(u); g.n += 1; g.items.push(it); return; }
+      const g = { it, n: 1, items: [it] };
+      groups.push(g);
+      if (u) byUrl.set(u, g);
+    });
+    const max = o.max || 4, more = groups.length - max;
+    const slot = (g) => DS.thumb(g.it, {
+      src: o.src, add: o.add, emptyLabel: o.emptyLabel, n: g.n,
+      label: (it) => (o.label ? o.label(it, g) : (g.n > 1 ? `\u00d7${g.n} \u00b7 ` : "") + g.items.map(name).filter(Boolean).join(" \u00b7 ")),
+      onclick: o.onclick ? o.onclick(g.it, g) : null,
+    });
+    return `<span class="ds-thumbs ds-fl-thumbs">${groups.slice(0, max).map(slot).join("")}`
+      + (more > 0 ? `<span class="ds-thumb-more ds-fl-more">+${esc(num(more))}</span>` : "")
+      + (o.total === false ? "" : `<span class="ds-muted">${esc(num(n))}</span>`) + `</span>`;
   };
   /** The stateless aligned grid a row expansion opens into. Purchases introduced it,
       fulfillment copied it, and sales.js hand-rolled a near-miss - `.ds-pu-subrow`

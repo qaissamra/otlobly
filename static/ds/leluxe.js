@@ -177,7 +177,7 @@
     const gwd = tn || pkgTn || "";
     const qty = W.lxF(it, "quantity ordered");
     return {
-      product: j(W.lxThumb(W.lxAmz(it), 30),
+      product: j(DS.thumb(it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
         `<span class="ds-truncate" title="${esc(it.name || "")}">${esc(W.lxShort3(it.name))}</span>`,
         `<button class="lx-copy" title="copy the full product title" data-t="${esc(it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`),
       profile: W.lxProfileCell(W.lxAcctChain(it, null)),
@@ -273,6 +273,7 @@
         + (p.flat
             ? `<div class="ds-lx-parcel-head">
                  <span class="ds-muted" title="no GAASH tracking number yet">📦 no tracking</span>
+                 ${W.lxThumbs(p.items || [], 4)}
                  <span class="ds-muted">${esc(W.lxCountLbl(p.items))}</span>
                  ${p.items.length ? `<button class="minibtn" title="ضع رقم تتبع واحد لكل هذه المنتجات دفعة واحدة · one tracking number for all these products at once" onclick="lxTrackingPrompt([${p.items.map((i) => i.id).join(",")}],'','${q(ordTn)}')">🚚 set tracking</button>` : ""}
                </div>`
@@ -337,7 +338,7 @@
      ==================================================================== */
   const PCOLS = () => [
     { key: "product", label: "المنتج · product", w: 330, min: 200, pin: "start", locked: true, sortable: true,
-      render: (r) => j(W.lxThumb(W.lxAmz(r.it), 30),
+      render: (r) => j(DS.thumb(r.it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
         `<span class="ds-truncate" title="${esc(r.it.name || "")}">${esc(W.lxShort3(r.it.name))}</span>`,
         `<button class="lx-copy" title="copy the full product title" data-t="${esc(r.it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) },
     { key: "order", label: "الطلب · order", w: 126, sortable: true, render: (r) => orderCell(r) },

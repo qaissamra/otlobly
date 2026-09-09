@@ -54,6 +54,8 @@
     const missing = e.total - e.priced;
     return `<span class="ds-pu-est" title="Estimated cost of the products${missing ? ", " + missing + " still unpriced" : ""}">${esc(money(e.sum))}${missing ? `<span class="ds-muted"> +${esc(num(missing))}?</span>` : ""}</span>`;
   };
+  /** Every product on an order, across all its packages — what the row is actually for. */
+  const poItems = (p) => (p.packages || []).flatMap((pk) => pk.items || []);
   const poEst = (p) => (p.packages || []).reduce((a, pk) => {
     const e = W.pkgEstTotal(pk); a.sum += e.sum; a.priced += e.priced; a.total += e.total; return a;
   }, { sum: 0, priced: 0, total: 0 });
@@ -74,7 +76,10 @@
 
   const PROFILE_HELP = "The Amazon buying account the order was placed under - the same code as its Multilogin browser profile (B19, E-B15).";
 
-  const thumb = (it) => (it.image ? `<img class="ds-pu-thumb" src="${esc(it.image)}" alt="">` : `<span class="ds-pu-thumb"></span>`);
+  // Was a private copy of DS.thumb that had drifted: it silently lost the tooltip and
+  // `loading="lazy"`. It survived because the "only ds.js builds this markup" check
+  // looks at ds.js, fulfillment.js and sales.js — and not at this file. It does now.
+  const thumb = D.thumb;
   const productName = (it) => `<span class="ds-pu-prod">${thumb(it)}${text(it.title || it.asin || "(unnamed product)")}${it.clean_url
     ? `<a class="ds-pu-out" href="${esc(it.clean_url)}" target="_blank" rel="noopener" title="Open on Amazon" aria-label="Open on Amazon">${D.icon("arrow-top-right-on-square", { size: 13 })}</a>` : ""}</span>`;
   const gwdCell = (pk) => {
@@ -217,9 +222,10 @@
 
   function ordersBoard(ctx, mount, list) {
     const cols = [
-      { key: "po", label: "Purchase order", w: 190, pin: "start", locked: true, sortVal: (p) => p.po_id,
+      { key: "po", label: "Purchase order", w: 250, pin: "start", locked: true, sortVal: (p) => p.po_id,
         render: (p) => `<span class="ds-pu-id"><b>${esc(p.po_id)}</b>${(p.amazon_order_number || "").trim()
-          ? `<span class="ds-mono ds-muted" title="Amazon order ${esc(p.amazon_order_number)}">\u2026${esc(p.amazon_order_number.trim().slice(-4))}</span>${W.lxCopyRawBtn(p.amazon_order_number.trim())}` : ""}</span>` },
+          ? `<span class="ds-mono ds-muted" title="Amazon order ${esc(p.amazon_order_number)}">\u2026${esc(p.amazon_order_number.trim().slice(-4))}</span>${W.lxCopyRawBtn(p.amazon_order_number.trim())}` : ""}`
+          + D.thumbs(poItems(p), { max: 2, total: false, empty: "", countWhenBlank: false }) + `</span>` },
       { key: "oname", label: "Order name", w: 150, sortVal: (p) => (p.ship_to || "~").toLowerCase(), render: (p) => text(p.ship_to) },
       { key: "profile", label: ctx.boxTerm, w: 128, title: PROFILE_HELP, sortVal: (p) => (p.profile_box || "~").toLowerCase(), render: (p) => W.poProfileCell(p) },
       { key: "customers", label: "Customers", w: 170, sortVal: (p) => (W.poWho(p) || "~").toLowerCase(), render: (p) => text(W.poWho(p)) },
@@ -227,7 +233,12 @@
       { key: "packages", label: "Packages", w: 84, align: "end", sortVal: (p) => (p.packages || []).length, render: (p) => `<span class="ds-num">${esc(num((p.packages || []).length))}</span>` },
       ctx.money ? { key: "paid", label: "Paid", w: 104, align: "end", sortVal: (p) => Number(p.total_usd) || 0,
         render: (p) => (p.total_usd != null ? `<b class="ds-num">${esc(money(p.total_usd))}</b>` : D.dash()) } : null,
-      ctx.money ? { key: "est", label: "Est. cost", w: 110, align: "end", sortVal: (p) => poEst(p).sum, render: (p) => est(poEst(p)) } : null,
+      // Folded away on the owner's word ("it doesn't look good"). Not deleted: the
+      // Columns button still offers it, the Packages and Customers boards still show
+      // it per parcel and per customer, and the Est. cost total is still in the strip
+      // at the top of the page. Hiding it needs the seedVersion bump below, because
+      // this column SHIPPED VISIBLE - the `known` path only covers one born hidden.
+      ctx.money ? { key: "est", label: "Est. cost", w: 110, align: "end", defaultHidden: true, sortVal: (p) => poEst(p).sum, render: (p) => est(poEst(p)) } : null,
       { key: "attention", label: "Needs attention", w: 176, sortable: false, render: (p) => attention(ctx, p) || D.dash() },
       { key: "shipping", label: "Shipping", w: 170, sortable: false, render: (p) => W.poSummaryPill(p) || D.dash() },
       // A rollup of the last-mile courier across every package: useful, but not what
@@ -243,7 +254,7 @@
     }, { paid: 0, est: 0, items: 0, pkgs: 0 });
 
     D.tableRender(mount, {
-      id: "po_orders", ariaLabel: "Purchase orders", columns: cols, rows: list, rowKey: (p) => p.po_id,
+      id: "po_orders", seedVersion: 1, ariaLabel: "Purchase orders", columns: cols, rows: list, rowKey: (p) => p.po_id,
       expandable: { render: (p) => packageGrid(ctx, p), open: (p) => ctx.isOpen(p) },
       onToggle: (key, open) => ctx.setOpen(key, open),
       empty: { title: "No purchase orders match this filter", text: "Clear the filters, or create the first one.", action: { label: "New purchase order", icon: "plus", onclick: "addPO()" } },
@@ -261,7 +272,7 @@
     const rows = [];
     list.forEach((p) => (p.packages || []).forEach((pk, pi) => rows.push([p, pk, pi])));
     const cols = [
-      { key: "pkg", label: "Package", w: 230, pin: "start", locked: true, sortVal: ([p, pk]) => `${p.po_id} ${String(pk.package_no).padStart(3, "0")}`, render: ([p, pk]) => pkgCell(ctx, p, pk) },
+      { key: "pkg", label: "Package", w: 300, pin: "start", locked: true, sortVal: ([p, pk]) => `${p.po_id} ${String(pk.package_no).padStart(3, "0")}`, render: ([p, pk]) => pkgCell(ctx, p, pk, { thumbs: true }) },
       { key: "order", label: "Order", w: 104, sortVal: ([p]) => p.po_id,
         render: ([p]) => D.button({ label: p.po_id, size: "sm", variant: "ghost", title: `Open ${p.po_id}`, onclick: `event.stopPropagation();poJumpOrder('${esc(p.po_id)}')` }) },
       { key: "oname", label: "Order name", defaultHidden: true, w: 140, sortVal: ([p]) => (p.ship_to || "~").toLowerCase(), render: ([p]) => text(p.ship_to) },
@@ -375,10 +386,11 @@
     }).sort((a, b) => (a.name === NO_CUSTOMER ? 1 : b.name === NO_CUSTOMER ? -1 : a.name.localeCompare(b.name, undefined, { numeric: true })));
 
     const cols = [
-      { key: "customer", label: "Customer", w: 230, pin: "start", locked: true, sortVal: (r) => (r.name === NO_CUSTOMER ? "~~~" : r.name.toLowerCase()),
+      { key: "customer", label: "Customer", w: 290, pin: "start", locked: true, sortVal: (r) => (r.name === NO_CUSTOMER ? "~~~" : r.name.toLowerCase()),
         render: (r) => (r.name === NO_CUSTOMER
           ? D.attention({ kind: "missing_name", detail: "no customer", title: "These products are not linked to a customer yet" })
-          : `<span class="ds-pu-id">${D.avatar({ name: r.name })}${text(r.name)}</span>`) },
+          : `<span class="ds-pu-id">${D.avatar({ name: r.name })}${text(r.name)}`
+            + D.thumbs(r.tuples.map((t) => t[3]), { max: 2, total: false, empty: "", countWhenBlank: false }) + `</span>`) },
       { key: "products", label: "Products", w: 92, align: "end", sortVal: (r) => r.tuples.length, render: (r) => `<span class="ds-num">${esc(num(r.tuples.length))}</span>` },
       { key: "qty", label: "Qty", w: 60, align: "end", sortVal: (r) => r.qty, render: (r) => `<span class="ds-num">${esc(num(r.qty))}</span>` },
       { key: "orders", label: "Orders", w: 84, align: "end", sortVal: (r) => r.pos.length, render: (r) => `<span class="ds-num">${esc(num(r.pos.length))}</span>` },

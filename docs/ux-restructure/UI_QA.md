@@ -999,3 +999,111 @@ later cleanup must not strip that one too. There is a check for exactly that.
 
 `DS.subTable`'s third argument now accepts `{label, expand}` as well as a plain label string,
 so the four existing callers are untouched — asserted, not assumed.
+
+---
+
+## §20 — Product photos everywhere, and one thumbnail (2026-09-09)
+
+Owner, on the Purchases → Orders board: *"remove the column that says estimated cost, it
+doesn't look good"*, *"at the purchase order column there's no images of the products"*, and
+*"make sure the products show on every view we have in the dashboard"*.
+
+### Q-043 — Est. cost folded off the Orders board
+
+`defaultHidden: true` on the orders `est` column plus `seedVersion: 1` on `po_orders`. The bump
+is required, not decorative: the column **shipped visible**, and the `known` path in `load()`
+only covers a column that was born hidden.
+
+Nothing deleted, per the standing rule: it is still in the Columns menu, still on the Packages
+and Customers boards, still per-parcel inside an expanded order, and the `Σ Est. cost` figure is
+still in the page header strip. The footer's `est` key needed no edit — `Table.foot()` maps over
+`visible()`.
+
+**One edge case found while there.** `Table.rows()` resolves the sort column from `o.columns`,
+not from the visible set — so anyone who had sorted by Est. cost would keep a board sorted by a
+column with no header and no arrow. A seed bump now drops a sort that points at a key it just
+hid.
+
+### Q-044 — four thumbnails, not one
+
+The bigger finding. Photos were drawn **four different ways**:
+
+| helper | size | fit | cap | merges duplicates |
+|---|---|---|---|---|
+| `DS.thumb` / `DS.thumbs` | 24–26px | `cover` | 5 | no |
+| `poThumbStrip` | 32px | `contain` | 4 | yes |
+| `lxThumbs` | 32px | `contain` | 4 | yes |
+| `lxThumb` | 30 / 34 / 44px | `contain` | — | n/a |
+
+Two of them were on screen **at once**: open a purchase order and the Package column drew 32px
+letterboxed photos directly above 26px cropped ones. `purchases.js` also carried a private copy
+of `DS.thumb` that had drifted — it had silently lost the tooltip and `loading="lazy"` — and it
+survived because the "only ds.js builds this markup" check looked at ds.js, fulfillment.js and
+sales.js, and not at purchases.js. That tuple now covers every page module.
+
+Settled on **32px, `contain`, cap 4, duplicates always merged with a `×N`**. 32px is the size
+the owner picked in writing and five of seven sites already shipped; `contain` because `cover`
+square-crops, and a square crop takes the ends off exactly the long thin products — cables,
+bottles, cases — that staff are trying to tell apart.
+
+`DS.thumb` and `DS.thumbs` were **extended in place**, never renamed (three tests pin the names
+and one pins a literal call string). `poThumbStrip` and `lxThumbs` became three-line delegating
+wrappers, still `function` declarations — a top-level `const` in index.html is not a window
+property and `W.poThumbStrip(...)` would throw, blanking the Purchases packages grid.
+
+**Two behaviours are options, not flattened:**
+
+- **A photo-less Leluxe slot is a button, not an absence.** It is the only way to attach an ASIN.
+  `countWhenBlank: false` keeps the slots; collapsing them to "3 products" would delete a
+  workflow. 69 all-photoless strips verified live: still buttons, still `lxOpenEditor`.
+- **`+K` counts distinct photos; the trailing total counts item lines.** Two real numbers.
+
+### Q-045 — seven lists that showed no products
+
+Purchases Orders / Packages / Customers, Package prep, the parcel table inside a Sales order,
+the Leluxe untracked parcel, and Sales → Customers. All but the last already had the image data
+in hand. Sales → Customers needed a join: `/api/customers` carries people, so `cuItemsOf()`
+matches each customer back to their orders with the app's own `normName` / `phoneCoreJs` pair —
+the same match `poCustInfo` already uses — and pools those orders' items. No server change.
+
+**Three bugs the work turned up, each caught by measuring rather than looking:**
+
+1. **The count was the first thing clipped.** A 250px identity cell holding "PO-0017 …2615 📋"
+   plus three 32px photos plus "+32" needs ~256px, and `overflow: clip` cuts the *last* child —
+   the `+32`, the only part of a strip carrying a fact you cannot get elsewhere. Identity cells
+   now show two photos, and `.ds-thumb-more` is `position: sticky` so it can never be the
+   casualty.
+2. **The empty placeholder collapsed to 2×19px.** It is an empty `<span>`, and a non-replaced
+   **inline** element ignores width and height. It had always worked only because it was used
+   inside flex parents; the moment a photo went into a plain block cell (Leluxe Products, 86 of
+   234 products have no image) it vanished. `.ds-thumb` is now `display: inline-block`.
+3. **`emptyLabel` lost to `label`.** A photo-less Leluxe slot showed the product's name instead
+   of *"no image — click to add an ASIN"*, quietly removing the hint that clicking is how you fix
+   it. `emptyLabel` now wins where it means something — on a slot with no photo.
+
+### Measured after
+
+| board | photos | sizes | need @1440 |
+|---|---|---|---|
+| PO Orders | 75 | 32×32 only | 1432 → **1382** |
+| PO Packages | 51 | 32×32 only | 1576 → 1646 |
+| PO Products | 62 | 32×32 only | 1446 |
+| PO Customers | 108 | 32×32 only | 1262 → 1322 |
+| Sales orders / customers | 40 / 52 | 32×32 only | 1472 / 936 |
+| Leluxe orders / products / packages | 217 / 234 / 230 | 32×32 only | 1396 / 1352 / 1360 |
+
+307 product images rendering, **0 broken**, zero `.po-thumbs` strips still drawn anywhere. The
+Orders board got *narrower* despite gaining photos, because Est. cost went with it. Packages is
+70px wider — that column now shows what is in each parcel, which is what it is scanned for.
+
+`test_ds_thumbs.py` — **39 checks fail on the pre-fix tree**, including the entity-decoded,
+`new Function`-compiled assertion on the Leluxe handler, so a double-escaped handler cannot pass
+the way one did before.
+
+### Deliberately not done
+
+**Needs attention** stays text: its rows are alerts (`{id, kind, title, detail, severity,
+age_days}`) carrying no products at all, so photos there need a serializer change on an endpoint
+that polls constantly. `lxThumb` keeps its 34px info-panel and 44px default sizes — panel
+decoration, not a board cell beside another board cell. `.po-thumbs` is left in place, dead, as
+the one-release safety net.

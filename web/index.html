@@ -3399,22 +3399,19 @@ function lxThumb(url,size){ size=size||44;
 // split across packages) merge into a single thumb with a ×N badge, so the same
 // picture never paints twice. Photo-less products still get one empty box each
 // (= product exists but no ASIN yet). Click a slot to open that product's editor.
+// The same DS.thumbs, with Leluxe's three differences bound: its images live at
+// data.image, its names are shortened to three words, and every slot is a BUTTON that
+// opens the item editor. `countWhenBlank:false` is the load-bearing one — a parcel where
+// no product has a photo must still show its slots, because clicking one is the only way
+// to attach an ASIN, and collapsing them to "3 products" deletes that path entirely.
 function lxThumbs(items,max){
-  items=items||[]; if(!items.length) return "";
-  const seen=new Map(), uniq=[];
-  items.forEach(it=>{ const img=lxAmz(it), prev=img?seen.get(img):null;
-    if(prev){ prev.n++; prev.names.push(lxShort3(it.name)); }
-    else{ const u={it,img,n:1,names:[lxShort3(it.name)]}; uniq.push(u); if(img) seen.set(img,u); } });
-  // Purchases parity (owner preference): the shared .po-thumbs img rule sizes
-  // these 32×32 and we cap at 4 + "+K", exactly like poThumbStrip.
-  max=max||4;
-  const shown=uniq.slice(0,max), extra=uniq.length-shown.length;
-  const cell=u=>{
-    const inner=u.img?`<img src="${poEsc(u.img)}">`:`<span class="noimg"></span>`;
-    const tip=u.img?(u.n>1?`×${u.n} · `:"")+u.names.join(" · "):"no image — click to add an ASIN";
-    return `<span title="${poEsc(tip)}" style="cursor:pointer;display:inline-flex;position:relative;flex:0 0 auto" onclick="event.stopPropagation();lxOpenEditor('item',${u.it.id},null)">${inner}${u.n>1?`<span class="xn">×${u.n}</span>`:""}</span>`;
-  };
-  return `<span class="po-thumbs">${shown.map(cell).join("")}${extra>0?`<span class="more">+${extra}</span>`:""}</span>`;
+  return DS.thumbs(items||[], {
+    max: max||4, total:false, empty:"", countWhenBlank:false, add:true,
+    src: lxAmz,
+    emptyLabel: "no image — click to add an ASIN",
+    label: (it,g) => g.items.map(x=>lxShort3(x.name)).filter(Boolean).join(" · "),
+    onclick: (it) => `event.stopPropagation();lxOpenEditor('item',${it.id},null)`,
+  });
 }
 function lxFind(id){
   for(const o of (LX.orders||[])){ if(o.id===id) return o;
@@ -8453,6 +8450,28 @@ function pkgIdNumber(pk){
 // richest source (it alone carries `city`), but it needs view_customers — so fall
 // back to the matched customer ORDERS, which carry phone/wa/address/id_number on
 // every role. `ords` = [{id,o}] as built by poRenderCustomers' ordersOf().
+// The Customers board lists PEOPLE — /api/customers carries no order items at all, so
+// there is nothing on the row to draw. Match each customer back to their orders the way
+// poCustInfo already does (name first, then phone core) and pool those orders' products.
+// DATA.orders rows carry title+image per item (report.py) — that is the same source the
+// Sales Orders board draws its photos from, so the two boards agree by construction.
+let CU_ITEMS=null, CU_ITEMS_N=-1;
+function cuItemMap(){
+  const os=(typeof DATA!=="undefined"&&DATA&&DATA.orders)||[];
+  if(CU_ITEMS&&CU_ITEMS_N===os.length) return CU_ITEMS;
+  const byName={}, byCore={};
+  os.forEach(o=>{
+    const its=(o.items||[]).filter(Boolean); if(!its.length) return;
+    const n=normName(o.customer||""); if(n) (byName[n]=byName[n]||[]).push(...its);
+    const c=phoneCoreJs(o.phone||""); if(c) (byCore[c]=byCore[c]||[]).push(...its);
+  });
+  CU_ITEMS={byName,byCore}; CU_ITEMS_N=os.length;
+  return CU_ITEMS;
+}
+function cuItemsOf(c){
+  const m=cuItemMap();
+  return m.byName[normName(c&&c.name||"")] || m.byCore[phoneCoreJs(c&&c.whatsapp||"")] || [];
+}
 function poCustInfo(cust,ords){
   const first=k=>{ for(const x of (ords||[])){ const v=x.o&&x.o[k]; if(v) return v; } return ""; };
   const oPhone=first("phone");
@@ -9551,18 +9570,12 @@ function popMenu(items){   // items: [ [icon+label, onclick, danger?], … | nul
 }
 // Inline product-photo strip for the card / package headers (same look as the To-order row).
 // Lines sharing one photo merge into a single thumb with a ×N badge (no duplicate pictures).
+// One implementation of a photo strip in this app: DS.thumbs. This name stays because
+// it has five callers and a test pins the literal call, but the body is now a delegation.
+// `total:false` and `empty:""` keep the output byte-compatible with what it built before
+// (no trailing count, nothing at all for an empty list — a dash would land mid-cell).
 function poThumbStrip(items,max=4){
-  items=(items||[]).filter(Boolean); if(!items.length) return '';
-  const seen=new Map(), uniq=[];
-  items.forEach(it=>{ const prev=it.image?seen.get(it.image):null;
-    if(prev) prev.n++;
-    else{ const u={it,n:1}; uniq.push(u); if(it.image) seen.set(it.image,u); } });
-  const cell=u=>{ const it=u.it, tip=(u.n>1?`×${u.n} · `:'')+(it.title||it.asin||'');
-    const inner=it.image?`<img src="${poEsc(it.image)}" title="${poEsc(tip)}">`:`<div class="noimg" title="${poEsc(tip)}"></div>`;
-    return u.n>1?`<span style="position:relative;display:inline-flex;flex:0 0 auto">${inner}<span class="xn">×${u.n}</span></span>`:inner;
-  };
-  const extra=uniq.length>max?`<span class="more">+${uniq.length-max}</span>`:'';
-  return `<span class="po-thumbs">${uniq.slice(0,max).map(cell).join('')}${extra}</span>`;
+  return DS.thumbs((items||[]).filter(Boolean), {max, total:false, empty:"", countWhenBlank:false});
 }
 // ── Pill 3/3 — the Otlobly status: set BY HAND per package, app-only. Vocabulary
 //    and colors copied verbatim from the owner's ClickUp list ("Otloble AMAZON /
@@ -10222,6 +10235,8 @@ let CU_QUERY="";
 function cuCtx(){
   return {
     money: PO_MONEY,
+    // what this customer has bought, pooled from their orders (see cuItemsOf)
+    items: c=>cuItemsOf(c),
     openProfile: id=>showProfile(id),
     cityCell: c=> cuCanEdit()
       ? `<span dir="auto" class="ds-truncate" style="cursor:text;border-bottom:1px dashed var(--line);min-height:24px;display:inline-flex;align-items:center" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`

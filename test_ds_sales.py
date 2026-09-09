@@ -113,9 +113,20 @@ def main():
     # ---- 6. one implementation, not three ----------------------------------
     check("DS.thumb / DS.thumbs live in ds.js", "DS.thumb = " in ds and "DS.thumbs = " in ds)
     check("DS.subTable lives in ds.js", "DS.subTable = " in ds)
-    # what matters is that only ONE file builds this markup — a delegating alias is fine
-    for cls in ("ds-pu-thumb", "ds-fl-thumbs", "ds-pu-sub-row", "ds-pu-td"):
-        owners = [n for n, src in (("ds.js", ds), ("fulfillment.js", ful), ("sales.js", sales)) if cls in code_only(src)]
+    # what matters is that only ONE file builds this markup — a delegating alias is fine.
+    lelu = (DS / "leluxe.js").read_text(encoding="utf-8")
+    EVERY = (("ds.js", ds), ("fulfillment.js", ful), ("sales.js", sales),
+             ("purchases.js", pur), ("leluxe.js", lelu))
+    # The sub-table classes are checked against the ORIGINAL three files, on purpose:
+    # purchases.js still carries a private copy of the grid builder, and retiring it is
+    # its own task. Widening these two would just record a duplicate we already know
+    # about as a red test, every run, until then.
+    SUBTABLE = (("ds.js", ds), ("fulfillment.js", ful), ("sales.js", sales))
+    for cls, files in (("ds-pu-thumb", EVERY), ("ds-fl-thumbs", EVERY),
+                       ("ds-pu-sub-row", SUBTABLE), ("ds-pu-td", SUBTABLE)):
+        # purchases.js was NOT in the photo tuple, which is how a drifted private copy of
+        # DS.thumb lived there for months, quietly missing the tooltip and lazy-loading.
+        owners = [n for n, src in files if cls in code_only(src)]
         check(f"only ds.js builds .{cls} (found in: {owners})", owners == ["ds.js"])
     check("fulfillment.js delegates rather than re-implements",
           "const thumb = D.thumb;" in ful and "D.thumbs(items, { max })" in ful and "const grid = D.subTable;" in ful)
