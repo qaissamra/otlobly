@@ -19,6 +19,7 @@
 <script src="/static/ds/fulfillment.js"></script>
 <script src="/static/ds/sales.js"></script>
 <script src="/static/ds/leluxe.js"></script>
+<script src="/static/ds/gaash.js"></script>
 <style>
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#101828; --muted:#667085; --line:#e7e9ee;
@@ -643,7 +644,7 @@
     .en-cf-r>b:first-child{flex:1 1 100%}
   }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
-  .wf-cols{display:grid;grid-template-columns:var(--wfgrid,74px 210px 58px 56px 86px 60px 70px 74px 76px 56px 64px 62px 170px 28px);gap:6px;align-items:center;flex:0 0 auto}.lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .bs-cols .lxc, .wf-cols .lxc, .en-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .bs-cols .lxc>.pill, .bs-cols .lxc>span, .bs-cols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
+  .lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .bs-cols .lxc, .wf-cols .lxc, .en-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .bs-cols .lxc>.pill, .bs-cols .lxc>span, .bs-cols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
   .lx-colhead, .lx-pcolhead, .lx-kcolhead, .bs-colhead, .wf-colhead, .en-colhead, .dp-colhead, .ct-colhead, .ic-colhead, .tr-colhead, .fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}.lx-colhead .lbl, .lx-pcolhead .lbl, .lx-kcolhead .lbl, .bs-colhead .lbl, .wf-colhead .lbl, .en-colhead .lbl, .dp-colhead .lbl, .ct-colhead .lbl, .ic-colhead .lbl, .tr-colhead .lbl, .fh-colhead .lbl{font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lx-colhead .lx-sort, .lx-pcolhead .lx-sort, .lx-kcolhead .lx-sort, .bs-colhead .lx-sort, .wf-colhead .lx-sort, .en-colhead .lx-sort, .dp-colhead .lx-sort, .ct-colhead .lx-sort, .ic-colhead .lx-sort, .tr-colhead .lx-sort, .fh-colhead .lx-sort{cursor:pointer;user-select:none}.lx-colhead .lx-sort:hover, .lx-pcolhead .lx-sort:hover, .lx-kcolhead .lx-sort:hover, .bs-colhead .lx-sort:hover, .wf-colhead .lx-sort:hover, .en-colhead .lx-sort:hover, .dp-colhead .lx-sort:hover, .ct-colhead .lx-sort:hover, .ic-colhead .lx-sort:hover, .tr-colhead .lx-sort:hover, .fh-colhead .lx-sort:hover{color:var(--ink)}/* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
@@ -661,27 +662,10 @@
   .lxt-ctx{min-width:210px}
   .lxt-ctx .pop-item{white-space:nowrap}
   .pop-sep{height:1px;background:var(--line);margin:5px 6px}
-  /* 📧 GAASH mail: two-pane chat — thread list + conversation bubbles */
-  .gm-wrap{display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start}
-  @media (max-width:900px){.gm-wrap{grid-template-columns:1fr}.gm-chat{min-height:300px}}
-  .gm-list{padding:6px;max-height:calc(100vh - 210px);overflow:auto}
-  .gm-row{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
-  .gm-row:hover{background:var(--bg2)}
-  .gm-row.on{background:var(--tint-accent);border-color:#f7680855}
-  /* ✅ the cleared folder — closed by default, one click from its contents */
-  .gm-fold{display:flex;align-items:center;gap:7px;padding:8px 10px;margin-top:8px;
-    border-top:1px solid var(--line);cursor:pointer;font-size:var(--ds-t-sm);user-select:none}
-  .gm-fold:hover{background:var(--bg2)}
-  .gm-fold-c{color:var(--muted);font-size:var(--ds-t-xs);width:10px}
-  .gm-fold-n{background:var(--line);border-radius:999px;padding:1px 8px;
-    font-size:var(--ds-t-xs);font-weight:700}
-  .gm-row .gm-top{display:flex;align-items:center;gap:7px}
-  .gm-row .gm-gwd{font-family:ui-monospace,monospace;font-size:var(--ds-t-sm);font-weight:700}
   .gm-dots{display:inline-flex;gap:2px;flex:0 0 auto}
   .gm-dot{width:7px;height:7px;border-radius:50%;background:var(--line)}
   .gm-dot.on{background:#f76808}
   .gm-unread{background:#e5484d;color:#fff;border-radius:999px;font-size:var(--ds-t-xs);font-weight:800;padding:1px 6px}
-  .gm-prev{font-size:var(--ds-t-xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* one row per mailbox that sent on this parcel — only drawn when there are 2+ */
   .gm-senders{display:flex;flex-direction:column;gap:2px}
   .gm-sender{display:flex;align-items:center;gap:5px;font-size:var(--ds-t-xs);color:var(--muted)}
@@ -694,7 +678,7 @@
   .gm-read i{width:6px;height:6px;border-radius:50%;background:var(--muted);opacity:.45}
   .gm-read.on{color:#12a150;border-color:#12a15055;background:#12a1500f}
   .gm-read.on i{background:#12a150;opacity:1}
-  .gm-chat{padding:0;display:flex;flex-direction:column;max-height:calc(100vh - 210px)}
+  .gm-chat{padding:0;display:flex;flex-direction:column;max-height:min(70vh,760px)}
   .gm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
   /* min-height so a tall reply box borrows space from the thread but can never
      squeeze it out of existence — .gm-msgs is the flex:1 that absorbs the change */
@@ -714,8 +698,9 @@
   /* the meta line is uppercase — addresses and Message-ID buttons opt out of that */
   .gm-meta .gm-who{text-transform:none;letter-spacing:0;font-weight:600;max-width:190px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 24px floor (UI_QA Q-002): these sat at 9-12px, unreachable on a touchpad */
   .gm-meta .gm-mid{border:0;background:none;padding:0;cursor:pointer;font-size:var(--ds-t-xs);
-    line-height:1;color:var(--muted);text-decoration:none}
+    line-height:1;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;margin-block:-6px}
   .gm-meta .gm-mid:hover{color:#f76808}
   /* attachments render themselves — you should never have to click to see a document */
   .gm-files{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;align-items:flex-start;white-space:normal}
@@ -737,7 +722,7 @@
   /* action strip over the reply box — same plain-text rhythm as the tab strips */
   .gm-actions{display:flex;gap:16px;align-items:center;padding:9px 13px 0}
   .gm-actions button{border:none;background:none;font-weight:700;font-size:var(--ds-t-sm);
-    padding:0;cursor:pointer;color:var(--muted)}
+    padding:0;cursor:pointer;color:var(--muted);min-height:24px}
   .gm-actions button:hover{color:var(--accent)}
   .gm-chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 13px 0}
   /* a token that did not resolve is named out loud under the box: a visible
@@ -760,11 +745,6 @@
   .gsq-delay:hover{color:var(--ink);border-color:var(--muted)}
   .gsq-add{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:var(--ds-t-md);line-height:1;color:var(--muted)}
   .gsq-add:hover{color:#f76808;border-color:#f76808}
-  .gm-tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:110px}
-  .gm-tile b{font-size:var(--ds-t-xl);display:block}
-  .gm-tile span{font-size:var(--ds-t-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
-  .gm-tile.click{cursor:pointer;transition:border-color .12s}
-  .gm-tile.click:hover{border-color:var(--accent)}
   /* 🧭 drill-down: one real mail row per email — collapsed to a preview line,
      click to unfold the whole body (the shape a mail client uses) */
   .gm-mail{border-top:1px solid var(--line);padding:9px 2px}
@@ -781,9 +761,6 @@
   .gm-mail:not(.open) .gm-mail-body{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .gm-mail.open .gm-mail-body{white-space:pre-wrap;color:inherit;background:var(--bg2);
     border-radius:8px;padding:9px 11px;max-height:260px;overflow:auto}
-  .gm-fun{display:flex;align-items:flex-end;gap:6px;height:64px}
-  .gm-fun>div{background:#f76808;border-radius:4px 4px 0 0;min-width:34px;position:relative}
-  .gm-fun>div>i{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:var(--ds-t-xs);font-style:normal;color:var(--muted)}
   .pkg-title-row:hover .lx-copy{opacity:.7}
   .bt-clip{position:sticky;top:70px;z-index:20;overflow:hidden;background:var(--bg);margin-bottom:4px;border-bottom:1px solid var(--line)}
   /* ClickUp-style Fields panel: the ⊕ button is anchored at the header clip's
@@ -837,18 +814,6 @@
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}/* the contact strip spans the whole (scrollable) row{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .bs-colhead .bt-pin, .en-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
-  /* ⚙️ Workflows table: hover row + hover-revealed actions in the pinned cell */
-  .wf-row:hover{background:var(--bg2)}
-  .wf-row .wf-acts{visibility:hidden;display:inline-flex;gap:4px}
-  .wf-row:hover .wf-acts{visibility:visible}
-  .wf-off .bt-pin b,.wf-off .wf-cols{opacity:.55}
-  .wf-row>.bt-pin .caret{flex:none;transition:transform .15s}
-  .wf-row:hover>.bt-pin{background:var(--bg2)}
-  .wf-row.wf-openrow,.wf-row.wf-openrow>.bt-pin{background:var(--tint-accent)}
-  .wf-openrow>.bt-pin .caret{transform:rotate(90deg);color:var(--accent)}
-  .wf-exp{box-sizing:border-box;width:100%;padding:6px 10px 12px;background:#fff9f5;border-bottom:1px solid var(--line)}
-  .wf-exp .wf-exp-h{display:flex;align-items:center;gap:8px;font-size:var(--ds-t-xs);font-weight:800;margin:8px 0 4px;flex-wrap:wrap}
-  .wf-exp .bt-wrap{max-height:400px;overflow-y:auto}
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
   /* the pin floats over scrolled content → its background must mirror every
      row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
@@ -1698,36 +1663,15 @@
     <div id="glRows"><div class="muted2" style="padding:36px;text-align:center;font-size:var(--ds-t-md)">🏆 Loading…</div></div>
   </div>
 
-  <!-- 📧 GAASH mail: automated clearance-email sequences — one chat per GWD -->
+  <!-- 📧 GAASH mail: automated clearance-email sequences — one chat per GWD.
+       The header, the safe-mode strip, the page's own tab strip and every tab's board
+       are drawn by static/ds/gaash.js (docs/ux-restructure Batch C); the gm* bridges
+       below hand it a ctx. #gmTabs is the page's OWN strip: the new shell draws the
+       same eight tabs above the page and hides this one (ds.css body.ds-shell-on). -->
   <div id="gmView" class="hidden">
-    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
-      <h2 style="margin:0;font-size:var(--ds-t-lg);font-weight:800">📧 <span data-en="GAASH mail" data-ar="بريد الجمارك">GAASH mail</span></h2>
-      <span class="muted2" id="gmSub" style="font-size:var(--ds-t-sm)"></span>
-      <span class="spacer"></span>
-      <button class="minibtn" id="gmCheckBtn" onclick="gmCheck(this)" title="افحص البريد الآن · poll the inboxes now" data-en="📥 Check replies" data-ar="📥 فحص الردود">📥 Check replies</button>
-      <button class="minibtn" id="gmTrkAllBtn" onclick="gmTrackAll(this)" title="اسأل غاش عن كل الطرود — يتخطى ما فُحص في آخر ٣٠ دقيقة · ask GAASH about every parcel — skips anything checked in the last 30 min" data-en="📦 Check tracking" data-ar="📦 فحص التتبّع">📦 Check tracking</button>
-      <button class="minibtn" id="gmChgBtn" onclick="gmChangesOpen()" title="ما تغيّر في آخر الفحوصات · what the last checks moved" data-en="🕐 Changes" data-ar="🕐 التغييرات">🕐 Changes</button>
-      <button class="minibtn" id="gmFreezeBtn" style="display:none" onclick="gmFreeze(this)"></button>
-      <button class="minibtn" onclick="gmSettingsOpen()" data-en="⚙ Accounts &amp; templates" data-ar="⚙ الحسابات والقوالب">⚙ Accounts &amp; templates</button>
-      <button class="accent" onclick="gmNewOpen()" data-en="📧 Enroll packages" data-ar="📧 إرسال طرود">📧 Enroll packages</button>
-    </div>
-    <div id="gmBanner"></div>
-    <div style="display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px" id="gmTabs">
-      <button class="minibtn accent" id="gmTabConv" style="border:0;border-radius:0" onclick="gmTab('conv')" data-en="💬 Conversations" data-ar="💬 المحادثات">💬 Conversations</button>
-      <button class="minibtn" id="gmTabOv" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ov')" data-en="🧭 Overview" data-ar="🧭 نظرة عامة">🧭 Overview</button>
-      <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="⚙️ Workflows" data-ar="⚙️ الأتمتة">⚙️ Workflows</button>
-      <button class="minibtn" id="gmTabReady" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ready')" data-en="🩺 Readiness" data-ar="🩺 الجاهزية">🩺 Readiness</button>
-      <button class="minibtn" id="gmTabDocs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('docs')" data-en="📄 Docs" data-ar="📄 المستندات">📄 Docs</button>
-      <button class="minibtn" id="gmTabFcast" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('fcast')" data-en="🔮 Forecast" data-ar="🔮 التوقعات">🔮 Forecast</button>
-      <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
-      <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
-    </div>
-    <div id="gmConvPane">
-      <div class="gm-wrap">
-        <div class="gm-list panel" id="gmList"></div>
-        <div class="gm-chat panel" id="gmChat"><div class="muted2" style="padding:30px;text-align:center" data-en="Pick a conversation — or start a new workflow." data-ar="اختر محادثة — أو ابدأ سير عمل جديداً.">Pick a conversation — or start a new workflow.</div></div>
-      </div>
-    </div>
+    <div id="gmChrome"></div>
+    <div id="gmTabs" class="ds-gm-tabs"></div>
+    <div id="gmConvPane"><div id="gmList"></div></div>
     <div id="gmOvPane" class="hidden"></div>
     <div id="gmSeqPane" class="hidden"></div>
     <div id="gmTplPane" class="hidden"></div>
@@ -3479,7 +3423,6 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
   "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
-  "wf": {key:"wf_colw", varn:"--wfgrid",  head:".wf-colhead .wf-cols",   rows:"gmSeqPane"},
   "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl"},
   "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount"},
   "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
@@ -3986,22 +3929,6 @@ const LXT_COLS={
     {key:"by",    label:"بواسطة · by",      w:96},
     {key:"act",   label:"",                 w:240, locked:true},
   ],
-  "wf":[    // 📧 GAASH mail → ⚙️ Workflows table (HubSpot Automation style)
-    {key:"onoff",    label:"تشغيل · on / off",       w:74,  sortable:true},
-    {key:"trigger",  label:"المُشغّل · trigger",      w:210},
-    {key:"steps",    label:"خطوات · steps",          w:58,  sortable:true},
-    {key:"days",     label:"أيام · days",            w:56,  sortable:true},
-    {key:"goal",     label:"الهدف · goal",           w:86,  sortable:true},
-    {key:"active",   label:"نشط · active",           w:60,  sortable:true},
-    {key:"enrolled", label:"مسجّل · enrolled",       w:70,  sortable:true},
-    {key:"enr7d",    label:"آخر ٧ أيام · last 7d",   w:74,  sortable:true},
-    {key:"goalmet",  label:"🎯 تحقق · goal met",     w:76,  sortable:true},
-    {key:"sent",     label:"مرسل · sent",            w:56,  sortable:true},
-    {key:"open",     label:"فتح · open %",           w:64,  sortable:true},
-    {key:"reply",    label:"رد · reply %",           w:62,  sortable:true},
-    {key:"desc",     label:"الوصف · description",    w:170},
-    {key:"menu",     label:"",             w:28,  locked:true},
-  ],
   // 🚩 flag history — every flagged email ever, open and closed alike
   "fh":[
     {key:"sender",  label:"من · from",                w:170, sortable:true},
@@ -4014,16 +3941,16 @@ const LXT_COLS={
   ],
 };
 const LXT_CLS={
-               "bs":["bs-colhead","bs-cols"],"wf":["wf-colhead","wf-cols"],
+               "bs":["bs-colhead","bs-cols"],
                "en":["en-colhead","en-cols"],
                "dp":["dp-colhead","dp-cols"],
                "ct":["ct-colhead","ct-cols"],
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
-const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","wf":" pin-md","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
+const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
 // "", "p" and "k" are migrated boards (F1/F2/F3) and are no longer in LX_TABLES, but their
 // SORT preference is still read by the bridges — keep them seeded here.
-["","p","k","po","pok","pop","bs","wf","en","dp","ct","ic","tr","fh"].forEach(t=>{
+["","p","k","po","pok","pop","bs","en","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -10814,20 +10741,16 @@ function bsRender(){
 let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null, wfOpen:new Set()};
 try{ const t=localStorage.getItem("gm_tab");                     // reopen on the tab the user was on
   if(["conv","ov","seq","tpl","ready","docs","fcast","dash"].includes(t)) GM.tab=t; }catch(e){}
-const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
-  missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
-  cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
-  waiting_task:["#7c4dff","مهمة معلقة · task waiting"], proposed:["#ffc53d","مقترح · proposed"],
-  exhausted:["#f76808","انتهى بلا رد · no reply"], done:["#8d8d8d","منجز · done"]};
 function gmTab(t){
   GM.tab=t;
   try{ localStorage.setItem("gm_tab",t); }catch(e){}
+  // [key, the tab's button in the page's own strip, its pane]
   [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
    ["seq","gmTabSeq","gmSeqPane"],
    ["tpl","gmTabTpl","gmTplPane"],["ready","gmTabReady","gmReadyPane"],
    ["docs","gmTabDocs","gmDocsPane"],["fcast","gmTabFcast","gmFcastPane"],
    ["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
-    $(b).classList.toggle("accent",k===t);
+    const bt=$(b); if(bt){ bt.setAttribute("aria-selected",k===t?"true":"false"); bt.tabIndex=k===t?0:-1; }
     $(p).classList.toggle("hidden",k!==t);
   });
   if(t==="ov") gmOvRender();
@@ -10839,8 +10762,8 @@ function gmTab(t){
   if(t==="dash") gmDashLoad();
   if(window.DS&&DS.shell2&&DS.shell2.syncTab) DS.shell2.syncTab();   // the tab a link points at is the tab that opens
 }
-function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
-  return hexPill(c,T(l)); }
+// one thread-state pill everywhere, from the shared status registry (static/ds/status.js)
+function gmChip(state){ return DS.status.badge("gmThread", state||"?"); }
 function gmSeqOf(th){ return ((GM.ov&&GM.ov.sequences)||[]).find(s=>s.id===th.seq_id)||null; }
 function gmDots(step,total){ total=Math.max(total||4,step||0,1);
   return `<span class="gm-dots" title="${step}/${total}">${Array.from({length:Math.min(total,10)},(_,i)=>
@@ -10860,34 +10783,49 @@ async function gmLoad(){
     return; }
   GM.ov=d;
   GM.stats=null; GM.matches=null;      // workflow stats + ⚡ match counts refetch lazily
-  const s=d.settings||{};
-  // 🔒/🟢 the honest, calm state strip: locks are SAFETY (nothing can send by
-  // itself), not breakage — the old ⚠ wording read as "the app is broken"
-  const seqsLive=(d.sequences||[]).filter(x=>!x.archived);
-  const frozen=seqsLive.length>0&&seqsLive.every(x=>x.paused);
-  const locks=[];
-  if(frozen) locks.push("⏸ "+T("كل سير العمل موقوف · all workflows Off"));
-  if(s.dry_run) locks.push("🧪 "+T("وضع التجربة · dry-run"));
-  if(!(d.accounts||[]).length) locks.push("✉ "+T("لا حساب Gmail بعد · no Gmail account yet"));
-  if(!d.mailer_env) locks.push("🤖 "+T("المُرسِل التلقائي متوقف على هذا الخادم · auto-sequencer off on this server"));
-  const acctErr=(d.accounts||[]).find(a=>a.last_error);
-  $("gmBanner").innerHTML=
-    (acctErr?`<div class="panel" style="background:#fffbeb;border-color:#fde68a;font-size:var(--ds-t-sm);margin-bottom:10px;display:flex;gap:8px;align-items:center"><span style="flex:1;min-width:0" title="${poEsc(acctErr.last_error)}">⚠ ${poEsc(acctErr.email)}: ${poEsc(String(acctErr.last_error).slice(0,120))}</span>${CAN_ADMIN?`<button class="minibtn" style="flex:none" onclick="gmSettingsOpen();gmAcctFix('${poEsc(acctErr.email)}')" title="${T("أدخل كلمة مرور تطبيق جديدة لهذا الحساب · enter a fresh app password for this account")}">🔑 ${T("حدّث كلمة المرور · update password")}</button>`:""}</div>`:"")
-    +(locks.length
-      ?`<div class="panel" style="background:var(--bg2);font-size:var(--ds-t-sm);margin-bottom:10px">🔒 <b>${T("وضع آمن — لا يُرسل أي إيميل من تلقاء نفسه · safe mode — no email goes out by itself")}</b> · ${locks.join(" · ")} <span class="muted2">${T("— كل ما عدا الإرسال يعمل، جرّب براحة · — everything else works, explore freely")}</span></div>`
-      :`<div class="panel" style="background:#f0fdf4;border-color:#bbf7d0;font-size:var(--ds-t-sm);margin-bottom:10px">🟢 <b>${T("الإرسال حي · sending is LIVE")}</b> — ${T("الإيميلات تخرج فعلاً إلى · real emails go out to")} <b dir="ltr">${poEsc(s.to_address||"?")}</b></div>`);
-  const fb=$("gmFreezeBtn");
-  if(fb){ fb.style.display=CAN_ADMIN&&seqsLive.length?"":"none";
-    fb.textContent=frozen?"▶ "+T("استئناف الكل · Resume all"):"⏸ "+T("تجميد الكل · Freeze all");
-    fb.style.color=frozen?"":"#b42318"; }
-  const n=(d.threads||[]).length, act=(d.threads||[]).filter(t=>t.state==="active").length;
-  $("gmSub").textContent=n?`${n} ${T("محادثة · conversations")} · ${act} ${T("نشط · active")}`:"";
+  GM.wfExp={};                         // the enrolment expansions repaint from fresh data
+  gmRenderChrome();
   gmRenderList();
   if(GM.cur) gmOpen(GM.cur,true);
   if(GM.tab==="seq"&&!GM.edit) gmRenderSeq();
   if(GM.tab==="tpl"&&!GM.tplEditId) gmRenderTpl();   // don't wipe an open editor
   clearInterval(GM.timer);
   GM.timer=setInterval(()=>{ if(VIEW==="gaashmail") gmLoad(); else clearInterval(GM.timer); },60000);
+}
+// ── the page chrome: header, safe-mode strip and the page's own tab strip (static/ds/gaash.js) ──
+function gmChromeCtx(){
+  const d=GM.ov||{}, s=d.settings||{};
+  const seqsLive=(d.sequences||[]).filter(x=>!x.archived);
+  return { threads:d.threads||[], proposed:d.proposed||[], accounts:d.accounts||[],
+    seqsLive:seqsLive.length, frozen:seqsLive.length>0&&seqsLive.every(x=>x.paused),
+    dryRun:!!s.dry_run, mailerEnv:!!d.mailer_env, toAddress:s.to_address||"",
+    acctErr:(d.accounts||[]).find(a=>a.last_error)||null, canAdmin:CAN_ADMIN };
+}
+function gmRenderChrome(){
+  if(!window.DS||!DS.gaash) return;
+  DS.gaash.tabs("gmTabs", GM.tab);
+  if(GM.ov) DS.gaash.chrome("gmChrome", gmChromeCtx());
+}
+// ── the boards' product photos, for any GAASH list that names a parcel ──────────
+// The same cross-board lookup Bulk search uses. The boards load lazily: a list
+// paints at once without photos and once more when they arrive.
+function gmHit(gwd,source,lxRows){
+  try{
+    if(source==="purchases") return {po:bsFindPo(gwd)[0]||null, lx:null};
+    return {po:null, lx:bsFindLx(gwd,lxRows||bsLxRows())};
+  }catch(e){ return {}; }
+}
+function gmThumbsOf(gwd,source,n,lxRows){
+  try{ const h=gmHit(gwd,source,lxRows);
+    if(h.po) return poThumbStrip(h.po.pk.items,n||3);
+    if(h.lx) return lxThumbs(h.lx.items,n||3); }catch(e){}
+  return "";
+}
+function gmThumbsKick(){
+  if(GM.thumbsKicked) return;
+  GM.thumbsKicked=true;
+  bsEnsureData().then(()=>{ if(VIEW!=="gaashmail") return;
+    gmRenderList(); if(GM.tab==="ready") gmReadyDraw(); }).catch(()=>{});
 }
 async function gmPropAct(gwd,action){       // ✓/✕ one suggested enrollment (Workflows expansion)
   const r=await post("/api/gaash/thread",{gwd,action});
@@ -10900,10 +10838,10 @@ function gmWfPropOf(seqId){ const seen=new Set(), out=[];
   ((GM.ov&&GM.ov.proposed)||[]).forEach(p=>{
     if(p.seq_id===seqId&&!seen.has(p.gwd)){ seen.add(p.gwd); out.push(p.gwd); } });
   return out; }
-function gmWfExpToggle(seqId){
+function gmWfSetOpen(seqId,open){
   GM.wfOpen=GM.wfOpen||new Set();
-  GM.wfOpen.has(seqId)?GM.wfOpen.delete(seqId):GM.wfOpen.add(seqId);
-  gmRenderSeq();
+  open?GM.wfOpen.add(seqId):GM.wfOpen.delete(seqId);
+  if(open&&!(GM.wfExp||{})[seqId]) gmWfExpRender(seqId);
 }
 async function gmPropAllSeq(seqId,action){
   const gwds=gmWfPropOf(seqId);
@@ -10915,15 +10853,12 @@ async function gmPropAllSeq(seqId,action){
   toast(`${gwds.length} ${action==="approve"?T("بدأ ✓ · started ✓"):T("تم التجاهل · dismissed")}`);
   gmLoad();
 }
-// fill an open workflow row's expansion: the enrolled + suggested packages with
-// the full board columns (bulk-search rows); ✓/✕ approve suggestions in place
+// fill an open workflow row's expansion: the parcels enrolled in it plus the ones its
+// triggers proposed, with the boards' own columns (static/ds/gaash.js draws the grid);
+// ✓/✕ approve a suggestion in place
 async function gmWfExpRender(seqId){
-  const pane=$("gmSeqPane"), box=pane&&pane.querySelector(`.wf-exp[data-seq="${seqId}"]`);
-  if(!box) return;
-  box.innerHTML=`<div class="muted2" style="padding:8px">${T("جارِ التحميل… · loading…")}</div>`;
+  const box=()=>{ const p=$("gmSeqPane"); return p&&p.querySelector(`.ds-gm-wfexp[data-seq="${CSS.escape(seqId)}"]`); };
   await bsEnsureData();
-  const cur=pane.querySelector(`.wf-exp[data-seq="${seqId}"]`);   // may have re-rendered while loading
-  if(!cur) return;
   const lxRows=bsLxRows();
   const models=gwds=>{ const out=[]; (gwds||[]).forEach(tn=>{
       const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
@@ -10931,35 +10866,13 @@ async function gmWfExpRender(seqId){
       pos.forEach(({p,pk,pi})=>out.push({kind:"po",tn,p,pk,pi}));
       if(lx) out.push({kind:"lx",tn,lx}); });
     return out; };
-  const table=(ms,acts)=>lxtHead("bs","التتبع · tracking")
-    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${ms.map(m=>bsModelRow(m,acts).html).join("")}</div></div>`);
   const ths=((GM.ov&&GM.ov.threads)||[]).filter(t=>t.seq_id===seqId);
   const stByGwd={}; ths.forEach(t=>stByGwd[t.gwd]=t.state);
-  const prop=gmWfPropOf(seqId);
-  let html="";
-  if(ths.length){
-    const seen=new Set();                     // chip once per GWD (a PO+Leluxe double match = one thread)
-    const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
-      return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">${gmChip(stByGwd[m.tn])}
-        <button class="minibtn" style="padding:0 7px" title="${T('فتح المحادثة · open the conversation')}" onclick="event.stopPropagation();gmTab('conv');gmOpen('${poEsc(m.tn)}')">💬</button></span>`; };
-    html+=`<div class="wf-exp-h">${T("مسجّل · enrolled")} <b>${ths.length}</b></div>`
-      +table(models(ths.map(t=>t.gwd)),acts);
-  }
-  if(prop.length){
-    const seen=new Set();
-    const acts=m=>{ if(seen.has(m.tn)) return ""; seen.add(m.tn);
-      return `<span style="display:inline-flex;gap:4px;flex:none;margin-inline-start:6px">
-        <button class="minibtn" style="padding:0 7px" title="${T('موافقة وبدء · approve & start')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','approve')">✓</button>
-        <button class="minibtn" style="padding:0 7px" title="${T('تجاهل · dismiss')}" onclick="event.stopPropagation();gmPropAct('${poEsc(m.tn)}','dismiss')">✕</button></span>`; };
-    html+=`<div class="wf-exp-h">⚡ ${T("اقتراحات تنتظر موافقتك · suggested — awaiting your approval")} <b>${prop.length}</b>
-        <span class="spacer"></span>
-        <button class="minibtn" onclick="gmPropAllSeq('${seqId}','approve')">✓ ${T("موافقة الكل · approve all")}</button>
-        <button class="minibtn" onclick="gmPropAllSeq('${seqId}','dismiss')">✕ ${T("تجاهل الكل · dismiss all")}</button></div>`
-      +table(models(prop),acts);
-  }
-  cur.innerHTML=html||`<div class="muted2" style="padding:6px 2px">${T("لا تسجيلات بعد — سجّل من 📧 أو عبر مُشغّل · no enrollments yet — enroll via 📧 or a trigger")}</div>`;
-  if(html) lxtGridApply("bs",cur);
-  if(gmRenderSeq._pinX) gmRenderSeq._pinX();   // keep the box inside the visible x-range
+  const html=DS.gaash.wfExpansion({ seqId, money:PO_MONEY,
+    enrolled:models(ths.map(t=>t.gwd)).map(m=>({m, state:stByGwd[m.tn]})),
+    proposed:models(gmWfPropOf(seqId)) });
+  GM.wfExp=GM.wfExp||{}; GM.wfExp[seqId]=html;
+  const cur=box(); if(cur) cur.innerHTML=html;
 }
 function gmReadPill(rd){                // 👁 did GAASH open what we sent?
   if(!rd||!rd.sent) return "";          // nothing sent yet — no claim to make
@@ -11045,52 +10958,61 @@ function gmSenderRows(t){
 // the top of the list between the parcels that still need chasing.
 const GM_DONE_STATES=["goal_met","done","cleared"];
 function gmIsDone(t){ return GM_DONE_STATES.includes(t.state); }
-function gmClearedOpen(){ return localStorage.getItem("gm_cleared_open")==="1"; }
-function gmClearedToggle(){
-  localStorage.setItem("gm_cleared_open",gmClearedOpen()?"0":"1");
-  gmRenderList();
+// ── the Conversations board (static/ds/gaash.js draws it): view, search, quick filter ──
+let GM_CONV={view:"open", q:"", quick:null};
+try{ const v=localStorage.getItem("gm_conv_view"); if(["open","cleared","all"].includes(v)) GM_CONV.view=v; }catch(e){}
+function gmConvView(v){ GM_CONV.view=v; try{ localStorage.setItem("gm_conv_view",v); }catch(e){} gmRenderList(); }
+function gmConvSearch(v){ GM_CONV.q=String(v||"").trim().toLowerCase(); gmRenderList(); }
+function gmConvQuick(k){ GM_CONV.quick=GM_CONV.quick===k?null:k; gmRenderList(); }
+function gmConvClear(){ GM_CONV.q=""; GM_CONV.quick=null; gmRenderList(); }
+function gmConvText(t){ const m=t.last_msg||{};
+  return [t.gwd,(t.members||[]).join(" "),t.pname,t.subject,m.body,t.state,(gmSeqOf(t)||{}).name,(gmAcctOf(t)||{}).email]
+    .filter(Boolean).join(" ").toLowerCase(); }
+// one conversation opens at a time: the thread body is #gmChat, and gmRenderChat
+// paints by that id — the row's own open/closed override is dropped so the
+// `cur` predicate is the only truth (the ⊞/⊟ lesson from the Leluxe board)
+function gmSetCur(gwd){
+  GM.cur=gwd||null;
+  if(window.DS&&DS.tableResetOpen) DS.tableResetOpen("gm_conv");
+  if(gwd) gmOpen(gwd); else gmRenderList();
+}
+function gmRowAct(gwd,action){ GM.cur=gwd; if(window.DS&&DS.tableResetOpen) DS.tableResetOpen("gm_conv"); gmAct(action); }
+function gmConvMenu(t){
+  const g=JSON.stringify(t.gwd);
+  const out=[{label:"Open the conversation", icon:"chat-bubble-left-right", onclick:`gmSetCur(${g})`},{divider:true}];
+  if(t.state==="waiting_task") out.push({label:"Task done", icon:"check-circle", onclick:`gmRowAct(${g},'task_done')`});
+  else if(t.state==="active") out.push({label:"Pause", icon:"pause", onclick:`gmRowAct(${g},'pause')`},
+                                       {label:"Send the next email now", icon:"envelope", onclick:`gmRowAct(${g},'send_next_now')`});
+  else if(!gmIsDone(t)) out.push({label:"Resume", icon:"play", onclick:`gmRowAct(${g},'resume')`});
+  out.push(t.missing_docs?{label:"Documents complete", icon:"document-check", onclick:`gmRowAct(${g},'clear_missing')`}
+                         :{label:"Mark documents missing", icon:"document-text", onclick:`gmSetCur(${g});gmMissing()`});
+  if(!gmIsDone(t)) out.push({label:"Mark as done", icon:"check", onclick:`gmRowAct(${g},'done')`});
+  if(CAN_ADMIN) out.push({divider:true},{label:"Erase this enrollment", icon:"trash", danger:true, title:"Allowed only while no real email left", onclick:`gmSetCur(${g});gmDelete()`});
+  return out;
+}
+function gmThreadHtml(t){
+  const ready=GM.detail&&GM.detail.thread&&GM.detail.thread.gwd===t.gwd;
+  return `<div id="gmChat" class="gm-chat ds-gm-thread">${ready?gmChatHtml():DS.skeleton({rows:4})}</div>`;
 }
 function gmRenderList(){
+  const host=$("gmList"); if(!host||!window.DS||!DS.gaash) return;
   const all=(GM.ov&&GM.ov.threads)||[];
-  const ths=all.filter(t=>!gmIsDone(t)), done=all.filter(gmIsDone);
-  // with a single mailbox the account is never in question — only show it when
-  // there are several and "which one sent this?" is a real question
-  const multi=(((GM.ov&&GM.ov.accounts)||[]).length>1);
-  if(!all.length){ $("gmList").innerHTML=`<div class="muted2" style="padding:14px;text-align:center">${T("لا محادثات بعد — 📧 أرسل طروداً · no conversations yet — 📧 Enroll packages")}</div>`; return; }
-  const card=t=>{
-    const last=t.last_msg||{};
-    const prev=last.body?poEsc(last.body):(t.last_error?`⚠ ${poEsc(t.last_error)}`:"");
-    return `<div class="gm-row${GM.cur===t.gwd?' on':''}" onclick="gmOpen('${t.gwd}')">
-      <div class="gm-top">
-        <span class="gm-gwd">${poEsc(t.gwd)}</span>
-        ${((t.members||[]).length>1)?`<span class="pill mono" style="background:var(--bg2);border:1px solid var(--line);color:var(--muted);font-size:var(--ds-t-xs);flex:none" title="${T("محادثة مجمّعة — إيميل واحد لكل هذه الطرود · grouped conversation — one email covers all these parcels")}: ${t.members.map(poEsc).join(" · ")}">+${t.members.length-1}</span>`:""}
-        ${gmDots(t.step||0,((gmSeqOf(t)||{}).steps||[]).length)}
-        ${t.missing_docs?'<span title="'+T('ناقص مستندات · missing documents')+'">⚠️</span>':''}
-        <span class="spacer"></span>
-        ${t.unread?`<span class="gm-unread">${t.unread}</span>`:''}
-        <span class="muted2" style="font-size:var(--ds-t-xs)">${gmAgo(t.last_activity)}</span>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${gmChip(t.state)}
-        ${((t.reads_by||[]).length>1)?"":gmReadPill(t.reads)}
-        ${gmGashPill({...(t.gash||{}),source:t.source},true)}
-        ${!gmAcctOf(t)?tonePill("red","⚠ "+T("بلا مرسِل · no sender"),T("لا حساب مُرسِل — افتحها واختر واحداً · no sending account — open it and pick one"),{style:"font-size:var(--ds-t-xs)"}):""}
-        ${multi&&gmAcctOf(t)&&(t.reads_by||[]).length<2?tonePill("gray","📤 "+(gmAcctOf(t).label||gmAcctOf(t).email).split("@")[0],T("يُرسل من · sends from")+": "+gmAcctOf(t).email,{style:"color:var(--ink);font-size:var(--ds-t-xs);text-transform:none;letter-spacing:0;max-width:120px;overflow:hidden;text-overflow:ellipsis"}):''}
-        ${t.pname?tonePill("gray",(t.pname_id?"👤 ":"⚠ ")+t.pname+(t.pname_src==="default"?" ·"+T("افتراضي · default"):""),T('الاسم على الطرد · name on the parcel')+": "+t.pname+(t.pname_id?` · 🪪 ${t.pname_id}`:` · ${T('بلا هوية · no ID')}`),{style:"font-size:var(--ds-t-xs);max-width:130px;overflow:hidden;text-overflow:ellipsis"}):''}
-        ${t.next_send_at&&t.state==="active"?`<span class="muted2" style="font-size:var(--ds-t-xs)" title="${T('الإيميل القادم · next email')}">⏭ ${poEsc(String(t.next_send_at).slice(5,16).replace("T"," "))}</span>`:''}</div>
-      ${gmSenderRows(t)}
-      ${prev?`<div class="gm-prev">${last.dir==="in"?"↩ ":""}${prev}</div>`:''}
-    </div>`;
-  };
-  const open=gmClearedOpen();
-  $("gmList").innerHTML=
-    (ths.length?ths.map(card).join("")
-      :`<div class="muted2" style="padding:14px;text-align:center">${T("لا شيء ينتظر — كل الطرود خلصت · nothing waiting — every parcel is done")}</div>`)
-    +(done.length?`<div class="gm-fold${open?" on":""}" onclick="gmClearedToggle()">
-        <span class="gm-fold-c">${open?"▾":"▸"}</span>
-        <b>✅ ${T("خلصت · Cleared")}</b>
-        <span class="muted2" style="font-size:var(--ds-t-xs)">${T("لا تسلسل بعد الآن · no longer sequencing")}</span>
-        <span class="spacer"></span><span class="gm-fold-n">${done.length}</span>
-      </div>${open?done.map(card).join(""):""}`:"");
+  const live=all.filter(t=>!gmIsDone(t)), done=all.filter(gmIsDone);
+  let rows=GM_CONV.view==="all"?all:GM_CONV.view==="cleared"?done:live;
+  if(GM_CONV.quick==="unread") rows=rows.filter(t=>t.unread);
+  if(GM_CONV.quick==="proposed") rows=rows.filter(t=>t.state==="proposed");
+  if(GM_CONV.quick==="docs") rows=rows.filter(t=>t.state==="missing_docs"||t.missing_docs);
+  if(GM_CONV.q) rows=rows.filter(t=>gmConvText(t).includes(GM_CONV.q));
+  gmThumbsKick();
+  const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  DS.gaash.conversations(host, rows, {
+    cur:GM.cur, view:GM_CONV.view, query:GM_CONV.q, quick:GM_CONV.quick, none:!all.length,
+    counts:{open:live.length, cleared:done.length, all:all.length,
+      unread:all.filter(t=>t.unread).length, proposed:all.filter(t=>t.state==="proposed").length,
+      docs:all.filter(t=>t.state==="missing_docs"||t.missing_docs).length},
+    acctOf:gmAcctOf, seqOf:gmSeqOf, thumbs:t=>gmThumbsOf(t.gwd,t.source,3,lxRows),
+    thread:gmThreadHtml, menu:gmConvMenu, setCur:gmSetCur, canAdmin:CAN_ADMIN });
+  gmChatAfterPaint();
 }
 async function gmOpen(gwd,keep){
   GM.cur=gwd;
@@ -11103,8 +11025,8 @@ async function gmOpen(gwd,keep){
   const th=d.thread;
   if(th&&th.unread) post("/api/gaash/thread",{gwd,action:"mark_read"}).then(()=>{ th.unread=0; gmLoad(); });
 }
-function gmRenderChat(){
-  const d=GM.detail; if(!d) return;
+function gmChatHtml(){
+  const d=GM.detail; if(!d||!d.thread) return "";
   const th=d.thread, msgs=d.messages||[];
   const idDoc=((GM.ov&&GM.ov.ids)||[]).find(x=>x.id===th.id_doc_id);
   const KIND={sent:T("مُرسل · sent"),resent:T("أُعيد إرساله · resent"),reply:T("رد · reply"),
@@ -11130,7 +11052,7 @@ function gmRenderChat(){
         ${m.dir==="out"?`<button class="gm-mid" onclick="gmResendPick(${m.id})" title="${T('أرسلها مرة أخرى — من نفس الحساب أو غيره · send it again — from this account or another')}">↻</button>`:""}</div>${poEsc(m.body||"")}${atts}</div>`;
   }).join("")||`<div class="muted2" style="text-align:center;padding:20px">${T("لا رسائل بعد · no messages yet")}</div>`;
   const resend=JSON.parse(th.resend_json||"null");
-  $("gmChat").innerHTML=`
+  return `
     <div class="gm-head">
       <b class="mono">${poEsc(th.gwd)}</b>${((th.members||[]).length>1)
         ?th.members.slice(1).map(m=>{ const g=(th.members_gash||{})[m]||{};
@@ -11178,12 +11100,21 @@ function gmRenderChat(){
       <button class="accent" onclick="gmSend(this)">${T("إرسال · Send")}</button>
     </div>
     <div id="gmTplWarn" class="gm-warn hidden"></div>`;
+}
+function gmRenderChat(){
+  const host=$("gmChat"); if(!host) return;      // the conversation's row is not open
+  const html=gmChatHtml(); if(!html) return;
+  DS.paintHost(host, html);                       // keeps the caret in the reply box across the 60s poll
+  gmChatAfterPaint();
+}
+// the 60s poll re-renders this pane; without these lines it silently ate whatever
+// you were typing and any document you had attached
+function gmChatAfterPaint(){
+  const d=GM.detail; if(!d||!d.thread||!$("gmChat")) return;
   const box=$("gmMsgs"); if(box) box.scrollTop=box.scrollHeight;
-  // the 60s poll re-renders this pane; without these two lines it silently ate
-  // whatever you were typing and any document you had attached
-  const draft=((GM.draft||{})[th.gwd])||"";
-  if(draft&&$("gmBody")) $("gmBody").value=draft;
-  gmGrow($("gmBody"));
+  const body=$("gmBody"), draft=((GM.draft||{})[d.thread.gwd])||"";
+  if(draft&&body&&body.value!==draft&&document.activeElement!==body) body.value=draft;
+  gmGrow(body);
   gmSendChips();
 }
 function gmDraftKeep(el){
@@ -11227,7 +11158,7 @@ async function gmDelete(){              // erase an accidental enrollment comple
   if(r&&r.ok===false){ toast(r.error||"failed"); return; }
   toast("🗑 "+T("حُذفت · erased"));
   GM.cur=null;
-  $("gmChat").innerHTML=`<div class="muted2" style="padding:30px;text-align:center">${T("اختر محادثة — أو ابدأ سير عمل جديداً. · Pick a conversation — or start a new workflow.")}</div>`;
+  if(window.DS&&DS.tableResetOpen) DS.tableResetOpen("gm_conv");
   gmLoad();
 }
 async function gmRestart(){             // 🔁 back to email #1 — sends immediately
@@ -11410,9 +11341,9 @@ async function gmSend(btn){
   await gmLoad(); gmOpen(GM.cur,true);
 }
 async function gmCheck(btn){
-  btn.disabled=true; btn.textContent="…";
+  const was=btn.innerHTML; btn.disabled=true; btn.setAttribute("aria-busy","true");
   const r=await post("/api/gaash/check",{});
-  btn.disabled=false; localizeStatic();
+  btn.disabled=false; btn.removeAttribute("aria-busy"); btn.innerHTML=was;
   toast(r&&r.ok?`${T("ردود جديدة · new replies")}: ${r.new||0}${r.gmail?` · ✍️ ${T("من جيميل · from Gmail")}: ${r.gmail}`:""}`:(r&&r.errors?JSON.stringify(r.errors).slice(0,120):"failed"));
   gmLoad();
 }
@@ -12788,66 +12719,20 @@ async function gmNewStart(btn){
 let GM_READY={mode:"blocked"};          // blocked | tagged | ready | enrolled | all
 async function gmRenderReady(){
   const p=$("gmReadyPane"); if(!p) return;
-  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  p.innerHTML=DS.skeleton({rows:5});
   let d; try{ d=await (await fetch("/api/gaash/readiness")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmRenderReady()"}}); return; }
   GM.ready=d.rows||[];
+  // landing on an empty "No ID" view says nothing - fall back to everything, as the Docs tab does
+  if(GM_READY.mode==="blocked"&&!DS.gaash.readyFilter(GM.ready,"blocked").length) GM_READY.mode="all";
   gmReadyDraw();
 }
+function gmReadyMode(k){ GM_READY.mode=k; gmReadyDraw(); }
 function gmReadyDraw(){
-  const p=$("gmReadyPane"); if(!p) return;
-  const rows=GM.ready||[];
-  const isBlocked=r=>!r.pname_id&&!r.state;
-  const isTagged=r=>!!(r.app_tag||r.cu_tag);
-  const isReady=r=>!!r.pname_id&&!r.state;
-  const isEnrolled=r=>!!r.state;
-  const M={all:()=>true, blocked:isBlocked, tagged:isTagged, ready:isReady, enrolled:isEnrolled};
-  const list=rows.filter(M[GM_READY.mode]||M.all);
-  const chip=(k,lab,n)=>`<button class="minibtn${GM_READY.mode===k?" accent":""}" style="padding:2px 10px;font-size:var(--ds-t-xs)" onclick="GM_READY.mode='${k}';gmReadyDraw()">${lab} <b>${n}</b></button>`;
-  const badge=s=>s==="leluxe"?"⌚":s==="purchases"?"📦":"✎";
-  const row=r=>{
-    const idc=r.pname_id
-      ?`<b class="mono" style="font-size:var(--ds-t-xs)">🪪 ${poEsc(r.pname_id)}</b>`
-      :tonePill("amber","⚠ "+T("بلا هوية · no ID"),T(r.source==="purchases"?"أضف الهوية في صفحة العميل (الزبائن) · add the ID on the customer's CRM page":"امنح الاسم هوية من ⚙ أو اختر اسماً آخر · give this name an ID via ⚙ or pick another name"),{style:"font-size:var(--ds-t-xs)"});
-    const tag=r.source==="purchases"
-      ?`<label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-size:var(--ds-t-xs)" title="${T("وسم داخل التطبيق: خلّص هذا الطرد تلقائياً · in-app tag: auto-clear this parcel")}">
-          <input type="checkbox" ${r.app_tag?"checked":""} onchange="gmReadyTag('${poEsc(r.gwd)}',this.checked)">${r.app_tag?"✅":`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("وسم · tag")}</span>`}</label>`
-      :(r.cu_tag?tonePill("green","✅ "+String(r.cu_tag).slice(0,14),T("موسوم من عمود AUTO CLEAR في كليك أب · tagged via the ClickUp AUTO CLEAR column"),{style:"font-size:var(--ds-t-xs)"})
-                :`<span class="muted2" style="font-size:var(--ds-t-xs)" title="${T("يوسَم من كليك أب: عمود AUTO CLEAR · tag it in ClickUp: the AUTO CLEAR column")}">—</span>`);
-    const st=r.state?gmChip(r.state):`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("غير مسجّل · not enrolled")}</span>`;
-    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:var(--ds-t-sm)">
-      <span style="flex:none" title="${poEsc(r.source)}">${badge(r.source)}</span>
-      <b class="mono" style="font-size:var(--ds-t-xs);flex:none;cursor:pointer" onclick="gmTab('conv');${r.state?`gmOpen('${poEsc(r.gwd)}')`:`gmNewOpen(['${poEsc(r.gwd)}'])`}" title="${T(r.state?"افتح المحادثة · open the conversation":"سجّله في سير عمل · enroll it")}">${poEsc(r.gwd)}</b>
-      <span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.pname||"")}${gmDefMark(r.pname_src)}</span>
-      <span style="width:110px;flex:none">${idc}</span>
-      <span style="width:80px;flex:none">${tag}</span>
-      <span style="width:110px;flex:none">${st}</span>
-      <span class="muted2" style="font-size:var(--ds-t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.status||r.who||"")}</span>
-    </div>`;
-  };
-  p.innerHTML=`<div class="panel">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <b style="font-size:var(--ds-t-sm)">🩺 ${T("جاهزية التخليص · clearance readiness")}</b>
-      <span class="muted2" style="font-size:var(--ds-t-xs)">${T("الاسم والهوية والوسم لكل طرد — قبل أن يخرج أي إيميل · name, ID and tag per parcel — before any email leaves")}</span>
-      <span class="spacer"></span>
-      ${chip("blocked","⚠ "+T("بلا هوية · no ID"),rows.filter(isBlocked).length)}
-      ${chip("tagged","✅ "+T("موسومة · tagged"),rows.filter(isTagged).length)}
-      ${chip("ready","🟢 "+T("جاهزة · ready"),rows.filter(isReady).length)}
-      ${chip("enrolled","💬 "+T("مسجّلة · enrolled"),rows.filter(isEnrolled).length)}
-      ${chip("all",T("الكل · All"),rows.length)}
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
-      <span style="width:14px;flex:none"></span>
-      <span style="width:92px;flex:none">${T("التتبع · tracking")}</span>
-      <span style="width:120px;flex:none">${T("الاسم · name")}</span>
-      <span style="width:110px;flex:none">${T("الهوية · ID")}</span>
-      <span style="width:80px;flex:none">${T("وسم · tag")}</span>
-      <span style="width:110px;flex:none">${T("المحادثة · conversation")}</span>
-      <span>${T("الحالة · status")}</span>
-    </div>
-    <div style="max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:10px">
-      ${list.map(row).join("")||`<div class="muted2" style="padding:12px;font-size:var(--ds-t-sm)">${T("لا شيء هنا 👌 · nothing here 👌")}</div>`}
-    </div></div>`;
+  const p=$("gmReadyPane"); if(!p||!window.DS||!DS.gaash) return;
+  gmThumbsKick();
+  const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  DS.gaash.readiness(p, GM.ready||[], {mode:GM_READY.mode, thumbs:r=>gmThumbsOf(r.gwd,r.source,3,lxRows)});
 }
 async function gmReadyTag(gwd,on){
   const r=await post("/api/gaash/autoclear",{gwd,on});
@@ -12870,9 +12755,9 @@ function gmDocsView(v){
 }
 async function gmDocsRender(){
   const p=$("gmDocsPane"); if(!p) return;
-  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  p.innerHTML=DS.skeleton({rows:5});
   let d; try{ d=await (await fetch("/api/gaash/docs_queue")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmDocsRender()"}}); return; }
   // product photos come from the boards themselves (same source as Bulk search /
   // the Workflows expansion) — a role without Leluxe access just gets no ⌚ thumbs
   try{ await bsEnsureData(); }catch(e){}
@@ -12895,10 +12780,6 @@ function gmFcView(v){
   GM_FC.view=v;
   if(v==="cases"){ GM_FC.cases?gmCasesDraw():gmCasesRender(); } else gmFcastDraw();
 }
-function gmFcViewChips(){
-  const b=(v,lab)=>`<button class="minibtn${GM_FC.view===v?" accent":""}" style="padding:2px 10px;font-size:var(--ds-t-xs)" onclick="gmFcView('${v}')">${lab}</button>`;
-  return b("queue","🔮 "+T("التالي · next"))+b("cases","📊 "+T("كم استغرقت · how long"));
-}
 const GM_FC_REASON={
   thin_history:["gray","❔ "+"لا تاريخ كافٍ · not enough history",
     "لم نجمع بعد ما يكفي من الطرود لنتوقع · we haven't seen enough parcels clear yet to predict"],
@@ -12914,9 +12795,9 @@ function gmFcReasonPill(r){
 }
 async function gmFcastRender(){
   const p=$("gmFcastPane"); if(!p) return;
-  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  p.innerHTML=DS.skeleton({rows:5});
   let d; try{ d=await (await fetch("/api/gaash/forecast")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmFcastRender()"}}); return; }
   // product photos come from the boards themselves, exactly as the Docs tab
   try{ await bsEnsureData(); }catch(e){}
   GM_FC.data=d;
@@ -12942,193 +12823,23 @@ function gmFcNextPill(r,tip){
   return hexPill(HEX[r.next_code]||"#4466ff",txt,tip);
 }
 function gmFcastDraw(){
-  const p=$("gmFcastPane"); if(!p) return;
+  const p=$("gmFcastPane"); if(!p||!window.DS||!DS.gaash) return;
   const d=GM_FC.data; if(!d) return;
-  const rows=d.rows||[], m=d.model||{};
-  const M={all:()=>true, overdue:r=>!!r.overdue, unknown:r=>!r.ok};
-  const list=rows.filter(M[GM_FC.mode]||M.all);
-  const n=k=>rows.filter(M[k]).length;
-  const chip=(k,lab,c)=>`<button class="minibtn${GM_FC.mode===k?" accent":""}" style="padding:2px 10px;font-size:var(--ds-t-xs)" onclick="gmFcMode('${k}')">${lab} <b>${c}</b></button>`;
-  const badge=b=>b==="leluxe"?"⌚":"📦";
   const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
-  const hitOf=new Map();
-  rows.forEach(r=>{
-    let po=null,lx=null;
-    try{
-      if(r.board==="purchases") po=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]||null:null;
-      else lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
-    }catch(e){}
-    hitOf.set(r.gwd,{po,lx});
-  });
-  const thumbs=r=>{
-    try{
-      const h=hitOf.get(r.gwd)||{};
-      if(r.board==="purchases") return h.po?poThumbStrip(h.po.pk.items,3):"";
-      return h.lx?lxThumbs(h.lx.items,3):"";
-    }catch(e){ return ""; }
-  };
-  const dayTxt=v=>{ const x=Number(v||0); return (x<10?x.toFixed(1):Math.round(x))+"d"; };
-  const clearedCell=r=>{
-    if(!r.cleared_at) return '<span class="muted2">—</span>';
-    const dt=String(r.cleared_at).slice(0,10);
-    return `<span class="mono" style="font-size:var(--ds-t-xs)">${poEsc(dt)}</span> <span class="muted2" style="font-size:var(--ds-t-xs)">${poEsc(r.cleared_weekday||"")}</span>`;
-  };
-  // how long it has been sitting, in WORKING days — a weekend adds nothing, so
-  // a parcel never looks stuck just because it cleared on a Thursday
-  const waitCell=r=>{
-    if(r.dwell_work_days==null) return '<span class="muted2">—</span>';
-    const tip=T("أيام عمل منذ التخليص (الجمعة والسبت لا تُحسب) · working days since clearance — Fri/Sat don't count")
-      +` · ${T("تقويمياً · calendar")} ${dayTxt(r.dwell_days)}`;
-    return r.overdue
-      ? `<b style="color:#dc2626" title="${poEsc(tip+" · "+T("تجاوز ٩٠٪ من السجل · past the historical p90"))}">⏳ ${dayTxt(r.dwell_work_days)}</b>`
-      : `<span title="${poEsc(tip)}">⏳ ${dayTxt(r.dwell_work_days)}</span>`;
-  };
-  const nextCell=r=>{
-    if(!r.ok) return gmFcReasonPill(r);
-    const alts=(r.alternatives||[]).slice(0,5)
-      .map(a=>`${Math.round(100*a.p)}% ${a.label} (n=${a.n})`).join("\n");
-    const pct=Math.round(100*(r.next_p||0));
-    return gmFcNextPill(r,T("الأكثر احتمالاً · most likely")+"\n"+alts)
-      +` <span class="muted2 mono" style="font-size:var(--ds-t-xs)" title="${poEsc(T("من أصل · out of")+" n="+r.basis_n+" "+T("طرد مخلَّص · cleared parcels"))}">${pct}%</span>`;
-  };
-  const etaCell=r=>{
-    if(!r.ok) return '<span class="muted2">—</span>';
-    const tip=`${T("المدى · range")} ${r.eta_early} → ${r.eta_late}\n`
-      +`${T("الوسيط · median")} ${r.gap_work_days} ${T("يوم عمل · working days")}\n`
-      +`${T("مبني على · based on")} n=${r.basis_n} (${r.basis_sweeps} ${T("دفعة استلام · pickup runs")})`;
-    return `<b class="mono" style="font-size:var(--ds-t-xs)" title="${poEsc(tip)}">${poEsc(r.eta)}</b>`
-      +` <span class="muted2" style="font-size:var(--ds-t-xs)">${poEsc(r.eta_weekday||"")}</span>`;
-  };
-  const row=r=>{
-    const st=r.stale?tonePill("gray",T("قديم · stale"),
-      T("لم نفحص التتبع منذ فترة — قد يكون تحرّك · we haven't refreshed tracking in a while — it may already have moved"),
-      {style:"border-style:dashed"}):"";
-    return `<div id="gmfr_${poEsc(r.gwd)}" class="gmf-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:var(--ds-t-sm)${r.overdue?";background:#dc26260a":""}">
-      <span style="flex:none;width:14px" title="${r.board==="leluxe"?"Leluxe":"Purchases"}">${badge(r.board)}</span>
-      <b class="mono" style="font-size:var(--ds-t-xs);flex:none;width:104px;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
-      <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
-      <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.name||"")}</span>
-      <span style="width:118px;flex:none">${clearedCell(r)}</span>
-      <span style="width:96px;flex:none">${waitCell(r)}</span>
-      <span style="width:168px;flex:none;overflow:hidden">${nextCell(r)}</span>
-      <span style="width:120px;flex:none">${etaCell(r)}</span>
-      ${st}
-      <span class="spacer"></span>
-      <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
-      <button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("المحادثة · conversation")}">💬</button>
-    </div>`;
-  };
-  // The basis strip. When the model isn't ready this REPLACES the numbers with
-  // the honest reason — never a confident-looking date on thin evidence.
-  const top=(m.next||[])[0];
-  const basis=m.ready
-    ? `🔮 ${T("مبني على · learned from")} <b>${m.n}</b> ${T("انتقال · transitions")} · <b>${m.parcels}</b> ${T("طرد · parcels")} · <b>${m.sweeps}</b> ${T("دفعة استلام · pickup runs")}
-       · ${T("الوسيط · median")} <b>${(m.p50||0).toFixed(1)}</b> ${T("يوم عمل · working days")}
-       ${top?`· <b>${Math.round(100*top.p)}%</b> ${poEsc(top.label)}`:""}`
-    : `⚠ ${T("لا يوجد تاريخ كافٍ بعد · not enough history yet")} — <b>${m.n||0}</b> ${T("انتقال من · transitions from")} <b>${m.parcels||0}</b> ${T("طرد · parcels")}
-       (${T("نحتاج · we need")} ${(m.thresholds||{}).model_n||12}+)`;
-
-  p.innerHTML=`<div class="panel" style="padding:12px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <b style="font-size:var(--ds-t-sm)">🔮 ${T("ما التالي بعد التخليص · what happens next")}</b>
-      <span class="spacer"></span>
-      ${chip("all",T("الكل · All"),rows.length)}
-      ${n("overdue")?chip("overdue","🔴 "+T("متأخر · overdue"),n("overdue")):""}
-      ${n("unknown")?chip("unknown","❔ "+T("غير معروف · unknown"),n("unknown")):""}
-      ${gmFcViewChips()}
-      <button class="minibtn" onclick="gmFcastRender()" title="${T("أعد الحساب · recompute")}">↻</button>
-    </div>
-    <div class="muted2" style="font-size:var(--ds-t-xs);margin-bottom:8px;line-height:1.7">${basis}
-      <span style="opacity:.8"> · ${T("الجمعة والسبت عطلة — لا استلام فيهما أبداً · Fri/Sat are the weekend — a pickup has never landed on one")}</span>
-    </div>
-    <div style="overflow-x:auto">
-      <div style="min-width:1064px">
-        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
-          <span style="flex:none;width:14px"></span>
-          <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
-          <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
-          <span style="flex:none;width:132px">${T("الاسم · name")}</span>
-          <span style="flex:none;width:118px">${T("تخلّص في · cleared")}</span>
-          <span style="flex:none;width:96px">${T("ينتظر · waiting")}</span>
-          <span style="flex:none;width:168px">${T("التالي المتوقع · predicted next")}</span>
-          <span style="flex:none;width:120px">${T("متوقع في · expected")}</span>
-          <span class="spacer"></span>
-        </div>
-        ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا طرود بانتظار الاستلام 🎉 · nothing waiting after clearance 🎉")}</div>`}
-      </div>
-    </div>
-  </div>`;
+  DS.gaash.forecast(p, d, { mode:GM_FC.mode, view:GM_FC.view,
+    thumbs:r=>gmThumbsOf(r.gwd,r.board,3,lxRows), reasonPill:gmFcReasonPill, nextPill:gmFcNextPill });
 }
 async function gmCasesRender(){
   const p=$("gmFcastPane"); if(!p) return;
-  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  p.innerHTML=DS.skeleton({rows:5});
   let d; try{ d=await (await fetch("/api/gaash/case_report")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmCasesRender()"}}); return; }
   GM_FC.cases=d; gmCasesDraw();
 }
 function gmCasesDraw(){
-  const p=$("gmFcastPane"); if(!p) return;
+  const p=$("gmFcastPane"); if(!p||!window.DS||!DS.gaash) return;
   const d=GM_FC.cases; if(!d) return;
-  const badge=b=>b==="leluxe"?"⌚":"📦";
-  const SRC={upload:["أُرسلت من التطبيق · uploaded by the app","✅"],
-             link:["فُتحت صفحة غاش ورُفعت يدوياً · GAASH's page was opened and the files carried by hand","🔗"],
-             email:["إيميل التخليص · the clearance email","📧"]};
-  const dayCell=r=>{
-    if(r.days==null) return `<span class="muted2" title="${poEsc(T(r.reason||""))}">— ${poEsc(r.reason||"")}</span>`;
-    const tip=`${T("أُرسلت · sent")} ${String(r.sent_at).slice(0,10)} → ${T("أُفرج عنها · released")} ${String(r.released_at).slice(0,10)}`;
-    return `<b title="${poEsc(tip)}">${r.days}</b> <span class="muted2" style="font-size:var(--ds-t-xs)">${T("يوم · d")}</span>`;
-  };
-  const row=r=>{
-    const sm=SRC[r.sent_src]||["",""];
-    return `<div class="gmf-row" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:var(--ds-t-sm)">
-      <span style="flex:none;width:14px" title="${r.board==="leluxe"?"Leluxe":"Purchases"}">${badge(r.board)}</span>
-      <b class="mono" style="font-size:var(--ds-t-xs);flex:none;width:104px;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
-      <span style="width:150px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.name||"")}</span>
-      <span style="width:190px;flex:none;overflow:hidden">${r.case&&r.case!=="(no case)"?hexPill(gmCaseColor(r.case),r.case):'<span class="muted2">—</span>'}</span>
-      <span style="width:104px;flex:none" title="${poEsc(T(sm[0]))}"><span class="mono" style="font-size:var(--ds-t-xs)">${poEsc(String(r.sent_at).slice(0,10))}</span> ${sm[1]}</span>
-      <span style="width:96px;flex:none">${r.released_at?`<span class="mono" style="font-size:var(--ds-t-xs)">${poEsc(String(r.released_at).slice(0,10))}</span>`:'<span class="muted2">—</span>'}</span>
-      <span style="width:86px;flex:none">${dayCell(r)}</span>
-      <span class="spacer"></span>
-      <button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("المحادثة · conversation")}">💬</button>
-    </div>`;
-  };
-  const cards=(d.cases||[]).map(c=>`<div class="panel" style="padding:9px 11px;min-width:168px">
-    <div style="margin-bottom:5px">${hexPill(c.color||"#6b7280",c.case)}</div>
-    ${c.ready
-      ? `<div style="font-size:var(--ds-t-lg);font-weight:800;line-height:1.1">${c.p50}<span style="font-size:var(--ds-t-xs);font-weight:600" class="muted2"> ${T("يوم · days")}</span></div>
-         <div class="muted2" style="font-size:var(--ds-t-xs);margin-top:2px">${T("الوسيط من · median of")} ${c.n} · ${T("الأبطأ ٩٠٪ · slowest 10%")} ${c.p90}${T("ي · d")} · ${c.fastest}–${c.slowest}${T("ي · d")}</div>`
-      : `<div class="muted2" style="font-size:var(--ds-t-xs);line-height:1.5">n=${c.n} — ${T("قليلة جداً للمقارنة · too few to compare")}<br><span style="font-size:var(--ds-t-xs)">${T("نحتاج · we need")} ${d.min_n}+</span></div>`}
-  </div>`).join("");
-  const o=d.overall||{};
-  p.innerHTML=`<div class="panel" style="padding:12px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <b style="font-size:var(--ds-t-md)">📊 ${T("كم استغرقت غاش · how long GAASH took")}</b>
-      <span class="spacer"></span>
-      ${gmFcViewChips()}
-      <button class="minibtn" onclick="gmCaseCols(this)" title="${T("اقرأ أعمدة غاش من ClickUp من جديد — اضغط بعد إنشائها · re-read the Gaash columns from ClickUp — press this after creating them")}">⟳ ${T("أعمدة AZ (2) · AZ (2) columns")}</button>
-      <button class="minibtn" onclick="gmCasesRender()" title="${T("أعد الحساب · recompute")}">↻</button>
-    </div>
-    <div class="muted2" style="font-size:var(--ds-t-xs);margin-bottom:9px;line-height:1.7">
-      ${o.n?`${T("الوسيط العام · overall median")} <b>${o.p50}</b> ${T("يوم · days")} ${T("من · over")} <b>${o.n}</b> ${T("طرد مخلَّص · cleared parcels")} · `:""}
-      <b>${(d.counts||{}).waiting||0}</b> ${T("ما زالت عند غاش · still with GAASH")}
-      ${d.weird?` · <b>${d.weird}</b> ${T("أُفرج عنها قبل أن نرسل — غير محسوبة · released before we sent — not counted")}`:""}
-      <span style="opacity:.8"> · ${T("أيام تقويمية كاملة، بما فيها العطل · plain calendar days, holidays included")}</span>
-    </div>
-    ${cards?`<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px">${cards}</div>`:""}
-    <div style="overflow-x:auto"><div style="min-width:900px">
-      <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
-        <span style="flex:none;width:14px"></span>
-        <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
-        <span style="flex:none;width:150px">${T("الاسم · name")}</span>
-        <span style="flex:none;width:190px">${T("نوع الملف · case")}</span>
-        <span style="flex:none;width:104px">${T("أُرسلت · sent")}</span>
-        <span style="flex:none;width:96px">${T("أُفرج عنها · released")}</span>
-        <span style="flex:none;width:86px">${T("المدة · took")}</span>
-        <span class="spacer"></span>
-      </div>
-      ${(d.rows||[]).length?(d.rows||[]).map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لم يُسجَّل إرسال بعد · nothing recorded as sent yet")}</div>`}
-    </div></div>
-  </div>`;
+  DS.gaash.cases(p, d, {view:GM_FC.view});
 }
 // Re-read the two clearance columns from the real AZ (2). Parcels parked with
 // "the column doesn't exist yet" are re-armed here — pressing this IS the thing
@@ -13147,69 +12858,22 @@ function gmCaseColor(name){
   const c=((GM_FC.cases||{}).cases||[]).find(x=>x.case===name);
   return (c&&c.color)||"#6b7280";
 }
-// UI_AUDIT: no hand-rolled pills — these all go through the helper family above,
-// so they inherit .pill's own 10px and match the ORDER STATUS + GAASH STATUS
-// columns beside them. The hex handed to hexPill is the old markup's TEXT
-// colour; hexPill tints the background and border from it, which keeps the
-// darker, more readable ink these pills already had. Column-edge alignment is
-// handled once in CSS (.gmd-row .pill), not per call.
-function gmDocsStatePill(r){
-  if(r.state==="action"){
-    const t=T("غاش يطلب مستندات · GAASH asks for docs")+((r.codes||[]).includes(818)?" (ID)":"");
-    return hexPill("#b45309","🟡 "+T("مطلوب رفع · upload asked"),t);
-  }
-  if(r.state==="stopped")
-    return hexPill("#dc2626","⛔ "+T("توقف التخليص · stopped"));
-  if(r.state==="noanswer"){
-    const odd=!/^GWD\d{9}$/.test(r.gwd||"");
-    // dashed border keeps "no answer" visually distinct from plain "unchecked"
-    return tonePill("gray","🚫 "+T("لا جواب · no answer"),
-        T("غاش لا سجل لهذا الرقم — تأكد من رقم التتبع · GAASH has no record of this number — check the Tracking Number"),
-        {style:"border-style:dashed"})
-      +(odd?hexPill("#b45309","⚠ "+T("رقم غير معتاد · unusual number"),
-        T("الأرقام عادةً GWD + ٩ أرقام · a GWD is normally GWD + 9 digits"),
-        {style:"font-size:var(--ds-t-xs)"}):"");
-  }
-  if(r.state==="unchecked"||r.state==="error")
-    return tonePill("gray","❔ "+T("غير مفحوص · unchecked"),
-      T(r.state==="error"?"تعذّر الفحص آخر مرة — أعد المحاولة · last check failed — try again":"لم يُفحص بعد — اضغط فحص · not checked yet — press Check"));
-  // GAASH's docs clock only starts at arrival — say so instead of claiming customs
-  if(!r.arrived)
-    return tonePill("gray","🚚 "+T("لم يصل بعد · not arrived"),
-      T("لم يصل إسرائيل بعد — لا مستندات مطلوبة حتى الوصول · not in Israel yet — nothing is asked before arrival"));
-  return hexPill("#0f766e","🔵 "+T("بالجمارك · in customs"),
-    T("لا طلب مستندات، قيد المعالجة · no request, customs processing"));
-}
+function gmDocsMode(k){ GM_DOCS.mode=k; gmDocsDraw(); }
+function gmDocsStop(){ GM_DOCS.stop=true; }
+// the Docs board (static/ds/gaash.js draws it): the queue rows plus what only this
+// script can see — the boards' photos, the owner's own status, which ORDER a parcel
+// belongs to (several parcels of one order sit together in the by-order view)
 function gmDocsDraw(){
-  const p=$("gmDocsPane"); if(!p) return;
+  const p=$("gmDocsPane"); if(!p||!window.DS||!DS.gaash) return;
   const rows=GM.docs||[];
-  const M={action:r=>r.state==="action"||r.state==="stopped",
-           unchecked:r=>r.state==="unchecked"||r.state==="error",
-           watching:r=>r.state==="info"||r.state==="plain",
-           noanswer:r=>r.state==="noanswer",
-           all:()=>true};
-  const list=rows.filter(M[GM_DOCS.mode]||M.all);
-  const chip=(k,lab,n)=>`<button class="minibtn${GM_DOCS.mode===k?" accent":""}" style="padding:2px 10px;font-size:var(--ds-t-xs)" onclick="GM_DOCS.mode='${k}';gmDocsDraw()">${lab} <b>${n}</b></button>`;
-  const badge=s=>s==="leluxe"?"⌚":"📦";
-  // product photos: the same cross-board lookup the Workflows expansion uses
-  // (bsEnsureData ran in gmDocsRender) — flattened ONCE, never per row
   const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
   // one board lookup per parcel, shared by thumbs / status / order grouping
-  const hitOf=new Map();
-  rows.forEach(r=>{
-    let po=null,lx=null;
-    try{
-      if(r.source==="purchases") po=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]||null:null;
-      else lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
-    }catch(e){}
-    hitOf.set(r.gwd,{po,lx});
-  });
+  const hitOf=new Map(); rows.forEach(r=>hitOf.set(r.gwd,gmHit(r.gwd,r.source,lxRows)));
   const thumbs=r=>{
-    try{
-      const h=hitOf.get(r.gwd)||{};
-      if(r.source==="purchases") return h.po?poThumbStrip(h.po.pk.items,3):"";
-      return h.lx?lxThumbs(h.lx.items,3):"";
-    }catch(e){ return ""; }
+    try{ const h=hitOf.get(r.gwd)||{};
+      if(h.po) return poThumbStrip(h.po.pk.items,3);
+      if(h.lx) return lxThumbs(h.lx.items,3); }catch(e){}
+    return "";
   };
   // the owner's OWN board status (oredered / rd / …), read off the same boards.
   // Leluxe reads the PRODUCT rows (bsFindLx.sts): a 📦 package row's own status
@@ -13218,20 +12882,18 @@ function gmDocsDraw(){
   const boardStatus=r=>{
     try{
       const h=hitOf.get(r.gwd)||{};
-      if(r.source==="purchases"){
-        return h.po?gmOrderPill({source:"purchases",status:h.po.pk.otlobly_status}):'<span class="muted2">—</span>';
-      }
+      if(r.source==="purchases")
+        return h.po?gmOrderPill({source:"purchases",status:h.po.pk.otlobly_status}):DS.dash();
       const lx=h.lx;
-      if(!lx) return '<span class="muted2">—</span>';
+      if(!lx) return DS.dash();
       const u=lx.sts||[];
       if(u.length===1) return gmOrderPill({source:"leluxe",status:u[0]});
-      if(u.length>1) return tonePill("gray",T("متعدد · mixed"),u.join(" · "));
+      if(u.length>1) return DS.badge({label:"mixed", tone:"neutral", title:u.join(" · ")});
       const eff=(typeof lxKEffStatus==="function")?lxKEffStatus(lx.items,lx.pkgRow):"";
-      return eff?gmOrderPill({source:"leluxe",status:eff}):'<span class="muted2">—</span>';
-    }catch(e){ return '<span class="muted2">—</span>'; }
+      return eff?gmOrderPill({source:"leluxe",status:eff}):DS.dash();
+    }catch(e){ return DS.dash(); }
   };
-  // which ORDER a parcel belongs to — several parcels sharing one order nest
-  // under one header (same source ⇒ a group is inherently same-board)
+  // which ORDER a parcel belongs to (same source ⇒ a group is inherently same-board)
   const keyOf=r=>{
     const h=hitOf.get(r.gwd)||{};
     if(r.source==="purchases")
@@ -13243,127 +12905,10 @@ function gmDocsDraw(){
     if(r.source==="purchases") return (h.po&&h.po.p&&h.po.p.ship_to)||"";
     return (h.lx&&h.lx.order&&h.lx.order.name)||"";
   };
-  const row=r=>{
-    const lk=docsUploadLink(r);
-    // deadline + last-check are real columns (they have header labels), so the
-    // slot is always rendered — an empty one keeps the row grid intact.
-    // overdue reads "12d late" (number first) so it stays on one line in the column
-    const dl=`<span class="muted2 mono" style="font-size:var(--ds-t-xs);flex:none;width:74px;white-space:nowrap;overflow:hidden" title="${r.gaash_deadline?"GAASH deadline "+poEsc(r.gaash_deadline):""}">${r.gaash_deadline?`⏳ ${r.days_left!=null?(r.days_left<0?`<b style="color:#dc2626">${-r.days_left}d ${T("متأخر · late")}</b>`:`${r.days_left}d`):poEsc(r.gaash_deadline)}`:""}</span>`;
-    const chk=`<span class="muted2" style="font-size:var(--ds-t-xs);flex:none;width:52px">${r.docs_checked?agoTxt(r.docs_checked):""}</span>`;
-    const stale=r.stale&&r.state!=="unchecked"?tonePill("gray",T("قديم · stale"),T("آخر فحص قديم — أعد الفحص · last check is old — re-check"),{style:"font-size:var(--ds-t-xs);flex:none"}):"";
-    const derr=docsErrChip(r);
-    // WHICH papers, spelled out. Triage is the whole point of the 📄 tab, and
-    // "upload asked" alone never said whether that's one document or three.
-    // Its own line under the row: the column strip is already full at 1280px,
-    // and squeezed into it the names ellipsed down to nothing.
-    const askedNm=r.state==="action"?docsAskedNames(r):"";
-    const asked=askedNm?`<div style="padding:0 8px 5px;padding-inline-start:126px">${
-      tonePill("gray","📎 "+askedNm,T("ما طلبته غاش بالضبط · exactly what GAASH asked for"),
-               {style:"font-size:var(--ds-t-xs)"})}</div>`:"";
-    // the name is the customs ship-under name; FAISAL is the blank→default, so
-    // dim it and let a real name stand out (parcel-name rule)
-    const nm=r.pname||r.name||"";
-    return `<div id="gmdr_${poEsc(r.gwd)}" class="gmd-row" style="border-top:1px solid var(--line);font-size:var(--ds-t-sm)">
-      <div style="display:flex;gap:8px;align-items:center;padding:5px 8px">
-      <span style="flex:none;width:14px" title="${r.source==="leluxe"?"Leluxe":"Purchases"}">${badge(r.source)}</span>
-      <b class="mono" style="font-size:var(--ds-t-xs);flex:none;width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
-      <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
-      <span class="${/^faisal$/i.test(nm.trim())?"muted2":""}" style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(nm)}</span>
-      <span style="width:130px;flex:none">${gmDocsStatePill(r)}</span>
-      <span style="width:120px;flex:none;overflow:hidden" title="${T("حالتك على اللوحة · your own board status")}">${boardStatus(r)}</span>
-      <span style="width:124px;flex:none" title="${T("موقع الطرد عند غاش · where the parcel is with GAASH")}">${gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · "),{style:"font-size:var(--ds-t-xs)"})}</span>
-      ${dl}${chk}${stale}${derr}
-      <span class="spacer"></span>
-      ${lk?`<button class="minibtn" onclick="guOpen('${poEsc(r.gwd)}')" title="${T("اختر المستندات وراجعها ثم ارفعها لغاش · pick the documents, review them, then upload to GAASH")}">⬆ ${T("رفع · Upload")}</button>`:""}
-      <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
-      ${r.thread_state?`<button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" aria-label="${T("افتح المحادثة · open the conversation")}" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
-                      :`<button class="minibtn" onclick="gmNewOpen(['${poEsc(r.gwd)}'])" aria-label="${T("سجّله في سير عمل · enroll in a workflow")}" title="${T("سجّله في سير عمل · enroll in a workflow")}">📧</button>`}
-      </div>${asked}
-    </div>`;
-  };
-  // ── order grouping (view "order" only): walk the FILTERED list in its sort
-  // order; ≥2 rows sharing an order nest under one header (a 1-row order stays
-  // a flat row, exactly like the board's 1-child visual-package collapse).
-  // Group headers default OPEN — GM_DOCS.closed remembers what was folded.
-  // View "flat" is the plain one-row-per-parcel list, headers nowhere.
-  GM_DOCS.closed=GM_DOCS.closed||new Set();
-  const blocks=[],byKey=new Map();
-  if(GM_DOCS.view!=="flat") list.forEach(r=>{
-    const k=keyOf(r);
-    let b=byKey.get(k);
-    if(!b){ b={key:k,rows:[]}; byKey.set(k,b); blocks.push(b); }
-    b.rows.push(r);
-  });
-  const RANK={action:0,stopped:1,unchecked:2,error:2,noanswer:3,info:4,plain:4};
-  const grpHead=(b,name)=>{
-    const open=!GM_DOCS.closed.has(b.key);
-    const worst=b.rows.slice().sort((a,c)=>(RANK[a.state]??3)-(RANK[c.state]??3))[0];
-    const gwds=b.rows.map(x=>x.gwd);
-    const allTh=b.rows.every(x=>x.thread_state);
-    return `<div class="gmd-grp" onclick="gmDocsGrpToggle('${poEsc(b.key)}')" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-top:1px solid var(--line);background:var(--bg2);font-size:var(--ds-t-sm);cursor:pointer">
-      <span class="caret" style="flex:none;width:14px;color:var(--muted)">${open?"▾":"▸"}</span>
-      <span style="flex:none;width:14px" title="${b.rows[0].source==="leluxe"?"Leluxe":"Purchases"}">${badge(b.rows[0].source)}</span>
-      <b style="font-size:var(--ds-t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px" title="${poEsc(name)}">${poEsc(name||T("طلبية · order"))}</b>
-      ${tonePill("gray","📦 "+gwds.length+" "+T("طرود · parcels"),"",{style:"flex:none"})}
-      ${gmDocsStatePill(worst)}
-      ${open?"":`<span class="muted2 mono" style="font-size:var(--ds-t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gwds.map(poEsc).join(" · ")}</span>`}
-      <span class="spacer"></span>
-      ${allTh?`<button class="minibtn" onclick="event.stopPropagation();gmTab('conv');gmOpen('${poEsc(gwds[0])}')" title="${T("افتح المحادثة · open the conversation")}">💬</button>`
-             :`<button class="minibtn" onclick='event.stopPropagation();gmNewOpen(${JSON.stringify(gwds)},{group:true})' title="${T("إيميل واحد لكل الطرود — سجّلها معاً · one email for all parcels — enroll them together")}">📧 ${T("الكل · all")} (${gwds.length})</button>`}
-    </div>`;
-  };
-  const body=GM_DOCS.view==="flat"
-    ? list.map(row).join("")
-    : blocks.map(b=>{
-        if(b.rows.length<2) return row(b.rows[0]);
-        const name=grpName(b.rows[0]);
-        const open=!GM_DOCS.closed.has(b.key);
-        return `<div style="border-inline-start:2px solid #d9770655">
-          ${grpHead(b,name)}
-          ${open?b.rows.map(row).join(""):""}
-        </div>`;
-      }).join("");
-  const n=k=>rows.filter(M[k]).length;
-  p.innerHTML=`<div class="panel">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <b style="font-size:var(--ds-t-sm)">📄 ${T("مستندات الجمارك · customs documents")}</b>
-      <span class="muted2" style="font-size:var(--ds-t-xs)">${T("كل طرد مفتوح من اللوحتين وما تطلبه صفحة غاش · every open parcel from both boards and what GAASH's page asks")}</span>
-      <span class="spacer"></span>
-      ${chip("action","🟡 "+T("مطلوب رفع · upload asked"),n("action"))}
-      ${chip("unchecked","❔ "+T("غير مفحوصة · unchecked"),n("unchecked"))}
-      ${chip("watching","🔵 "+T("بالجمارك · in customs"),n("watching"))}
-      ${n("noanswer")?chip("noanswer","🚫 "+T("لا جواب · no answer"),n("noanswer")):""}
-      ${chip("all",T("الكل · All"),rows.length)}
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <span style="display:inline-flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-        <button class="minibtn${GM_DOCS.view!=="flat"?" accent":""}" style="border:0;border-radius:0;padding:2px 10px;font-size:var(--ds-t-xs)" onclick="gmDocsView('order')" title="${T("طرود الطلبية الواحدة تحت رأس واحد · one order's parcels nest under one header")}">🧾 ${T("حسب الطلبية · by order")}</button>
-        <button class="minibtn${GM_DOCS.view==="flat"?" accent":""}" style="border:0;border-radius:0;padding:2px 10px;font-size:var(--ds-t-xs)" onclick="gmDocsView('flat')" title="${T("صف لكل طرد، بلا تجميع · one row per parcel, no grouping")}">📦 ${T("كل طرد لحاله · flat parcels")}</button>
-      </span>
-      ${GM_DOCS.busy
-        ? `<span class="muted2" style="font-size:var(--ds-t-xs)"><span class="spin"></span> ${T("جارِ الفحص · checking")} <b>${GM_DOCS.done}/${GM_DOCS.total}</b></span>
-           <button class="minibtn" onclick="GM_DOCS.stop=true" data-en="■ Stop" data-ar="■ إيقاف">■ ${T("إيقاف · Stop")}</button>`
-        : (list.length?`<button class="minibtn" onclick="gmDocsCheckAll()" title="${T("افحص كل الصفوف المعروضة، واحداً بعد الآخر · check every row shown, one after another")}">📄 ${T("فحص الكل · Check all")} (${list.length})</button>`:"")}
-      ${GM_DOCS.busy?"":`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("كل فحص ١٠-٢٥ ثانية — صفحة غاش بطيئة · each check takes 10-25s — GAASH's page is slow")}</span>`}
-    </div>
-    <div style="overflow-x:auto">
-      <div style="min-width:1064px">
-        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;white-space:nowrap">
-          <span style="flex:none;width:14px"></span>
-          <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
-          <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
-          <span style="flex:none;width:132px">${T("الاسم · name")}</span>
-          <span style="flex:none;width:130px">${T("المستندات · docs")}</span>
-          <span style="flex:none;width:120px">${T("حالة الطلب · order status")}</span>
-          <span style="flex:none;width:124px">${T("حالة الجمارك · GAASH status")}</span>
-          <span style="flex:none;width:74px">${T("المهلة · deadline")}</span>
-          <span style="flex:none;width:52px">${T("آخر فحص · checked")}</span>
-          <span class="spacer"></span>
-        </div>
-        ${list.length?body:`<div class="muted2" style="padding:18px;text-align:center">${T("لا شيء هنا 🎉 · nothing here 🎉")}</div>`}
-      </div>
-    </div>
-  </div>`;
+  DS.gaash.docs(p, rows, { mode:GM_DOCS.mode, view:GM_DOCS.view, busy:GM_DOCS.busy, done:GM_DOCS.done, total:GM_DOCS.total,
+    thumbs, boardStatus, orderKey:keyOf, orderName:grpName,
+    gaash:r=>gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · ")),
+    asked:r=>docsAskedNames(r), uploadLink:r=>docsUploadLink(r), errChip:r=>docsErrChip(r) });
 }
 /* ── 🪪 Upload documents to GAASH ────────────────────────────────────────────
    Three steps, the same shape as the enroll wizard, but it ends in an UPLOAD
@@ -13668,21 +13213,12 @@ async function guSend(btn){
   } else if(r&&r.ok){ toast("🧪 "+T("جاهز — لم يُرسل شيء · ready — nothing sent"));
   } else toast("⚠ "+((r&&r.error)||T("فشل الرفع · upload failed")));
 }
-function gmDocsGrpToggle(key){
-  GM_DOCS.closed=GM_DOCS.closed||new Set();
-  GM_DOCS.closed.has(key)?GM_DOCS.closed.delete(key):GM_DOCS.closed.add(key);
-  gmDocsDraw();
-}
 // Walk the CURRENTLY FILTERED rows, 2 live checks at a time (GAASH's page is
 // slow; 2 keeps a 35-parcel pile inside a few minutes without hammering them).
 // Results land per row as they arrive, so a Stop keeps everything fetched.
 async function gmDocsCheckAll(){
   if(GM_DOCS.busy) return;
-  const M={action:r=>r.state==="action"||r.state==="stopped",
-           unchecked:r=>r.state==="unchecked"||r.state==="error",
-           watching:r=>r.state==="info"||r.state==="plain",
-           noanswer:r=>r.state==="noanswer", all:()=>true};
-  const gwds=(GM.docs||[]).filter(M[GM_DOCS.mode]||M.all).map(r=>r.gwd);
+  const gwds=DS.gaash.docsFilter(GM.docs||[],GM_DOCS.mode).map(r=>r.gwd);   // the rows on screen
   if(!gwds.length) return;
   GM_DOCS.busy=true; GM_DOCS.stop=false; GM_DOCS.done=0; GM_DOCS.total=gwds.length;
   gmDocsDraw();
@@ -14211,149 +13747,41 @@ async function gmWfClone(id){
   toast(T("نُسخ — يبدأ موقوفاً · cloned — starts Off"));
   await gmLoad(); gmRenderSeq();
 }
-function gmWfRow(row){
-  const s=row.s, st=row.st||{}, myRules=row.rules;
-  const prop=gmWfPropOf(s.id), open=!!(GM.wfOpen&&GM.wfOpen.has(s.id));
-  const onoff=`<span style="display:inline-flex;align-items:center;gap:5px;${CAN_ADMIN?"cursor:pointer":""}" ${CAN_ADMIN?`onclick="event.stopPropagation();gmWfToggle('${s.id}')"`:""} title="${T("تشغيل/إيقاف — الإيقاف يمنع الإرسال والتسجيل الجديد · On/Off — Off stops sends and new enrollment")}"><span class="tglsw${s.paused?"":" on"}"></span><span class="muted2" style="font-size:var(--ds-t-xs)">${s.paused?"Off":"On"}</span></span>`;
-  const trig=myRules.length
-    ?myRules.map(r=>`<span style="display:inline-flex;gap:4px;align-items:center;min-width:0"><span class="muted2" style="font-size:var(--ds-t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name)}: ${gmRuleSummary(r.cond)}">${gmRuleSummary(r.cond)}</span>${gmMatchChip(r.id)}</span>`).join(" ")
-    :`<span class="muted2" style="opacity:.5;font-size:var(--ds-t-xs)">${T("يدوي · manual")}</span>`;
-  const cells={
-    onoff, trigger:trig,
-    steps:`<span class="muted2">${(s.steps||[]).length}</span>`,
-    days:`<span class="muted2">${gmSeqDays(s)}</span>`,
-    goal:tonePill("gray","🎯 "+s.goal,null,{style:"font-size:var(--ds-t-xs)"}),
-    active:`<b>${s.active_threads||0}</b>`,
-    enrolled:`<span style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0" title="${T("عرض المسجّل والمقترح بكل الأعمدة · view enrolled + suggested packages with full columns")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')"><span class="muted2">${st.enrolled??"—"}</span>${prop.length?tonePill("amber","⚡ "+prop.length,null,{style:"font-size:var(--ds-t-xs);font-weight:800;flex:none"}):""}</span>`,
-    enr7d:`<span class="muted2">${st.enrolled_7d??"—"}</span>`,
-    goalmet:`<span class="muted2">${st.goal_met??"—"}</span>`,
-    sent:`<span class="muted2">${st.sent??"—"}</span>`,
-    open:`<span class="muted2">${gmWfPct(st.opened||0,st.sent||0)}</span>`,
-    reply:`<span class="muted2">${gmWfPct(st.replied||0,st.enrolled||0)}</span>`,
-    desc:`<span class="muted2" style="font-size:var(--ds-t-xs)" title="${poEsc(s.description||"")}">${poEsc(s.description||"")}</span>`,
-    menu:CAN_ADMIN?popMenu([
-      [`✎ ${T("تعديل سير العمل · Edit workflow")}`,`gmSeqEdit('${s.id}')`],
-      [`⧉ ${T("نسخ · Clone")}`,`gmWfClone('${s.id}')`],
-      [`🗑 ${T("أرشفة · Archive")}`,`gmSeqDelete('${s.id}')`,true],
-    ]):"",
-  };
-  return `<div class="poc-row wf-row${s.paused?" wf-off":""}${open?" wf-openrow":""}" style="cursor:pointer" onclick="if(event.target.closest('.pop,button,input,.tglsw,.caret'))return;gmSeqEdit('${s.id}')">
-    <div class="bt-pin">
-      <span class="caret" title="${T("عرض التسجيلات · view the enrollments")}" onclick="event.stopPropagation();gmWfExpToggle('${s.id}')">▸</span>
-      <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s.name)}</b>
-      ${CAN_ADMIN?`<span class="wf-acts"><button class="minibtn" style="padding:1px 7px" title="${T("تعديل · edit")}" onclick="event.stopPropagation();gmSeqEdit('${s.id}')">✎</button>
-      <button class="minibtn" style="padding:1px 7px" title="${T("نسخ · clone")}" onclick="event.stopPropagation();gmWfClone('${s.id}')">⧉</button></span>`:""}
-    </div>
-    ${lxtCells("wf",cells)}
-  </div>${open?`<div class="wf-exp" data-seq="${s.id}"></div>`:""}`;
-}
+function gmWfSearch(v){ GM_WF.q=String(v||""); clearTimeout(gmRenderSeq._t); gmRenderSeq._t=setTimeout(gmRenderSeq,250); }
+function gmWfState(k){ GM_WF.state=k; gmRenderSeq(); }
+function gmWfExpHtml(id){ return `<div class="ds-gm-wfexp" data-seq="${poEsc(id)}">${(GM.wfExp||{})[id]||DS.skeleton({rows:3})}</div>`; }
+// the Workflows board + the auto-enroll triggers (static/ds/gaash.js draws both)
 function gmRenderSeq(){
+  const host=$("gmSeqPane"); if(!host||!window.DS||!DS.gaash) return;
   const seqs=(GM.ov&&GM.ov.sequences)||[];
   if(GM.edit) return gmRenderBuilder();
   const rules=(GM.ov&&GM.ov.rules)||[];
   gmWfEnsureData();
   const stMap={}; ((GM.stats&&GM.stats.sequences)||[]).forEach(x=>stMap[x.seq_id]=x);
-  let rows=seqs.map(s=>({s, st:stMap[s.id], rules:rules.filter(r=>r.seq_id===s.id)}));
-  const q=(GM_WF.q||"").toLowerCase();
-  rows=rows.filter(r=>{
+  const allRows=seqs.map(s=>({s, st:stMap[s.id], rules:rules.filter(r=>r.seq_id===s.id)}));
+  const q=(GM_WF.q||"").trim().toLowerCase();
+  const rows=allRows.filter(r=>{
     if(GM_WF.state==="on"&&r.s.paused) return false;
     if(GM_WF.state==="off"&&!r.s.paused) return false;
     if(GM_WF.state==="trig"&&!r.rules.length) return false;
-    if(q&&!((r.s.name+" "+(r.s.description||"")+" "+r.rules.map(x=>x.name).join(" ")).toLowerCase().includes(q))) return false;
-    return true;
+    return !q||(r.s.name+" "+(r.s.description||"")+" "+r.rules.map(x=>x.name).join(" ")).toLowerCase().includes(q);
   });
-  lxtSortApply("wf",rows,(r,key)=>{
-    const st=r.st||{};
-    if(key==="onoff") return r.s.paused?1:0;
-    if(key==="steps") return (r.s.steps||[]).length;
-    if(key==="days") return gmSeqDays(r.s);
-    if(key==="goal") return String(r.s.goal||"");
-    if(key==="active") return r.s.active_threads||0;
-    if(key==="enrolled") return st.enrolled||0;
-    if(key==="enr7d") return st.enrolled_7d||0;
-    if(key==="goalmet") return st.goal_met||0;
-    if(key==="sent") return st.sent||0;
-    if(key==="open") return st.sent?(st.opened||0)/st.sent:0;
-    if(key==="reply") return st.enrolled?(st.replied||0)/st.enrolled:0;
-    return String(r.s.name||"").toLowerCase();
-  });
-  const chip=(k,lab)=>`<button class="minibtn${GM_WF.state===k?" accent":""}" style="padding:2px 10px;font-size:var(--ds-t-xs)" onclick="GM_WF.state='${k}';gmRenderSeq()">${lab}</button>`;
-  const onN=seqs.filter(s=>!s.paused).length;
-  const table=rows.length
-    ?lxtHead("wf","سير العمل · workflow")+lxtWrap("wf",`<div class="pkg open"><div class="pkg-body">${rows.map(gmWfRow).join("")}</div></div>`)
-    :`<div class="muted2 panel">${T("لا نتائج — عدّل الفلاتر · no results — adjust the filters")}</div>`;
-  $("gmSeqPane").innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <b style="font-size:var(--ds-t-md)">⚙️ ${T("الأتمتة · Workflows")}</b>
-      <span class="muted2" style="font-size:var(--ds-t-xs)">${onN} ${T("مشغّل · on")} · ${seqs.length-onN} ${T("موقوف · off")}</span>
-      <span class="spacer"></span>
-      ${CAN_ADMIN?`<button class="accent" onclick="gmSeqNew()">＋ ${T("سير عمل جديد · New workflow")}</button>`:""}
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-      <input id="gmWfSearch" placeholder="🔍 ${T("ابحث في سير العمل · Search workflows")}" value="${poEsc(GM_WF.q)}" style="width:210px;font-size:var(--ds-t-sm)" oninput="GM_WF.q=this.value;clearTimeout(gmRenderSeq._t);gmRenderSeq._t=setTimeout(()=>{gmRenderSeq();const i=$('gmWfSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">
-      ${chip("all",T("الكل · All"))}${chip("on","On")}${chip("off","Off")}${chip("trig","⚡ "+T("بمُشغّل · has trigger"))}
-    </div>
-    <div class="panel" style="padding:0">${table}</div>
-    <div style="margin-top:16px"><b style="font-size:var(--ds-t-md)">⚡ ${T("قواعد التسجيل التلقائي · auto-enroll triggers")}</b>
-      ${rules.map(r=>`<div class="panel" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:var(--ds-t-sm)">
-        <label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${r.enabled?"checked":""} ${CAN_ADMIN?`onchange="gmRuleToggle('${r.id}',this.checked)"`:"disabled"}></label>
-        <b>${poEsc(r.name)}</b>
-        <span class="muted2" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gmRuleSummary(r.cond)} → ${poEsc(((GM.ov.sequences||[]).find(s=>s.id===r.seq_id)||{}).name||"?")}</span>
-        ${gmMatchChip(r.id)}
-        ${tonePill("gray",r.mode==="auto"?T("تلقائي · auto"):T("بموافقة · approval"),null,{style:"font-size:var(--ds-t-xs)"})}
-        <span class="spacer"></span>
-        ${CAN_ADMIN?`<button class="minibtn" onclick="gmRuleEdit('${r.id}')">✎</button>
-        <button class="minibtn" onclick="gmRuleDelete('${r.id}')">🗑</button>`:""}
-      </div>`).join("")}
-      ${CAN_ADMIN?`<button class="minibtn" style="margin-top:8px" onclick="gmRuleNew()">＋ ${T("قاعدة جديدة · New rule")}</button>`:""}
-    </div>`;
-  lxtGridApply("wf",$("gmSeqPane"));
-  // expansion boxes live inside the h-scrolling wrap whose .pkg is CANVAS-wide —
-  // size each to the visible width and translate by scrollLeft so it stays put
-  const wwrap=$("gmSeqPane").querySelector(".bt-wrap");
-  if(wwrap){
-    const pinX=()=>{ const w=wwrap.clientWidth;
-      wwrap.querySelectorAll(":scope > .pkg > .pkg-body > .wf-exp").forEach(x=>{
-        x.style.width=w+"px"; x.style.transform=`translateX(${wwrap.scrollLeft}px)`; }); };
-    wwrap.addEventListener("scroll",pinX,{passive:true}); pinX();
-    const onRes=()=>{ if(!wwrap.isConnected){ window.removeEventListener("resize",onRes); return; } pinX(); };
-    window.addEventListener("resize",onRes);
-    gmRenderSeq._pinX=pinX;
-  }
+  DS.gaash.workflows(host, rows, {
+    q:GM_WF.q, state:GM_WF.state,
+    counts:{all:allRows.length, on:allRows.filter(r=>!r.s.paused).length,
+            off:allRows.filter(r=>r.s.paused).length, trig:allRows.filter(r=>r.rules.length).length},
+    rules, matches:GM.matches||{}, canAdmin:CAN_ADMIN, loading:!!GM.wfLoading,
+    seqName:id=>(seqs.find(s=>s.id===id)||{}).name||"", ruleSummary:c=>gmRuleSummary(c),
+    propOf:gmWfPropOf, isOpen:id=>!!(GM.wfOpen&&GM.wfOpen.has(id)), setOpen:gmWfSetOpen,
+    expansion:gmWfExpHtml, seqDays:gmSeqDays });
   if(GM.wfOpen&&GM.wfOpen.size)
-    rows.forEach(r=>{ if(GM.wfOpen.has(r.s.id)) gmWfExpRender(r.s.id); });
+    rows.forEach(r=>{ if(GM.wfOpen.has(r.s.id)&&!(GM.wfExp||{})[r.s.id]) gmWfExpRender(r.s.id); });
 }
 // ── 🧭 Overview tab: summary tiles across all workflows ──
 function gmOvRender(){
   gmWfEnsureData();
-  const st=GM.stats, o=st&&st.overall;
   const seqs=(GM.ov&&GM.ov.sequences)||[];
-  const onN=seqs.filter(s=>!s.paused).length;
-  const tile=(v,l)=>`<div class="gm-tile"><b>${v}</b><span>${l}</span></div>`;
-  const dtile=(v,l,kind)=>`<div class="gm-tile click" onclick="gmStatDrill('${kind}')"><b>${v}</b><span>${l}</span></div>`;
-  const list=seqs.map(s=>{
-    const x=((st&&st.sequences)||[]).find(y=>y.seq_id===s.id)||{};
-    return `<div class="panel" style="display:flex;gap:10px;align-items:center;margin-top:6px;font-size:var(--ds-t-sm);cursor:pointer" onclick="gmTab('seq');gmSeqEdit('${s.id}')">
-      <span class="tglsw${s.paused?"":" on"}" style="flex:none"></span>
-      <b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(s.name)}</b>
-      <span class="spacer"></span>
-      <span class="muted2" style="font-size:var(--ds-t-xs)">${x.enrolled||0} ${T("مسجل · enrolled")} · ${s.active_threads||0} ${T("نشط · active")} · 🎯 ${x.goal_met||0}</span>
-    </div>`;
-  }).join("");
-  $("gmOvPane").innerHTML=o?`
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${tile(seqs.length,T("سير عمل · workflows"))}
-      ${tile(onN+" / "+seqs.length,"On")}
-      ${tile(o.enrolled,T("مسجل · enrolled"))}
-      ${tile(o.enrolled_7d??0,T("آخر ٧ أيام · last 7 days"))}
-      ${tile(o.active,T("نشط · active"))}
-      ${dtile(o.sent,T("مرسل · sent"),"sent")}
-      ${dtile(gmWfPct(o.opened,o.sent),T("فتح · open"),"opened")}
-      ${dtile(gmWfPct(o.replied,o.enrolled),T("رد · reply"),"replied")}
-      ${tile(gmWfPct(o.goal_met,o.enrolled),T("الهدف · goal"))}
-    </div>
-    <b style="font-size:var(--ds-t-sm)">⚙️ ${T("سير العمل · Workflows")}</b>${list}`
-    :`<div class="muted2 panel">${T("جارِ التحميل… · loading…")}</div>`;
+  DS.gaash.overview($("gmOvPane"), {stats:GM.stats, seqs, onN:seqs.filter(s=>!s.paused).length});
 }
 // ── Overview drill-down: which exact parcel/email is behind a stat tile ──
 function gmWhen(s){                      // "Jul 26, 2026 at 6:16 PM", viewer's tz
@@ -14782,34 +14210,11 @@ async function gmRuleSave(btn){
 }
 // ── 📝 Templates tab ──
 function gmRenderTpl(editId){
+  const p=$("gmTplPane"); if(!p||!window.DS||!DS.gaash) return;
   const tpls=(GM.ov&&GM.ov.templates)||[];
   const ed=tpls.find(t=>t.id===editId)||(editId==="new"?{id:"",name:"",subject_tpl:"",body_tpl:""}:null);
   GM.tplEditId=ed?(editId||"new"):null;         // guards the 60s poll re-render
-  $("gmTplPane").innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <b style="font-size:var(--ds-t-md)">📝 ${T("مكتبة القوالب · Template library")}</b>
-      <span class="muted2" style="font-size:var(--ds-t-xs)">${T("اضغط متغيّراً بالأسفل لإدراجه · click a variable below to insert it")}</span>
-      <span class="spacer"></span>
-      ${CAN_ADMIN?`<button class="accent" onclick="gmRenderTpl('new')">＋ ${T("قالب جديد · New template")}</button>`:""}
-    </div>
-    ${tpls.map(t=>`<div class="panel" style="display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:var(--ds-t-sm)">
-      <b>${poEsc(t.name)}</b>
-      <span class="muted2" style="font-size:var(--ds-t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${poEsc(t.subject_tpl||"")}</span>
-      <span class="spacer"></span>
-      ${tonePill("gray",(t.used_by||0)+" "+T("استخدام · used"),null,{style:"font-size:var(--ds-t-xs)"})}
-      ${CAN_ADMIN?`<button class="minibtn" onclick="gmRenderTpl('${t.id}')">✎</button>
-      <button class="minibtn" onclick="gmTplDelete('${t.id}')">🗑</button>`:""}
-    </div>`).join("")||`<div class="muted2 panel">${T("لا قوالب بعد · no templates yet")}</div>`}
-    ${ed?`<div class="panel" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-      <b>${ed.id?T("تعديل القالب · Edit template"):T("قالب جديد · New template")}</b>
-      <input id="gmTplName" value="${poEsc(ed.name)}" placeholder="${T("اسم القالب · template name")}">
-      <input id="gmTplSubj" value="${poEsc(ed.subject_tpl||"")}" placeholder="subject — e.g. Customs clearance — {gwd}" onfocus="gmTokCaret(this)" onblur="gmTokCaret(this)">
-      ${gmTokBar()}
-      <textarea id="gmTplBody" rows="22" style="font-size:var(--ds-t-sm);min-height:48vh;resize:vertical;line-height:1.5" onfocus="gmTokCaret(this)" onblur="gmTokCaret(this)">${poEsc(ed.body_tpl||"")}</textarea>
-      <div style="display:flex;justify-content:flex-end;gap:8px">
-        <button class="minibtn" onclick="gmRenderTpl()">${T("إلغاء · Cancel")}</button>
-        <button class="accent" onclick="gmTplSave('${poEsc(ed.id)}',this)">💾 ${T("حفظ · Save")}</button>
-      </div></div>`:""}`;
+  DS.gaash.templates(p, tpls, {canAdmin:CAN_ADMIN, editor:ed, tokBar:ed?gmTokBar():""});
 }
 // ── template variable picker: core-token chips + a searchable all-columns box ──
 function gmTokList(){ return (GM.ov&&GM.ov.tpl_tokens)||[]; }
@@ -14859,35 +14264,12 @@ async function gmTplDelete(id){
 }
 // ── 📊 Dashboard tab ──
 async function gmDashLoad(){
-  $("gmDashPane").innerHTML=`<div class="muted2" style="padding:20px">${T("جارِ التحميل… · loading…")}</div>`;
+  const p=$("gmDashPane"); if(!p) return;
+  p.innerHTML=DS.skeleton({rows:5});
   let d; try{ d=await (await fetch("/api/gaash/stats")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ $("gmDashPane").innerHTML=`<div class="muted2 panel">${T("تعذر التحميل · couldn't load")}${poEsc(apiFailReason())}</div>`; return; }
+  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmDashLoad()"}}); return; }
   GM.stats=d;
-  const o=d.overall, pct=(a,b)=>b?Math.round(a/b*100)+"%":"—";
-  const tile=(v,l,tip)=>`<div class="gm-tile" ${tip?`title="${poEsc(tip)}"`:""}><b>${v}</b><span>${l}</span></div>`;
-  const seqRows=(d.sequences||[]).filter(s=>s.enrolled||s.sent).map(s=>{
-    const mx=Math.max(1,...(s.steps.length?s.steps:[0]));
-    return `<tr><td><b>${poEsc(s.name)}</b></td><td>${s.enrolled}</td><td>${s.sent}</td>
-      <td>${pct(s.opened,s.sent)}</td><td>${pct(s.clicked,s.sent)}</td>
-      <td>${pct(s.replied,s.enrolled)}</td><td>${pct(s.goal_met,s.enrolled)}</td><td>${s.bounces}</td>
-      <td><div class="gm-fun">${s.steps.map((n,i)=>`<div style="height:${Math.max(8,n/mx*56)}px" title="${T("إيميل · email")} #${i+1}: ${n}"><i>${n}</i></div>`).join("")||'<span class="muted2" style="font-size:var(--ds-t-xs)">—</span>'}</div></td></tr>`;
-  }).join("");
-  $("gmDashPane").innerHTML=`
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${tile(o.enrolled,T("مسجل · enrolled"))}
-      ${tile(o.sent,T("مرسل · emails sent"))}
-      ${tile(pct(o.opened,o.sent),T("فتح · open rate"),T("تقريبي — بعض البرامج تحمّل الصور تلقائياً · approximate — some mail apps auto-load images"))}
-      ${tile(pct(o.clicked,o.sent),T("نقر · click rate"))}
-      ${tile(pct(o.replied,o.enrolled),T("رد · reply rate"))}
-      ${tile(pct(o.goal_met,o.enrolled),T("الهدف · goal rate"))}
-      ${tile(o.bounces,T("ارتداد · bounces"))}
-    </div>
-    <div class="panel" style="padding:0"><div class="tbl-scroll"><table>
-      <thead><tr><th>${T("سير العمل · workflow")}</th><th>${T("مسجل · enrolled")}</th><th>${T("مرسل · sent")}</th>
-        <th>${T("فتح · open")}</th><th>${T("نقر · click")}</th><th>${T("رد · reply")}</th><th>🎯</th>
-        <th>${T("ارتداد · bounce")}</th><th>${T("قمع الخطوات · step funnel")}</th></tr></thead>
-      <tbody>${seqRows||`<tr><td colspan="9" class="muted2">${T("لا بيانات بعد · no data yet")}</td></tr>`}</tbody>
-    </table></div></div>`;
+  DS.gaash.analyze(p, d);
 }
 
 // Offline shell worker: scope /app only — /, /login and the public pages stay untouched.

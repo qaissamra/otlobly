@@ -685,3 +685,48 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 /* Batch F3 — the packages board's "+N?" marker for products with no individual price. */
 .ds-lx-unpriced { color: var(--ds-warning-ink); font-size: var(--ds-t-xs); flex: 0 0 auto;
   margin-inline-start: var(--ds-s1); }
+
+/* ── Callout: a state strip that carries the control which changes it (Batch C) ── */
+.ds-callout { display: flex; align-items: center; gap: var(--ds-s2); padding: var(--ds-s2) var(--ds-s3); border: 1px solid var(--ds-neutral-line); border-radius: var(--ds-r-sm); background: var(--ds-neutral-bg); color: var(--ds-neutral-ink); font-size: var(--ds-t-sm); }
+.ds-callout + .ds-callout { margin-block-start: var(--ds-s1); }
+.ds-callout > .ds-icon { flex: 0 0 auto; }
+.ds-callout-body { flex: 1 1 auto; min-inline-size: 0; }
+.ds-callout-actions { display: inline-flex; gap: var(--ds-s1); flex: 0 0 auto; }
+.ds-callout-info { background: var(--ds-info-bg); border-color: var(--ds-info-line); color: var(--ds-info-ink); }
+.ds-callout-success { background: var(--ds-success-bg); border-color: var(--ds-success-line); color: var(--ds-success-ink); }
+.ds-callout-warning { background: var(--ds-warning-bg); border-color: var(--ds-warning-line); color: var(--ds-warning-ink); }
+.ds-callout-danger { background: var(--ds-danger-bg); border-color: var(--ds-danger-line); color: var(--ds-danger-ink); }
+/* a KPI card that opens its own drill-down */
+.ds-kpi-click { cursor: pointer; transition: border-color var(--ds-dur-fast) var(--ds-ease); }
+.ds-kpi-click:hover, .ds-kpi-click:focus-visible { border-color: var(--ds-accent); outline: none; }
+
+/* ── GAASH mail (Batch C) ── */
+.ds-gm-id { display: inline-flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; max-inline-size: 100%; }
+.ds-gm-src { font-size: var(--ds-t-xs); color: var(--ds-muted); flex: 0 0 auto; }
+.ds-gm-unread { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 18px; block-size: 18px; padding-inline: 5px; border-radius: var(--ds-r-pill); background: var(--ds-danger-dot); color: var(--ds-on-solid); font-size: var(--ds-t-xs); font-weight: var(--ds-w-bold); flex: 0 0 auto; }
+.ds-gm-prog { display: inline-flex; align-items: center; gap: var(--ds-s2); }
+.ds-gm-name { display: inline-flex; align-items: center; gap: var(--ds-s1); min-inline-size: 0; max-inline-size: 100%; }
+.ds-gm-name > .ds-muted { font-size: var(--ds-t-xs); flex: 0 0 auto; }
+.ds-gm-in { display: inline-flex; color: var(--ds-info-ink); margin-inline-end: 2px; vertical-align: middle; }
+.ds-gm-hint { font-size: var(--ds-t-xs); align-self: center; }
+.ds-gm-h2 { font-size: var(--ds-t-md); font-weight: var(--ds-w-bold); margin: var(--ds-s4) 0 var(--ds-s2); }
+.ds-gm-sec { display: flex; align-items: center; gap: var(--ds-s3); margin-block: var(--ds-s4) var(--ds-s2); }
+.ds-gm-sec .ds-gm-h2 { margin: 0; }
+.ds-tr.ds-gm-off .ds-cell { opacity: .6; }
+.ds-tr.ds-gm-off .ds-td-check .ds-cell, .ds-tr.ds-gm-off .ds-switch, .ds-tr.ds-gm-off .ds-actions { opacity: 1; }
+.ds-gm-trig { display: inline-flex; align-items: center; gap: var(--ds-s1); min-inline-size: 0; max-inline-size: 100%; }
+.ds-gm-lead { display: inline-flex; align-items: center; gap: var(--ds-s1); margin-inline-start: var(--ds-s2); }
+.ds-gm-sub-h { display: flex; align-items: center; gap: var(--ds-s2); margin: var(--ds-s3) 0 var(--ds-s1); font-size: var(--ds-t-sm); }
+/* the conversation body a row opens into: the legacy thread panel, framed */
+.ds-tr-exp .ds-gm-thread { border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-card); }
+.ds-gm-tie { display: inline-flex; align-items: center; gap: var(--ds-s1); color: var(--ds-muted); font-size: var(--ds-t-xs); }
+.ds-gm-run { display: inline-flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; max-inline-size: 100%; }
+.ds-tr.ds-gm-tied { border-block-start: 0; }
+.ds-tr.ds-gm-tie-first { box-shadow: inset 3px 0 0 var(--ds-warning-dot); }
+.ds-tr.ds-gm-tied { box-shadow: inset 3px 0 0 var(--ds-warning-line); }
+.ds-tr.ds-gm-overdue { background: var(--ds-danger-bg); }
+.ds-gm-fun { display: inline-flex; align-items: flex-end; gap: var(--ds-s1); block-size: 32px; padding-block-start: 12px; }
+.ds-gm-fun > span { display: inline-block; min-inline-size: 22px; background: var(--ds-accent); border-radius: 3px 3px 0 0; position: relative; }
+.ds-gm-fun > span > i { position: absolute; inset-block-start: -14px; inset-inline: 0; text-align: center; font-size: var(--ds-t-xs); font-style: normal; color: var(--ds-muted); }
+.ds-gm-editor { margin-block-start: var(--ds-s4); padding: var(--ds-s4); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-card); display: flex; flex-direction: column; gap: var(--ds-s3); }
+.ds-gm-editor-foot { display: flex; justify-content: flex-end; gap: var(--ds-s2); }

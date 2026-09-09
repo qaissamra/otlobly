@@ -363,7 +363,7 @@
       // threw `Unexpected token '&'` on click. Dead since Phase 1 in every tab strip and
       // view pill in the app; only ever noticed once a page lost its legacy strip.
       const on = (o.onchange || "").replace(/KEY/g, JSON.stringify(t.key));
-      return `<button${attrs({ type: "button", role: "tab", class: "ds-tab", "aria-selected": sel ? "true" : "false", tabindex: sel ? "0" : "-1", "data-key": t.key, id: `${id}-${t.key}`, onclick: `DS.tabSelect(this);${on}`, onkeydown: "DS.tabsKey(event)", title: t.title })}>${t.icon ? DS.icon(t.icon) : ""}<span>${esc(t.label)}</span>${t.count != null ? `<span class="ds-count">${esc(t.count)}</span>` : ""}</button>`;
+      return `<button${attrs({ type: "button", role: "tab", class: "ds-tab", "aria-selected": sel ? "true" : "false", tabindex: sel ? "0" : "-1", "data-key": t.key, id: t.id || `${id}-${t.key}`, onclick: `DS.tabSelect(this);${on}`, onkeydown: "DS.tabsKey(event)", title: t.title })}>${t.icon ? DS.icon(t.icon) : ""}<span>${esc(t.label)}</span>${t.count != null ? `<span class="ds-count">${esc(t.count)}</span>` : ""}</button>`;
     }).join("")}</div>`;
   };
   DS.tabSelect = (btn) => { const list = btn.closest('[role="tablist"]'); if (!list) return; list.querySelectorAll('[role="tab"]').forEach((t) => { const on = t === btn; t.setAttribute("aria-selected", on ? "true" : "false"); t.tabIndex = on ? 0 : -1; }); };
@@ -383,6 +383,11 @@
   DS.kpis = (stats) => `<div class="ds-kpis">${(stats || []).map((s) => `<div class="ds-kpi">${DS.stat(s)}</div>`).join("")}</div>`;
   DS.empty = (o) => { o = o || {}; return `<div${attrs({ class: cls("ds-empty", o.cls), id: o.id })}>${DS.icon(o.icon || "inbox", { size: "xl" })}<div class="ds-empty-title">${esc(o.title || "Nothing here yet")}</div>${o.text || o.hint ? `<div class="ds-empty-text">${esc(o.text || o.hint)}</div>` : ""}${o.action ? DS.button(Object.assign({ variant: "primary" }, o.action)) : ""}</div>`; };
   DS.errorState = (o) => { o = o || {}; return `<div class="ds-error-state" role="alert">${DS.icon("exclamation-triangle")}<span>${esc(o.text || "Something went wrong.")}</span><span class="ds-spacer" style="flex:1"></span>${o.retry ? DS.button(Object.assign({ label: "Retry", size: "sm", icon: "arrow-path" }, o.retry)) : ""}</div>`; };
+  /** DS.callout({tone:neutral|info|success|warning|danger, icon, title, text|html, actions:[button opts|html], cls})
+      - a state strip that carries the control which changes it (safe mode + Freeze all, an
+      auth error + Update password). Not a toast: it stays until the state does. */
+  DS.callout = (o) => { o = o || {}; const acts = (o.actions || []).filter(Boolean).map((a) => (typeof a === "string" ? a : DS.button(a))).join("");
+    return `<div${attrs({ class: cls("ds-callout", `ds-callout-${o.tone || "neutral"}`, o.cls), role: "status", title: o.title })}>${o.icon ? DS.icon(o.icon, { size: 16 }) : ""}<div class="ds-callout-body">${o.html || esc(o.text || "")}</div>${acts ? `<div class="ds-callout-actions">${acts}</div>` : ""}</div>`; };
   DS.feed = (o) => { o = o || {}; return `<div class="ds-feed">${(o.items || []).map((it) => `<div class="ds-feed-item"><span class="ds-feed-icon">${DS.icon(it.icon || "clock", { size: 14 })}</span><div><div>${it.html || esc(it.text)}</div>${it.by ? `<div class="ds-muted" style="font-size:11px">${esc(it.by)}</div>` : ""}</div><span class="ds-feed-when" title="${esc(DS.fmt ? DS.fmt.title(it.when) : it.when)}">${esc(DS.fmt ? DS.fmt.relative(it.when) : it.when)}</span></div>`).join("")}</div>`; };
 
   // ---------------------------------------------------------------- toast (one queue, variants, live region)

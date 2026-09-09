@@ -49,7 +49,7 @@ quoting a number.
 | leads | 0 | 0 | 0 | 0 | 10 | – | 457 |
 | activity · team · tracking | 0 | 0 | 0 | 0 | 5–8 | – | 10–162 |
 
-Not captured: **gaash mail › readiness** — its fetch outruns the harness; measure it during Batch C.
+Not captured in this run: **gaash mail › readiness** — its fetch outruns the harness; measured in Batch C (§22): 123 controls, 0 under 24px.
 
 ---
 
@@ -92,6 +92,7 @@ No `<h1>` anywhere. Needs attention emits 5 `<h2>`s, Deposits 4, P&L 3, Team 2.
 ### Q-007 · major · the GAASH mail tab strip is 23px tall
 All 8 tab buttons (`💬 Conversations` 111×23, `🧭 Overview` 85×23 …) sit one pixel under
 the minimum, on every one of the 8 tabs. **Fix:** the strip becomes `DS.tabs` in Batch C.
+**Closed in Batch C (2026-09-10):** the strip is `DS.tabs`, 34px, on every tab; under the new shell the shell's own strip is the navigation, as before.
 
 ---
 
@@ -1190,3 +1191,43 @@ Every page renders, no console errors, no dead or non-compiling controls anywher
 
 `run_all_tests.sh` = **62 passed · 0 failed**; the four new menu-placement checks fail on the
 pre-fix tree.
+
+
+## 22. Batch C — the GAASH mail walk (2026-09-10)
+
+Every tab of the migrated page, 1400×900, admin, new shell on, live-data snapshot. Harness =
+the inline `window.__qa.measure()` (scoped to `#gmView`, skips `.ds-sr` and hidden panes).
+
+| tab | controls | < 24px | truncated | no tooltip | fonts |
+|---|---:|---:|---:|---:|---|
+| conversations (thread open) | 93 | **0** | 25 | **0** | 11 · 12.5 · 13.02 · 14 · 17 · 22 |
+| overview | – | 0 | 0 | 0 | same |
+| workflows (expansion open, 32 parcels) | – | 0 | – | 0 | same |
+| readiness (46) | 123 | **0** | 3 | 0 | same |
+| docs (11, by order + flat) | – | 0 | 6 | **0** | same |
+| forecast queue (2) · cases (32) | – | 0 | 19 | **0** | same |
+| templates (7, editor open) · analyze | – | 0 | 1 | 0 | 11 · 12.5 · 14 · 17 · 22 |
+
+### Q-049 · minor · the thread body's controls were under 24px — fixed
+The chat a conversation opens into is legacy markup (Phase 5), but it is on a design-system
+board now: three action buttons (`📝 Templates` 79×18, `🧬 Sequences` 84×18, `📎 Attach` 56×18)
+and sixteen link / copy-Message-ID / resend buttons at 9–12px. Both rules got the 24px floor in
+index.html (`.gm-actions button`, `.gm-meta .gm-mid`).
+
+### Q-050 · minor · Readiness landed on an empty view — fixed
+`GM_READY.mode` defaulted to "blocked" (no ID); with every parcel carrying an ID the tab opened
+on "Nothing here" with 46 parcels one click away. It now falls back to All, as the Docs tab
+already did for its "upload asked" view.
+
+### Two harness corrections
+- **Read the value inside the cell, not the cell.** The DataTable's `.ds-cell` wrapper is what
+  clips (`text-overflow: ellipsis`), while the value inside it carries the `title`. Walking
+  ancestors only reported 6 "unreadable" Order numbers and 19 "not cleared yet" reasons that
+  every user can hover. The probe now also accepts a titled descendant.
+- **A checkbox is measured by its label.** `.ds-check` is a 24px `<label>`; the 16px `<input>`
+  inside it is not the hit target.
+
+Verified by driving, not by name: the Docs by-order tie runs were forced with a grouping `ctx`
+(2 runs, 7 tied rows, "Enroll all 6" / "Enroll all 3"), the classic layout's strip switched tabs
+on a real click, and the reply box kept text + focus + caret across `gmRenderList()` and
+`gmRenderChat()`.
