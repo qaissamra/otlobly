@@ -262,7 +262,13 @@
     o = o || {}; const id = o.id || uid("tabs");
     return `<div${attrs({ class: cls("ds-tabs", o.variant === "pills" && "ds-tabs-pills", o.cls), role: "tablist", id, "aria-label": o.ariaLabel })}>${(o.items || []).map((t) => {
       const sel = t.key === o.active;
-      const on = (o.onchange || "").replace(/KEY/g, JSON.stringify(t.key).replace(/"/g, "&quot;"));
+      // Substitute the key RAW. `attrs()` runs the finished handler through esc() once,
+      // which is what turns the quotes into &quot; for the attribute - and the HTML parser
+      // turns them back into quotes before compiling the handler. Pre-escaping here escaped
+      // the & a second time, so every tab shipped `foo(&quot;bar&quot;)` as its JS source and
+      // threw `Unexpected token '&'` on click. Dead since Phase 1 in every tab strip and
+      // view pill in the app; only ever noticed once a page lost its legacy strip.
+      const on = (o.onchange || "").replace(/KEY/g, JSON.stringify(t.key));
       return `<button${attrs({ type: "button", role: "tab", class: "ds-tab", "aria-selected": sel ? "true" : "false", tabindex: sel ? "0" : "-1", "data-key": t.key, id: `${id}-${t.key}`, onclick: `DS.tabSelect(this);${on}`, onkeydown: "DS.tabsKey(event)", title: t.title })}>${t.icon ? DS.icon(t.icon) : ""}<span>${esc(t.label)}</span>${t.count != null ? `<span class="ds-count">${esc(t.count)}</span>` : ""}</button>`;
     }).join("")}</div>`;
   };

@@ -185,6 +185,44 @@ def main():
             check("daysUntil counts backwards correctly", o["days"] == -6)
             check("iso() normalises D/M/YYYY", o["iso"] == "2026-02-01")
 
+        # ---- 8. an inline handler this file builds must be runnable JS -------
+        # Every tab strip and view pill in the app shipped `foo(&quot;bar&quot;)` as the
+        # SOURCE of its onclick for two days: DS.tabs pre-escaped the quotes and then
+        # attrs() escaped the & again. Clicking one threw `Unexpected token '&'`, and
+        # nothing caught it because the suites only ever called the target function
+        # directly. Compile the handler exactly as a browser does - decode the attribute
+        # once, then parse it - so a double-escape can never ship again.
+        probe2 = r"""
+          global.window = {}; global.document = { addEventListener(){}, documentElement:{} };
+          require(process.argv[1]);
+          const DS = window.DS;
+          const html = DS.tabs({ id:"t", active:"a",
+            items:[{key:"a",label:"A"},{key:"b-2",label:"B"}], onchange:"go(KEY)" });
+          const raw = [...html.matchAll(/onclick="([^"]*)"/g)].map(m => m[1]);
+          const dec = s => s.replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+                            .replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&");
+          const out = { n: raw.length, calls: [], ok: true, err: null };
+          for (const r of raw) {
+            const src = dec(r);
+            out.calls.push(src);
+            try { new Function(src); } catch (e) { out.ok = false; out.err = String(e); }
+          }
+          console.log(JSON.stringify(out));
+        """
+        r2 = subprocess.run([node, "-e", probe2, str(DS / "ds.js")], capture_output=True, text=True)
+        if r2.returncode:
+            check("DS.tabs renders", False)
+            print("      ", r2.stderr.strip()[:300])
+        else:
+            o2 = json.loads(r2.stdout)
+            check("every DS.tabs onclick compiles as JavaScript", o2["ok"])
+            if not o2["ok"]:
+                print("      ", o2["err"], o2["calls"][:2])
+            check("the key reaches the handler as a plain string literal",
+                  any('go("b-2")' in c for c in o2["calls"]))
+            check("no HTML entity survives into the handler source",
+                  not any("&quot;" in c or "&amp;" in c for c in o2["calls"]))
+
     print("――――――――――――――――――――――")
     print("PASS" if not fails else f"FAIL ({len(fails)}): {fails}")
     sys.exit(1 if fails else 0)
