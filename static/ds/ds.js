@@ -122,7 +122,14 @@
     // title got 956px of a 1062px panel and left Qty stranded at the far edge. It now grows
     // to a comfortable reading width and stops. Fixed-width columns are untouched, so a
     // wide sub-table (the parcel table on Orders) keeps its shape.
-    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,var(--ds-pu-flex,620px))")).join(" ");
+    // The MINIMUM matters as much as the cap. It used to be 0, and grid resolves a flexible
+    // track down to its minimum before it will overflow - so when the fixed columns did not
+    // fit, the one column carrying the identity (the product name, the package number) was
+    // silently deleted while the fixed ones kept their pixels. A 0-width track counts as a
+    // fitting layout, so `overflow-x: auto` below never got its turn. With a real floor the
+    // sub-table scrolls instead, which is what it was always meant to do.
+    // `min` means here exactly what it means on a DataTable column (table.js `width()`).
+    const tpl = cols.map((c) => (c.w ? c.w + "px" : `minmax(${c.min || 160}px,var(--ds-pu-flex,620px))`)).join(" ");
     return `<div class="ds-pu-sub" role="table" style="--ds-pu-cols:${tpl}"${label ? ` aria-label="${esc(label)}"` : ""}>`
       + `<div class="ds-pu-sub-head" role="row">${cols.map((c) => `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`
       + rows.map((r) => {

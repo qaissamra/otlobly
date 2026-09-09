@@ -57,6 +57,9 @@ def main():
     shell = (DS / "shell.js").read_text(encoding="utf-8")
     tokens = (DS / "tokens.css").read_text(encoding="utf-8")
     css = (DS / "ds.css").read_text(encoding="utf-8")
+    # purchases.js still carries its own copy of the sub-table builder, so the rules
+    # about flexible-column sizing have to be checked against both.
+    pur = (DS / "purchases.js").read_text(encoding="utf-8")
     idx = (HERE / "web" / "index.html").read_text(encoding="utf-8")
     rep = (HERE / "report.py").read_text(encoding="utf-8")
 
@@ -213,9 +216,23 @@ def main():
     check("an error message wraps instead of making its own scrollbar",
           "max-inline-size: 640px" in re.search(r"\.ds-error-state \{([^}]*)\}", css).group(1))
 
-    # a sub-table's flexible column stops growing before it swallows the panel
-    check("a width-less sub-table column is capped, not 1fr",
-          "minmax(0,var(--ds-pu-flex,620px))" in ds and "minmax(0,1fr)" not in ds)
+    # A sub-table's flexible column stops growing before it swallows the panel — and,
+    # just as important, stops SHRINKING before it disappears. This used to assert the
+    # literal "minmax(0,var(--ds-pu-flex,620px))", which pinned the 0 in place: grid
+    # resolves a flexible track to its minimum before it will overflow, so whenever the
+    # fixed columns did not fit, the column carrying the identity was deleted outright
+    # while the fixed ones kept their pixels. Both builders are checked, because
+    # purchases.js still carries its own copy.
+    # code_only: both builders now carry a comment quoting the old broken value, and a
+    # comment must not be able to fail — or pass — a check about what the file BUILDS.
+    ds_code, pur_code = code_only(ds), code_only(pur)
+    check("neither sub-table builder emits a 1fr flexible column",
+          "minmax(0,1fr)" not in ds_code and "minmax(0,1fr)" not in pur_code)
+    check("a width-less sub-table column keeps the 620px cap",
+          "var(--ds-pu-flex,620px)" in ds_code and "var(--ds-pu-flex,620px)" in pur_code)
+    check("...and can never resolve to a zero-width track",
+          "minmax(0px," not in ds_code and "minmax(0," not in ds_code
+          and "minmax(0px," not in pur_code and "minmax(0," not in pur_code)
     check("Still owed is hidden, not deleted", "defaultHidden" in cols.get("remaining", ""))
     check("DS.empty no longer drops the `hint` its callers pass",
           "o.text || o.hint" in ds and 'hint: "Change the search' in sales)
@@ -243,6 +260,11 @@ def main():
           empty:   D.thumbs([]) === D.dash(),
           subrow:  D.subTable([{{label:"A", render:()=> "x"}}], [{{}}]).includes("ds-pu-sub-row"),
           subtd:   D.subTable([{{label:"A", render:()=> "x"}}], [{{}}]).includes("ds-pu-td"),
+          // the emitted grid template, so the floor is asserted as BEHAVIOUR, not as a
+          // substring someone can satisfy by accident
+          tplDefault: (D.subTable([{{label:"A", render:()=> "x"}}], [{{}}]).match(/--ds-pu-cols:([^"]*)/)||[])[1],
+          tplMin:     (D.subTable([{{label:"A", min:240, render:()=> "x"}}], [{{}}]).match(/--ds-pu-cols:([^"]*)/)||[])[1],
+          tplFixed:   (D.subTable([{{label:"A", w:120, render:()=> "x"}}], [{{}}]).match(/--ds-pu-cols:([^"]*)/)||[])[1],
           boards:  (D.orders.BOARDS||[]).map(b => b.key).join(","),
           delegate: typeof D.purchases.board === "function",
         }}));
@@ -258,6 +280,14 @@ def main():
             check("items with no photo fall back to the plain count", o["noPhoto"])
             check("no products at all renders the em dash", o["empty"])
             check("the sub-table emits the class the CSS actually styles", o["subrow"] and o["subtd"])
+            # A flexible track that can reach 0 is how the Leluxe product column and the
+            # Purchases package column both vanished: grid shrinks it to its minimum before
+            # it will overflow, so the escape hatch (overflow-x:auto) never gets its turn.
+            m = re.match(r"minmax\((\d+)px,var\(--ds-pu-flex,620px\)\)$", (o["tplDefault"] or "").strip())
+            check("a width-less sub-table column has a NON-ZERO floor", bool(m) and int(m.group(1)) > 0)
+            check("and per-column `min` overrides it", (o["tplMin"] or "").strip().startswith("minmax(240px,"))
+            check("a column with an explicit width is still exactly that wide",
+                  (o["tplFixed"] or "").strip() == "120px")
             check("the three views are registered in order", o["boards"] == "orders,packages,products")
             check("the board they delegate to really exists", o["delegate"])
 

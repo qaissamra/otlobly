@@ -151,16 +151,23 @@
      One block per PHYSICAL PARCEL — the same lxPkgRows model the 📦 Packages
      view uses, so a real 📦 subtask and the loose products carrying its GWD
      are one row, never twins. */
+  // Widths MEASURED in this nested grid (90th-percentile natural content width across 30
+  // expanded parcels), not copied from the full-width Products board - that copy is what
+  // Batch G got wrong: it added 210px of fixed columns to a box that never had the room,
+  // and the product column, the only flexible one, absorbed all of it and vanished.
+  // The measurement also showed Batch G had over-declared rd by 75px and status by 38.
+  // `min` on the product column is the floor it can never fall below; past that the
+  // sub-table scrolls (ds.css .ds-pu-sub is overflow-x:auto) rather than dropping a column.
   const PROD_COLS = [
-    { key: "product", label: "المنتج · product" },
-    { key: "profile", label: "الحساب · profile", w: 100 },
-    { key: "status", label: "الحالة · status", w: 154 },
-    { key: "qty", label: "الكمية · qty", w: 74, align: "end" },
-    { key: "tracking", label: "التتبع · tracking", w: 138 },
-    { key: "gash", label: "الجمارك · gash", w: 180 },
-    { key: "rd", label: "RD", w: 114 },
-    { key: "due", label: "الاستحقاق · due", w: 96 },
-    { key: "menu", label: "", w: 30 },
+    { key: "product", label: "المنتج · product", min: 220 },
+    { key: "profile", label: "الحساب · profile", w: 106 },
+    { key: "status", label: "الحالة · status", w: 120 },
+    { key: "qty", label: "الكمية · qty", w: 80, align: "end" },
+    { key: "tracking", label: "التتبع · tracking", w: 146 },
+    { key: "gash", label: "الجمارك · gash", w: 164 },
+    { key: "rd", label: "RD", w: 88 },
+    { key: "due", label: "الاستحقاق · due", w: 110 },
+    { key: "menu", label: "", w: 44 },
   ];
 
   // `pkgTn` is the parcel's number: a product that has none of its own inherits

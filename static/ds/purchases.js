@@ -88,7 +88,13 @@
       each other (item 12) without registering a second DataTable instance. */
   function grid(cols, rows, o) {
     o = o || {};
-    const tpl = cols.map((c) => (c.w ? c.w + "px" : "minmax(0,1fr)")).join(" ");
+    // Same floor as DS.subTable, and for the same reason: `minmax(0,1fr)` let grid delete
+    // this grid's identity column outright. packageGrid below declares 1272px of fixed
+    // columns against a ceiling of about 1292px, so the Package column - chevron, number,
+    // thumbnails, GAASH number - had at most 20px on the widest monitor and none at all
+    // below a ~1612px window. (This builder is a copy of DS.subTable; merging them is its
+    // own task, so the fix has to be made in both places for now.)
+    const tpl = cols.map((c) => (c.w ? c.w + "px" : `minmax(${c.min || 160}px,var(--ds-pu-flex,620px))`)).join(" ");
     const head = `<div class="ds-pu-sub-head" role="row">${cols.map((c) =>
       `<div class="ds-pu-th${c.align === "end" ? " ds-num" : ""}" role="columnheader">${esc(c.label || "")}</div>`).join("")}</div>`;
     const body = rows.map((r) => `<div class="ds-pu-sub-row" role="row">${cols.map((c) =>
@@ -137,7 +143,10 @@
     const add = D.button({ label: "Add package", icon: "plus", size: "sm", variant: "ghost", onclick: `poAddPkg('${esc(p.po_id)}')` });
     if (!pkgs.length) return `<div class="ds-pu-empty">No packages yet. ${add}</div>`;
     const cols = [
-      { key: "pkg", label: "Package", render: ([pk]) => pkgCell(ctx, p, pk, { disclosure: true, thumbs: true }) },
+      // min: the identity column of this grid. Its 11 fixed siblings declare 1272px against
+      // a ceiling of ~1292px, so with a 0 floor grid deleted this column outright - chevron,
+      // package number, thumbnails and all - on every screen. Measured natural width 363px.
+      { key: "pkg", label: "Package", min: 240, render: ([pk]) => pkgCell(ctx, p, pk, { disclosure: true, thumbs: true }) },
       { key: "who", label: "Customer", w: 150, render: ([pk]) => text(W.pkgWho(pk)) },
       ctx.money ? { key: "est", label: "Est. cost", w: 108, align: "end", render: ([pk]) => est(W.pkgEstTotal(pk)) } : null,
       { key: "arrival", label: "Arrival", w: 104, render: ([pk]) => W.pkgDatePill(pk) || D.dash() },
