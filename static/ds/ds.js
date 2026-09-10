@@ -464,6 +464,8 @@
     const over = (o.overflow || []).concat(extra.length ? [{ divider: true }].concat(extra) : []);
     const stats = (o.stats || []).map((s) => DS.stat(s)).join("");
     const upd = o.updated ? `<span class="ds-updated" title="${esc(DS.fmt.title(o.updated))}">Updated ${esc(DS.fmt.relative(o.updated))}</span>` : "";
+    // title:false -> the breadcrumb alone (a page that still draws its own title row)
+    if (o.title === false) return crumbs ? `<header class="ds-pagehead ds-pagehead-crumbs"><nav class="ds-crumbs" aria-label="Breadcrumb">${crumbs}</nav>${o.below || ""}</header>` : (o.below || "");
     return `<header class="ds-pagehead">${crumbs ? `<nav class="ds-crumbs" aria-label="Breadcrumb">${crumbs}</nav>` : ""}<div class="ds-pagehead-row"><h1>${esc(o.title)}</h1>${o.badge || ""}<span class="ds-spacer"></span>${sec}${over.length ? DS.menu({ items: over, button: { icon: "ellipsis-horizontal", ariaLabel: "More actions" } }) : ""}${o.primary ? DS.button(Object.assign({ variant: "primary" }, o.primary)) : ""}</div>${stats || upd ? `<div class="ds-pagehead-stats">${stats}${upd}</div>` : ""}${o.below || ""}</header>`;
   };
   /** DS.paintHost(host, html) - swap a chrome host's markup without stealing the caret.

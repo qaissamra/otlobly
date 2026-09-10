@@ -637,6 +637,12 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
    (GAASH stage, deadline, documents) live on the head; a product's live on its
    row, so nothing has to be blanked to keep one shared grid honest. ── */
 .ds-lx-name { display: inline-flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; }
+/* An identity row must fit its cell: capped at the cell's width, the text parts
+   (.ds-truncate, min-inline-size 0) shrink to an ellipsis while the photos and the
+   buttons keep their size - a bare full title used to push the copy button out of
+   the cell, and a package's "4 products · ×16" ran past its edge. */
+.ds-lx-name { max-inline-size: 100%; }
+.ds-lx-name > .ds-thumbs, .ds-lx-name > .ds-thumb, .ds-lx-name > button { flex: 0 0 auto; }
 .ds-lx-exp { display: flex; flex-direction: column; gap: var(--ds-s3); }
 .ds-lx-parcel { border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-bg); overflow: clip; }
 .ds-lx-parcel-head { display: flex; align-items: center; gap: var(--ds-s2); flex-wrap: wrap;
@@ -739,3 +745,19 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 .ds-trk-tn > .ds-mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-tr.ds-trk-miss, .ds-tr.ds-trk-miss > .ds-pin-start, .ds-tr.ds-trk-miss > .ds-pin-end { background: var(--ds-warning-bg); }
 .ds-trk-missing { color: var(--ds-warning-ink); font-weight: var(--ds-w-medium); }
+
+/* ---- Customers: the photo strip is a flex item of the identity row (never a second
+   line - every cell is one line tall) and sits at the end of the cell so it lines
+   up row to row; an editable blank keeps the dashed "click to edit" mark on a
+   target no narrower than a finger. */
+.ds-sl-who > .ds-thumbs { flex: 0 0 auto; margin-inline-start: auto; }
+.ds-sl-edit { cursor: text; display: inline-flex; align-items: center; justify-content: center;
+  min-block-size: 24px; min-inline-size: 24px; max-inline-size: 100%; border-block-end: 1px dashed var(--ds-line); }
+/* the profile drawer body: key/value rows, wrapping values, the ID thumbnail */
+.ds-cu-profile .ds-kv { align-items: center; }
+.ds-cu-profile .ds-kv > b { min-inline-size: 0; text-align: end; }
+.ds-cu-profile .ds-kv > b.ds-cu-wrap { max-inline-size: 60%; white-space: normal; overflow-wrap: anywhere; }
+.ds-cu-idimg { block-size: 46px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line); vertical-align: middle; }
+.ds-cu-h { margin: var(--ds-s4) 0 var(--ds-s1); font: var(--ds-w-bold) var(--ds-t-sm)/1.2 var(--ds-font); color: var(--ds-muted); text-transform: uppercase; letter-spacing: .04em; }
+/* the whole check cell is the target, not the 15px box inside it (table.js toggles it) */
+.ds-td-check, .ds-th-check { cursor: pointer; }

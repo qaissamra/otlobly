@@ -177,9 +177,9 @@
     const gwd = tn || pkgTn || "";
     const qty = W.lxF(it, "quantity ordered");
     return {
-      product: j(DS.thumb(it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
-        `<span class="ds-truncate" title="${esc(it.name || "")}">${esc(W.lxShort3(it.name))}</span>`,
-        `<button class="lx-copy" title="copy the full product title" data-t="${esc(it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`),
+      product: `<span class="ds-lx-name">` + j(DS.thumb(it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
+        `<span class="ds-truncate" title="${esc(it.name || "")}">${esc(it.name || "")}</span>`,
+        `<button class="lx-copy" title="copy the full product title" data-t="${esc(it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) + `</span>`,
       profile: W.lxProfileCell(W.lxAcctChain(it, null)),
       status: j(W.lxDot(it), W.lxConfPill(it), W.lxStatusSelect(it)),
       qty: qty == null || qty === "" ? "" : `<span class="ds-muted" title="Quantity ordered">×${esc(qty)}</span>`,
@@ -338,9 +338,13 @@
      ==================================================================== */
   const PCOLS = () => [
     { key: "product", label: "المنتج · product", w: 330, min: 200, pin: "start", locked: true, sortable: true,
-      render: (r) => j(DS.thumb(r.it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
-        `<span class="ds-truncate" title="${esc(r.it.name || "")}">${esc(W.lxShort3(r.it.name))}</span>`,
-        `<button class="lx-copy" title="copy the full product title" data-t="${esc(r.it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) },
+      // the full title in a flex row (.ds-lx-name) so it ellipsizes at the cell's edge
+      // and the copy button stays in view - the old three-word cut showed
+      // "5 Laurel Tab…" in a column with 200px to spare; a bare full title pushed the
+      // copy button out of the cell instead
+      render: (r) => `<span class="ds-lx-name">` + j(DS.thumb(r.it, { src: W.lxAmz, label: (x) => x.name || "", emptyLabel: "no image yet", add: true }),
+        `<span class="ds-truncate" title="${esc(r.it.name || "")}">${esc(r.it.name || "")}</span>`,
+        `<button class="lx-copy" title="copy the full product title" data-t="${esc(r.it.name || "")}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>`) + `</span>` },
     { key: "order", label: "الطلب · order", w: 126, sortable: true, render: (r) => orderCell(r) },
     { key: "profile", label: "الحساب · profile", w: 100, sortable: true,
       render: (r) => W.lxProfileCell(W.lxAcctChain(r.it, r.o)) },
@@ -492,7 +496,7 @@
   const fmt2 = (n) => (Math.round(n * 100) / 100).toLocaleString();
 
   const KCOLS = () => [
-    { key: "package", label: "الطرد · package", w: 340, min: 190, pin: "start", locked: true, sortable: true,
+    { key: "package", label: "الطرد · package", w: 380, min: 190, pin: "start", locked: true, sortable: true,
       render: (r) => packageCell(r) },
     { key: "order", label: "الطلب · order", w: 126, sortable: true, render: (r) => kOrderCell(r) },
     { key: "profile", label: "الحساب · profile", w: 100, sortable: true,
@@ -529,8 +533,10 @@
           W.lxConfPill((r.pk && r.pk.sync_state === "conflict") ? r.pk : its.find((i) => i.sync_state === "conflict")),
           `<b class="ds-lx-parcel-tn">📦 ${r.tn ? W.poTn4(r.tn) : `<span class="ds-muted" title="no GAASH tracking number yet">no tracking</span>`}</b>`,
           r.tn ? W.lxCopyRawBtn(r.tn) : "",
-          W.lxThumbs(its),
-          `<span class="ds-muted">${esc(W.lxCountLbl(its))}</span>`)
+          // two photos, like every identity cell: four pushed the count - the one
+          // fact in the strip you cannot see - past the edge of the cell
+          W.lxThumbs(its, 2),
+          `<span class="ds-muted ds-truncate" title="${esc(W.lxCountLbl(its))}">${esc(W.lxCountLbl(its))}</span>`)
       + `</span>`;
   }
 

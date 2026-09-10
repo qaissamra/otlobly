@@ -804,3 +804,31 @@ same-order tie runs adjacent, which a per-row comparator cannot express. The Lel
 reason: adjacency of the same-order runs depends on the final row order, so the app sorts and the
 DataTable renders what it is given. Nothing else passes `onSort`. A page that has no such
 grouping rule should now omit `onSort` and trust the engine.
+
+
+## The customer-page sweep (2026-09-10)
+
+**The owner sent a screenshot of Sales › Customers with the rows painting over each other and
+asked for every page to be checked.** The walk covered both workspaces at 1440 with the new
+shell on, the changed pages at 1280 / 1100, and a harness that now measures VERTICAL spill.
+Ten defects, all fixed in one PR; the write-up is `UI_QA.md` §24 (Q-051 … Q-060),
+`test_ux_sweep2.py` fails 43 checks on the tree before it.
+
+**The two that mattered.** The Customers cell had stacked its photo strip under the name since
+the photo batch (52px in a 42px row — the screenshot), and a permanent, mostly empty profile
+panel took 35% of the page so three columns hid behind a scrollbar. The strip is one line now
+and the profile is a `DS.drawer` (`DS.customers.profile`, the first page on the T2 surface), with
+everything the panel showed. And a CSS comment that Phase 3 had collapsed into an unclosed one
+had been swallowing `.bt-pin` since 2026-09-07 — every table still on the LXT engine (Trash,
+the Deposits ledger, Catalog, Flag history, the enroll picker) had lost its pinned column.
+
+**The rest.** Leluxe product names were cut to three words in a column with room for twelve
+(now a capped flex row with the copy button kept in view); package counts ran past their cell
+(two photos, an ellipsis, a wider column); the P&L batch bars drew over their heading; the
+Purchases help box put "Hide" on its text; Activity printed the detail twice; ten legacy pages
+showed two titles (`OWN_TITLE` — the breadcrumb only, via `DS.pageHeader({ title: false })`);
+and the DataTable's 15px row checkbox became the whole cell (`table.js`, every board).
+
+**Nothing was removed.** The profile panel's every field, the order history and its two buttons
+live in the drawer; the legacy pages keep their own title rows; the Orders page keeps the old
+home dashboard above its board (a question for the owner, noted in §24).

@@ -89,7 +89,8 @@
   .delta.up{color:#067647;background:#ecfdf3}
   .delta.down{color:#b42318;background:#fef3f2}
   .delta.flat{color:var(--muted);background:var(--bg2)}
-  #pnlChart{display:flex;align-items:flex-end;gap:7px;height:96px;padding:6px 0;margin-bottom:6px}
+  #pnlChart{display:flex;align-items:flex-end;gap:7px;min-height:96px;padding:6px 0;margin-bottom:6px}
+  .pnl-lbl{max-inline-size:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #pnlSources .qchip b{font-weight:750}
   /* P&L redesign: NET-PROFIT hero + profit equation + pipeline tint + activity chart */
   .pnl-hero{display:grid;grid-template-columns:minmax(230px,1fr) 2.2fr;gap:12px;margin-bottom:4px}
@@ -242,7 +243,7 @@
     min-width:24px;min-height:24px;display:inline-flex;align-items:center;justify-content:center}
   .iconbtn:hover{background:var(--bg3);color:var(--ink)}
   .po-help{background:#fff7ee;border:1px solid #f3d9be;border-radius:11px;padding:11px 14px;
-    font-size:var(--ds-t-sm);line-height:1.6;color:#6b5a45;margin-bottom:12px;position:relative}
+    font-size:var(--ds-t-sm);line-height:1.6;color:#6b5a45;margin-bottom:12px;position:relative;padding-inline-end:56px}
   .po-help .hk{background:#fff;border:1px solid #e8c9a8;border-radius:6px;padding:1px 6px;white-space:nowrap;font-weight:600;color:var(--ink)}
   .po-help .dismiss{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--muted);font-size:var(--ds-t-xs);
     min-width:24px;min-height:24px;display:inline-flex;align-items:center;justify-content:center}
@@ -811,7 +812,13 @@
   .bt-wrap>.pkg{margin-top:0}
   .bt-wrap .po-body{padding-inline:0}
   .bt-wrap .pkg-body{padding-inline:0;overflow-x:visible}
-  .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}/* the contact strip spans the whole (scrollable) row{width:max-content;min-width:100%;padding-inline:0}
+  .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}
+  /* the contact strip spans the whole (scrollable) row, but its content sticks to
+     the start edge so it stays readable while the columns scroll - same trick as
+     .poc-cust below. (This comment once ran on, unclosed, into the four rules
+     below it, so .bt-pin never applied and every remaining LXT table lost its
+     pinned column - keep it closed.) */
+  .bt-wrap .poc-meta{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
   .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .en-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
@@ -1123,12 +1130,11 @@
         </div>
       </div>
     </div>
-    <div class="grid2" id="custGrid" style="display:grid;grid-template-columns:1.3fr .7fr;gap:14px">
+    <!-- The profile used to be a permanent panel beside the list (35% of the width
+         holding one sentence until a row was clicked). It is a DS drawer now, opened
+         by the row, its menu, or showProfile(); the list keeps the whole width. -->
+    <div id="custGrid">
       <div id="cuMount" style="min-width:0"></div>
-      <div class="panel" id="custProfile" style="align-self:start">
-        <h2>Profile</h2>
-        <div style="color:var(--muted);font-size:var(--ds-t-sm)">Click a customer to see their profile &amp; order history.</div>
-      </div>
     </div>
     <div id="custGallery" class="hidden"></div>
   </div>
@@ -6611,7 +6617,9 @@ function actText(e){
 }
 function actRow(e){
   const who=(e.user||"You"); const ini=who.trim().slice(0,2).toUpperCase();
-  const sub=(e.action==="set"||e.action==="deleted")&&e.detail&&e.action==="set"
+  // "on <detail>" only adds something when the title named a FIELD; without one the
+  // title already IS the detail, and the line repeated it word for word.
+  const sub=e.action==="set"&&e.field&&e.detail
     ? `<div class="act-sub">on ${poEsc(e.detail)}</div>`:"";
   return `<div class="act-row">
     <span class="avatar">${poEsc(ini)}</span>
@@ -10151,7 +10159,7 @@ function cuCtx(){
     items: c=>cuItemsOf(c),
     openProfile: id=>showProfile(id),
     cityCell: c=> cuCanEdit()
-      ? `<span dir="auto" class="ds-truncate" style="cursor:text;border-bottom:1px dashed var(--line);min-height:24px;display:inline-flex;align-items:center" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
+      ? `<span dir="auto" class="ds-truncate ds-sl-edit" title="${poEsc(c.city?c.city+" · اضغط للتعديل · click to edit":"اضغط للتعديل · click to edit")}" onclick="event.stopPropagation();cuCityEdit(this,'${c.customer_id}')">${c.city?poEsc(c.city):"—"}</span>`
       : (c.city?`<span dir="auto" class="ds-truncate" title="${poEsc(c.city)}">${poEsc(c.city)}</span>`:DS.dash()),
     idCell: c=> c.id_number
       ? `<span class="ds-mono" title="ID number on file${c.id_image?" · photo too":""}">${poEsc(c.id_number)}</span>`
@@ -10194,27 +10202,15 @@ function cuGalleryFilter(which){ if(which==="missing") ID_MISS=!ID_MISS; else ID
 
 function showProfile(id){
   const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
-  const orders=(c.previous_orders||[]).map(o=>`<div class="kv"><span>${o.order_id} · ${o.status}</span><b>${o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):'—'}</b></div>`).join("")||'<div style="color:var(--muted);font-size:var(--ds-t-sm)">No orders yet.</div>';
-  const wa=c.wa?`<a href="https://wa.me/${poEsc(c.wa)}" target="_blank">${poEsc(c.whatsapp)}</a>`:(poEsc(c.whatsapp)||'—');
-  $("custProfile").innerHTML=`<h2>${poEsc(c.name)||'—'} ${c.vip?'★':''}</h2>
-    <div class="kv"><span>WhatsApp</span><b>${wa}</b></div>
-    <div class="kv"><span>Email</span><b>${poEsc(c.email)||'—'}</b></div>
-    <div class="kv"><span>City</span><b>${poEsc(c.city)||'—'}</b></div>
-    <div class="kv"><span>Address</span><b style="max-width:160px;text-align:right">${poEsc(c.address)||'—'}</b></div>
-    <div class="kv"><span>Payment</span><b>${poEsc(c.payment_method)||'—'}</b></div>
-    <div class="kv"><span>Orders</span><b>${c.order_count}</b></div>
-    <div class="kv"><span>Total spent</span><b style="color:var(--accent)">${money(c.total_spent_usd)}</b></div>
-    ${c.notes?`<div class="kv"><span>Notes</span><b style="max-width:160px;text-align:right">${poEsc(c.notes)}</b></div>`:''}
-    <div class="kv"><span>ID document</span><b>${c.id_image
-        ? `<a href="/api/customer_image?file=${encodeURIComponent(c.id_image)}" target="_blank" title="open full size"><img src="/api/customer_image?file=${encodeURIComponent(c.id_image)}" style="height:46px;border-radius:6px;border:1px solid var(--line);vertical-align:middle"></a>`
-        : `<span style="color:var(--muted)">none</span>`}</b></div>
-    <div class="kv"><span>🪪 ID number</span><b>${c.id_number?`<span class="mono">${poEsc(c.id_number)}</span>`:'<span style="color:var(--muted)">none</span>'}
-        ${CAN_EDIT?`<button class="minibtn" style="padding:1px 6px;margin-inline-start:6px" onclick="custIdNumberEdit('${c.customer_id}')">✎</button>`:''}</b></div>
-    <h2 style="margin-top:12px">Order history</h2>${orders}
-    <div style="margin-top:10px;display:flex;gap:8px">
-      <button class="minibtn" onclick="editCustomer('${c.customer_id}')">✎ Edit</button>
-      <button class="minibtn" onclick="custIdUpload('${c.customer_id}')">🪪 ${c.id_image?'Replace':'Upload'} ID</button>
-    </div>`;
+  // one drawer at a time; a stale one (closed or not) is replaced, never stacked
+  const old=$("cuProfileDlg"); if(old){ if(old.open) old.close(); old.remove(); }
+  document.body.insertAdjacentHTML("beforeend", DS.customers.profile(c, cuProfileCtx()));
+  const dlg=$("cuProfileDlg"); dlg.dataset.transient="1";
+  DS.dialogOpen("cuProfileDlg",{focus:false});
+}
+function cuProfileCtx(){
+  return { money:PO_MONEY, canEdit:cuCanEdit(),
+           idImageUrl:c=>"/api/customer_image?file="+encodeURIComponent(c.id_image||"") };
 }
 function editCustomer(id){
   const c=CUST.customers.find(x=>x.customer_id===id); if(!c)return;
@@ -10354,7 +10350,7 @@ function renderPnl(){
     const h=Math.round(74*v/maxV)+4;
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end" title="Order ${b}: ${money(v)}">
       <div style="width:58%;max-width:60px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0"></div>
-      <div style="font-size:var(--ds-t-xs);color:var(--muted)">${b==='—'?'—':'#'+b}</div></div>`;}).join("");
+      <div class="pnl-lbl" style="font-size:var(--ds-t-xs);color:var(--muted)">${b==='—'?'—':(b.startsWith('#')?b:'#'+b)}</div></div>`;}).join("");
   const miss=(showMeta?["revenue","cogs","meta"]:["revenue","cogs"]).filter(k=>!s[k].connected);
   const metaEmpty = showMeta && s.meta.connected && !(t.meta_usd>0);   // connected but no spend typed yet
   $("pnlNote").innerHTML=(miss.length

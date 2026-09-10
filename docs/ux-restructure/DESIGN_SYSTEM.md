@@ -61,7 +61,7 @@ the old patterns (warn level until Phase 7).
 
 | Component | For | Notes |
 |---|---|---|
-| `DS.pageHeader(o)` | the top of every page | breadcrumb, title, `stats[]`, `updated` (relative, absolute in the tooltip), one `primary`, ≤2 `secondary`, the rest in `overflow` |
+| `DS.pageHeader(o)` | the top of every page | breadcrumb, title, `stats[]`, `updated` (relative, absolute in the tooltip), one `primary`, ≤2 `secondary`, the rest in `overflow`; `title: false` renders the breadcrumb alone (the shell uses it over a legacy page that still draws its own title row) |
 | `DS.filterBar(o)` | search + saved views + filter chips | chips carry their value and a remove control; `add` opens the filter builder, `clear` resets |
 | `DS.callout(o)` | a state strip that carries the control which changes it (safe mode / live, an account that needs a password) | `tone: neutral·info·success·warning·danger`, `icon`, `text` or `html`, `actions[]` (button options or html); not a toast — it stays until the state does |
 | `DS.tabs(o)` | switching between views of one object | not for navigation between pages | `variant: pills` for saved views; full arrow-key support |

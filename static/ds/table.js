@@ -151,7 +151,7 @@
     head(pins) {
       const lead = this.lead(); const st = this.state.sort || {};
       const leadCells = lead.map((l, i) => l.kind === "check"
-        ? `<div class="ds-th ds-th-check ds-pin-start" style="inset-inline-start:${pins.start[i].off}px" role="columnheader"><input type="checkbox" aria-label="Select all rows" onchange="DS.tableEv('${this.id}','selectAll',null,event)"${this.allSelected() ? " checked" : ""}></div>`
+        ? `<div class="ds-th ds-th-check ds-pin-start" style="inset-inline-start:${pins.start[i].off}px" role="columnheader" onclick="DS.tableEv('${this.id}','allcell',null,event)"><input type="checkbox" aria-label="Select all rows" onchange="DS.tableEv('${this.id}','selectAll',null,event)"${this.allSelected() ? " checked" : ""}></div>`
         : `<div class="ds-th ds-td-exp ds-pin-start" style="inset-inline-start:${pins.start[i].off}px" role="columnheader"><span class="ds-sr">Expand</span></div>`).join("");
       const cells = this.visible().map((c) => {
         const sorted = st.key === c.key; const sortable = c.sortable !== false && c.type !== "actions";
@@ -344,7 +344,13 @@
         else new Function("keys", "rows", "table", b.onclick)(Array.from(t.selected), t.selectedRows(), t);
         break; }
       case "toggle": { ev.stopPropagation(); if (t.open.has(key)) { t.open.delete(key); (t.closed = t.closed || new Set()).add(key); } else { t.open.add(key); if (t.closed) t.closed.delete(key); } t.rerender(); if (t.o.onToggle) t.o.onToggle(key, t.open.has(key)); break; }
-      case "rowclick": { if (ev.target.closest("button,a,input,select,textarea,label,.ds-menu,[data-nostop]")) return; if (t.o.onRowClick) t.o.onRowClick(findRow(key), ev, t); break; }
+      case "rowclick": {
+        // The 15px box was the only target in a 42px check cell, and a click beside it
+        // opened the row instead. The whole cell toggles the row now.
+        const chk = ev.target.closest(".ds-td-check");
+        if (chk && ev.target.tagName !== "INPUT") { const box = chk.querySelector("input"); if (box) { box.checked = !box.checked; box.dispatchEvent(new Event("change", { bubbles: true })); } return; }
+        if (ev.target.closest("button,a,input,select,textarea,label,.ds-menu,[data-nostop]")) return; if (t.o.onRowClick) t.o.onRowClick(findRow(key), ev, t); break; }
+      case "allcell": { if (ev.target.tagName === "INPUT") return; const box = ev.currentTarget.querySelector("input"); if (box) { box.checked = !box.checked; box.dispatchEvent(new Event("change", { bubbles: true })); } break; }
       case "rowkey": { const el = ev.currentTarget; const list = Array.from(t.el().querySelectorAll(".ds-tr[data-key]")); const i = list.indexOf(el); let j = null;
         if (ev.key === "ArrowDown") j = Math.min(i + 1, list.length - 1); else if (ev.key === "ArrowUp") j = Math.max(i - 1, 0); else if (ev.key === "Home") j = 0; else if (ev.key === "End") j = list.length - 1;
         else if (ev.key === "Enter" && t.o.onRowClick && !ev.target.closest("button,a,input,select")) { ev.preventDefault(); t.o.onRowClick(findRow(key), ev, t); return; }
