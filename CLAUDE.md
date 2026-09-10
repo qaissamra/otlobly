@@ -8,7 +8,7 @@ customer portal with WhatsApp-OTP login.
 
 ## Stack
 Python 3 / Flask + gunicorn · SQLite (db.py, WAL) · Flask-Login roles
-(admin / sales / fulfillment) · single-page vanilla-JS UI in web/index.html ·
+(admin / operator / sales / fulfillment — operator = the one-hire role, docs/OPERATOR_RUNBOOK.md) · single-page vanilla-JS UI in web/index.html ·
 public pages in templates/ (track, order intake, account, login).
 
 ## Run locally

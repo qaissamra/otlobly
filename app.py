@@ -1909,7 +1909,7 @@ def api_gerizim_registered():
 
 
 @app.route("/api/gerizim/registered", methods=["POST"])
-@auth.require("admin_actions")
+@auth.require("ops_actions")
 def api_gerizim_registered_post():
     rows = (request.get_json(force=True, silent=True) or {}).get("records") or []
     db.sync_gerizim_registered(rows)
@@ -2385,7 +2385,7 @@ def _pkg_by_no(pdb, po_id, package_no):
 
 
 @app.route("/api/purchase/package/image", methods=["GET", "POST"])
-@auth.require("admin_actions")
+@auth.require("ops_actions")
 def api_pkg_image():
     import base64
     import purchases
@@ -2432,7 +2432,7 @@ def api_pkg_image():
 
 
 @app.route("/api/purchase/package/image/delete", methods=["POST"])
-@auth.require("admin_actions")
+@auth.require("ops_actions")
 def api_pkg_image_delete():
     import purchases
     b = request.get_json(force=True, silent=True) or {}
@@ -3359,9 +3359,11 @@ def api_leluxe_pkgmail_reply():
 
 
 # ── 📧 GAASH Mail: automated clearance-email sequences (gaash_mail.py) ──────
-# View/send = edit_fulfillment (the fulfillment hire chases GAASH docs); account
-# management + ID-library edits + test sends = admin_actions. Feature-gated
-# like the Leluxe family.
+# View/send = edit_fulfillment (the fulfillment hire chases GAASH docs); the
+# day's own admin-ish actions (ID-library edits, the freeze switch, the one-press
+# tracking check, erasing an accidental enrollment) = ops_actions (operator +
+# admin); account management, templates, workflows, triggers and test sends =
+# admin_actions. Feature-gated like the Leluxe family.
 
 def _gm_files(raw):
     """[{name,data_base64,ctype}] → [(name, bytes, ctype)] (skip bad entries)."""
@@ -3387,7 +3389,7 @@ def api_gaash_overview():
 
 
 @app.route("/api/gaash/check_tracking", methods=["POST"])
-@auth.require("admin_actions")
+@auth.require("ops_actions")
 @auth.require_feature("leluxe")
 def api_gaash_check_tracking():
     """📦 one press → every store that holds the number, plus the receipt.
@@ -3610,7 +3612,7 @@ def api_gaash_resend():
 def api_gaash_ids():
     if request.method == "GET":
         return jsonify({"ok": True, "ids": gaash_mail.ids_list()})
-    if not current_user.has("admin_actions"):   # library edits are admin-only
+    if not current_user.has("ops_actions"):     # library edits: operator or admin
         abort(403)
     b = request.get_json(force=True, silent=True) or {}
     if request.method == "DELETE":
@@ -3730,9 +3732,9 @@ def api_gaash_attachment():
 @auth.require_feature("leluxe")
 def api_gaash_name_id():
     """Map one on-package name → ID number from the 🪪 column in the enroll
-    picker. Merges (never replaces) gaash_mail.name_ids. Writing settings is an
-    admin job — same gate as the ⚙ panel that owns the rest of that map."""
-    if not current_user.has("admin_actions"):
+    picker. Merges (never replaces) gaash_mail.name_ids. Pinning a name is day
+    work (ops_actions); the ⚙ panel that owns the rest of that map stays admin."""
+    if not current_user.has("ops_actions"):
         abort(403)
     b = request.get_json(force=True, silent=True) or {}
     res = gaash_mail.set_name_id(b.get("name"), b.get("id_number"))
@@ -3767,7 +3769,7 @@ def api_gaash_start():
 
 
 @app.route("/api/gaash/freeze", methods=["POST"])
-@auth.require("admin_actions")
+@auth.require("ops_actions")
 @auth.require_feature("leluxe")
 def api_gaash_freeze():
     """⏸ freeze/resume EVERYTHING — all workflows Off (and back)."""
@@ -3916,9 +3918,9 @@ def api_gaash_thread():
         return jsonify({"ok": True, "results": res})
     elif action == "set_name":      # pin the name this parcel ships under ("" clears)
         return jsonify(gaash_mail.set_parcel_name(gwd, b.get("pname")))
-    elif action == "delete":        # erase an accidental enrollment (admin)
-        if not current_user.has("admin_actions"):
-            return jsonify({"ok": False, "error": "admin only"}), 403
+    elif action == "delete":        # erase an accidental enrollment (operator/admin)
+        if not current_user.has("ops_actions"):
+            return jsonify({"ok": False, "error": "operator or admin only"}), 403
         res = gaash_mail.thread_delete(gwd)
         return jsonify(res), (200 if res.get("ok") else 400)
     elif action == "restart":       # 🔁 back to email #1 (now, or scheduled)

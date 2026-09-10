@@ -77,7 +77,7 @@
     if (!(ctx.accounts || []).length) locks.push("no Gmail account yet");
     if (!ctx.mailerEnv) locks.push("auto-sequencer off on this server");
     // The one big switch sits beside the state it changes, not in a toolbar.
-    const freeze = ctx.canAdmin && ctx.seqsLive
+    const freeze = (ctx.canOps || ctx.canAdmin) && ctx.seqsLive
       ? [{ label: ctx.frozen ? "Resume all" : "Freeze all", icon: ctx.frozen ? "play" : "pause", size: "sm",
         variant: ctx.frozen ? "secondary" : "danger", onclick: "gmFreeze(this)",
         title: ctx.frozen ? "Turn every workflow back On" : "Turn every workflow Off - nothing sends or enrolls until you resume" }]
@@ -87,7 +87,7 @@
       : D.callout({ tone: "success", icon: "check-circle", html: `<b>Sending is live</b> · real emails go out to <b dir="ltr">${esc(ctx.toAddress || "?")}</b>`, actions: freeze }));
     return out.join("");
   }
-  /** ctx: {threads, proposed, accounts, seqsLive, frozen, dryRun, mailerEnv, toAddress, acctErr, canAdmin} */
+  /** ctx: {threads, proposed, accounts, seqsLive, frozen, dryRun, mailerEnv, toAddress, acctErr, canAdmin, canOps} */
   G.chrome = (host, ctx) => {
     const el = hostOf(host); if (!el) return;
     const th = ctx.threads || [];

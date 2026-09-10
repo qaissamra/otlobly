@@ -120,7 +120,9 @@ check("the select-all header cell does the same", 'case "allcell":' in table and
 check("both cells show a pointer", ".ds-td-check, .ds-th-check { cursor: pointer; }" in css)
 
 # ---------------------------------------------------------------- housekeeping
-check("the offline cache moved on (ds.css / sales.js / leluxe.js / table.js / shell.js changed)", '"otl-off-v24"' in sw)
+# v24 was this sweep's bump; later PRs keep moving it on (v25 = the operator role) — never backwards
+check("the offline cache moved on (ds.css / sales.js / leluxe.js / table.js / shell.js changed)",
+      int((re.search(r'otl-off-v(\d+)', sw) or ["", "0"])[1]) >= 24)
 new_css = css.split("/* ---- Customers: the photo strip", 1)[-1]
 check("every new ds.css selector carries .ds-", all(".ds-" in sel for sel in re.findall(r"(?m)^([^{}/\n][^{]*)\{", new_css)))
 check("no raw hex in the new ds.css rules", not re.search(r"#[0-9a-fA-F]{3,6}\b", new_css))

@@ -3,7 +3,8 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v24";         // v24: the 2026-09-10 UI sweep (Customers one-line cell +
+const CACHE = "otl-off-v25";         // v25: the operator role (Team roles, CAN_OPS gates)
+                                     // v24: the 2026-09-10 UI sweep (Customers one-line cell +
                                      // profile drawer, LXT pinned column back, breadcrumb-only
                                      // headers, check cells, Leluxe full names)
                                      // v23: the DataTable keeps blanks LAST in both sort

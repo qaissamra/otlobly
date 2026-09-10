@@ -2,9 +2,18 @@
 """
 Authentication + role-based permissions for the hosted app.
 
-Roles: admin, sales, fulfillment. Each route is guarded by a permission; the
-business data is also redacted per role (Sales/Fulfillment never see profit/cost;
-Fulfillment never sees money totals).
+Roles: admin, operator, sales, fulfillment. Each route is guarded by a
+permission; the business data is also redacted per role (Sales/Fulfillment never
+see profit/cost; Fulfillment never sees money totals).
+
+`operator` (2026-09-10) is the one login a single hire needs to run the whole
+day — orders, quotes, deposits, customers and their ID photos, purchase orders
+WITH their Amazon costs, package photos, GAASH mail, tracking, package prep —
+and nothing of the owner's: no P&L, no Settings writes, no Team, no Trash
+purge, no backup download, no Tatabu console, no Leluxe board. The day's own
+admin-ish actions (package photos, the GAASH ID library, the freeze switch,
+the Gerizim mirror) sit behind `ops_actions`, which admin also holds; the
+owner-only surfaces stay behind `admin_actions`.
 """
 
 from functools import wraps
@@ -22,7 +31,11 @@ login_manager.login_view = "login"
 ROLE_PERMS = {
     "admin": {"view_orders", "view_money", "view_cost", "view_pnl", "edit_order",
               "edit_fulfillment", "view_customers", "manage_customers",
-              "manage_users", "admin_actions", "view_meta_leads"},
+              "manage_users", "admin_actions", "ops_actions", "view_meta_leads"},
+    # Operator = the day, all of it, with costs — minus the owner's surfaces.
+    "operator": {"view_orders", "view_money", "view_cost", "edit_order",
+                 "edit_fulfillment", "view_customers", "manage_customers",
+                 "view_meta_leads", "ops_actions"},
     # Sales is a limited console — Quote + To-order + Leads (see the UI nav lock in
     # web/index.html). view_orders lets the pages load; view_money shows prices.
     "sales": {"view_orders", "view_money", "view_meta_leads"},

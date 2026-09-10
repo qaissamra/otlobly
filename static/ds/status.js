@@ -102,7 +102,7 @@
   const payment = { deposit: T("Deposit", "success"), collect: T("Collected", "success"), refund: T("Refund", "danger") };
   const sync = { synced: T("Synced", "success"), dirty: T("Unsaved", "warning"), pushing: T("Pushing", "warning"), error: T("Error", "danger"), conflict: T("Conflict", "danger") };
   const flag = { open: T("Open", "warning"), done: T("Done", "neutral") };
-  const role = { admin: T("Admin", "info"), sales: T("Sales", "neutral"), fulfillment: T("Fulfillment", "neutral") };
+  const role = { admin: T("Admin", "info"), operator: T("Operator", "info"), sales: T("Sales", "neutral"), fulfillment: T("Fulfillment", "neutral") };
   const tier = { starter: T("Starter", "neutral"), growth: T("Growth", "info"), pro: T("Pro", "success") };
   // Attention states are SEPARATE from status (brief §9.4): a small fixed vocabulary
   const attention = {

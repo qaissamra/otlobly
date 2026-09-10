@@ -11,7 +11,7 @@ only, JSON state, zero AI cost per run.** Money is in **USD** throughout.
 ### Two ways to run
 - **Local single-user** (the original): `python3 dashboard.py` → http://localhost:8788.
   No login, JSON files. Fine for solo use.
-- **Hosted multi-user** (`app.py`, Flask + SQLite): logins, roles (Admin / Sales /
+- **Hosted multi-user** (`app.py`, Flask + SQLite): logins, roles (Admin / Operator / Sales /
   Fulfillment), and a customer portal — deploy to a managed platform (**see `DEPLOY.md`**).
   Run locally with `./.venv/bin/python app.py` → http://localhost:8789 (first visit →
   `/setup` to create the admin). **This is the source of truth going forward**; the local
@@ -46,7 +46,7 @@ only, JSON state, zero AI cost per run.** Money is in **USD** throughout.
 | `pnl.py` | **P&L** — combines revenue − Amazon cost − Meta = net profit, margin, cost/customer, by month. |
 | `customers.py` | **CRM** — one profile per customer (WhatsApp, email, address, city, ID, VIP, notes, payment); orders + total-spent auto-derived. `--sync`. |
 | `amazon_import.py` | **Auto-import** — Amazon link → image, title, price, seller, Prime, delivery, ASIN, options via SerpAPI (cached by ASIN). |
-| `app.py` | **Hosted multi-user app** (Flask) — logins, roles (Admin/Sales/Fulfillment), all the above behind auth, + customer portal. See `DEPLOY.md`. |
+| `app.py` | **Hosted multi-user app** (Flask) — logins, roles (Admin/Operator/Sales/Fulfillment), all the above behind auth, + customer portal. See `DEPLOY.md`. |
 | `db.py` + `migrate_json_to_db.py` | **SQLite** persistence for the hosted app; migrates the JSON stores in. |
 | `auth.py` | Login + role permissions + field redaction (Sales/Fulfillment never see profit; Fulfillment never sees money). |
 | `worker.py` | **Local worker** — polls the hosted app for PAID orders and places them via Multilogin (anti-detection stays on your Mac). |

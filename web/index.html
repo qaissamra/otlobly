@@ -1429,6 +1429,7 @@
         <div><label class="fld">Password (6+ characters)</label><input id="u_password" type="text" style="width:100%" placeholder="a starter password to share with them"></div>
         <div><label class="fld">Role</label>
           <select id="u_role" style="width:100%">
+            <option value="operator">Operator — runs the whole day: orders, quotes, deposits, purchases &amp; costs, parcels, customers (no P&amp;L, settings, team)</option>
             <option value="sales">Sales — quotes, orders, customers (no profit/cost)</option>
             <option value="fulfillment">Fulfillment — order queue, status &amp; tracking (no money totals)</option>
             <option value="admin">Admin — full access</option>
@@ -2087,6 +2088,7 @@ async function applyRole(){
   const p=ME.perms;
   CAN_EDIT = p.includes("edit_order");
   CAN_ADMIN = p.includes("admin_actions");
+  CAN_OPS   = p.includes("ops_actions");     // operator or admin: the day's own admin-ish actions
   const hide=(id,ok)=>{const el=$(id); if(el) el.style.display=ok?'':'none';};
   // Per-tenant feature flags (Tatabu white-label): Otlobly-only tools are hidden for
   // broker tenants. Business #1 has every flag true, so its nav is unchanged.
@@ -2592,7 +2594,7 @@ function aoCloseForm(){ $("formPanel").classList.add("hidden"); PO_MOUNT="poTree
 
 async function syncClickup(b){b.disabled=true;toast("Syncing ClickUp…");const r=await post("/api/clickup",{});b.disabled=false;toast(r.output||"done");load();}
 
-let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true, BOOTED=false;
+let VIEW="orders", CAN_EDIT=true, CAN_ADMIN=true, CAN_OPS=true, BOOTED=false;
 // Which views keep the topbar quick-actions (see the toggles in setView).
 const ADD_ORDER_VIEWS=new Set(["orders","brain","needorder"]);  // create a customer order
 const REFRESH_VIEWS  =new Set(["orders","brain","picking"]);    // views load() actually re-renders
@@ -2765,7 +2767,7 @@ async function ppSetStatus(poId,pno,status){
 // pick:true statuses. ──
 function cuMapRow(s){ return ((QSETTINGS&&QSETTINGS.employee_status_map)||[])
   .find(r=>r.status===String(s||"").toLowerCase()); }
-function cuLabel(s){ if(CAN_ADMIN) return s||"—";
+function cuLabel(s){ if(CAN_OPS) return s||"—";
   const m=cuMapRow(s); return (m&&m.label)||s||"—"; }
 function cuPickRows(cur){   // dropdown rows for a NON-admin: curated picks, mapped labels
   const picks=((QSETTINGS&&QSETTINGS.employee_status_map)||[]).filter(r=>r.pick);
@@ -2774,7 +2776,7 @@ function cuPickRows(cur){   // dropdown rows for a NON-admin: curated picks, map
 }
 function ppStatusPicker(pkg){
   const cur=pkg.otlobly_status||"", c=CU_COLOR[cur]||"#8d8d8d";
-  const opts=CAN_ADMIN
+  const opts=CAN_OPS
     ?(CU_COLOR[cur]?CU_STATUSES:[[cur||'—',"#8d8d8d"]].concat(CU_STATUSES)).map(([s,h])=>[s,h,s])
     :cuPickRows(cur);
   const rows=opts.map(([s,h,lbl])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
@@ -6202,7 +6204,7 @@ async function convertLead(id,btn){ if(!confirm("إنشاء طلب من هذا �
   const r=await post("/api/meta/lead/convert",{id}); btn.disabled=false;
   if(r&&r.ok){ toast("Order "+r.order_id+" created — add products in To order"); loadMetaLeads(); } else toast((r&&r.error)||"failed"); }
 function toggleTeam(){ setView(VIEW==="team"?"orders":"team"); }
-const ROLE_LABEL={admin:"Admin",sales:"Sales",fulfillment:"Fulfillment"};
+const ROLE_LABEL={admin:"Admin",operator:"Operator",sales:"Sales",fulfillment:"Fulfillment"};
 // ── Brain: the command-center landing (per-tenant; /api/brain does the thinking) ──
 let BRAIN=null;
 async function loadBrain(){
@@ -9520,7 +9522,7 @@ function pkgCuSelect(p,pk,pi){
   const cur=pk.otlobly_status||CU_STATUSES[0][0], c=CU_COLOR[cur]||"#8d8d8d";
   // owner sees the raw ClickUp vocabulary; other staff see the remapped labels
   // and may only pick the curated employee statuses (cuLabel/cuPickRows)
-  const opts=CAN_ADMIN
+  const opts=CAN_OPS
     ?(CU_COLOR[cur]?CU_STATUSES:[[cur,"#8d8d8d"]].concat(CU_STATUSES)).map(([s,h])=>[s,h,s])
     :cuPickRows(cur);
   const rows=opts.map(([s,h,lbl])=>`<button class="pop-item cu-item${s===cur?'" style="font-weight:800':''}"
@@ -9612,7 +9614,7 @@ function pkgInfoOpen(id,pi){
           return `<img src="${poEsc(u)}" loading="lazy" title="انقر للفتح بالحجم الكامل · click to open full size" style="width:100%;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:zoom-in;display:block;margin:6px 0 8px" onclick="window.open('${poEsc(u)}','_blank','noopener')">`; }).join("")):"";
       // 📷 THIS package's own photos — paste with ⌘V while the popup is open.
       // Admin-only end to end (route + section): the owner's own working shots.
-      const pkgImgSec=CAN_ADMIN?sec('📷 صور الطرد · package photos',pkgPhotosHtml(p,pk,pi)):"";
+      const pkgImgSec=CAN_OPS?sec('📷 صور الطرد · package photos',pkgPhotosHtml(p,pk,pi)):"";
       return sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows)+pkgImgSec+imgSec; })()}
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
       <button class="po-btn" onclick="pkgInfoClose();trackPkg(null,'${p.po_id}',${pi})">🔎 تتبع الشحنة · Check shipping</button>
@@ -9633,7 +9635,7 @@ function pkgPhotoUrl(fn){ return '/api/purchase/package/image?file='+encodeURICo
 // row hint that this package carries photos — the row click already opens them
 function pkgPhotoBadge(pk){
   const n=((pk&&pk.pkg_images)||[]).filter(Boolean).length;
-  if(!n||typeof CAN_ADMIN==="undefined"||!CAN_ADMIN) return "";
+  if(!n||typeof CAN_OPS==="undefined"||!CAN_OPS) return "";
   return `<span class="pill" style="flex:0 0 auto;background:var(--bg2);color:var(--muted);border:1px solid var(--line);font-size:var(--ds-t-xs);padding:1px 5px"
     title="${T('صور على هذا الطرد — افتح الطرد لعرضها · photos on this package — open it to see them')}">📷${n}</span>`;
 }
@@ -9663,7 +9665,7 @@ async function pkgPhotoDel(poId,pi,fn){
   else toast(T("تعذّر الحذف · remove failed")+((r&&r.error)?": "+r.error:""));
 }
 document.addEventListener("paste",e=>{        // ⌘V while a package popup is open
-  if(!PKG_INFO||!CAN_ADMIN||$("pkgInfoModal").classList.contains("hidden")) return;
+  if(!PKG_INFO||!CAN_OPS||$("pkgInfoModal").classList.contains("hidden")) return;
   const p=poFind(PKG_INFO.id), pk=p&&(p.packages||[])[PKG_INFO.pi]; if(!pk) return;
   const items=(e.clipboardData&&e.clipboardData.items)||[];
   for(const it of items){
@@ -10754,7 +10756,7 @@ function gmChromeCtx(){
   return { threads:d.threads||[], proposed:d.proposed||[], accounts:d.accounts||[],
     seqsLive:seqsLive.length, frozen:seqsLive.length>0&&seqsLive.every(x=>x.paused),
     dryRun:!!s.dry_run, mailerEnv:!!d.mailer_env, toAddress:s.to_address||"",
-    acctErr:(d.accounts||[]).find(a=>a.last_error)||null, canAdmin:CAN_ADMIN };
+    acctErr:(d.accounts||[]).find(a=>a.last_error)||null, canAdmin:CAN_ADMIN, canOps:CAN_OPS };
 }
 function gmRenderChrome(){
   if(!window.DS||!DS.gaash) return;
@@ -10935,7 +10937,7 @@ function gmConvMenu(t){
   out.push(t.missing_docs?{label:"Documents complete", icon:"document-check", onclick:`gmRowAct(${g},'clear_missing')`}
                          :{label:"Mark documents missing", icon:"document-text", onclick:`gmSetCur(${g});gmMissing()`});
   if(!gmIsDone(t)) out.push({label:"Mark as done", icon:"check", onclick:`gmRowAct(${g},'done')`});
-  if(CAN_ADMIN) out.push({divider:true},{label:"Erase this enrollment", icon:"trash", danger:true, title:"Allowed only while no real email left", onclick:`gmSetCur(${g});gmDelete()`});
+  if(CAN_OPS) out.push({divider:true},{label:"Erase this enrollment", icon:"trash", danger:true, title:"Allowed only while no real email left", onclick:`gmSetCur(${g});gmDelete()`});
   return out;
 }
 function gmThreadHtml(t){
@@ -11021,7 +11023,7 @@ function gmChatHtml(){
       <button class="minibtn" onclick="gmAttachPick()" title="${T("يُرفق مع الإيميل القادم · attached to the NEXT email")}">📎</button>
       <button class="minibtn" onclick="gmAct('done')">✓ ${T("منجز · done")}</button>
       ${(th.step||0)>0&&th.state!=="proposed"?`<button class="minibtn" onclick="gmRestart()" title="${T("يرجع للإيميل الأول ويرسله فوراً بالمستلم والقالب الحاليين · back to email #1, sent immediately with the CURRENT recipient & template")}">🔁</button>`:""}
-      ${CAN_ADMIN?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح ما دامت لا مراسلة حقيقية (إيميلات التجربة لصندوقك لا تُحتسب) · erase an accidental enrollment — allowed while there is no real correspondence (test emails to your own inbox don't count)")}">🗑</button>`:""}
+      ${CAN_OPS?`<button class="minibtn" style="color:#b42318" onclick="gmDelete()" title="${T("حذف تسجيل بالخطأ — مسموح ما دامت لا مراسلة حقيقية (إيميلات التجربة لصندوقك لا تُحتسب) · erase an accidental enrollment — allowed while there is no real correspondence (test emails to your own inbox don't count)")}">🗑</button>`:""}
     </div>
     <div class="gm-head" style="padding-top:0;gap:6px;font-size:var(--ds-t-sm)">
       ${acct
@@ -11741,8 +11743,8 @@ function gmEnrollRender(){
           style="width:100%;min-width:0;font-size:var(--ds-t-xs);padding:2px 4px"
           title="${T("الاسم الذي يُشحن الطرد باسمه · the name this parcel ships under")}">${gmNameOpts(nm)}</select>${gmDefMark(c.pname_src)}`,
       nameid:`<span class="gmCandId" data-gwd="${poEsc(c.gwd)}" data-src="${poEsc(c.source||"")}"
-          style="flex:1;min-width:24px;cursor:${CAN_ADMIN?"pointer":"default"}"
-          ${CAN_ADMIN?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
+          style="flex:1;min-width:24px;cursor:${CAN_OPS?"pointer":"default"}"
+          ${CAN_OPS?`onclick="event.stopPropagation();gmNameIdEdit(this,'${poEsc(c.gwd)}','${poEsc(nm)}')"`:""}
           >${gmIdPill(c.pname_id,c.source)}</span>`,
       status:gmOrderPill(c),
       gash:gmGashPill(c),
@@ -12345,7 +12347,7 @@ function gmIdsRender(){
         <span class="gm-folder-i">${f.icon}</span>
         <span><b>${T(f.lab)}</b><span class="muted2" style="display:block;font-size:var(--ds-t-xs)">${
           n} ${T("مستند · documents")}${on?` · ${on} ${T("مختار · picked")}`:""}</span></span></button>`;}).join("")}
-      ${CAN_ADMIN?`<button class="gm-folder" onclick="gmIdUpload()">
+      ${CAN_OPS?`<button class="gm-folder" onclick="gmIdUpload()">
         <span class="gm-folder-i">＋</span><span><b>${T("أضف مستنداً · add a document")}</b></span></button>`:""}
     </div>`;
     return;
@@ -12374,7 +12376,7 @@ function gmIdsRender(){
       <button class="minibtn" onclick="gmSendDeclMake(this,'originality')"
         title="${T("إقرار بأن البضاعة أصلية — يطلبه المكس للماركات · declares the goods are genuine — customs asks for it on branded parcels")}">${
         hadOrig?"↻ ":"＋ "}${T("إقرار أصلية · originality")}</button>`:""}
-      ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
+      ${CAN_OPS?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
     </div>
     ${msg}
     <div style="display:flex;gap:9px;flex-wrap:wrap">${docs.map(x=>gmIdTile(x,sel)).join("")
@@ -13021,7 +13023,7 @@ function guStepFiles(){
       p.customer.id_number?`🪪 ${p.customer.id_number}`:T("بلا رقم هوية · no ID number on file"));
   // no ID number on file — offer to file it right here (a blank number on a
   // declaration is how a wrong ID once reached customs)
-  if(p.customer&&!p.customer.id_number&&p.customer.customer_id&&CAN_ADMIN&&(isDecl||p.customer.id_image))
+  if(p.customer&&!p.customer.id_number&&p.customer.customer_id&&CAN_OPS&&(isDecl||p.customer.id_image))
     opts+=`<div class="panel" style="padding:8px 10px;margin:-2px 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span class="muted2" style="font-size:var(--ds-t-xs);flex:1 1 100%">🪪 ${T("رقم هوية العميل ينقص — سجّله الآن ليُطبع على أوراقه · the customer's ID number is missing — file it now so their papers carry it")}</span>
       <input id="guIdNum" placeholder="${T("رقم الهوية · ID number")}" value="${poEsc(GU.idNum||"")}" oninput="GU.idNum=this.value"
@@ -13031,7 +13033,7 @@ function guStepFiles(){
   const lib=(p.library||[]).slice().sort((a,b)=>((a.folder===want)?0:1)-((b.folder===want)?0:1));
   opts+=lib.map(d=>opt("library",d.id,d.name,d.folder,false,overKb(d))).join("");
   let up="";
-  if(CAN_ADMIN) up=(GU.up&&String(GU.up.t)===String(t))?guUpFormHtml()
+  if(CAN_OPS) up=(GU.up&&String(GU.up.t)===String(t))?guUpFormHtml()
     :`<button class="minibtn" style="margin-top:2px" onclick="guUpPick('${poEsc(t)}')">＋ ${T("رفع ملف جديد · upload a new file")}</button>`;
   const head=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 10px">
     <b style="font-size:var(--ds-t-sm)">${poEsc(p.types[t]||("type "+t))}</b>

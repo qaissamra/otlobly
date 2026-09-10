@@ -52,6 +52,11 @@ pick the owner username + a strong password. That's your top account.
 
 ### 5. Add your employees
 Log in as admin → **Users** → add each staff member with a role:
+- **Operator** — runs the whole day on their own: orders, quotes, deposits, customers and
+  ID photos, purchase orders with their Amazon costs, package photos, GAASH mail, tracking,
+  package prep. Not: P&L, Settings, Team, Trash purge, the backup, the Tatabu console, the
+  Leluxe board. The role for the one hire who operates everything — see
+  `docs/OPERATOR_RUNBOOK.md`.
 - **Sales** — create/quote orders, customers, WhatsApp. No cost/profit.
 - **Fulfillment** — order queue, set status/tracking/Amazon #. No money totals.
 - **Admin** — everything, including P&L and user management.
