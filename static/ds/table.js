@@ -15,7 +15,7 @@
        rows: [...], rowKey: r => r.id, rowClass(r), rowTitle(r), onRowClick(r, ev),
        selectable: true, bulk: [{ label, icon, danger, onclick(keys, rows) }], onSelect(keys, rows, table),
        expandable: { render(r) -> html, open(r) -> bool },
-       sort: { key, dir }, onSort(key, dir),            // omit onSort to sort locally
+       sort: { key, dir }, onSort(key, dir),            // omit onSort to sort locally (blanks last, both directions)
        loading: false, error: null, retry(), empty: { title, text, action },
        footer: { key: html }, page: { from, to, total, onPrev(), onNext() }, density: "compact"|"comfortable",
        onStateChange(state)                            // width / order / hidden / sort / density (for the router later)
@@ -43,6 +43,18 @@
     const na = Number(a), nb = Number(b);
     if (!isNaN(na) && !isNaN(nb) && String(a).trim() !== "" && String(b).trim() !== "") return na - nb;
     return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+  };
+  /** The sort DIRECTION applies to values, never to blanks. `cmp` already puts a blank
+      after every value, but the local sort used to multiply its WHOLE verdict by -1 for a
+      descending sort - so a "~" that correctly sat last on the first click was lifted to
+      the top of the board on the second (Q-036's other half). A blank is not the smallest
+      value, it is the absence of one, and it sits under the real rows whichever way the
+      column runs: blank vs blank is a tie (they keep their order), blank vs value is
+      "after", and only value vs value is `cmp` times the direction. */
+  const cmpDir = (a, b, dir) => {
+    const an = blank(a), bn = blank(b);
+    if (an || bn) return an && bn ? 0 : an ? 1 : -1;
+    return cmp(a, b) * dir;
   };
 
   class Table {
@@ -94,7 +106,7 @@
     width(c) { return Math.max(c.min || 48, this.state.w[c.key] || c.w || 140); }
     rows() {
       const rows = (this.o.rows || []).slice(); const s = this.state.sort;
-      if (s && s.key && !this.o.onSort) { const c = this.o.columns.find((x) => x.key === s.key); if (c) { const v = (r) => (c.sortVal ? c.sortVal(r) : r[c.key]); rows.sort((a, b) => cmp(v(a), v(b)) * (s.dir === "desc" ? -1 : 1)); } }
+      if (s && s.key && !this.o.onSort) { const c = this.o.columns.find((x) => x.key === s.key); if (c) { const v = (r) => (c.sortVal ? c.sortVal(r) : r[c.key]); const dir = s.dir === "desc" ? -1 : 1; rows.sort((a, b) => cmpDir(v(a), v(b), dir)); } }
       return rows;
     }
     key(r, i) { return this.o.rowKey ? String(this.o.rowKey(r)) : String(r.id != null ? r.id : r.key != null ? r.key : i); }

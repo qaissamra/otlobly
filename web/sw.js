@@ -3,7 +3,9 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v22";         // v22: Batch D - Tracking (Bulk search) on the design system
+const CACHE = "otl-off-v23";         // v23: the DataTable keeps blanks LAST in both sort
+                                     //      directions (static/ds/table.js changed)
+                                     // v22: Batch D - Tracking (Bulk search) on the design system
                                      //      (static/ds/tracking.js is new; gaash.js/ds.css/shell.js changed)
                                      // v21: Batch C - GAASH mail on the design system
                                      //      (static/ds/gaash.js is new; ds.js/ds.css/shell.js changed)

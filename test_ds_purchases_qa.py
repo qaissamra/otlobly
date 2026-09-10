@@ -308,7 +308,12 @@ def main():
             # ascending: every real name, THEN every spelling of blank
             check(f"  ascending puts blanks last ({o['asc']})",
                   o["asc"][:2] == ["amin", "zoe"] and set(o["asc"][2:]) == {"blank", "tilde", "tilde3"})
-            check(f"  descending reverses it ({o['desc']})", o["desc"][-2:] == ["zoe", "amin"])
+            # descending: the VALUES reverse, the blanks stay last. Until 2026-09-10 this
+            # asserted `o["desc"][-2:] == ["zoe", "amin"]` - the blanks on TOP - because
+            # table.js multiplied cmp's whole verdict by -1; the engine now applies the
+            # direction to values only (test_design_system.py has the full fixture)
+            check(f"  descending reverses the values and keeps the blanks last ({o['desc']})",
+                  o["desc"][:2] == ["zoe", "amin"] and set(o["desc"][2:]) == {"blank", "tilde", "tilde3"})
             check("  a table can open or close all of its rows", o["setAllOpen"] == "function")
             check("  and can say whether it has any to open", o["expandable"] == "function")
             check("  paintHost still writes the new markup", o["painted"] == "<em>repainted</em>")

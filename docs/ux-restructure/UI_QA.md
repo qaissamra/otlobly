@@ -856,6 +856,12 @@ blank however a page spells it, and blank sorts last. Behavioural proof, before 
 | before | `blank, tilde, tilde3, amin, zoe` |
 | after | `amin, zoe, blank, tilde, tilde3` |
 
+**Follow-up (2026-09-10):** the fix above covered the ascending sort only. `rows()` multiplied
+`cmp`'s whole verdict by −1 for a descending sort, so the second click on a header lifted the same
+blanks back to the top (`tilde, empty, null, tilde3, zoe, bob, amin`). The direction now applies
+to value-vs-value comparisons only, so blanks sit last both ways (`zoe, bob, amin, tilde, empty,
+null, tilde3`) — see MIGRATION.md "DataTable: blanks sort last both ways".
+
 ### Q-037 — the row-identity column could be switched off
 
 `po`, `pkg`, `product`, `customer` on Purchases; `name`, `product`, `package` on Leluxe;
