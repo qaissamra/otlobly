@@ -19,6 +19,7 @@
 <script src="/static/ds/fulfillment.js"></script>
 <script src="/static/ds/sales.js"></script>
 <script src="/static/ds/leluxe.js"></script>
+<script src="/static/ds/tracking.js"></script>
 <script src="/static/ds/gaash.js"></script>
 <style>
   :root{
@@ -217,7 +218,7 @@
      overflow:visible + z-index:40 on open — collapsing the h-scroll container
      (sticky pin + header desync) and painting rows OVER the topbar. Don't
      re-add them. */
-  .lx-cols .lxc>.pop, .lx-pcols .lxc>.pop, .lx-kcols .lxc>.pop, .bs-cols .lxc>.pop, .wf-cols .lxc>.pop, .en-cols .lxc>.pop, .dp-cols .lxc>.pop, .ct-cols .lxc>.pop, .ic-cols .lxc>.pop, .tr-cols .lxc>.pop, .fh-cols .lxc>.pop{overflow:visible}
+  .lx-cols .lxc>.pop, .lx-pcols .lxc>.pop, .lx-kcols .lxc>.pop, .wf-cols .lxc>.pop, .en-cols .lxc>.pop, .dp-cols .lxc>.pop, .ct-cols .lxc>.pop, .ic-cols .lxc>.pop, .tr-cols .lxc>.pop, .fh-cols .lxc>.pop{overflow:visible}
   /* Products view: consecutive rows of the SAME order read as one block —
      soft accent stripe + tint (pill+×N on the first row, └ marker on the rest) */
   .poc-row.lx-tied{box-shadow:inset 3px 0 0 #f7680866;background:var(--bg2)}
@@ -454,7 +455,6 @@
      scrollLeft lxtSync keeps in step with the body. Grid vars per table:
      --lxgrid / --lxpgrid / --lxkgrid / --pogrid; pin width via --btpin
      (.pin-lg orders 380 · .pin-md purchases 360 · default 320). ═══ */
-  .bs-cols{display:grid;grid-template-columns:var(--bsgrid,120px 120px 78px 120px 130px 110px 130px 96px 96px);gap:6px;align-items:center;flex:0 0 auto}
   .dp-cols{display:grid;grid-template-columns:var(--dpgrid,96px 84px 64px 92px 86px 160px 96px 40px);gap:6px;align-items:center;flex:0 0 auto}
   .ct-cols{display:grid;grid-template-columns:var(--ctgrid,80px 96px 120px 150px 56px 88px);gap:6px;align-items:center;flex:0 0 auto}
   .ic-cols{display:grid;grid-template-columns:var(--icgrid,200px 100px 200px);gap:6px;align-items:center;flex:0 0 auto}
@@ -644,11 +644,11 @@
     .en-cf-r>b:first-child{flex:1 1 100%}
   }
   .en-cols{display:grid;grid-template-columns:var(--engrid,112px 116px 124px 126px 108px 78px 96px 106px 104px 124px 92px 88px);gap:6px;align-items:center;flex:0 0 auto}
-  .lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .bs-cols .lxc, .wf-cols .lxc, .en-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .bs-cols .lxc>.pill, .bs-cols .lxc>span, .bs-cols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
+  .lx-cols .lxc, .lx-pcols .lxc, .lx-kcols .lxc, .wf-cols .lxc, .en-cols .lxc, .dp-cols .lxc, .ct-cols .lxc, .ic-cols .lxc, .tr-cols .lxc, .fh-cols .lxc{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}.lx-cols .lxc>.pill, .lx-cols .lxc>span, .lx-cols .lxc>b, .lx-pcols .lxc>.pill, .lx-pcols .lxc>span, .lx-pcols .lxc>select, .lx-kcols .lxc>.pill, .lx-kcols .lxc>span, .lx-kcols .lxc>b, .wf-cols .lxc>.pill, .wf-cols .lxc>span, .wf-cols .lxc>b, .en-cols .lxc>.pill, .en-cols .lxc>span, .en-cols .lxc>b, .dp-cols .lxc>.pill, .dp-cols .lxc>span, .dp-cols .lxc>b, .ct-cols .lxc>span, .ct-cols .lxc>b, .ic-cols .lxc>span, .ic-cols .lxc>b, .tr-cols .lxc>span, .tr-cols .lxc>b, .fh-cols .lxc>span, .fh-cols .lxc>b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}/* header row (inside .bt-clip): same width recipe as the rows, 1px transparent
      borders compensating the cards' real borders so full-scroll never lags */
-  .lx-colhead, .lx-pcolhead, .lx-kcolhead, .bs-colhead, .wf-colhead, .en-colhead, .dp-colhead, .ct-colhead, .ic-colhead, .tr-colhead, .fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}.lx-colhead .lbl, .lx-pcolhead .lbl, .lx-kcolhead .lbl, .bs-colhead .lbl, .wf-colhead .lbl, .en-colhead .lbl, .dp-colhead .lbl, .ct-colhead .lbl, .ic-colhead .lbl, .tr-colhead .lbl, .fh-colhead .lbl{font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lx-colhead .lx-sort, .lx-pcolhead .lx-sort, .lx-kcolhead .lx-sort, .bs-colhead .lx-sort, .wf-colhead .lx-sort, .en-colhead .lx-sort, .dp-colhead .lx-sort, .ct-colhead .lx-sort, .ic-colhead .lx-sort, .tr-colhead .lx-sort, .fh-colhead .lx-sort{cursor:pointer;user-select:none}.lx-colhead .lx-sort:hover, .lx-pcolhead .lx-sort:hover, .lx-kcolhead .lx-sort:hover, .bs-colhead .lx-sort:hover, .wf-colhead .lx-sort:hover, .en-colhead .lx-sort:hover, .dp-colhead .lx-sort:hover, .ct-colhead .lx-sort:hover, .ic-colhead .lx-sort:hover, .tr-colhead .lx-sort:hover, .fh-colhead .lx-sort:hover{color:var(--ink)}/* drag the right edge of a header label to resize that column (persisted);
+  .lx-colhead, .lx-pcolhead, .lx-kcolhead, .wf-colhead, .en-colhead, .dp-colhead, .ct-colhead, .ic-colhead, .tr-colhead, .fh-colhead{display:flex;align-items:center;gap:10px;padding:6px 0 5px;width:max-content;min-width:100%;border-inline:1px solid transparent}.lx-colhead .lbl, .lx-pcolhead .lbl, .lx-kcolhead .lbl, .wf-colhead .lbl, .en-colhead .lbl, .dp-colhead .lbl, .ct-colhead .lbl, .ic-colhead .lbl, .tr-colhead .lbl, .fh-colhead .lbl{font-size:var(--ds-t-xs);font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lx-colhead .lx-sort, .lx-pcolhead .lx-sort, .lx-kcolhead .lx-sort, .wf-colhead .lx-sort, .en-colhead .lx-sort, .dp-colhead .lx-sort, .ct-colhead .lx-sort, .ic-colhead .lx-sort, .tr-colhead .lx-sort, .fh-colhead .lx-sort{cursor:pointer;user-select:none}.lx-colhead .lx-sort:hover, .lx-pcolhead .lx-sort:hover, .lx-kcolhead .lx-sort:hover, .wf-colhead .lx-sort:hover, .en-colhead .lx-sort:hover, .dp-colhead .lx-sort:hover, .ct-colhead .lx-sort:hover, .ic-colhead .lx-sort:hover, .tr-colhead .lx-sort:hover, .fh-colhead .lx-sort:hover{color:var(--ink)}/* drag the right edge of a header label to resize that column (persisted);
      double-click a handle to reset all widths to the defaults */
-  .lx-colhead .lx-cols .lbl, .lx-pcolhead .lx-pcols .lbl, .lx-kcolhead .lx-kcols .lbl, .bs-colhead .bs-cols .lbl, .wf-colhead .wf-cols .lbl, .en-colhead .en-cols .lbl, .dp-colhead .dp-cols .lbl, .ct-colhead .ct-cols .lbl, .ic-colhead .ic-cols .lbl, .tr-colhead .tr-cols .lbl, .fh-colhead .fh-cols .lbl{position:relative;padding-inline-end:8px}
+  .lx-colhead .lx-cols .lbl, .lx-pcolhead .lx-pcols .lbl, .lx-kcolhead .lx-kcols .lbl, .wf-colhead .wf-cols .lbl, .en-colhead .en-cols .lbl, .dp-colhead .dp-cols .lbl, .ct-colhead .ct-cols .lbl, .ic-colhead .ic-cols .lbl, .tr-colhead .tr-cols .lbl, .fh-colhead .fh-cols .lbl{position:relative;padding-inline-end:8px}
   .bt-pin.lbl{padding-inline-end:10px}
   .lx-rsz{position:absolute;inset-inline-end:0;top:-5px;bottom:-5px;width:8px;cursor:col-resize;border-inline-end:2px solid transparent}
   .lx-rsz:hover,.lx-rsz.dragging{border-inline-end-color:var(--muted)}
@@ -813,7 +813,7 @@
   .bt-wrap .pkg-body{padding-inline:0;overflow-x:visible}
   .bt-wrap .po-title,.bt-wrap .pkg-title-row,.bt-wrap .poc-row{flex-wrap:nowrap;width:max-content;min-width:100%;padding-inline:0;gap:10px}/* the contact strip spans the whole (scrollable) row{width:max-content;min-width:100%;padding-inline:0}
   .bt-wrap .poc-meta>.in{position:sticky;inset-inline-start:0;width:max-content;padding-inline:10px}
-  .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .bs-colhead .bt-pin, .en-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
+  .bt-pin{position:sticky;inset-inline-start:0;z-index:6;display:flex;align-items:center;gap:8px;flex:0 0 var(--btpin,320px);width:var(--btpin,320px);min-width:0;overflow:hidden;background:var(--card);align-self:stretch;padding-inline:8px}.lx-colhead .bt-pin, .lx-pcolhead .bt-pin, .lx-kcolhead .bt-pin, .wf-colhead .bt-pin, .en-colhead .bt-pin, .dp-colhead .bt-pin, .ct-colhead .bt-pin, .ic-colhead .bt-pin, .tr-colhead .bt-pin, .fh-colhead .bt-pin{background:var(--bg);align-self:auto}
   .btscrolled .bt-pin{box-shadow:6px 0 10px -6px rgba(16,24,40,.28)}
   /* the pin floats over scrolled content → its background must mirror every
      row state it can sit on (open tint, pkg strip, hovers, tied stripe) */
@@ -1632,20 +1632,18 @@
     <div id="ppList"></div>
   </div>
 
-  <!-- 🔎 Bulk search: paste many GWD/tracking numbers → where each package lives
-       (Purchases PO or Leluxe order), its status, GAASH stage, and value -->
+  <!-- Tracking (docs/ux-restructure Batch D): paste many GWD/tracking numbers, see where each
+       package lives (a Purchases PO or a Leluxe order), its status, GAASH stage and value.
+       static/ds/tracking.js draws the header, the saved views and the results table; the
+       paste box is static on purpose - a repaint can never eat what is being typed into it. -->
   <div id="bulkSearchView" class="hidden">
-    <div class="panel" style="max-width:860px">
-      <h2 style="margin:0 0 4px;font-size:var(--ds-t-lg);font-weight:800">🔎 <span data-en="Bulk package search" data-ar="بحث جماعي عن الطرود">Bulk package search</span></h2>
-      <div class="muted2" style="font-size:var(--ds-t-sm);margin-bottom:10px" data-en="Paste GWD tracking numbers (one per line, or separated by spaces/commas) — each is looked up across Purchases and Leluxe." data-ar="الصق أرقام تتبع GWD (رقم في كل سطر أو مفصولة بمسافات/فواصل) — يتم البحث عن كل رقم في المشتريات وليلوكس.">Paste GWD tracking numbers (one per line, or separated by spaces/commas) — each is looked up across Purchases and Leluxe.</div>
-      <textarea id="bsInput" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:var(--ds-t-sm)" placeholder="GWD004755690&#10;GWD004699248&#10;GWD004678248…"></textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-        <button class="accent" id="bsGo" onclick="bsRun()" data-en="🔎 Search" data-ar="🔎 بحث">🔎 Search</button>
-        <button class="minibtn" onclick="$('bsInput').value='';$('bsResults').innerHTML=''" data-en="Clear" data-ar="مسح">Clear</button>
-        <span class="muted2" id="bsInfo" style="font-size:var(--ds-t-sm)"></span>
-      </div>
-    </div>
-    <div id="bsResults" style="margin-top:14px"></div>
+    <div id="trkChrome"></div>
+    <section class="ds-trk-paste" aria-labelledby="trkPasteLbl">
+      <label id="trkPasteLbl" class="ds-label" for="bsInput">GWD numbers</label>
+      <textarea id="bsInput" class="ds-textarea ds-trk-input" rows="5" spellcheck="false" placeholder="GWD004755690&#10;GWD004699248&#10;GWD004678248" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();bsRun()}"></textarea>
+      <div class="ds-trk-hint">One per line, or separated by spaces or commas, up to 300. Each number is looked up on Purchases and Leluxe. Cmd/Ctrl+Enter searches.</div>
+    </section>
+    <div id="bsResults"></div>
   </div>
 
   <!-- 🏆 Goals: the multi-source sales campaign — IT / PC (ClickUp "IT Products"),
@@ -2659,7 +2657,7 @@ function setView(v){
   const VIEW_TITLES={brain:"Brain",orders:"Orders",picking:"Picking list",pnl:"P&L",customers:"Customers",purchases:"Purchase orders",
     activity:"Activity",trash:"Trash",settings:"Settings",needorder:"To order",team:"Team",
     brokers:"Brokers",brokerprofile:"Broker",platoverview:"Tatabu · Overview",plans:"Plans & pricing",
-    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",goals:"Goals",pkgprep:"Package prep",bulksearch:"Bulk search",gaashmail:"GAASH mail",flags:"Flags"};
+    usage:"Usage by broker",platactivity:"Platform activity",metaleads:"Leads",deposits:"Deposits",incart:"In cart",catalog:"Catalog",leluxe:"Leluxe",goals:"Goals",pkgprep:"Package prep",bulksearch:"Tracking",gaashmail:"GAASH mail",flags:"Flags"};
   document.querySelectorAll("#sideNav button, #platNav button").forEach(b=>b.classList.remove("on"));
   const nb=$(VIEW_BTN[v]); if(nb) nb.classList.add("on");
   if($("pageTitle")) $("pageTitle").textContent=VIEW_TITLES[v]||"Orders";
@@ -3422,7 +3420,6 @@ function lxSortArrow(key){ return LX_SORT&&LX_SORT.key===key?(LX_SORT.dir===1?"�
 // status button on every load/deploy ("the empty orange box" bug); clamping
 // at apply time self-heals an already-poisoned saved value.
 const LX_TABLES={
-  "bs": {key:"bs_colw", varn:"--bsgrid",  head:".bs-colhead .bs-cols",   rows:"bsResults"},
   "en": {key:"en_colw", varn:"--engrid",  head:".en-colhead .en-cols",   rows:"gmEnrollTbl"},
   "dp": {key:"dp_colw", varn:"--dpgrid",  head:".dp-colhead .dp-cols",   rows:"dpMount"},
   "ct": {key:"ct_colw", varn:"--ctgrid",  head:".ct-colhead .ct-cols",   rows:"ctMount"},
@@ -3881,17 +3878,6 @@ function lxOrphanPkgEst(r){       // no parent order → its products, else its 
 // a column never shows both languages (the ⊕ picker + sort tooltips route through
 // T() too). Widths are sized for the English side (the default).
 const LXT_COLS={
-  "bs":[    // 🔎 Bulk search results (mixed Purchases + Leluxe rows)
-    {key:"found",    label:"موجود في · found in",   w:120, sortable:true},
-    {key:"oname",    label:"الاسم · order name",    w:120, sortable:true},
-    {key:"profile",  label:"الحساب · profile",     w:78,  sortable:true},
-    {key:"imgs",     label:"الصور · images",        w:120},
-    {key:"cust",     label:"العملاء · customers",   w:130, sortable:true},
-    {key:"status",   label:"الحالة · status",       w:110, sortable:true},
-    {key:"gash",     label:"جمارك · GAASH",         w:130},
-    {key:"gashdate", label:"تاريخ الجمارك · gash date", w:96, sortable:true},
-    {key:"value",    label:"القيمة · value",        w:96,  sortable:true},
-  ],
   // 📧 Enroll picker. ONLY columns the candidate record fills on its own — the
   // picker must paint before the Purchases/Leluxe caches load, so anything
   // needing them (images, profile, value, gash date) would render half-empty.
@@ -3941,16 +3927,15 @@ const LXT_COLS={
   ],
 };
 const LXT_CLS={
-               "bs":["bs-colhead","bs-cols"],
                "en":["en-colhead","en-cols"],
                "dp":["dp-colhead","dp-cols"],
                "ct":["ct-colhead","ct-cols"],
                "tr":["tr-colhead","tr-cols"],"fh":["fh-colhead","fh-cols"]};
-const LXT_PINCLS={"":" pin-lg","p":"","k":"","bs":"","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
+const LXT_PINCLS={"":" pin-lg","p":"","k":"","en":" pin-md","dp":"","ct":" pin-md","tr":" pin-md","fh":" pin-lg"};
 const LXT_HIDDEN={}, LXT_SORT={}, LXT_ORDER={};
 // "", "p" and "k" are migrated boards (F1/F2/F3) and are no longer in LX_TABLES, but their
 // SORT preference is still read by the bridges — keep them seeded here.
-["","p","k","po","pok","pop","bs","en","dp","ct","ic","tr","fh"].forEach(t=>{
+["","p","k","po","pok","pop","en","dp","ct","ic","tr","fh"].forEach(t=>{
   try{ LXT_HIDDEN[t]=new Set(JSON.parse(localStorage.getItem("lxt_hidden_"+t)||"[]")); }catch(e){ LXT_HIDDEN[t]=new Set(); }
   try{ LXT_SORT[t]=JSON.parse(localStorage.getItem("lxt_sort_"+t)||"null"); }catch(e){ LXT_SORT[t]=null; }
   try{ LXT_ORDER[t]=JSON.parse(localStorage.getItem("lxt_order_"+t)||"null"); }catch(e){ LXT_ORDER[t]=null; }
@@ -3980,7 +3965,7 @@ function lxtCols(tbl){
 function lxtVisible(tbl){ return lxtCols(tbl).filter(c=>!LXT_HIDDEN[tbl].has(c.key)); }
 function lxtRender(tbl){
   if(tbl==="po"||tbl==="pok"||tbl==="pop") return renderPurchases();
-  const fn={bs:bsRender, wf:gmRenderSeq, en:gmEnrollRender,
+  const fn={wf:gmRenderSeq, en:gmEnrollRender,
             dp:renderDeposits, ct:renderCatalog,
             ic:renderIncart, tr:trRender}[tbl];
   (fn||renderLeluxe)();
@@ -10566,10 +10551,13 @@ function drillRenderFormula(metric){
 
 async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json();}
 
-// ═══ 🔎 Bulk package search: paste many GWDs → where each lives + status + value ═══
+// ═══ Tracking (the Bulk search page): paste many GWDs, see where each lives + status + value ═══
 // Searches BOTH data sets client-side: Purchases (POS — customer purchase orders)
 // and Leluxe (LX — the ClickUp AZ (2) mirror). Read-only; money cells respect
 // PO_MONEY, and the Leluxe fetch simply skips for roles that can't access it.
+// static/ds/tracking.js draws the page (header, saved views, the results table);
+// the finders below are shared with GAASH mail (readiness, docs, the workflow
+// expansion, the enroll picker's colours), so they live here, not in the module.
 let BS_LOADING=null;
 async function bsEnsureData(){
   if(BS_LOADING) return BS_LOADING;
@@ -10582,14 +10570,6 @@ async function bsEnsureData(){
     await Promise.all(jobs);
   })();
   try{ await BS_LOADING; } finally{ BS_LOADING=null; }
-}
-async function bsInit(){
-  const inf=$("bsInfo"); if(inf) inf.textContent=T("جارِ تحميل البيانات… · loading data…");
-  await bsEnsureData();
-  if(inf){
-    const nPo=(POS||[]).length, nLx=(typeof LX!=="undefined"&&LX&&LX.orders)?LX.orders.length:0;
-    inf.textContent=`${T("جاهز · ready")} — ${nPo} PO · ${nLx} Leluxe`;
-  }
 }
 function bsTokens(){
   return [...new Set(($("bsInput").value||"").split(/[\s,;،]+/)
@@ -10627,114 +10607,93 @@ function bsFindLx(tn,rows){
   return {order, pkgRow, items:[...items.values()], tot:Math.round(tot*100)/100, sts, gash,
           trk:en&&en.data&&en.data.tracking_status||null};
 }
+// one {kind:"po"|"lx"|"miss"} model per match — a GWD can be several packages
+// on Purchases AND a Leluxe parcel; the Tracking board and GAASH mail's
+// workflow expansion both draw these through DS.tracking.modelCells
+function bsModels(tns){
+  const lxRows=bsLxRows(), out=[];
+  (tns||[]).forEach(tn=>{
+    const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
+    if(!pos.length&&!lx){ out.push({kind:"miss",tn}); return; }
+    pos.forEach(({p,pk,pi})=>out.push({kind:"po",tn,p,pk,pi}));
+    if(lx) out.push({kind:"lx",tn,lx});
+  });
+  return out;
+}
 function bsOpenPo(id){ setView("purchases"); poJumpOrder(id); }
 // is the 📧 GAASH-mail page available to this user? (nav button shown)
 function gmAvail(){ const b=$("gaashMailBtn"); return !!b && b.style.display!=="none"; }
-function bsEnrollBtn(tn){ return gmAvail()
-  ? `<button class="minibtn" style="padding:0 6px;margin-inline-start:6px" title="${T('أرسل تسلسل تخليص لغاش · start a GAASH clearance sequence')}" onclick="event.stopPropagation();gmEnrollFrom(['${poEsc(tn)}'])">📧</button>` : ""; }
-// results render through the shared ClickUp-table system (table id "bs") — the
-// ⊕ Fields picker, drag-reorder, right-click column menu and resize all apply.
-let BS_LAST=null;   // last search's row models — re-rendered on any column change
-async function bsRun(){
-  const res=$("bsResults"), toks=bsTokens();
-  if(!toks.length){ res.innerHTML=""; BS_LAST=null; toast(T("الصق أرقام تتبع أولاً · paste tracking numbers first")); return; }
-  res.innerHTML=`<div class="muted2" style="padding:10px">${T("جارِ البحث… · searching…")}</div>`;
+// ── the page's state + bridges (static/ds/tracking.js draws, this decides) ──
+let BS_LAST=null;                       // last search: {models,nTok,found}; re-drawn on sort/column/view changes
+let BS_VIEW="all";                      // All · Found · Missing · Purchases · Leluxe
+const BS_STATE={loading:false, error:null};
+function bsCtx(){
+  return { money:PO_MONEY, pos:POS||[], lx:(typeof LX!=="undefined"&&LX)||null,
+    last:BS_LAST, view:BS_VIEW, loading:BS_STATE.loading, error:BS_STATE.error,
+    nTok:BS_LAST?BS_LAST.nTok:0, found:BS_LAST?BS_LAST.found:0,
+    canEnroll:gmAvail(), menu:m=>bsRowMenu(m) };
+}
+function bsRenderChrome(){ if(window.DS&&DS.tracking) DS.tracking.chrome("trkChrome", bsCtx()); }
+async function bsInit(){
+  BS_STATE.loading=!POS; BS_STATE.error=null; bsRenderChrome();
   await bsEnsureData();
-  const lxRows=bsLxRows(), models=[];
-  toks.forEach(tn=>{
-    const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
-    if(!pos.length&&!lx){ models.push({kind:"miss",tn}); return; }
-    pos.forEach(({p,pk,pi})=>models.push({kind:"po",tn,p,pk,pi}));
-    if(lx) models.push({kind:"lx",tn,lx});
-  });
-  BS_LAST={models,nTok:toks.length,found:toks.length-models.filter(m=>m.kind==="miss").length};
+  BS_STATE.loading=false;
+  if(!POS) BS_STATE.error="Couldn't load the purchase orders"+apiFailReason();
+  bsRenderChrome();
+  if(BS_STATE.error) DS.tracking.results("bsResults", [], bsCtx());
+}
+async function bsRun(){
+  const toks=bsTokens();
+  if(!toks.length){ BS_LAST=null; bsRender(); toast(T("الصق أرقام تتبع أولاً · paste tracking numbers first")); return; }
+  $("bsResults").innerHTML=DS.skeleton({rows:4});
+  await bsEnsureData();
+  const models=bsModels(toks);
+  BS_LAST={models, nTok:toks.length, found:toks.length-models.filter(m=>m.kind==="miss").length};
+  const t=DS.tableGet("trk"); if(t) t.selected.clear();     // a new search starts with a clean selection
   bsRender();
 }
-function bsSortVal(m,key){
-  if(m.kind==="po"){
-    const {p,pk}=m;
-    if(key==="found") return "1"+String(p.po_id||"").toLowerCase();
-    if(key==="oname") return String(p.ship_to||"~").toLowerCase();
-    if(key==="profile") return String(p.profile_box||"~").toLowerCase();
-    if(key==="cust") return String(pkgWho(pk)||"~").toLowerCase();
-    if(key==="status") return String(pk.otlobly_status||"~").toLowerCase();
-    if(key==="gashdate") return "~~";
-    if(key==="value") return String(1e9+(pkgEstTotal(pk).sum||0)).padStart(16,"0");
-  }else{
-    const lx=m.lx;
-    if(key==="found") return "2leluxe";
-    if(key==="oname") return String((lx.order&&lx.order.name)||"~").toLowerCase();
-    if(key==="profile") return String(lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"~").toLowerCase();
-    if(key==="cust") return "~";
-    if(key==="status") return String(lx.sts[0]||"~").toLowerCase();
-    if(key==="gashdate"){ const v=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean); return v?lxMs(v)||"~~":"~~"; }
-    if(key==="value") return String(1e9+(lx.tot||0)).padStart(16,"0");
-  }
-  return String(m.tn);
-}
-// One bulk-search-style row for a {kind:"po"|"lx"|"miss"} model — shared by the
-// 🔎 Bulk-search results AND the GAASH ⚡ suggested-enrollments table.
-// pinExtra(m) → extra HTML appended to the pinned cell (e.g. ✓/✕ approve).
-// ONE row builder for every "packages as a table" surface: 🔎 Bulk search, the
-// ⚙️ Workflows expansion, and the 📧 enroll picker. opts.tbl renders the same
-// cells into a different column set, opts.extra adds that table's own cells
-// (the picker's 🪪 name/ID pair), opts.pinPre puts markup BEFORE the tracking
-// number in the pin (the picker's checkbox). Keep the three in sync via this.
-function bsModelRow(m,pinExtra,opts){
-  const O=opts||{}, TBL=O.tbl||"bs";
-  const CE=o=>lxtCells(TBL,Object.assign({},o,O.extra?O.extra(m):{}));
-  // 📧 in the enroll picker itself the per-row enroll button is re-entrant
-  // (it calls gmEnrollFrom → setView → gmNewOpen), so it is suppressed there
-  const EB=O.noEnroll?"":bsEnrollBtn(m.tn);
-  const pin=`<div class="bt-pin"${m.kind==="miss"?' style="background:#fff7ed"':''}>${O.pinPre?O.pinPre(m):""}<span class="mono" style="font-size:var(--ds-t-sm)">${poEsc(m.tn)}</span>${lxCopyRawBtn(m.tn)}${pinExtra?pinExtra(m):""}</div>`;
-  if(m.kind==="miss")
-    return {usd:0,ils:0,html:`<div class="poc-row" style="background:#fff7ed">${pin}${CE({found:`<span style="color:#b45309;font-size:var(--ds-t-xs)">${T("غير موجود · not found")}</span>`})}</div>`};
-  if(m.kind==="po"){
-    const {p,pk}=m, pst=(pk.otlobly_status||"").trim(), est=pkgEstTotal(pk);
-    return {usd:PO_MONEY?est.sum:0,ils:0,html:`<div class="poc-row">${pin}${CE({
-      found:`<button class="pill" style="background:var(--bg3);border:1px solid var(--line);cursor:pointer" title="${T('فتح الطلب · open on the Purchases board')}" onclick="bsOpenPo('${p.po_id}')">📦 ${poEsc(p.po_id)}</button><span class="muted2" style="font-size:var(--ds-t-xs)">pkg ${pk.package_no}</span>${EB}`,
-      oname: poNameCell(p.ship_to,true),
-      profile: poProfileCell(p),
-      imgs: poThumbStrip(pk.items),
-      cust:`<span style="font-size:var(--ds-t-xs)" title="${poEsc(pkgWho(pk)||'')}">${poEsc(pkgWho(pk)||"—")}</span>`,
-      status: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):'<span class="muted2">—</span>',
-      gash: pkgGaashPill(pk),
-      gashdate:'<span class="muted2" style="opacity:.45">—</span>',
-      value:(PO_MONEY&&est.priced)?`<span>≈ <b>${money(est.sum)}</b></span>`:'<span class="muted2">—</span>',
-    })}</div>`};
-  }
-  const lx=m.lx;
-  const oname=(lx.order&&lx.order.name)||(lx.pkgRow&&lx.pkgRow.name)||"—";
-  const prof=lx.items.map(it=>lxF(it,"name")).find(Boolean)||(lx.order&&lxF(lx.order,"name"))||"";
-  const gd=(lx.pkgRow&&lxF(lx.pkgRow,"gash date"))||lx.items.map(it=>lxF(it,"gash date")).find(Boolean);
-  return {usd:0,ils:lx.tot||0,html:`<div class="poc-row">${pin}${CE({
-    found:tonePill("gray","⌚ Leluxe")+EB,
-    oname:`<span style="font-size:var(--ds-t-xs)" title="${poEsc(oname)}">${poEsc(String(oname).slice(0,46))}</span>`,
-    profile: prof?lxProfileChip(prof,`${T('الحساب · profile / account')} (NAME): ${prof}`):'<span class="muted2" style="opacity:.5">—</span>',
-    imgs: lxThumbs(lx.items),
-    cust:`<span class="muted2" style="font-size:var(--ds-t-xs)">${lx.items.length} ${T("منتج · products")}</span>`,
-    status: lx.sts.length?lx.sts.map(s=>lxStatusPill(s)).join(" "):'<span class="muted2">—</span>',
-    gash: lxGashRollupPill(lx.gash)||(lx.trk?tonePill("gray",lx.trk):'<span class="muted2">—</span>'),
-    gashdate: gd?(lxDueChip(gd,true)||`<span class="muted2">${lxMs(gd)}</span>`):'<span class="muted2" style="opacity:.45">—</span>',
-    value: lx.tot?`<b>₪${lx.tot.toLocaleString()}</b>`:'<span class="muted2">—</span>',
-  })}</div>`};
-}
 function bsRender(){
-  const res=$("bsResults"); if(!res||!BS_LAST) return;
-  const {models,nTok,found}=BS_LAST;
-  const live=lxtSortApply("bs",models.filter(m=>m.kind!=="miss").slice(),bsSortVal)
-    .concat(models.filter(m=>m.kind==="miss"));   // missing rows always last
-  let sumUsd=0, sumIls=0;
-  const rows=live.map(m=>{ const r=bsModelRow(m); sumUsd+=r.usd; sumIls+=r.ils; return r.html; }).join("");
-  const missing=nTok-found;
-  const totals=`<div class="poc-row bt-total">
-      <div class="bt-pin">Σ ${nTok} · ${found} ${T("موجود · found")}${missing?` · <span style="color:#b45309">${missing} ${T("مفقود · missing")}</span>`:""}</div>
-      ${lxtCells("bs",{value:`<b style="font-size:var(--ds-t-sm);white-space:nowrap">${PO_MONEY&&sumUsd?`≈ ${money(Math.round(sumUsd*100)/100)}`:""}${sumIls?`${PO_MONEY&&sumUsd?" · ":""}₪${(Math.round(sumIls*100)/100).toLocaleString()}`:""}</b>`})}
-    </div>`;
-  res.innerHTML=lxtHead("bs","التتبع · tracking")
-    +lxtWrap("bs",`<div class="pkg open"><div class="pkg-body">${rows}${totals}</div></div>`);
-  lxColwApply(); lxtGridApply("bs",res);
-  $("bsInfo").textContent=`${nTok} ${T("رقم · numbers")} · ${found} ${T("موجود · found")}`;
+  bsRenderChrome();
+  if(!BS_LAST){ $("bsResults").innerHTML=""; return; }
+  DS.tracking.results("bsResults", BS_LAST.models, bsCtx());
+}
+function bsView(k){ BS_VIEW=k; bsRender(); }
+function bsClear(){ $("bsInput").value=""; BS_LAST=null; BS_VIEW="all"; bsRender(); }
+async function bsReload(btn){
+  if(btn) btn.disabled=true;
+  POS=null; if(typeof LX!=="undefined") LX=null;
+  try{ await bsInit(); if(BS_LAST&&!BS_STATE.error) await bsRun(); }
+  finally{ if(btn) btn.disabled=false; }
+}
+// open Tracking with these numbers already searched — the GAASH ⚡ match chips
+// and the global search land here (bsRun awaits the data itself: no timer, no race)
+function bsLookup(gwds){
+  setView("bulksearch");
+  $("bsInput").value=(gwds||[]).join("\n");
+  return bsRun();
+}
+function bsRowMenu(m){
+  const items=[{label:"Copy number", icon:"clipboard-document", onclick:`copyCtk(${JSON.stringify(m.tn)})`}];
+  if(m.kind==="po") items.push({label:"Open purchase order", icon:"cube", onclick:`bsOpenPo(${JSON.stringify(m.p.po_id)})`});
+  if(m.kind==="lx"){
+    const o=m.lx&&m.lx.order, r=o||(m.lx&&(m.lx.pkgRow||(m.lx.items||[])[0]));
+    if(o) items.push({label:"Open in Leluxe", icon:"arrow-top-right-on-square", onclick:`lxJumpOrder(${JSON.stringify(o.id)})`});
+    else if(r) items.push({label:"Open in Leluxe", icon:"arrow-top-right-on-square", onclick:`lxInfoOpen(${JSON.stringify(r.kind||"item")},${JSON.stringify(r.id)})`});
+  }
+  if(m.kind!=="miss"&&gmAvail()) items.push({divider:true},{label:"Enroll in GAASH mail", icon:"envelope", onclick:`gmEnrollFrom([${JSON.stringify(m.tn)}])`});
+  return items;
+}
+function bsEnrollSel(keys,rows){
+  const tns=[...new Set((rows||[]).filter(m=>m.kind!=="miss").map(m=>m.tn))];
+  if(!tns.length){ toast(T("اختر طروداً موجودة أولاً · pick found parcels first")); return; }
+  gmEnrollFrom(tns);
+}
+function bsEnrollFound(){ if(BS_LAST) bsEnrollSel(null, BS_LAST.models); }
+function bsCopyMissing(){
+  const l=((BS_LAST||{}).models||[]).filter(m=>m.kind==="miss").map(m=>m.tn);
+  if(!l.length) return;
+  (navigator.clipboard?navigator.clipboard.writeText(l.join("\n")):Promise.reject())
+    .then(()=>toast(`${l.length} missing ${l.length===1?"number":"numbers"} copied`)).catch(()=>toast(l.join(", ")));
 }
 
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
@@ -10859,18 +10818,11 @@ async function gmPropAllSeq(seqId,action){
 async function gmWfExpRender(seqId){
   const box=()=>{ const p=$("gmSeqPane"); return p&&p.querySelector(`.ds-gm-wfexp[data-seq="${CSS.escape(seqId)}"]`); };
   await bsEnsureData();
-  const lxRows=bsLxRows();
-  const models=gwds=>{ const out=[]; (gwds||[]).forEach(tn=>{
-      const pos=bsFindPo(tn), lx=bsFindLx(tn,lxRows);
-      if(!pos.length&&!lx){ out.push({kind:"miss",tn}); return; }
-      pos.forEach(({p,pk,pi})=>out.push({kind:"po",tn,p,pk,pi}));
-      if(lx) out.push({kind:"lx",tn,lx}); });
-    return out; };
   const ths=((GM.ov&&GM.ov.threads)||[]).filter(t=>t.seq_id===seqId);
   const stByGwd={}; ths.forEach(t=>stByGwd[t.gwd]=t.state);
   const html=DS.gaash.wfExpansion({ seqId, money:PO_MONEY,
-    enrolled:models(ths.map(t=>t.gwd)).map(m=>({m, state:stByGwd[m.tn]})),
-    proposed:models(gmWfPropOf(seqId)) });
+    enrolled:bsModels(ths.map(t=>t.gwd)).map(m=>({m, state:stByGwd[m.tn]})),
+    proposed:bsModels(gmWfPropOf(seqId)) });
   GM.wfExp=GM.wfExp||{}; GM.wfExp[seqId]=html;
   const cur=box(); if(cur) cur.innerHTML=html;
 }
@@ -13727,12 +13679,7 @@ function gmMatchChip(ruleId){
   return `<button class="pill" style="background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:var(--ds-t-xs);cursor:${m.count?"pointer":"default"}" title="${T("طرود تطابق هذا المُشغّل الآن — انقر لعرضها بكل الأعمدة · packages matching this trigger now — click to view with full columns")}" onclick="event.stopPropagation();gmMatchesViewRule('${ruleId}')">⚡ ${m.count}</button>`;
 }
 function gmMatchesViewRule(id){ const m=(GM.matches||{})[id]; if(m&&m.count) gmMatchesView(m.gwds); }
-function gmMatchesView(gwds){
-  setView("bulksearch");
-  // bsInit (kicked by setView) loads its data async — drop the GWDs in and run
-  setTimeout(()=>{ const i=$("bsInput"); if(!i) return;
-    i.value=(gwds||[]).join("\n"); bsRun(); },350);
-}
+function gmMatchesView(gwds){ bsLookup(gwds); }
 async function gmWfToggle(id){
   const s=((GM.ov&&GM.ov.sequences)||[]).find(x=>x.id===id); if(!s) return;
   const want=s.paused?0:1;

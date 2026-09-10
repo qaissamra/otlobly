@@ -1231,3 +1231,41 @@ Verified by driving, not by name: the Docs by-order tie runs were forced with a 
 (2 runs, 7 tied rows, "Enroll all 6" / "Enroll all 3"), the classic layout's strip switched tabs
 on a real click, and the reply box kept text + focus + caret across `gmRenderList()` and
 `gmRenderChat()`.
+
+## 23. Tracking (Batch D) — measured after
+
+The Bulk search page on `static/ds/tracking.js`, 1400×900 / 1280 / 1100, admin, new shell on,
+live-data snapshot (8 purchase orders, 157 Leluxe orders), the same seven numbers the old page
+was run on first (3 Purchases, 3 Leluxe, 1 bogus). Harness = the inline `window.__qa.measure()`
+(scoped to `#bulkSearchView`, skips `.ds-sr`, reads the value inside `.ds-cell`, measures a
+checkbox by its `.ds-check` label). The row where it used to score `0 | 0 | 0 | 0` (§1, line 50)
+was measured EMPTY — before any search had run.
+
+| surface | controls | < 24px | truncated | no tooltip | fonts |
+|---|---:|---:|---:|---:|---|
+| results, 7 rows, 1400×900 | 35 | **0** | 10 | **0** | 11 · 12.5 · 13.02 · 14 · 17 · 22 |
+| results, 1280 | 35 | 0 | 10 | 0 | same |
+| results, 1100 | 35 | 0 | 10 | 0 | same |
+
+No horizontal page overflow at any width; the board scrolls inside its own scrollport (3 columns
+start past the edge at 1280, 4 at 1100 — the same shape as every other ten-column board at those
+widths; the tracking number is pinned at the start and the ⋯ menu at the end).
+
+**Parity with the old page, cell for cell:** same rows, same values, Σ 7 · 6 found · 1 missing,
+≈ $106.82 · ₪1,944.73. Column keys: the nine of `LXT_COLS.bs` plus `tn` and `actions`.
+
+**Driven, not called:** Search, Clear, Reload data, Cmd+Enter; every sortable header asc → desc →
+none (blanks and "Not found" rows stay last in both directions); the Columns panel (hide Profile,
+Reset layout); the five view pills; both row menus (Purchases: Copy · Open purchase order ·
+Enroll; Leluxe: Copy · Open in Leluxe · Enroll); two ticked rows → the bulk bar → Enroll in GAASH
+mail opened the picker with both numbers pre-checked; the header ⋯ (Enroll all found · Copy
+missing numbers); the ⚡ match-chip path (`gmMatchesView` → `bsLookup`); the global search's
+"Look up … in Tracking" (pastes and searches); the Leluxe workspace (Tracking stays, the
+workspace stays). No console errors.
+
+No new Q-item: nothing on the page failed a check. Two pre-existing observations, unchanged
+and out of this batch's scope: the copy button (`lxCopyRawBtn`) and the GASH date chip
+(`lxDueChip`) are legacy builders shared with Purchases and Leluxe and still carry their glyphs;
+and the DataTable's own sort would put blanks FIRST on a descending sort (`cmp` × −1), which is
+why this page, like Docs, owns its sort — a table.js change for every board is its own item.
+

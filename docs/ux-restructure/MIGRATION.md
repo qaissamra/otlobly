@@ -21,7 +21,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `orders` › add-order panel | ＋ Add order (mounts Purchases cards) | T3 | Sales › Orders › New order (drawer) | `orders-add-order-panel.jpg` | not started |
 | `customers` | 👤 Customers | T1 (+T2 profile) | Sales › Customers | `customers.jpg` | **migrated** (Batch B) |
 | `metaleads` | 📣 Leads | T1 | Sales › Leads | `leads.jpg` | not started |
-| `bulksearch` | 🔎 Bulk search | T1 | Shipping › Tracking | `bulk-search.jpg`, `bulk-search-results.jpg` | not started |
+| `bulksearch` | 🔎 Bulk search | T1 | Shipping › Tracking | `bulk-search.jpg`, `bulk-search-results.jpg` | **migrated** (Batch D, `static/ds/tracking.js`) |
 | `gaashmail` › conv | 💬 Conversations | T1 (+T2 thread) | Shipping › GAASH mail | `gaash-mail-conversations.jpg` | **migrated** (Batch C) — the thread body stays legacy markup inside the row (Phase 5) |
 | `gaashmail` › ov | 🧭 Overview | T4 | Shipping › GAASH mail › Overview | `gaash-mail-overview.jpg` | **migrated** (Batch C) |
 | `gaashmail` › seq | ⚙️ Workflows | T1 (+T3 builder) | Shipping › GAASH mail › Workflows | `gaash-mail-workflows.jpg` | **migrated** (Batch C) — the builder itself is Phase 5 |
@@ -73,7 +73,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `.po-btn` (+`.accent`, `.danger`) | CSS ≈L241 | `DS.button` (secondary / primary / danger) | keep as base | **built** (0 of 129 migrated) |
 | `.minibtn` (+`.danger`) | CSS ≈L287 | `DS.button {size:'sm'}` | merge | **built** (0 of 213 migrated) |
 | `.iconbtn` · `.qchip` · `.chip` | CSS ≈L235 / 267 / 330 | `Button icon` · `Tag` · `Tabs` | merge | not started |
-| LXT table engine (`LX_TABLES` L3594, `LXT_COLS` L4045, `lxtHead` L4452, `lxtCells` L4497) — 15 tables | JS L4045–4955 | `DS.tableRender` (`table.js`) | superseded — the new engine adds selection + bulk bar, end-pinned status/actions, keyboard, skeleton/empty/error, typed cells | **built** (0 of 15 tables migrated) |
+| LXT table engine (`LX_TABLES` L3594, `LXT_COLS` L4045, `lxtHead` L4452, `lxtCells` L4497) — 15 tables | JS L4045–4955 | `DS.tableRender` (`table.js`) | superseded — the new engine adds selection + bulk bar, end-pinned status/actions, keyboard, skeleton/empty/error, typed cells | **built** — 10 of the 15 tables migrated; still on LXT: `en` (enroll picker), `dp`, `ct`, `tr`, `fh` |
 | `neTable` / `NE_COLS` (To order) | JS L7385–7400 | `DataTable` | delete after migration | not started |
 | 20 raw `<table>` (P&L ×7, Settings ×3, platform ×3, Team, Activity, Picking, Deposits-by-customer, To order, GM templates, GM analyze) | markup + JS | `DataTable` | delete | in progress — GM analyze is a DataTable (Batch C) |
 | `.pill` rule pair (L287 vs L963) + `statusPill` L2443 · `tonePill` L9578 · `hexPill` L9581 · `solidPill` L9588 · `gaashBucketPill` · `lxStatusPill` · `lxCfPill` + 12 domain builders + 48 raw literals | JS/CSS | `DS.badge` + `DS.attention` behind `status.js` | merge (one rule, one helper) | **built** — registry covers all 35 live ClickUp statuses + every order status; 0 call sites migrated |
@@ -104,7 +104,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | Quick quote: proof / product image / window paste (client-side only) | `quote-images` | not started |
 | Price-image editor (`piUpload`) | `quote-images` | not started |
 | GAASH mail: attach next / attach this message / document library / in-wizard library upload | `gaash-attachments`, `gaash-documents` | not started |
-| Bulk search textarea (`bsTokens`) | `tracking-numbers` (paste) | not started |
+| Bulk search textarea (`bsTokens`) | `tracking-numbers` (paste) | **migrated** (Batch D: a DS textarea, Cmd/Ctrl+Enter, the tokenizer unchanged) |
 | GAASH enroll wizard paste (`gmNewGwds`) | `tracking-numbers` (paste) | not started |
 | Gerizim bulk register (Mac only) | `gerizim-register` (source) | not started |
 | Sync buttons: Import from ClickUp, Check all shipping, Estimate all costs, Sync from orders, Sync from Meta, Leluxe tools, Check replies, Catalog fetch, item photo fetch | `clickup-po`, `tracking-refresh`, `cost-estimate`, `customers-from-orders`, `meta-leads`, `leluxe-*`, `gaash-replies`, `product-url` (source) | not started |
@@ -247,7 +247,7 @@ Screens in `screens/after/to-order*.jpg`, `in-cart.jpg`, `package-prep*.jpg`.
 - [x] **Phase 1** — foundations *(this PR)*: `static/ds/` (tokens · ds.css · ds.js · table.js · status.js · format.js · icons.svg), the `/design-system` catalogue, `DESIGN_SYSTEM.md`, the warn-level lint (`test_ds_lint.py` + `lint-baseline.json`), `test_design_system.py`, and the behaviour parity suite `test_ux_parity.py`. Loaded app-wide but used by nothing yet — the staff app is byte-for-byte unchanged on screen.
 - [x] **Phase 2** — shell and navigation *(this PR)*: `static/ds/shell.js` (grouped sidebar, top bar with global search, hash router, stage tabs, workspace switcher), `attention.py` + `/api/attention` + the Needs attention page, `test_ds_shell.py`, `test_attention.py`. Behind the per-user flag (D13) until Phase 4 completes.
 - [x] **Phase 3** — Purchase orders on T1 *(this PR)*: `static/ds/purchases.js` (header, filter bar, four DataTable boards, aligned sub-grids), the old renderers and LXT tables deleted, `test_ds_purchases.py`, `defaultHidden` columns. All fifteen §14 items answered.
-- [~] **Phase 4** — the daily pages. **4a *(this PR)*: To order, In cart, Package prep** — `static/ds/fulfillment.js`, `test_ds_fulfillment.py`; the Fulfillment group is now fully migrated. Still to do: GAASH mail (8 tabs), then Orders, Customers, Leads, Deposits, Tracking.
+- [~] **Phase 4** — the daily pages. **4a *(this PR)*: To order, In cart, Package prep** — `static/ds/fulfillment.js`, `test_ds_fulfillment.py`; the Fulfillment group is now fully migrated. Still to do: GAASH mail (8 tabs), then Orders, Customers, Leads, Deposits, Tracking. *(Later: GAASH mail = Batch C, Orders + Customers = Batch B, Tracking = Batch D; Leads and Deposits remain.)*
 - [ ] **Phase 5** — details, forms, modals.
 - [ ] **Phase 6** — imports onto `ImportWizard`; delete old importers.
 - [ ] **Phase 7** — insights, cleanup, lint to error, keyboard pass, before/after gallery.
@@ -699,6 +699,85 @@ tables 19 → 18, colour registries 13 → 12, hex literals 490 → 469 — the 
    reuses a legacy builder, check whether it hands back text or markup.
 
 **Still legacy on this page (Phase 5):** the thread body's own controls (`.gm-chat`), the
-workflow builder, the rule editor, the enroll wizard and its LXT `en` picker (it shares
-`bsModelRow` with Bulk search, so it moves with Tracking), the accounts panel, the changes
-popup, the stat drill-down modal, and the 16 native dialogs.
+workflow builder, the rule editor, the enroll wizard and its LXT `en` picker (it builds its
+own rows with `lxtCells("en")` — the claim that it shared `bsModelRow` with Bulk search was
+wrong, see Batch D), the accounts panel, the changes popup, the stat drill-down modal, and the
+16 native dialogs.
+
+## Batch D — Tracking, the Bulk search page (2026-09-10)
+
+`static/ds/tracking.js` (`DS.tracking`) draws the page: the header, the saved views and one
+DataTable (`trk`). `web/index.html` keeps the data — `bsEnsureData`, the finders `bsFindPo` /
+`bsFindLx` / `bsLxRows` (GAASH mail's readiness, docs, forecast and workflow expansion all lean on
+them), the tokenizer, the search itself — and hands the module a `ctx` on every repaint. The
+parcel model cells left gaash.js for tracking.js (`DS.tracking.modelCells`, `PARCEL_COLS`); the
+workflow expansion draws through them, and one named `bsModels(tns)` replaced the builder that
+`bsRun` and `gmWfExpRender` each carried inline. LXT `bs` is out of all four registries, the seed
+array and `lxtRender`'s dispatch; the `.bs-cols` grid rule and its six fragments are gone;
+`LX_TABLES` is down to five entries (`en`, `dp`, `ct`, `tr`, `fh`). `bsModelRow`, `bsSortVal`
+and `bsEnrollBtn` were deleted — index.html 14,279 → 14,226 lines.
+
+**The page chrome, by the brief's rules.** Breadcrumb Shipping › Tracking; the stats say what the
+old `#bsInfo` line said (purchase orders and Leluxe orders loaded — or "not loaded for your role")
+and, after a search, Numbers · Found · Missing · Value. **One** primary (Search), **two**
+secondaries (Clear, and a new Reload data that drops both caches — the page had no refresh, so a
+status changed on Purchases stayed stale here until a full reload), and ⋯ = Enroll all found in
+GAASH mail · Copy missing numbers. `bulksearch` joined `OWN_HEADER`; the classic top bar now
+calls the page Tracking, as the header does.
+
+**The paste box is static markup**, deliberately not module-rendered: a DS textarea, mono,
+Cmd/Ctrl+Enter searches. The header repaints through `DS.paintHost` and never contains the field,
+so the caret trap of Q-033 cannot happen on this page. The two ids the rest of the app pokes
+(`bsInput`, `bsResults`) stay.
+
+**The results board** keeps the nine columns of `LXT_COLS.bs` in the same order with English
+labels, plus the pinned tracking number with its copy button and a ⋯ actions column (Copy number ·
+Open purchase order / Open in Leluxe · Enroll in GAASH mail). Saved views All · Found · Missing ·
+Purchases · Leluxe carry counts. The page sorts and passes `onSort`, because blanks and misses
+must stay LAST in both directions — the DataTable's local sort multiplies by −1 and would put
+them on top of a descending sort. The footer carries Σ numbers · found · missing and the money
+(USD ≈ when money is visible, ₪ for Leluxe). Rows select, and the one bulk action — Enroll in
+GAASH mail — opens the picker with every ticked number pre-checked. The Value column is dropped
+for a role that can see neither money nor Leluxe rather than printing dashes.
+
+**Deep links.** `bsLookup(gwds)` replaces the 350 ms `setTimeout` `gmMatchesView` used to poke the
+textarea with (`bsRun` awaits the data itself). The global search's "Look up GWD… in Tracking"
+used to land on an empty page; a search result may now carry `after`, and Tracking's pastes the
+number and searches it.
+
+**Capabilities kept**, checked cell by cell against `bsModelRow` on the same seven numbers: both
+boards searched client-side; several packages per number plus the Leluxe parcel; copy; open the
+purchase order; enroll per row; Leluxe thumbnails still open the item editor; the profile chip;
+status pills from the registry; the GAASH pill and the Leluxe GASH rollup; the GASH date chip;
+USD ≈ (money-gated) and ₪ values; the Σ line with the missing count; the 300-token cap and the
+tolerant tokenizer (any ≥4-char token — it searches any carrier number; the enroll wizard's strict
+`^GWD\d+$` is right for GAASH threads, so AUDIT §5.3's disagreement is documented, not changed);
+Purchases-only degradation for roles without Leluxe. Nothing was removed; Reload data,
+Cmd/Ctrl+Enter, the views, bulk enroll, Copy missing numbers and Open in Leluxe are additions.
+
+Measured at 1400×900 on a copy of the live data (8 purchase orders, 157 Leluxe orders), the same
+seven numbers as the old page: 7 rows, Σ 7 · 6 found · 1 missing, ≈ $106.82 · ₪1,944.73 —
+identical, cell for cell. **35 controls, 0 under 24px**; 10 truncated values, **0 without a
+tooltip**; 6 font sizes, all DS steps; no horizontal page overflow (the board scrolls inside its
+own scrollport at 1280 and 1100). Every control was driven, not called: Search, Clear, Reload
+data, Cmd+Enter, every sortable header asc/desc/none, the Columns panel (hide Profile, Reset
+layout), the five views, both row menus, two ticked rows → bulk Enroll → the picker opened with
+both numbers, the ⚡ match-chip path, the global search, and the Leluxe workspace (Tracking stays
+put). `run_all_tests.sh`: **64 passed** (new `test_ds_tracking.py`, which fails on the
+pre-Batch-D tree). Lint: emoji 1727 → 1701, raw buttons 402 → 398, hex literals 469 → 464, raw
+pill literals 39 → 38 — the baseline is pinned there.
+
+**Two things worth carrying forward:**
+1. **A "shared" builder can be shared with nobody.** `bsModelRow`'s comment named three consumers
+   (Bulk search, the workflows expansion, the enroll picker); its only live caller was `bsRender`.
+   Batch C's note that the `en` picker "moves with Tracking" came from that comment. Grep the
+   callers before designing around a comment — the comment was two migrations out of date.
+2. **The DataTable sorts blanks first on a descending sort.** `cmp` puts a blank after everything
+   and the caller multiplies by −1. A page whose blanks must stay last (Tracking's misses, Docs'
+   tie runs) owns its sort through `onSort`; making `table.js` keep blanks last in both
+   directions on every board is a design-system change of its own, not a page migration's.
+
+**Still legacy on this page (Phase 5):** the enroll picker `en` inside `#bulkModal` (its own
+rows, its own wizard), and the two legacy builders reused as-is (`lxCopyRawBtn`'s 📋 glyph,
+`lxDueChip`'s 📅 chip) — they are shared with Leluxe and Purchases and move when those glyphs do.
+

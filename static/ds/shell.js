@@ -348,7 +348,7 @@
 
   // ---------------------------------------------------------------- page header
   /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
-  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers", "gaashmail"]);
+  const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers", "gaashmail", "bulksearch"]);
 
   function paint() {
     // syncTab() reaches this from a page's own tab switch, which can fire during boot -
@@ -431,7 +431,9 @@
         if (hit(pk.tracking_number) || hit(pk.customer_tracking)) out.push({ icon: "map-pin", label: pk.tracking_number || pk.customer_tracking, meta: p.po_id + " · package " + pk.package_no, path: "/fulfillment/purchase-orders" });
       });
     });
-    if (/^[a-z]*\d{4,}$/i.test(q.trim())) out.push({ icon: "magnifying-glass", label: "Look up " + q.trim() + " in Tracking", meta: "Tracking", path: "/shipping/tracking" });
+    // `after` runs once the route is applied: Tracking pastes the number and searches it,
+    // instead of landing on an empty page that makes the person type it again.
+    if (/^[a-z]*\d{4,}$/i.test(q.trim())) out.push({ icon: "magnifying-glass", label: "Look up " + q.trim() + " in Tracking", meta: "Tracking", path: "/shipping/tracking", after: () => { if (window.bsLookup) window.bsLookup([q.trim()]); } });
     return out.slice(0, 8);
   }
 
@@ -450,6 +452,7 @@
     const r = SEARCH_ROWS[i]; if (!r) return;
     $("dsSearch").value = ""; $("dsSearchResults").dataset.open = ""; $("dsSearchResults").innerHTML = "";
     S.go(r.path);
+    if (r.after) r.after();
   };
   S.searchKey = (e) => {
     if (e.key === "Escape") { e.target.value = ""; paintResults(""); e.target.blur(); return; }
