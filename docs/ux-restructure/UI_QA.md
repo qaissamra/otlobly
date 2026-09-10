@@ -1275,3 +1275,126 @@ and out of this batch's scope: the copy button (`lxCopyRawBtn`) and the GASH dat
 and the DataTable's own sort would put blanks FIRST on a descending sort (`cmp` × −1), which is
 why this page, like Docs, owns its sort — a table.js change for every board is its own item.
 
+
+
+---
+
+## 24. The customer-page sweep (2026-09-10)
+
+Trigger: the owner's screenshot of Sales › Customers, rows painting over each other. Walked
+every page of both workspaces at 1440 (headless captures with the new shell on) and the changed
+pages at 1280 / 1100 in the pane, with a harness that now measures VERTICAL spill (any descendant
+painted outside its `.ds-td`) beside the width checks. Ten defects, all fixed in one PR;
+`test_ux_sweep2.py` — **43 checks fail on the pre-fix tree**; `run_all_tests.sh` 65 passed.
+
+### Q-051 · major · every remaining LXT table had lost its pinned column
+
+`1202425` (Phase 3, 2026-09-07) collapsed a three-line CSS comment into
+`…row{width:max-content;…}` with no `*/`, so the comment ran on through `.bt-wrap .poc-meta`,
+`.poc-meta>.in`, **`.bt-pin{position:sticky;…flex:0 0 var(--btpin)}`** and `.btscrolled .bt-pin`.
+Every table still on the LXT engine — Trash, the Deposits ledger, Catalog, Flag history, the
+enroll picker — rendered its pinned column at content width: rows staggered, the header out of
+line with its cells. Measured on Trash: pins 41 / 93 / 171 / 113px, `flex: 0 1 auto`,
+`position: static`. After: 360px, `0 0 360px`, sticky; every `.tr-cols` starts at x=642; the
+Deposits ledger pins at 320. The comment is closed, the rule is back, and a note says why.
+On live since 2026-09-07; three sweeps walked past it because none of them opened Trash or the
+ledger, and because a rule inside a comment looks like a rule in `grep`.
+
+### Q-052 · major · Customers rows painted over each other (the owner's screenshot)
+
+`d4dcd7b` (§20) appended the photo strip AFTER the `.ds-sl-who` flex row, so it wrapped to a
+second line: 52px of content in a 42px cell. 36 of 49 cells spilled 5px above and below, and
+each row's name sat on the previous row's photos. §21 measured width only, so it never saw it.
+The strip is a flex item of the identity row now, at its end (`margin-inline-start: auto`, so it
+lines up row to row, the way the PO customers cell does), and the column is 360 (was 320).
+Spill 0 at every width.
+
+### Q-053 · major · a 35% profile panel that held one sentence
+
+`#custGrid` was `1.3fr .7fr`: the "Click a customer to see their profile" panel took ~400px at
+1440 and the board (936px) had 746 — Orders, Spent and ID on file sat behind a scrollbar, which
+is the second thing wrong in the owner's screenshot. The profile is `DS.drawer` now
+(`DS.customers.profile`), opened by the row, the row menu and `showProfile()`; it keeps everything
+the panel showed — WhatsApp link, email, city, address, payment, notes, the ID document
+thumbnail, the ID number and its pencil, the order history, Edit customer and Upload / Replace
+the ID photo — and the three actions close it before handing over to the page flows they open.
+Board: need 1162 / port 1162 at 1440 — 0 columns off (was 2); 1002 / 1002 at 1280; 976 / 822 at
+1100.
+
+### Q-054 · minor · the editable blank city was a 14px target
+
+"—" with a dashed underline and an inline style, 14×24. `.ds-sl-edit`: 24×24 minimum, the same
+dashed "click to edit" mark, no inline style.
+
+### Q-055 · minor · Leluxe product names cut to three words; package counts clipped
+
+`lxShort3` printed "5 Laurel Tab…" in a 330px column with 200px to spare — on the Products board
+and on the product rows inside an order. The full title now sits in a `.ds-lx-name` flex row
+capped at the cell's width: ellipsis at the edge, copy button in view (a bare full title pushed
+the button out of the cell, which is why the row is needed — measured 516px wide in a 310px cell
+before the cap). Packages: four photos + "4 products · ×16" — 19 of 40 counts ran past the cell.
+Two photos now (§20's identity rule), the count ellipsizes with a tooltip, column 380 (was 340).
+0 past the cell.
+
+### Q-056 · minor · P&L bars drew over their heading
+
+`#pnlChart` was `height: 96px` while a bar (78) plus a three-line label (36) is 119, and
+`align-items: flex-end` pushed two columns up through "Revenue by bulk order". `min-height` and
+one-line ellipsized labels (`.pnl-lbl`); a batch key that already starts with `#` is no longer
+printed as `## 114-…`. 0 columns above the chart, 0 over the heading.
+
+### Q-057 · minor · the Purchases "How this works" box: Hide on the text
+
+`.po-help .dismiss` is absolute at the top-right with no room reserved, so the first line ran under
+it ("…Use" + "Hide"). `padding-inline-end: 56px`. Text ends at 1360, Hide starts at 1383.
+
+### Q-058 · minor · Activity repeated itself
+
+"on ‹detail›" was printed under every `set` entry that had a detail — including the ones whose
+title already WAS the detail (no field named), so ten rows read "auto → updated from …
+(reconcile)" twice. The sub-line needs a named field now. 0 duplicates in 60 rows.
+
+### Q-059 · cosmetic · two titles on ten pages
+
+Leads, Deposits, P&L, Goals, Activity, Settings, Team, Trash, Watched inboxes and Leluxe still
+draw their own title row (icon, subtitle, controls), and the shell printed its own `<h1>` right
+above it. `OWN_TITLE` in shell.js: those pages get the breadcrumb only
+(`DS.pageHeader({ title: false })` renders a crumb-only header). Nothing on the pages moved; they
+leave the set as they migrate.
+
+### Q-060 · minor · the row checkbox was a 15px target in a 42px cell
+
+Every DataTable: a click beside the box fell through to `onRowClick` and opened the row instead
+of ticking it. The whole `.ds-td-check` cell toggles the row now, the header cell selects all,
+both show a pointer. Driven on To order: first click selects and shows the bulk bar, second
+unselects; the header 3/3 then 0/3.
+
+### Measured after
+
+| surface | controls | < 24px | truncated | no tooltip | spill | cols off | fonts |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Customers 1440×900 | 158 | **0** (was 49) | 3 | 0 | **0** (was 36) | **0** (was 2) | 11 · 12.5 · 13.02 · 14 · 17 · 22 |
+| Customers 1280 | 158 | 0 | 3 | 0 | 0 | 0 | same |
+| Customers 1100×820 | 158 | 0 | 3 | 0 | 0 | 0 | same |
+
+No horizontal page overflow at any width. Leluxe Products: names ellipsize at 224px with the
+copy button inside the cell; Leluxe Packages: 0 counts past the cell. Lint: emoji 1701 → 1696,
+raw buttons 398 → 395, physical CSS (file) 61 → 59; nothing up.
+
+### Three harness lessons
+
+1. **Measure vertical spill, not just width.** Compare every descendant's rect with its
+   `.ds-td`; that is the check §21 lacked, and the owner found what it would have found.
+2. **Parse the comments before trusting a rule.** A rule inside an unclosed comment is not CSS,
+   and `grep` cannot tell. `test_ux_sweep2.py` strips comments the way the parser does.
+3. **A hidden Browser pane defers `<dialog>` close events.** The drawer closed (`open=false`) but
+   stayed in the DOM until the tab was visible, and a synthetic Escape never reached Chrome's
+   close watcher — verify through the `cancel` handler and the Close button, and read
+   `document.visibilityState` before calling it a leak.
+
+### Not changed, on purpose
+
+The Orders page still carries the old home dashboard (money / action queue / load by profile /
+latest activity) above the board — a design question for the owner, not a defect; the legacy
+pages' own emoji titles, pills and 15px form checkboxes (Phase 4 / 7); the Leluxe board's
+wrapping stat ("53 · 34%"); the enroll picker and the customer form (Phase 5).

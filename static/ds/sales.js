@@ -305,13 +305,16 @@
   // ---------------------------------------------------------------- customers
   function custColumns(ctx) {
     return [
-      { key: "who", label: "Customer", w: 320, pin: "start", locked: true,
+      // One line: the photo strip sits INSIDE the flex row. Appended after it (as the
+      // photo batch did) it wrapped under the name - 52px of content in a 42px row, so
+      // every row painted over the one above it. Same shape as the PO customers cell.
+      { key: "who", label: "Customer", w: 360, pin: "start", locked: true,
         sortVal: (c) => (c.name || "~").toLowerCase(),
         render: (c) => `<span class="ds-sl-who">
           ${c.vip ? D.tag({ label: "VIP", tone: "warning", icon: "star", title: "Marked as a VIP customer" }) : ""}
           <span class="ds-sl-name">${text(c.name)}</span>
-          <span class="ds-sl-phone">${c.whatsapp ? esc(c.whatsapp) : ""}</span></span>`
-          + D.thumbs(ctx.items ? ctx.items(c) : [], { max: 2, total: false, empty: "", countWhenBlank: false }) },
+          <span class="ds-sl-phone">${c.whatsapp ? esc(c.whatsapp) : ""}</span>
+          ${D.thumbs(ctx.items ? ctx.items(c) : [], { max: 2, total: false, empty: "", countWhenBlank: false })}</span>` },
       // The old board's sortable ★ column. Batch B folded VIP into the name cell and
       // the row menu, which kept the capability but lost the one thing a column gives
       // you: sorting and scanning the whole list by it.
@@ -347,6 +350,43 @@
         menu: (c) => ctx.rowMenu(c) },
     ].filter(Boolean);
   }
+
+  // ------------------------------------------------------- the profile drawer (T2)
+  // The legacy page kept a permanent right-hand panel - 35% of the width holding
+  // "Click a customer to see their profile" - and the board lost its Orders, Spent
+  // and ID columns behind a scrollbar at 1440. The DS detail surface over a list is
+  // the drawer: the row, the row menu and showProfile() open it. Everything the
+  // panel showed is here: contact, address, payment, notes, the ID document and
+  // number, the order history, and the edit / upload actions.
+  C.profile = (c, ctx) => {
+    const dash = D.dash();
+    const kv = (label, value, wrap) => `<div class="ds-kv"><span class="ds-muted">${esc(label)}</span><b${wrap ? ' class="ds-cu-wrap"' : ""}>${value}</b></div>`;
+    const wa = c.wa ? `<a href="https://wa.me/${esc(c.wa)}" target="_blank" rel="noopener">${esc(c.whatsapp || c.wa)}</a>` : (c.whatsapp ? esc(c.whatsapp) : dash);
+    const idUrl = c.id_image && ctx.idImageUrl ? ctx.idImageUrl(c) : "";
+    const idDoc = idUrl ? `<a href="${esc(idUrl)}" target="_blank" rel="noopener" title="Open the ID photo full size"><img class="ds-cu-idimg" src="${esc(idUrl)}" alt="ID document"></a>` : `<span class="ds-muted">none</span>`;
+    const idNum = (c.id_number ? `<span class="ds-mono">${esc(c.id_number)}</span>` : `<span class="ds-muted">none</span>`)
+      + (ctx.canEdit ? " " + D.button({ icon: "pencil-square", size: "sm", variant: "ghost", ariaLabel: "Set the ID number", title: "Set the ID number", onclick: `DS.dialogClose('cuProfileDlg');custIdNumberEdit('${esc(c.customer_id)}')` }) : "");
+    const hist = c.previous_orders || [];
+    const orders = hist.length
+      ? hist.map((o) => `<div class="ds-kv"><span><span class="ds-mono">${esc(o.order_id)}</span> · ${esc(o.status || "")}</span><b>${o.amount_to_collect_usd != null ? esc(money(o.amount_to_collect_usd)) : dash}</b></div>`).join("")
+      : `<div class="ds-muted">No orders yet.</div>`;
+    const facts = [{ label: "Orders", value: num(c.order_count || 0) }];
+    if (ctx.money) facts.push({ label: "Total spent", value: money(c.total_spent_usd || 0), tone: "accent" });
+    facts.push({ label: "Pays by", value: c.payment_method || "\u2014" });
+    const body = `<div class="ds-cu-profile">`
+      + kv("WhatsApp", wa) + kv("Email", c.email ? esc(c.email) : dash) + kv("City", c.city ? esc(c.city) : dash)
+      + kv("Address", c.address ? esc(c.address) : dash, true) + kv("Payment", c.payment_method ? esc(c.payment_method) : dash)
+      + (c.notes ? kv("Notes", esc(c.notes), true) : "")
+      + kv("ID document", idDoc) + kv("ID number", idNum)
+      + `<h3 class="ds-cu-h">Order history</h3>${orders}</div>`;
+    return D.drawer({ id: "cuProfileDlg", title: c.name || "\u2014", subtitle: c.whatsapp || "",
+      badge: c.vip ? D.tag({ label: "VIP", tone: "warning", icon: "star", title: "Marked as a VIP customer" }) : "",
+      facts, body,
+      actions: [
+        { label: "Edit customer", icon: "pencil-square", onclick: `DS.dialogClose('cuProfileDlg');editCustomer('${esc(c.customer_id)}')` },
+        { label: c.id_image ? "Replace the ID photo" : "Upload an ID photo", icon: "identification", onclick: `DS.dialogClose('cuProfileDlg');custIdUpload('${esc(c.customer_id)}')` },
+      ] });
+  };
 
   C.board = (mount, rows, ctx) => {
     const el = typeof mount === "string" ? document.getElementById(mount) : mount;

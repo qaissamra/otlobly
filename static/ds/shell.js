@@ -349,6 +349,10 @@
   // ---------------------------------------------------------------- page header
   /** Views that render their own DS.pageHeader (docs/ux-restructure Phase 3+). */
   const OWN_HEADER = new Set(["purchases", "needorder", "incart", "pkgprep", "orders", "customers", "gaashmail", "bulksearch"]);
+  // Legacy pages that still draw their own title row (icon, subtitle, controls) get
+  // the breadcrumb only: the shell's title directly above theirs read as two titles
+  // on ten pages. They leave this set as Phase 4 migrates them.
+  const OWN_TITLE = new Set(["metaleads", "deposits", "pnl", "goals", "activity", "settings", "team", "trash", "flags", "leluxe"]);
 
   function paint() {
     // syncTab() reaches this from a page's own tab switch, which can fire during boot -
@@ -386,7 +390,7 @@
       ? below
       : D.pageHeader({
         crumbs: stage ? [{ label: "Fulfillment" }, { label: it.label }] : g ? [{ label: g.label }, { label: it.label }] : [],
-        title: it.label, below,
+        title: OWN_TITLE.has(v) ? false : it.label, below,
       }) + (sub ? `<p class="ds-pagesub">${esc(sub)}</p>` : "");
     if (v === "attention") attnRender();
   }
