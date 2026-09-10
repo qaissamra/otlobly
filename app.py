@@ -1405,6 +1405,53 @@ def api_az_rotate():
     return jsonify(res)
 
 
+@app.route("/api/az/roster")
+@auth.require("view_orders")
+@auth.require_feature("multilogin")
+def api_az_roster():
+    """The buying accounts as AZ Studio last sent them, plus how old that copy is."""
+    import az_roster
+    m = az_roster.meta()
+    m["profiles"] = az_roster.profiles() if m.get("have") else []
+    return jsonify(m)
+
+
+@app.route("/api/az/recommend")
+@auth.require("view_orders")
+@auth.require_feature("multilogin")
+def api_az_recommend():
+    """Which buying account should this purchase order go on? Every account AZ Studio
+    pushed us, decided and ranked by recommend.py: the ready tag (Settings → Leluxe goal),
+    the Accounts-Tool verdict, bans/quarantine/in-use, card + address saved, then fewest
+    orders in 30 days across our POs and the Leluxe board. A stale roster recommends
+    nothing. `?exclude=A,B` drops names already used on the order being built."""
+    import account_rd
+    import az_roster
+    import leluxe_goal
+    import purchases
+    import recommend
+    doc = az_roster.load()
+    if not doc:
+        return jsonify({"ok": False, "have": False, "rows": [],
+                        "reason": "AZ Studio has not sent its roster yet"})
+    try:
+        board = account_rd.rollup().get("orders") or []
+    except Exception:  # noqa: BLE001 — no Leluxe board on this tenant is not an error
+        board = []
+    try:
+        pos = purchases.load().get("purchase_orders") or []
+    except Exception:  # noqa: BLE001
+        pos = []
+    tag = (leluxe_goal.settings().get("ready_tag") or recommend.DEFAULT_READY_TAG)
+    ex = [x.strip() for x in (request.args.get("exclude") or "").split(",") if x.strip()]
+    res = recommend.rank(doc.get("profiles") or [], recommend.history(pos, board),
+                         ready_tag=tag, synced_ts=doc.get("synced_ts"), exclude=ex)
+    res.update({"ok": True, "have": True, "host": doc.get("host"),
+                "synced_ts": doc.get("synced_ts"), "partial": doc.get("partial"),
+                "fleet_complete": doc.get("fleet_complete"), "acctool": doc.get("acctool")})
+    return jsonify(res)
+
+
 @app.route("/api/az/track_fetch", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("multilogin")
@@ -4685,6 +4732,21 @@ def worker_queue():
     ready = [o for o in db.list_orders()
              if o["status"] == "PAID" and not o.get("amazon_order_number")]
     return jsonify({"orders": ready})
+
+
+@app.route("/api/worker/az_roster", methods=["GET", "POST"])
+def worker_az_roster():
+    """AZ Studio pushes its buying-account roster here (2026-09-10) — worker bearer, every
+    15 minutes from every host that runs it; the droplet's copy is the fresh one and
+    az_roster.store keeps the freshest by the snapshot's own timestamp. GET answers what
+    we hold and how old it is, for the same caller (the deploy check reads it)."""
+    if not _worker_ok():
+        abort(401)
+    import az_roster
+    if request.method == "GET":
+        return jsonify(az_roster.meta())
+    res = az_roster.store(request.get_json(force=True, silent=True) or {})
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/api/worker/result", methods=["POST"])

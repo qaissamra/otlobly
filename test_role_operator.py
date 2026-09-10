@@ -183,7 +183,8 @@ def test_wiring():
     check("Needs attention no longer assumes the owner's Telegram",
           "Watched inboxes" in att and 'reply \\"done\\" on Telegram' in att)
     sw = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
-    check("service worker cache bumped (v25)", 'const CACHE = "otl-off-v25"' in sw)
+    check("service worker cache moved past v24 (v25 = this PR; later PRs keep bumping)",
+          int((re.search(r'otl-off-v(\d+)', sw) or ["", "0"])[1]) >= 25)
     for doc, needle in (("DEPLOY.md", "**Operator**"), ("README.md", "Operator"),
                         ("CLAUDE.md", "operator")):
         check(f"{doc} mentions the role", needle in (HERE / doc).read_text(encoding="utf-8"))

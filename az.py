@@ -7,20 +7,30 @@ the Multilogin profile behind a box (B19, B22…):
   * check_ip(box)     — live exit-IP check (proxied through the AZ app, no browser)
   * launch(box)       — start the profile's browser and leave it open (manual use)
 
-Reads from the AZ Flask app on :8765 (which manages Multilogin auth) and, for the
-launch, talks straight to the local Multilogin agent on :45000 with the AZ token —
-so nothing in the AZ tool needs changing or restarting. Boxes map to profiles by
-exact NAME (the Multilogin profile is literally named "B19", etc.).
+Reads the roster through AZ Studio's Otlobly bridge (2026-09-10): GET /api/otlobly/*
+behind a bearer of its own (env AZ_OTLOBLY_TOKEN) at AZ_STUDIO_URL — the droplet
+https://azstudio.otlobly.co from Render, http://127.0.0.1:8765 on the owner's Mac. When
+that link is missing (no token here, AZ Studio asleep) the roster AZ Studio last PUSHED
+us (az_roster.py, /api/worker/az_roster) answers instead, so the popup and the
+recommendation work everywhere. Boxes map to profiles by exact NAME (the Multilogin
+profile is literally named "E-B50", "B19", etc.).
 
-This only works on the local machine where the AZ tool + Multilogin agent run.
+Launch / stop still talk straight to the local Multilogin agent on :45000 with the AZ
+token, and rotate / track_fetch / check_ip still need AZ Studio's own login — they only
+work on the machine where the AZ tool + Multilogin agent run (the honest error says so).
+
+History: until 2026-09-10 this read /api/all_profiles with no credential, which AZ Studio
+closed behind logins in August — every button here answered "not reachable" for weeks.
 """
 
 import json
+import os
 import time
 from pathlib import Path
 from urllib import request, error
 
-AZ_APP = "http://127.0.0.1:8765"          # the AZ tool's Flask app
+AZ_APP = (os.environ.get("AZ_STUDIO_URL") or "http://127.0.0.1:8765").rstrip("/")
+AZ_TOKEN = (os.environ.get("AZ_OTLOBLY_TOKEN") or "").strip()
 AGENT = "http://127.0.0.1:45000"          # local Multilogin agent
 AZ_DIR = Path(__file__).resolve().parent.parent / "multilogin-claude-code"
 TOKEN_FILE = AZ_DIR / ".token"
@@ -28,8 +38,15 @@ TOKEN_FILE = AZ_DIR / ".token"
 _cache = {"profiles": None, "ts": 0}
 
 
+def _headers():
+    h = {"Accept": "application/json"}
+    if AZ_TOKEN:
+        h["Authorization"] = f"Bearer {AZ_TOKEN}"
+    return h
+
+
 def _get(url, timeout=20):
-    req = request.Request(url, headers={"Accept": "application/json"})
+    req = request.Request(url, headers=_headers())
     with request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
@@ -37,26 +54,58 @@ def _get(url, timeout=20):
 def _post(url, body, timeout=40, headers=None):
     data = json.dumps(body).encode()
     h = {"Content-Type": "application/json"}
+    h.update(_headers())
     h.update(headers or {})
     req = request.Request(url, data=data, headers=h, method="POST")
     with request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
-def healthy(timeout=2):
-    """Quick liveness probe of the AZ tool — cheap gate before the heavy
-    /api/all_profiles fetch (which enriches 250+ profiles)."""
+def _why(e):
+    """One honest sentence for a failed call — a closed door is not a dead server."""
+    if isinstance(e, error.HTTPError) and e.code in (401, 403):
+        return ("AZ Studio refused this call (login required) — only the roster bridge is "
+                "open to Otlobly; run it on the machine that has AZ Studio and Multilogin")
+    return f"AZ Studio not reachable at {AZ_APP} ({e})"
+
+
+def _pushed():
+    """The roster AZ Studio last pushed to us, while it is fresh — [] otherwise."""
     try:
-        return bool(_get(f"{AZ_APP}/api/health", timeout=timeout).get("ok"))
-    except Exception:  # noqa: BLE001 - down/refused/timeout → just not healthy
-        return False
+        import az_roster
+        m = az_roster.meta()
+        if m.get("have") and not m.get("stale"):
+            return az_roster.profiles()
+    except Exception:  # noqa: BLE001 - no DB / no table on a bare CLI run
+        pass
+    return []
+
+
+def healthy(timeout=2):
+    """Is the roster available — over the bridge, or pushed to us recently?"""
+    try:
+        if bool(_get(f"{AZ_APP}/api/otlobly/health", timeout=timeout).get("ok")):
+            return True
+    except Exception:  # noqa: BLE001 - down/refused/401 → try the pushed copy
+        pass
+    return bool(_pushed())
 
 
 def all_profiles(force=False):
-    """All AZ profiles (cached 60s). {} on failure."""
+    """All AZ profiles (cached 60s): the bridge first, the pushed roster second.
+    Raises only when neither has anything."""
     if not force and _cache["profiles"] is not None and time.time() - _cache["ts"] < 60:
         return _cache["profiles"]
-    rows = _get(f"{AZ_APP}/api/all_profiles", timeout=25)
+    rows, err = None, None
+    try:
+        d = _get(f"{AZ_APP}/api/otlobly/profiles", timeout=25)
+        rows = d.get("profiles") if isinstance(d, dict) else d
+    except Exception as e:  # noqa: BLE001
+        err = e
+    if not rows:
+        rows = _pushed()
+    if not rows:
+        raise error.URLError(_why(err) if err else "no roster from AZ Studio yet")
     _cache["profiles"] = rows
     _cache["ts"] = time.time()
     return rows
@@ -81,7 +130,7 @@ def profile_info(box, force=False):
     try:
         p = find_box(box, force=force)
     except (error.URLError, ValueError, OSError) as e:
-        return {"error": f"AZ tool not reachable on :8765 — is it running? ({e})"}
+        return {"error": _why(e)}
     if not p:
         return {"error": f"No Multilogin profile named “{box}”."}
     return {
@@ -104,7 +153,7 @@ def check_ip(box):
         return _post(f"{AZ_APP}/api/ip_list/check_proxy",
                      {"profile_id": p["profile_id"], "folder_id": p["folder_id"]})
     except (error.URLError, ValueError, OSError) as e:
-        return {"ok": False, "error": f"AZ tool not reachable ({e})"}
+        return {"ok": False, "error": _why(e)}
 
 
 def _agent_get(path, timeout=120):
@@ -122,7 +171,7 @@ def launch(box):
     try:
         p = find_box(box)
     except (error.URLError, ValueError, OSError) as e:
-        return {"ok": False, "error": f"AZ tool not reachable ({e})"}
+        return {"ok": False, "error": _why(e)}
     if not p:
         return {"ok": False, "error": f"No profile named “{box}”."}
     try:
@@ -142,7 +191,7 @@ def stop(box):
     try:
         p = find_box(box)
     except (error.URLError, ValueError, OSError) as e:
-        return {"ok": False, "error": f"AZ tool not reachable ({e})"}
+        return {"ok": False, "error": _why(e)}
     if not p:
         return {"ok": False, "error": f"No profile named “{box}”."}
     try:
@@ -164,7 +213,7 @@ def rotate_start(box, target_risk=25, max_tries=8):
             "profiles": [{"id": p["profile_id"], "folder_id": p["folder_id"], "name": box}],
             "target_risk": int(target_risk), "max_tries": int(max_tries)})
     except (error.URLError, ValueError, OSError) as e:
-        return {"error": f"AZ tool not reachable ({e})"}
+        return {"error": _why(e)}
 
 
 def rotate_status(job_id):
@@ -197,7 +246,7 @@ def track_fetch_start(box, items, max_items=12):
             "folder_id": p["folder_id"], "profile_id": p["profile_id"],
             "name": box, "items": clean, "max_items": int(max_items)})
     except (error.URLError, ValueError, OSError) as e:
-        return {"error": f"AZ tool not reachable on :8765 ({e})"}
+        return {"error": _why(e)}
 
 
 def track_fetch_status(job_id):
