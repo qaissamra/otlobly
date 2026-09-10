@@ -158,8 +158,8 @@ def _flags():
         who = (f.get("profile") or f.get("mailbox") or "").strip()
         out.append(_item(f"flag:{f.get('id')}", "action_email",
                          (f.get("subject") or "(no subject)").strip(),
-                         f"{who} · reply \"done\" on Telegram to clear it" if who
-                         else "reply \"done\" on Telegram to clear it",
+                         f"{who} · mark it done on Watched inboxes, or reply \"done\" on Telegram" if who
+                         else "mark it done on Watched inboxes, or reply \"done\" on Telegram",
                          severity="urgent",
                          age_days=_days_since(f.get("created_at"), today),
                          view="flags"))

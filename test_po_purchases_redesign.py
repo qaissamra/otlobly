@@ -116,9 +116,11 @@ def main():
           all(s in html for s in ("function pkgPhotosHtml(", "function pkgPhotoDel(",
                                   "/api/purchase/package/image",
                                   '$("pkgInfoModal").classList.contains("hidden")')))
-    check("photo section is admin-gated", "CAN_ADMIN?sec('📷" in html.replace(" ", "")
-          or "const pkgImgSec=CAN_ADMIN?sec(" in html)
-    check("paste handler refuses non-admins", "if(!PKG_INFO||!CAN_ADMIN" in html)
+    # 2026-09-10: the gate is CAN_OPS (ops_actions — the operator role; admin holds it
+    # too). Fulfillment/sales still never see or paste package photos.
+    check("photo section is gated to ops_actions (CAN_OPS)", "CAN_OPS?sec('📷" in html.replace(" ", "")
+          or "const pkgImgSec=CAN_OPS?sec(" in html)
+    check("paste handler refuses roles without ops_actions", "if(!PKG_INFO||!CAN_OPS" in html)
     check("photo-count badge on the package identity cell",
           "function pkgPhotoBadge(" in html and "W.pkgPhotoBadge(pk)" in pur)
 
