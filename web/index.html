@@ -7581,7 +7581,7 @@ async function saveSettings(b){
 
 let POS=null, PO_MONEY=true, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
 let PO_COLLAPSED=openStore({inverted:true, persist:"po_collapsed"});
-let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}}; const PO_BOXES=["B19","B22","B27","B31","B85"]; const poSaveTimers={};
+let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}}; let PO_BOXES=["B19","B22","B27","B31","B85"];   // seeded with the live AZ Studio names by azRosterEnsure() const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function importClickup(btn){
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Importing…';
@@ -8110,6 +8110,30 @@ async function azTrackFetch(btn, poId, pi){
     }
   }, 1500);
 }
+// ── shopping list for AZ Studio (2026-09-10): its Products page imports a sheet laid out
+// as link · price · qty (its own positional fallback), so the export is exactly that — one
+// row per product line, price = our best cost estimate (blank when we have none).
+function poShoppingRows(p){
+  const rows=[];
+  (p.packages||[]).forEach(pk=>(pk.items||[]).forEach(it=>{
+    const asin=(it.asin||"").trim(); const url=((it.clean_url||"").trim())||(asin?`https://www.amazon.com/dp/${asin}`:"");
+    if(!url) return;
+    const price=(it.est_cost_usd!=null&&it.est_cost_usd!=="")?it.est_cost_usd:(it.serp_price_usd!=null?it.serp_price_usd:"");
+    rows.push([url, price===""?"":Number(price).toFixed(2), parseInt(it.qty)||1]);
+  }));
+  return rows;
+}
+function poShoppingCsv(rows){ const q=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v); return ["link,price,qty"].concat(rows.map(r=>r.map(q).join(","))).join("\n"); }
+function poShoppingList(id, mode){
+  const p=poFind(id); if(!p) return;
+  const rows=poShoppingRows(p);
+  if(!rows.length){ toast(T("لا روابط منتجات على هذا الطلب · no product links on this purchase order")); return; }
+  const csv=poShoppingCsv(rows), n=`${rows.length} line${rows.length===1?"":"s"}`;
+  if(mode==="copy"){ (navigator.clipboard?navigator.clipboard.writeText(csv):Promise.reject()).then(()=>toast(`Shopping list copied · ${n}`)).catch(()=>toast("Copy failed — download it instead")); return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`${p.po_id}-shopping-list.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+  toast(`Shopping list · ${n} · upload it on AZ Studio, Products page`);
+}
 function copyCtk(num){ (navigator.clipboard?navigator.clipboard.writeText(num):Promise.reject()).then(()=>toast("Copied "+num)).catch(()=>toast(num)); }
 async function genCtk(poId,pkgNo){
   let r; try{ r=await post("/api/customer_tracking/generate",{po_id:poId,package_no:pkgNo}); }catch(e){ r={}; }
@@ -8130,6 +8154,64 @@ function boxDatalist(){   // autocomplete hints: the known boxes + any already u
 function custDatalist(){   // searchable customer list for the CUSTOMER cell (incl. To-order customers)
   return `<datalist id="poCustList">${(PO_CUSTNAMES||[]).slice().sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${poEsc(n)}">`).join("")}</datalist>`;
 }
+// ── AZ Studio roster: the live buying accounts + the recommendation (2026-09-10) ────────
+// /api/az/recommend = every account AZ Studio pushed us (az_roster.py), decided and ranked
+// by recommend.py. Cached 5 min. The pickers render from the cache and refresh their rows
+// IN PLACE when it lands — a form mid-typing is never re-rendered under the operator's
+// hands (the caret trap, UI_QA §23). The typed field stays: nothing is removed.
+let AZ_RECO=null, AZ_RECO_TS=0, AZ_RECO_LOADING=null;
+function azRosterEnsure(force){
+  if(!force && AZ_RECO && Date.now()-AZ_RECO_TS<5*60*1000) return Promise.resolve(AZ_RECO);
+  if(AZ_RECO_LOADING) return AZ_RECO_LOADING;
+  AZ_RECO_LOADING=(async()=>{
+    let d=null;
+    try{ const r=await fetch("/api/az/recommend"); d=r.ok?await r.json():{ok:false,rows:[],reason:(typeof apiFailReason==="function"?apiFailReason():"")||"couldn't load"}; }
+    catch(e){ d={ok:false,rows:[],reason:"couldn't reach the server"}; }
+    AZ_RECO=d||{ok:false,rows:[]}; AZ_RECO_TS=Date.now(); AZ_RECO_LOADING=null;
+    if(AZ_RECO.ok&&(AZ_RECO.rows||[]).length)
+      PO_BOXES=[...new Set(AZ_RECO.rows.map(r=>r.name).filter(Boolean).concat(PO_BOXES))];   // live names first; nothing removed
+    document.querySelectorAll(".az-box-rows").forEach(el=>{ el.innerHTML=azBoxRowsHtml(el.dataset.pick,el.dataset.cur); });
+    document.querySelectorAll(".az-reco").forEach(el=>{ el.innerHTML=azRecoHtml(el.dataset.use,el.dataset.cur); });
+    return AZ_RECO;
+  })();
+  return AZ_RECO_LOADING;
+}
+function azAge(d){ const m=Number(d&&d.age_min)||0; return m>=90?`${Math.round(m/60)} h`:`${Math.round(m)} min`; }
+function azBoxRowsHtml(pick, cur){
+  const d=AZ_RECO;
+  if(!d) return `<div class="pop-item muted2">${T("جاري تحميل قائمة AZ Studio… · loading the AZ Studio roster…")}</div>`;
+  if(!d.ok||!(d.rows||[]).length) return `<div class="pop-item muted2" style="white-space:normal">${poEsc(d.reason||T("لم يرسل AZ Studio قائمته بعد · AZ Studio has not sent its roster yet"))}</div>`;
+  const head=d.stale
+    ?`<div class="pop-item" style="color:var(--warn);white-space:normal">${T("قائمة AZ Studio عمرها · AZ Studio roster is")} ${azAge(d)} ${T("— لا توصية حتى تتم المزامنة · old — no recommendation until it syncs")}</div>`
+    :`<div class="pop-item muted2" style="white-space:normal">${d.eligible} ${T("جاهز من · ready of")} ${d.total} · ${T("محدّث قبل · synced")} ${azAge(d)} ${T("مضت · ago")}</div>`;
+  return head+d.rows.map(r=>{
+    const note=r.eligible?(r.rank===1?DS.tag({label:T("مقترح · Recommended"),tone:"success"}):DS.tag({label:T("جاهز · ready"),tone:"info"}))
+                         :`<span class="muted2">${poEsc((r.blockers||[])[0]||"")}</span>`;
+    const tip=poEsc((r.why||[]).concat(r.blockers||[]).join(" · "));
+    return `<div class="pop-item cu-item" style="cursor:pointer;display:flex;gap:10px;align-items:center;justify-content:space-between" title="${tip}" onclick="${pick}('${poEsc(r.name)}',this)">${lxProfileChip(r.name,r.name)}<span style="font-size:var(--ds-t-xs);white-space:nowrap">${note}</span></div>`;
+  }).join("");
+}
+function azBoxMenu(pick, cur){
+  azRosterEnsure();
+  return `<span class="pop">${DS.button({icon:"chevron-down",size:"sm",variant:"secondary",ariaLabel:T("اختر حساب الشراء · pick the buying account"),title:T("اختر من قائمة AZ Studio · pick from the AZ Studio roster"),onclick:"popToggle(this);const q=this.nextElementSibling.querySelector('input');if(q){q.value='';cuFilter(q);q.focus()}"})}
+    <div class="pop-menu cu-menu" style="inset-inline-end:auto;inset-inline-start:0;min-width:340px;max-height:60vh;overflow:auto" onclick="event.stopPropagation()">
+      ${DS.input({cls:"cu-search",size:"sm",placeholder:T("بحث · search")+" — B70, E-B15…",ariaLabel:T("بحث · search"),attrs:{oninput:"cuFilter(this)"}})}
+      <div class="az-box-rows" data-pick="${poEsc(pick)}" data-cur="${poEsc(cur||"")}">${azBoxRowsHtml(pick,cur)}</div>
+    </div></span>`;
+}
+function azRecoHtml(use, cur){
+  const d=AZ_RECO;
+  if(!d) return `<span class="muted2">${T("نسأل AZ Studio… · asking AZ Studio…")}</span>`;
+  if(!d.ok) return `<span class="muted2">${poEsc(d.reason||T("لم يرسل AZ Studio قائمته بعد · AZ Studio has not sent its roster yet"))}</span>`;
+  if(d.stale) return `<span style="color:var(--warn)">${T("قائمة AZ Studio عمرها · AZ Studio roster is")} ${azAge(d)} ${T("— لا توصية حتى تتم المزامنة · old — no recommendation until it syncs")}</span>`;
+  const top=(d.rows||[]).find(r=>r.eligible);
+  if(!top) return `<span class="muted2">${T("لا حساب شراء جاهز الآن · no buying account is ready right now")} (${d.total} ${T("مفحوص · checked")})</span>`;
+  const same=(cur||"").trim()===top.name;
+  return `<span class="muted2">${T("مقترح · Recommended")}:</span> ${lxProfileChip(top.name,top.name)} <span class="muted2">— ${poEsc((top.why||[]).join(" · "))}</span>${same?"":" "+DS.button({label:T("استخدم · Use"),size:"sm",variant:"secondary",onclick:`${use}('${poEsc(top.name)}')`})}`;
+}
+function azRecoLine(use, cur){ azRosterEnsure(); return `<div class="az-reco" data-use="${poEsc(use)}" data-cur="${poEsc(cur||"")}" style="font-size:var(--ds-t-xs);margin-top:5px;line-height:1.5">${azRecoHtml(use,cur)}</div>`; }
+function azRecoSync(modalId, v){ const m=$(modalId); if(!m) return; const inp=m.querySelector("input.pobox"); if(inp) inp.value=v;
+  m.querySelectorAll(".az-reco").forEach(el=>{ el.dataset.cur=v; el.innerHTML=azRecoHtml(el.dataset.use,v); }); }
 function poSetBox(id,v){ const p=poFind(id); if(p){ p.profile_box=(v||'').trim(); poSave(p); renderPurchases(); } }
 const PO_FILTERS={
   all:{lab:"All",test:()=>true},
@@ -9760,7 +9842,7 @@ function poeRender(){
     <input style="width:100%" value="${poEsc(p.ship_to)}" placeholder="اسم صاحب الطلب · order's main name" onchange="poeSet('ship_to',this.value)">
     <div style="display:flex;gap:12px;margin-top:11px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px"><label class="fld">${poEsc(boxTerm)}</label>
-        <input class="pobox mono" list="poBoxList" style="width:100%" value="${poEsc(p.profile_box)}" placeholder="box…" onchange="poeSetBox(this.value)"></div>
+        <div style="display:flex;gap:6px;align-items:center"><input class="pobox mono" list="poBoxList" style="flex:1;min-width:0" value="${poEsc(p.profile_box)}" placeholder="E-B50…" onchange="poeSetBox(this.value)">${azBoxMenu('poeBoxPick', p.profile_box)}</div>${azRecoLine('poeBoxUse', p.profile_box)}</div>
       <div style="width:110px"><label class="fld">Total ${poEsc(cur)}</label>
         <input style="width:100%" value="${p.total_usd!=null?p.total_usd:''}" placeholder="0.00" onchange="poeSet('total_usd',this.value)"></div>
       ${F.second_currency?`<div style="width:110px"><label class="fld">Total ${poEsc(cur2)}</label>
@@ -9772,6 +9854,8 @@ function poeRender(){
 }
 function poeSet(f,v){ if(POE) poSet(POE,f,v); }
 function poeSetBox(v){ if(POE){ poSetBox(POE,v); } }
+function poeBoxUse(v){ if(!POE) return; poeSetBox(v); azRecoSync("poEditModal", v); }
+function poeBoxPick(v,el){ poeBoxUse(v); const menu=el&&el.closest(".pop-menu"); if(menu) menu.classList.remove("open"); }
 
 /* ---- 📱 Notify customers (track_package WhatsApp) — per-package picker ---- */
 let NTF_CTX=null;
@@ -9882,6 +9966,8 @@ function newOrderOpen(items){                    // items = optional prefill (qu
 }
 function noClose(){ $("newOrderModal").classList.add("hidden"); NO=null; }
 function noSet(f,v){ if(NO){ NO[f]=v; if(f==="customer") noRefreshRowCust(); } }
+function noBoxUse(v){ if(!NO) return; noSet('profile',v); azRecoSync("newOrderModal", v); }
+function noBoxPick(v,el){ noBoxUse(v); const menu=el&&el.closest(".pop-menu"); if(menu) menu.classList.remove("open"); }
 function noRowSet(i,f,v){ if(!NO)return; NO.rows[i][f]=v;
   if(f==="link"){ const a=extractAsinClient(v); if(a) NO.rows[i].asin=a; } }
 function noAddRow(){ if(NO){ NO.rows.push({customer:NO.customer||""}); noRender(); } }
@@ -9917,7 +10003,7 @@ function noRender(){
   $("noBody").innerHTML=`${boxDatalist()}${custDatalist()}
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px"><label class="fld">${poEsc(boxTerm)} <span style="color:var(--bad)">*</span></label>
-        <input class="pobox mono" list="poBoxList" style="width:100%" value="${poEsc(NO.profile)}" placeholder="B19…" onchange="noSet('profile',this.value)"></div>
+        <div style="display:flex;gap:6px;align-items:center"><input class="pobox mono" list="poBoxList" style="flex:1;min-width:0" value="${poEsc(NO.profile)}" placeholder="E-B50…" onchange="noSet('profile',this.value)">${azBoxMenu('noBoxPick', NO.profile)}</div>${azRecoLine('noBoxUse', NO.profile)}</div>
       <div style="flex:1;min-width:150px"><label class="fld">العميل · Customer <span style="color:var(--bad)">*</span></label>
         <input class="custc" list="poCustList" style="width:100%" value="${poEsc(NO.customer)}" placeholder="اسم العميل · name" onchange="noSet('customer',this.value)"></div>
       <div style="width:120px"><label class="fld">المبلغ ${poEsc(cur)} · Amount <span style="color:var(--bad)">*</span></label>

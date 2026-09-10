@@ -96,8 +96,9 @@ lands in this ledger too. After recording a collection, set the order to COLLECT
 
 **Choose the buying account in AZ Studio** (https://azstudio.otlobly.co, your own login).
 An account is ready when it carries the ready tag (READY TO ORDER) and the Accounts Tool
-says READY, which means it never ran an RD and has at least one clean completed order.
-Never use an account tagged Amazon ban, in quarantine, or already running somewhere.
+does not mark it spent, banned, in play or unknown. Never use an account tagged Amazon ban,
+in quarantine, or already running somewhere. The recommendation under the Buying account
+field applies exactly these rules and prefers the account with the fewest recent orders.
 
 **RD** means a refund or dispute was filed on the Amazon side for that order. An account
 that ran an RD is spent and never takes a big order again. "no rd" means clean.
@@ -109,7 +110,7 @@ copy the Amazon order number and the order total from the checkout page.
 
 | Field | What to put |
 |---|---|
-| Buying account (required) | The account code exactly as AZ Studio names it, for example E-B50. The list under the field is old; type the real code. |
+| Buying account (required) | Accept the recommendation shown under the field (the app names the most available ready account and says why), or open the ▾ list to pick any account AZ Studio knows, with its state next to it. You can still type a code. If the line says the roster is old, AZ Studio has not synced for a while: ask before choosing. |
 | Customer (required) | The customer's name as it is on Customers. |
 | Amount (required) | The Amazon order total in dollars, from the checkout page. |
 | Amazon order # | The 113-… number. You can add it later. |
@@ -120,6 +121,10 @@ copy the Amazon order number and the order total from the checkout page.
 
 Saving the purchase order flips the matched customer orders to ORDERED and gives them the
 delivery date. Press **Get photo** on a product to fetch its picture and name.
+
+**Shopping list for AZ Studio.** On a purchase order's row menu, **Shopping list (CSV)**
+downloads one row per product as link, price, quantity, the layout AZ Studio's Products
+page imports as is; **Copy shopping list** puts the same rows on the clipboard.
 
 ## 7. The parcel: GWD, GAASH, customs, Gerizim
 

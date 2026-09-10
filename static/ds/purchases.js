@@ -209,6 +209,10 @@
       ctx.flags.clickup ? { label: "Send to ClickUp", icon: "arrow-top-right-on-square", onclick: `clickupPO(this,'${esc(p.po_id)}',false)` } : null,
       { label: "Estimate every package", icon: "calculator", onclick: `poEstimateCost('${esc(p.po_id)}')` },
       { divider: true },
+      // AZ Studio's Products page imports a sheet laid out as link · price · qty — this is that sheet
+      { label: "Shopping list (CSV)", icon: "arrow-down-tray", title: "One row per product (link, price, qty), ready for AZ Studio's Products import", onclick: `poShoppingList('${esc(p.po_id)}','csv')` },
+      { label: "Copy shopping list", icon: "clipboard", title: "The same rows, to the clipboard", onclick: `poShoppingList('${esc(p.po_id)}','copy')` },
+      { divider: true },
       { label: "Delete order", icon: "trash", danger: true, onclick: `poDelete('${esc(p.po_id)}')` },
     ].filter(Boolean);
   }
