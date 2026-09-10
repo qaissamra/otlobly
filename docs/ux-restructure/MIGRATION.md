@@ -781,3 +781,26 @@ pill literals 39 → 38 — the baseline is pinned there.
 rows, its own wizard), and the two legacy builders reused as-is (`lxCopyRawBtn`'s 📋 glyph,
 `lxDueChip`'s 📅 chip) — they are shared with Leluxe and Purchases and move when those glyphs do.
 
+
+## DataTable: blanks sort last both ways (2026-09-10)
+
+The engine guarantees it now. `static/ds/table.js` sorts a blank — `null`, `""`, or the pages'
+`"~"` / `"~~~"` sentinel — AFTER every real value whichever way a column runs. Q-036 had hoisted
+the sentinel into `cmp`, so an ascending sort was right; but `rows()` multiplied `cmp`'s whole
+verdict by −1 for a descending sort, and the second click on any header lifted every blank to the
+top of the board (Batch D's carry-forward note 2). The direction applies to value-vs-value
+comparisons only: blank vs blank is a tie (they keep their given order), blank vs value is "after",
+then `cmp × dir`. `cmp`'s numeric and locale rules are unchanged. `test_design_system.py` sorts a
+fixture asc and desc under node through the real header-click state machine and the column menu's
+Sort ascending / descending, and asserts the blanks land last both ways (it fails on the previous
+tree). `sw.js` → v23, because `static/ds` changed.
+
+Two pages keep owning their sort through `onSort`, deliberately: Tracking (`G.sortRows` in
+`static/ds/tracking.js`) and the Docs tab of GAASH mail (`gmDocsDraw` in `web/index.html`, through
+`DS.gaash.docs`' `onSort: () => W.gmDocsDraw()` when grouped by order). Neither does it only to keep
+blanks last — Tracking also keeps every MISS in paste order after the found rows, and Docs keeps the
+same-order tie runs adjacent, which a per-row comparator cannot express. The Leluxe boards
+(`static/ds/leluxe.js`, and the LXT `p` / `k` bridges in `web/index.html`) pass it for the same
+reason: adjacency of the same-order runs depends on the final row order, so the app sorts and the
+DataTable renders what it is given. Nothing else passes `onSort`. A page that has no such
+grouping rule should now omit `onSort` and trust the engine.

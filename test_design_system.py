@@ -10,7 +10,8 @@ Proves the foundations are real and safe to load app-wide:
   * the status registry covers every order status in store.STATUSES, every ClickUp
     package status in the live schema, and agrees with the Python "parcel is done" sets;
   * the icon sprite has no emoji and the DS sources carry none either;
-  * with node available, status.js + format.js are executed and their output asserted.
+  * with node available, status.js + format.js are executed and their output asserted,
+    and the DataTable is sorted asc + desc: blanks ("~", "", null) land LAST both ways.
 
     ./.venv/bin/python test_design_system.py
 """
@@ -222,6 +223,62 @@ def main():
                   any('go("b-2")' in c for c in o2["calls"]))
             check("no HTML entity survives into the handler source",
                   not any("&quot;" in c or "&amp;" in c for c in o2["calls"]))
+
+        # ---- 9. blanks sort LAST in both directions ---------------------------
+        # Q-036 hoisted the pages' "~" sentinel into cmp, so an ASCENDING sort put the
+        # blanks last. But rows() multiplied cmp's whole verdict by -1 for a descending
+        # sort, so the second click on any header lifted every blank to the top of the
+        # board. The direction applies to value-vs-value comparisons only now. Prove it
+        # through the real header-click state machine (asc -> desc -> none) and the column
+        # menu's Sort ascending / descending, not by calling cmp on its own.
+        probe3 = r"""
+          global.window = {}; global.document = { addEventListener(){}, documentElement:{}, getElementById(){ return null; } };
+          for (const f of process.argv.slice(1)) require(f);
+          const DS = window.DS;
+          const rows = [
+            { id: "zoe",    name: "zoe",  n: 3,     d: "2026-09-03" },
+            { id: "tilde",  name: "~",    n: "~",   d: "~" },
+            { id: "amin",   name: "amin", n: 1,     d: "2026-09-01" },
+            { id: "empty",  name: "",     n: "",    d: "" },
+            { id: "nul",    name: null,   n: null,  d: null },
+            { id: "tilde3", name: "~~~",  n: "~~~", d: "~~~" },
+            { id: "bob",    name: "Bob",  n: 10,    d: "2026-09-10" },
+          ];
+          const columns = [
+            { key: "name", label: "Name" },
+            { key: "n", label: "N", sortVal: (r) => r.n },
+            { key: "d", label: "Date" },
+          ];
+          DS.table({ id: "t", columns, rows });
+          const t = DS.tableGet("t");
+          const order = () => t.rows().map((r) => r.id).join(",");
+          const out = {};
+          DS.tableEv("t", "sort", "name", {}); out.nameAsc = order();  out.st1 = JSON.stringify(t.state.sort);
+          DS.tableEv("t", "sort", "name", {}); out.nameDesc = order(); out.st2 = JSON.stringify(t.state.sort);
+          DS.tableEv("t", "sort", "name", {}); out.nameNone = order(); out.st3 = JSON.stringify(t.state.sort);
+          DS.tableEv("t", "sortSet", "n|asc", {});  out.numAsc = order();
+          DS.tableEv("t", "sortSet", "n|desc", {}); out.numDesc = order();
+          DS.tableEv("t", "sortSet", "d|asc", {});  out.dateAsc = order();
+          DS.tableEv("t", "sortSet", "d|desc", {}); out.dateDesc = order();
+          console.log(JSON.stringify(out));
+        """
+        r3 = subprocess.run([node, "-e", probe3, str(DS / "ds.js"), str(DS / "status.js"), str(DS / "format.js"), str(DS / "table.js")],
+                            capture_output=True, text=True)
+        if r3.returncode:
+            check("the DataTable sorts a fixture under node", False)
+            print("      ", r3.stderr.strip()[:400])
+        else:
+            o3 = json.loads(r3.stdout)
+            blanks = "tilde,empty,nul,tilde3"   # "~", "", null, "~~~" - in the order they were given
+            check("text ascending: values A-Z, then every blank in its original order", o3["nameAsc"] == "amin,bob,zoe," + blanks)
+            check("text DESCENDING: values Z-A, blanks STILL last (they used to jump to the top)", o3["nameDesc"] == "zoe,bob,amin," + blanks)
+            check("the header click cycles asc -> desc -> none",
+                  o3["st1"] == '{"key":"name","dir":"asc"}' and o3["st2"] == '{"key":"name","dir":"desc"}' and o3["st3"] == "null")
+            check("a third click clears the sort and restores the given order", o3["nameNone"] == "zoe,tilde,amin,empty,nul,tilde3,bob")
+            check("numbers ascending are numeric (1, 3, 10), blanks last", o3["numAsc"] == "amin,zoe,bob," + blanks)
+            check("numbers descending (10, 3, 1), blanks last", o3["numDesc"] == "bob,zoe,amin," + blanks)
+            check("ISO dates ascending, blanks last", o3["dateAsc"] == "amin,zoe,bob," + blanks)
+            check("ISO dates descending, blanks last", o3["dateDesc"] == "bob,zoe,amin," + blanks)
 
     # ---- a menu is placed AFTER it has a size ------------------------------
     # DS.menuOpenAt positions the list while it is still EMPTY, and the Columns panel
