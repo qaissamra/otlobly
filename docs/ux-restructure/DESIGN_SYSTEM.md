@@ -63,6 +63,7 @@ the old patterns (warn level until Phase 7).
 |---|---|---|
 | `DS.pageHeader(o)` | the top of every page | breadcrumb, title, `stats[]`, `updated` (relative, absolute in the tooltip), one `primary`, ≤2 `secondary`, the rest in `overflow` |
 | `DS.filterBar(o)` | search + saved views + filter chips | chips carry their value and a remove control; `add` opens the filter builder, `clear` resets |
+| `DS.callout(o)` | a state strip that carries the control which changes it (safe mode / live, an account that needs a password) | `tone: neutral·info·success·warning·danger`, `icon`, `text` or `html`, `actions[]` (button options or html); not a toast — it stays until the state does |
 | `DS.tabs(o)` | switching between views of one object | not for navigation between pages | `variant: pills` for saved views; full arrow-key support |
 | `DS.menu(o)` / `DS.menuOpenAt(items, x, y)` | overflow and context menus | fixed-position, focus-managed, Escape closes | items: `{label, icon, onclick, danger, disabled, kbd}`, `{divider}`, `{head}` |
 | `DS.modal(o)` | a short form or a decision (≤5 fields) | anything long (use a drawer or a page) | native `<dialog>`: focus trap, Esc, backdrop click, `unsavedGuard` |
@@ -127,7 +128,7 @@ nothing lost its address.
 - **Status and actions pin to the end** (`pin: "end"`) so they are never scrolled out of view; the identifier pins to the start.
 - **Per-user layout** — resize, drag to reorder, right-click a header (sort, move, reset width, hide), the Columns menu (show/hide, reorder, reset), and density; saved under `ds_table_<id>` in `localStorage`.
 - **Selection** with `selectable: true` + `bulk: [{label, icon, onclick(keys, rows)}]` → a docked `BulkActionBar`.
-- **Expandable rows** with `expandable: {render(row)}` — the expansion holds a nested DataTable with its own header, never ad-hoc rows.
+- **Expandable rows** with `expandable: {render(row)}` — the expansion holds a nested DataTable with its own header, never ad-hoc rows. `onToggle(key, isOpen)` tells the page when a row opens or closes, so a page-driven `open(row)` predicate can stay the single truth (`DS.tableResetOpen(id)` clears the by-hand overrides).
 - **States:** `loading` → skeleton rows; `error` + `retry` → an error row; no rows → `EmptyState`.
 - **Keyboard:** arrows move, Home/End jump, Enter opens, Space selects, Left/Right collapse/expand.
 - **Sorting** is local by default; pass `onSort(key, dir)` to sort on the server. `page: {from, to, total, onPrev, onNext}` renders the counter and pager.

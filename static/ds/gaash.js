@@ -221,46 +221,10 @@
   };
 
   // ---------------------------------------------------------------- workflows (+ the triggers table)
-  /** Cells for one parcel model {kind:"po"|"lx"|"miss", tn, p, pk, lx} - the same facts the
-      Bulk-search row shows, built for a DS.subTable instead of the LXT grid. */
-  function modelCells(m, ctx) {
-    if (m.kind === "miss") return { found: D.attention({ kind: "no_tracking", label: "Not found", title: "No board carries this tracking number" }) };
-    if (m.kind === "po") {
-      const p = m.p, pk = m.pk, pst = (pk.otlobly_status || "").trim(), est = W.pkgEstTotal ? W.pkgEstTotal(pk) : { sum: 0, priced: 0 };
-      return {
-        found: `<button type="button" class="ds-btn ds-btn-sm ds-btn-secondary" title="Open on the Purchases board" onclick="event.stopPropagation();bsOpenPo('${esc(p.po_id)}')">${D.icon("cube", { size: 13 })}<span>${esc(p.po_id)}</span></button><span class="ds-muted">pkg ${esc(pk.package_no)}</span>`,
-        oname: W.poNameCell ? W.poNameCell(p.ship_to, true) : text(p.ship_to),
-        profile: W.poProfileCell ? W.poProfileCell(p) : D.dash(),
-        imgs: W.poThumbStrip ? W.poThumbStrip(pk.items) : "",
-        cust: text(W.pkgWho ? W.pkgWho(pk) : ""),
-        status: pst ? D.status.badge("pkg", pst) : D.dash(),
-        gash: W.pkgGaashPill ? W.pkgGaashPill(pk) : D.dash(),
-        gashdate: D.dash(),
-        value: ctx.money && est.priced ? `<span class="ds-num">${esc(D.fmt.money(est.sum, "USD", { approx: true }))}</span>` : D.dash(),
-      };
-    }
-    const lx = m.lx || {}, items = lx.items || [];
-    const lxF = W.lxF || (() => null);
-    const oname = (lx.order && lx.order.name) || (lx.pkgRow && lx.pkgRow.name) || "";
-    const prof = items.map((it) => lxF(it, "name")).find(Boolean) || (lx.order && lxF(lx.order, "name")) || "";
-    const gd = (lx.pkgRow && lxF(lx.pkgRow, "gash date")) || items.map((it) => lxF(it, "gash date")).find(Boolean);
-    return {
-      found: D.tag({ label: "Leluxe", tone: "neutral" }),
-      oname: text(oname),
-      profile: prof && W.lxProfileChip ? W.lxProfileChip(prof, `Profile / account (NAME): ${prof}`) : D.dash(),
-      imgs: W.lxThumbs ? W.lxThumbs(items) : "",
-      cust: `<span class="ds-muted">${esc(num(items.length))} products</span>`,
-      status: (lx.sts || []).length ? lx.sts.map((s) => D.status.badge("pkg", s)).join(" ") : D.dash(),
-      gash: (W.lxGashRollupPill && W.lxGashRollupPill(lx.gash)) || (lx.trk ? D.tag({ label: lx.trk, tone: "neutral" }) : D.dash()),
-      gashdate: gd ? ((W.lxDueChip && W.lxDueChip(gd, true)) || muted(W.lxMs ? W.lxMs(gd) : gd)) : D.dash(),
-      value: lx.tot ? `<b class="ds-num">₪${esc(Number(lx.tot).toLocaleString())}</b>` : D.dash(),
-    };
-  }
-  const PARCEL_COLS = [
-    { key: "found", label: "Found in", w: 150 }, { key: "oname", label: "Order name", w: 160 }, { key: "profile", label: "Profile", w: 128 },
-    { key: "imgs", label: "Products", w: 150 }, { key: "cust", label: "Customer", w: 140 }, { key: "status", label: "Status", w: 150 },
-    { key: "gash", label: "GAASH", w: 140 }, { key: "gashdate", label: "GASH date", w: 106 }, { key: "value", label: "Value", w: 100, align: "end" },
-  ];
+  /** The parcel model cells and columns live in static/ds/tracking.js (the Tracking page owns the
+      {kind:"po"|"lx"|"miss"} model); this expansion draws the same nine facts through them. */
+  const modelCells = (m, ctx) => (D.tracking && D.tracking.modelCells ? D.tracking.modelCells(m, ctx) : {});
+  const PARCEL_COLS = (D.tracking && D.tracking.PARCEL_COLS) || [];
   /** The expansion under a workflow row: the parcels enrolled in it and the ones its triggers
       proposed. ctx: {enrolled:[{m, state}], proposed:[m], seqId, money} */
   G.wfExpansion = (ctx) => {
