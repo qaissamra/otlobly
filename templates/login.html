@@ -27,6 +27,9 @@
     margin:0;padding:0;border:none;border-radius:8px;background:transparent;color:var(--muted);
     display:flex;align-items:center;justify-content:center;cursor:pointer}
   .pw-eye:hover{background:#f3f1ea;color:var(--ink)}
+  .rem{display:flex;align-items:center;gap:8px;margin:16px 0 0;font-size:12.5px;
+    text-transform:none;letter-spacing:0;color:var(--ink);cursor:pointer}
+  .rem input{width:auto;margin:0;accent-color:var(--accent)}
 </style>
 <form class="card" method="post" action="{{ url_for('setup') if setup else url_for('login') }}">
   <div class="brand">
@@ -44,6 +47,11 @@
     <input id="pw" name="password" type="password" required>
     <button type="button" class="pw-eye" id="pwEye" aria-label="Show password" title="Show password"></button>
   </div>
+  {% if not setup %}
+  <label class="rem" for="remember"><input id="remember" type="checkbox" name="remember" value="1"
+    {{ '' if remember is defined and not remember else 'checked' }}>
+    Keep me signed in for 30 days</label>
+  {% endif %}
   <button type="submit">{{ 'Create admin' if setup else 'Sign in' }}</button>
 </form>
 <script>

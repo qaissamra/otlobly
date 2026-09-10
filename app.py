@@ -50,6 +50,7 @@ import cfg
 import customers as cust_mod
 import db
 import estimate
+import forecast
 import settings as settings_mod
 import goals
 import google_login
@@ -149,8 +150,15 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(os.environ.get("OTLOBLY_SECURE")),
     # "Trust this device": only CUSTOMER logins set session.permanent, so this 180-day
-    # window applies to the portal only — staff Flask-Login sessions stay browser-scoped.
+    # window applies to the portal only — a staff session cookie stays browser-scoped.
     PERMANENT_SESSION_LIFETIME=timedelta(days=180),
+    # "Keep me signed in" (staff): Flask-Login's OWN cookie, 30 days — deliberately
+    # separate from the 180-day lifetime above, which stays portal-only. Not refreshed
+    # per request, so it's a fixed 30 days from sign-in, not a sliding window.
+    REMEMBER_COOKIE_DURATION=timedelta(days=30),
+    REMEMBER_COOKIE_HTTPONLY=True,
+    REMEMBER_COOKIE_SAMESITE="Lax",
+    REMEMBER_COOKIE_SECURE=bool(os.environ.get("OTLOBLY_SECURE")),
 )
 auth.login_manager.init_app(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
@@ -339,14 +347,20 @@ def login():
     if request.method == "GET" and current_user.is_authenticated:
         return redirect(url_for("staff_app"))   # already in → straight to the dashboard
     if request.method == "POST":
+        # "Keep me signed in" — Flask-Login's 30-day remember cookie (see the config
+        # block). Ticked by default in the form, so an absent field means the user
+        # deliberately unticked it.
+        remember = bool(request.form.get("remember"))
         user = auth.verify(request.form.get("username", "").strip(),
                            request.form.get("password", ""))
         if user:
-            login_user(user)
+            login_user(user, remember=remember)
             session.pop("support_view_bid", None)   # a fresh login never inherits a support view
             db.audit(auth.actor(), "login", "user", user.username, "")
             return redirect(url_for("staff_app"))
-        return render_template("login.html", error="Wrong username or password.")
+        # Keep their choice through a typo'd password instead of silently re-ticking.
+        return render_template("login.html", error="Wrong username or password.",
+                               remember=remember)
     return render_template("login.html")
 
 
@@ -1823,7 +1837,8 @@ def api_purchases_refresh_tracking():
                  f"refreshed GAASH status on {res['updated']} package(s)")
     return jsonify({"ok": True, "updated": res["updated"], "remaining": res["remaining"],
                     "changes": res["changes"],
-                    "purchase_orders": [purchases.summary(p) for p in res["db"]["purchase_orders"]]})
+                    "purchase_orders": [purchases.summary(p, include_money=current_user.has("view_cost"))
+                                        for p in res["db"]["purchase_orders"]]})
 
 
 @app.route("/api/purchase", methods=["GET", "POST"])
@@ -1861,7 +1876,52 @@ def api_purchase():
     else:
         activity.log_po_diff(old_snapshot, po, user=_user())
     return jsonify({"ok": True, "how": how, "po_id": po["po_id"],
-                    "purchase_order": purchases.summary(po)})
+                    "purchase_order": purchases.summary(po, include_money=current_user.has("view_cost"))})
+
+
+@app.route("/api/purchase/split", methods=["POST"])
+@auth.require("view_cost")
+def api_purchase_split():
+    """💵 Landed cost per line + rollups by package / category / customer order.
+
+    One Amazon checkout mixes Otlobly customer items, IT products and Le Luxe
+    watches; the shipping/tax/import on that checkout is cheaper than buying the
+    categories separately, so it can't be measured per category — it has to be
+    shared out. This returns that split (see landed.py).
+
+    Body: {"po_id": "PO-0001"} for a saved PO, {"po": {...}} for the draft still
+    open in the editor (live preview while typing), or {"po_ids": [...]} for the
+    whole board in ONE round trip (the 💵 category view needs every visible PO's
+    lines — one request per card would be dozens). view_cost only: the split IS
+    the COGS."""
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    po = b.get("po")
+    if isinstance(po, dict):
+        return jsonify(purchases.split_costs(po))
+    if isinstance(b.get("po_ids"), list):
+        pdb = purchases.load()
+        wanted = {str(x) for x in b["po_ids"]}
+        return jsonify({"splits": {p["po_id"]: purchases.split_costs(p)
+                                   for p in pdb["purchase_orders"]
+                                   if p.get("po_id") in wanted}})
+    po = purchases.find(purchases.load(), b.get("po_id") or "")
+    if not po:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(purchases.split_costs(po))
+
+
+@app.route("/api/purchase/parse_summary", methods=["POST"])
+@auth.require("view_cost")
+def api_purchase_parse_summary():
+    """Paste Amazon's order summary → {items, shipping, promo, tax, import,
+    order total}. Typing six numbers by hand off a screenshot is where the
+    wrong-total mistakes come from; this reads them off the copied text."""
+    import landed
+    text = (request.get_json(force=True, silent=True) or {}).get("text") or ""
+    if not text.strip():
+        return jsonify({"ok": False, "error": "empty"}), 400
+    return jsonify({"ok": True, "parsed": landed.parse_amazon_summary(text)})
 
 
 @app.route("/api/purchase/import_clickup", methods=["POST"])
@@ -2072,8 +2132,15 @@ def api_trash_empty():
 def api_activity():
     ent = request.args.get("entity") or None
     eid = request.args.get("id") or None          # per-entity feed (PO detail drawer)
-    lim = int(request.args.get("limit", "60"))
-    return jsonify({"activity": activity.recent(lim, ent, entity_id=eid)})
+    # `ids` rolls a whole order up in ONE pass — its packages and products would
+    # otherwise be N requests, each re-walking the log.
+    ids = [s for s in (request.args.get("ids") or "").split(",") if s.strip()]
+    try:
+        lim = max(1, min(int(request.args.get("limit", "60")), 300))
+    except ValueError:
+        lim = 60
+    page = activity.recent_page(lim, ent, entity_id=eid, entity_ids=ids)
+    return jsonify({"activity": page["events"], "truncated": page["truncated"]})
 
 
 # The staff bell 🔔 — customer-driven moments only (form submissions, quote
@@ -2802,12 +2869,21 @@ def api_leluxe_item_image():
 @auth.require_feature("leluxe")
 def api_leluxe_order():
     b = request.get_json(force=True, silent=True) or {}
-    row, err = leluxe_mod.save_row(b)
+    # save_row logs its own per-field diff ("changed Quantity ordered from 30 to
+    # 50") — a flat "saved" event used to be all this board recorded.
+    row, err = leluxe_mod.save_row(b, user=_user())
     if err:
         return jsonify({"ok": False, "error": err}), 400
-    activity.log("saved", "leluxe", row["id"], row["name"] or f"#{row['id']}",
-                 detail="leluxe order saved → syncing to ClickUp", user=_user())
     return jsonify({"ok": True, "row": row})
+
+
+@app.route("/api/leluxe/qty_conflicts")
+@auth.require("view_orders")
+@auth.require_feature("leluxe")
+def api_leluxe_qty_conflicts():
+    """Products whose NAME-number and `Quantity ordered` FIELD disagree — the
+    server-side twin of the board's ⚠ pill. Reports only; fixes nothing."""
+    return jsonify({"ok": True, "conflicts": leluxe_mod.qty_conflicts()})
 
 
 @app.route("/api/leluxe/move", methods=["POST"])
@@ -2820,19 +2896,14 @@ def api_leluxe_move():
     a smaller `qty` splits off a new product row. `new_package:true` creates an
     empty destination package first."""
     b = request.get_json(force=True, silent=True) or {}
+    # move_item logs the per-row detail itself (which parcel → which parcel, and
+    # for a split the source's QTY drop and any name relabel)
     summary, err = leluxe_mod.move_item(
         b.get("id"), dest_parent_local_id=b.get("parent_local_id"),
-        new_package=bool(b.get("new_package")), move_qty=b.get("qty"))
+        new_package=bool(b.get("new_package")), move_qty=b.get("qty"),
+        user=_user())
     if err:
         return jsonify({"ok": False, "error": err}), 400
-    if summary["mode"] == "split":
-        detail = (f"split {summary['moved_qty']} unit(s) off (kept "
-                  f"{summary['left_qty']}) → new subtask, amount stays on the "
-                  f"original → syncing to ClickUp")
-    else:
-        detail = "moved to another package → syncing to ClickUp"
-    activity.log("moved", "leluxe", summary["row_id"], f"#{summary['row_id']}",
-                 detail=detail, user=_user())
     return jsonify({"ok": True, **summary})
 
 
@@ -2901,12 +2972,12 @@ def api_leluxe_az2_organize():
 def api_leluxe_status():
     """Inline status change from the board (no editor card) — status-only save."""
     b = request.get_json(force=True, silent=True) or {}
-    row, err = leluxe_mod.set_status(b.get("id"), b.get("status"))
+    # set_status logs the old→new STATUS itself (the flat event it replaced
+    # never recorded what the status changed FROM)
+    row, err = leluxe_mod.set_status(b.get("id"), b.get("status"),
+                                     user=_user())
     if err:
         return jsonify({"ok": False, "error": err}), 400
-    activity.log("set", "leluxe", row["id"], row["name"] or f"#{row['id']}",
-                 detail=f"status → {row['status']} (board) → syncing to ClickUp",
-                 user=_user())
     return jsonify({"ok": True, "row": row})
 
 
@@ -3203,11 +3274,17 @@ def api_gaash_declaration():
     say yes or name the reason. Pass save=true for the rare hand-filed copy."""
     b = request.get_json(force=True, silent=True) or {}
     save = bool(b.get("save"))
+    # kind=originality is the second paper — "הצהרת מקוריות", what customs asks
+    # for when it wants proof that branded goods are genuine. Same everything
+    # else: read from the boards, never stored, written onto the email.
+    make = (gaash_mail.originality_make
+            if str(b.get("kind") or "") == "originality"
+            else gaash_mail.declaration_make)
     many = b.get("gwds")
     if isinstance(many, list):
         # one refusal must not sink the batch: a parcel with no name is reported
         # by name with its reason, the rest still come back ready
-        results = [{**gaash_mail.declaration_make(g, save=save),
+        results = [{**make(g, save=save),
                     "gwd": str(g or "").strip().upper()} for g in many[:200]]
         done = [r["gwd"] for r in results if r.get("ok")]
         if done and save:
@@ -3215,7 +3292,7 @@ def api_gaash_declaration():
                          detail=f"filed {len(done)} customs declaration(s)",
                          user=_user())
         return jsonify({"ok": True, "results": results})
-    res = gaash_mail.declaration_make(b.get("gwd"), save=save)
+    res = make(b.get("gwd"), save=save)
     if res.get("ok") and save:
         activity.log("create", "gaash", 0, res.get("gwd") or "",
                      detail="filed a customs declaration", user=_user())
@@ -3237,11 +3314,14 @@ def api_gaash_declaration_preview():
 
     Inline, not a download — the point is to glance at it and go back."""
     gwd = (request.args.get("gwd") or "").strip().upper()
-    got = gaash_mail.declaration_attachment(gwd)
+    orig = (request.args.get("kind") or "") == "originality"
+    got = (gaash_mail.originality_attachment(gwd) if orig
+           else gaash_mail.declaration_attachment(gwd))
     if not got:
-        # declaration_make names the reason (no name on the parcel, an Arabic
-        # name the document cannot print); the UI shows it instead of a dead link
-        res = gaash_mail.declaration_make(gwd)
+        # *_make names the reason (no name on the parcel, an Arabic name the
+        # document cannot print); the UI shows it instead of a dead link
+        res = (gaash_mail.originality_make(gwd) if orig
+               else gaash_mail.declaration_make(gwd))
         return jsonify({"ok": False,
                         "error": res.get("error") or "no declaration"}), 400
     name, data, ctype = got
@@ -3364,6 +3444,16 @@ def api_gaash_docs_queue():
     return jsonify(gaash_mail.docs_queue())
 
 
+@app.route("/api/gaash/forecast")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_forecast():
+    """🔮 the forecast queue: every parcel sitting at "Cleared customs" with its
+    predicted next GAASH status + expected date, learned from our own cached
+    tracking history. Read-only and cache-only — no carrier calls."""
+    return jsonify(forecast.forecast_queue())
+
+
 @app.route("/api/gaash/send", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
@@ -3376,11 +3466,11 @@ def api_gaash_send():
     for did in (b.get("doc_ids") or [])[:6]:
         # DECL_AUTO = "write this parcel's declaration now" — never a stored
         # file. On a grouped conversation that means one PER member parcel.
-        if did == gaash_mail.DECL_AUTO:
+        if did in gaash_mail.AUTO_DOCS:
             mem = gaash_mail.thread_members(
                 gaash_mail.thread_get(gwd) or {"gwd": gwd})
             for m in mem:
-                got = gaash_mail.declaration_attachment(m)
+                got = gaash_mail.auto_attachment(did, m)
                 if got:
                     files.append(got)
             continue
@@ -4500,6 +4590,46 @@ def api_restore():
     os.replace(staging, db.DB_FILE)   # atomic swap-in
     db.init_db()                       # idempotent schema/migrate on the restored DB
     return jsonify({"ok": True, "restored_at": db.now_iso(), "counts": counts})
+
+
+@app.route("/api/gaash/accounts/restore", methods=["POST"])
+def api_gaash_accounts_restore():
+    """Put the sending mailboxes back from a backup zip — same auth and same
+    streaming shape as /api/restore, but it touches ONE table: the live DB, its
+    orders and its money keep today's data. For when corruption has eaten the
+    account rows themselves, where a rebuild alone leaves an empty list and
+    three app passwords to re-fetch from Google."""
+    if not _backup_ok():
+        abort(401)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    staging = db.DB_FILE.with_name(db.DB_FILE.name + f".acctsrc-{stamp}")
+    up = tempfile.NamedTemporaryFile(prefix="otlobly-acctrestore-",
+                                     suffix=".zip", delete=False)
+    try:
+        # stream, like /api/backup: the zip is ~100 MB and the instance is 512
+        shutil.copyfileobj(request.stream, up, length=1024 * 1024)
+        up.close()
+        if not os.path.getsize(up.name):
+            abort(400, "empty body — POST the backup zip as the raw body")
+        try:
+            with zipfile.ZipFile(up.name) as z, z.open("otlobly.db") as src, \
+                    open(staging, "wb") as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+        except Exception as e:        # noqa: BLE001
+            abort(400, f"could not read otlobly.db from the zip: {e}")
+        res = gaash_mail.restore_accounts(staging)
+    finally:
+        for f in (up.name, staging):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+    if res.get("ok"):
+        db.audit(auth.actor() or {"username": "worker"},   # same shape /api/backup logs
+                 "gaash_accounts_restore", "gaash",
+                 ",".join(res.get("restored") or []),
+                 "from backup" + (" (rebuilt first)" if res.get("repaired") else ""))
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/api/worker/seed", methods=["POST"])

@@ -502,7 +502,53 @@ def _insert_row(kind, name, *, status="", due_date=None, fields=None, desc="",
         return cur.lastrowid
 
 
-def save_row(payload, config=None):
+def _lx_snapshot(row):
+    """The slice of a row that leluxe_diff compares — a detached copy, so the
+    in-place data_json mutation below can't rewrite the "before" out from under
+    the diff."""
+    d = row.get("data") or {}
+    return {"id": row.get("id"), "name": row.get("name"),
+            "status": row.get("status"), "due_date": row.get("due_date"),
+            "data": {"fields": dict(d.get("fields") or {})}}
+
+
+def _pkg_label(row):
+    """A parcel's display name for the activity feed ("the order" when a product
+    hangs straight off the order, "—" when the row is gone)."""
+    if not row:
+        return "—"
+    if row.get("kind") in TOP_KINDS:
+        return "the order"
+    return _row_tracking(row) or row.get("name") or f"#{row.get('id')}"
+
+
+def _lx_log(row, action, user=None, field=None, old=None, new=None, detail=""):
+    """One activity event on a leluxe row. Values go through activity._fval so a
+    ClickUp label list renders as "red, gold" and never as raw JSON.
+    Best-effort — never breaks the edit."""
+    try:
+        import activity
+        activity.log(action, "leluxe", row.get("id") or "",
+                     row.get("name") or f"#{row.get('id')}", field=field,
+                     old=activity._fval(old) or None,
+                     new=activity._fval(new) or None,
+                     detail=detail, user=user)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _log_diff(old_snap, new_snap, user=None, detail=""):
+    """Per-field activity for a leluxe row. Best-effort: a logging failure must
+    never break the edit (imported here — activity imports db, we import it)."""
+    try:
+        import activity
+        return activity.log_leluxe_diff(old_snap, new_snap, user=user,
+                                        detail=detail)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def save_row(payload, config=None, user=None):
     """Create/update one row from the editor. Overwrites name/status/due/tags/
     description/fields; keeps images + pushed snapshot. Marks dirty + kicks the
     pusher. Returns (row, error)."""
@@ -558,7 +604,9 @@ def save_row(payload, config=None):
                           (payload["id"],)).fetchone()
             if not r:
                 return None, "row not found"
-            d = _row(r)["data"]
+            old_row = _row(r)
+            old_snap = _lx_snapshot(old_row)
+            d = old_row["data"]
             old_fields = dict(d.get("fields") or {})
             d.update({"description": desc, "tags": tags, "fields": fields})
             d.pop("pending_fields", None)   # a real edit → full push takes over
@@ -573,6 +621,10 @@ def save_row(payload, config=None):
                        json.dumps(d, ensure_ascii=False), payload["id"]))
             db.log_leluxe_status(payload["id"], r["status"], status, "app", c=c)
         row_id = payload["id"]
+        _log_diff(old_snap,
+                  {"id": row_id, "name": name, "status": status,
+                   "due_date": str(due_ms) if due_ms else None,
+                   "data": {"fields": fields}}, user=user)
         # a product's Tracking Number changed → its 📦 must follow the GWD
         if kind == "item":
             ok_ = str(old_fields.get(_field_key(old_fields, "Tracking Number",
@@ -589,6 +641,8 @@ def save_row(payload, config=None):
             kind, name, status=status, due_date=due_ms, fields=fields,
             desc=desc, tags=tags, parent_local_id=parent_local,
             parent_task_id=(parent or {}).get("clickup_task_id"), extra=extra)
+        _log_diff(None, {"id": row_id, "name": name}, user=user,
+                  detail=f"new {kind}")
         # a brand-new product born WITH a GWD lands in that parcel's package
         if kind == "item" and str(fields.get(_field_key(fields, "Tracking Number",
                                                         fields_def)) or "").strip():
@@ -599,7 +653,7 @@ def save_row(payload, config=None):
     return get_row(row_id), None
 
 
-def set_status(row_id, status, config=None):
+def set_status(row_id, status, config=None, user=None):
     """Inline status change from the board — touches ONLY the status column
     (fields/tags/description/images in data_json untouched), marks dirty and
     kicks the pusher, which mirrors it via the core PUT. Returns (row, error)."""
@@ -621,7 +675,10 @@ def set_status(row_id, status, config=None):
         return None, "row not found"
     _clear_pending(row_id)      # a real edit → the full push takes over
     kick()
-    return get_row(row_id), None
+    row = get_row(row_id)
+    _log_diff({"id": row_id, "status": old["status"], "name": row["name"]},
+              {"id": row_id, "status": status, "name": row["name"]}, user=user)
+    return row, None
 
 
 def add_image(row_id, filename):
@@ -708,7 +765,7 @@ def _top_order_of(row):
 
 
 def move_item(row_id, dest_parent_local_id=None, new_package=False,
-              move_qty=None, config=None):
+              move_qty=None, config=None, user=None):
     """Move a product to another package of the SAME order, or split a partial
     quantity off into it. Returns (summary, error).
 
@@ -729,6 +786,9 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
     order = _top_order_of(row)
     if not order:
         return None, "this product isn't inside an order"
+    # the source parcel's name, read BEFORE the re-parent (and before the sweep
+    # can delete an emptied package out from under us)
+    src_label = _pkg_label(get_row(row.get("parent_local_id")))
 
     sch = schema(config)
     sfields = sch.get("fields") or {}
@@ -772,6 +832,9 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
         if row.get("parent_local_id"):
             _sweep_order_packages(order["id"], sfields)
         kick()
+        _lx_log(row, "moved", user=user, field="package",
+                old=src_label, new=_pkg_label(dest),
+                detail=f"whole product ({Q if Q is not None else '?'} unit(s))")
         return {"mode": "move", "row_id": row_id, "dest_id": dest["id"],
                 "qty": Q, "new_package": bool(new_package)}, None
 
@@ -812,6 +875,18 @@ def move_item(row_id, dest_parent_local_id=None, new_package=False,
             c.execute("UPDATE leluxe_orders SET ordered_at=? WHERE id=?",
                       (row["ordered_at"], new_id))
     kick()
+    # The split is exactly where the board's two unit counts fork: the source's
+    # QTY FIELD drops to Q-mq, and its NAME only follows when the old name began
+    # with the old count (see _relabel_qty). Log both so the feed shows which.
+    src_new_name = _relabel_qty(row["name"], Q, Q - mq)
+    _lx_log(row, "set", user=user, field="Quantity ordered", old=Q, new=Q - mq,
+            detail=f"split {mq} unit(s) off → {_pkg_label(dest)}")
+    if src_new_name != row["name"]:
+        _lx_log(row, "set", user=user, field="name", old=row["name"],
+                new=src_new_name, detail="renamed by the quantity split")
+    _lx_log({"id": new_id, "name": _relabel_qty(row["name"], Q, mq)}, "created",
+            user=user,
+            detail=f"{mq} unit(s) split off {row['name']} → {_pkg_label(dest)}")
     return {"mode": "split", "row_id": row_id, "new_id": new_id,
             "dest_id": dest["id"], "moved_qty": mq, "left_qty": Q - mq,
             "new_package": bool(new_package)}, None
@@ -2041,6 +2116,16 @@ def _merge_order(rid, src_order, kids, sch, known, keep, made,
     oname = src_order.get("name") or ""
 
     def _record(row_id, kind, name, res, chs):
+        # Inbound ClickUp edits land in the activity feed too, attributed to
+        # ClickUp — otherwise a value that changed under you during a pull looks
+        # like nobody touched it. The sync report itself is last-run-only
+        # (write_json_atomic overwrites it), so this is the durable copy.
+        if res == "updated" and chs:
+            for ch in chs:
+                _lx_log({"id": row_id, "name": name}, "set", user="ClickUp",
+                        field=ch.get("label") or ch.get("field"),
+                        old=ch.get("old"), new=ch.get("new"),
+                        detail=f"pulled from AZ (2) · {oname}"[:200])
         if report is None:
             return
         if res == "updated" and chs:
@@ -2439,6 +2524,36 @@ def _az2_qty(it, sfields):
         return int(float(v))
     except (TypeError, ValueError):
         return None
+
+
+def qty_conflicts(config=None):
+    """Every product whose NAME-number disagrees with its `Quantity ordered`
+    FIELD → [{id, name, order_id, package_id, name_qty, field_qty}].
+
+    This is the fork that let one package read as 50 units when it held 30: the
+    board's ×N and the Products Σ read the FIELD, while _az2_qty (and therefore
+    the package rollup pushed to ClickUp) prefers the leading number of the
+    NAME. _relabel_qty only keeps the two in step while they already match, so
+    once they diverge nothing pulls them back. Read-only — reports, never fixes."""
+    config = config or cfg.load()
+    sfields = (schema(config).get("fields") or {})
+    out = []
+    orders, _orphans = list_tree()
+    for o in orders:
+        pkgs = [(p["id"], p.get("items") or []) for p in o.get("packages") or []]
+        for pid, items in pkgs + [(None, o.get("items") or [])]:
+            for it in items:
+                m = re.match(r"\s*(\d+)\b", str(it.get("name") or ""))
+                if not m:
+                    continue
+                f = (it.get("data") or {}).get("fields") or {}
+                fq = _as_num(f.get(_field_key(f, "Quantity ordered", sfields)))
+                nq = int(m.group(1))
+                if fq is not None and fq != nq:
+                    out.append({"id": it["id"], "name": it.get("name") or "",
+                                "order_id": o["id"], "package_id": pid,
+                                "name_qty": nq, "field_qty": fq})
+    return out
 
 
 def az2_organize(order_id, user="", dry_run=False):
@@ -3851,14 +3966,8 @@ def _queue_gash_status(row, fkey, target):
                      sync_state='dirty', sync_error=NULL, sync_attempts=0
                      WHERE id=?""",
                   (json.dumps(d, ensure_ascii=False), db.now_iso(), row["id"]))
-    try:
-        import activity
-        activity.log("set", "leluxe", row["id"],
-                     row.get("name") or f"#{row['id']}",
-                     detail=f"gash status → {target} (from Gerizim) "
-                            f"→ syncing to ClickUp")
-    except Exception:  # noqa: BLE001 — logging must never block the sync
-        pass
+    _lx_log(row, "set", user="Gerizim", field=key, old=old, new=target,
+            detail="from Gerizim → syncing to ClickUp")
     code = next((str(v) for k, v in (row["data"].get("fields") or {}).items()
                  if k.strip().upper() == "NAME" and v), "")
     return {"row_id": row["id"], "tracking": _row_tracking(row),

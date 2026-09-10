@@ -152,6 +152,49 @@ def test_reads_only_the_tail():
     check("stays under 5MB on a multi-MB log", peak_new < 5 * 1024 * 1024)
 
 
+def test_max_scan_bounds_a_filtered_read():
+    """`limit` only bounds a read that keeps MATCHING. A filtered read that
+    matches little walks to EOF — which is what the per-row Activity panel does
+    on every product click. max_scan caps it and says so."""
+    p = _TMP / "scan.jsonl"
+    _write(p, n=5_000)
+    activity._activity_file = lambda business_id=None: Path(p)
+
+    page = activity.recent_page(limit=50, entity="nope", max_scan=500)
+    check("a no-match filtered read stops at max_scan", page["events"] == [])
+    check("  …and reports itself truncated", page["truncated"] is True)
+
+    page = activity.recent_page(limit=50, entity="nope", max_scan=0)
+    check("max_scan=0 means walk it all (not truncated)", page["truncated"] is False)
+
+    page = activity.recent_page(limit=10, max_scan=5_000)
+    check("a read that fills up early is NOT truncated",
+          len(page["events"]) == 10 and page["truncated"] is False)
+    check("recent() still returns a plain list",
+          activity.recent(limit=10) == page["events"])
+
+
+def test_entity_ids_union():
+    """The order-level panel rolls its packages + products up in ONE pass."""
+    p = _TMP / "ids.jsonl"
+    _write(p, n=300)
+    activity._activity_file = lambda business_id=None: Path(p)
+
+    got = activity.recent(limit=500, entity_ids=["2", "5"])
+    one = activity.recent(limit=500, entity_id="2")
+    two = activity.recent(limit=500, entity_id="5")
+    check("ids= returns exactly the union of the single-id reads",
+          sorted(e["label"] for e in got)
+          == sorted(e["label"] for e in one + two))
+    check("  …still newest-first",
+          [e["ts"] for e in got] == sorted((e["ts"] for e in got), reverse=True))
+    check("blank ids are ignored, not matched as ''",
+          activity.recent(limit=5, entity_ids=["", "  "]) == activity.recent(limit=5))
+    check("id= and ids= combine",
+          len(activity.recent(limit=500, entity_id="2", entity_ids=["5"]))
+          == len(one) + len(two))
+
+
 def main():
     print("matches the original implementation:")
     test_matches_the_original()
@@ -161,6 +204,10 @@ def main():
     test_chunk_boundaries()
     print("reads only the tail:")
     test_reads_only_the_tail()
+    print("max_scan bounds a filtered read:")
+    test_max_scan_bounds_a_filtered_read()
+    print("entity_ids union:")
+    test_entity_ids_union()
     print()
     if fails:
         print(f"RESULT: FAIL ({len(fails)}): {fails}")

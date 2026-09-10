@@ -38,5 +38,6 @@ otlobly-backup-*.zip
 !config.default.json
 meta_cache.json
 tracking_cache.json
+forecast_history.json
 leluxe_sync_report.json
 leluxe_presync_*.json

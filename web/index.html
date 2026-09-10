@@ -965,6 +965,21 @@
   .az-fraud{font-weight:700;padding:1px 8px;border-radius:20px;font-size:12px}
   .az-actions{display:flex;gap:8px;margin-top:14px}
   .az-actions button{flex:1}
+  /* ── ClickUp-style detail: fields on the left, Activity on the right ──
+     Same split the owner reads in ClickUp itself. The Activity rail is the
+     board's answer to "how did this number get here" — it scrolls on its own so
+     a long history never pushes the fields off-screen. Single column under
+     900px (the rail moves below the fields, still full height). */
+  .lx-det{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+  .lx-det-act{border-left:1px solid var(--line);padding-left:14px;min-width:0}
+  .lx-det-act .actfeed{max-height:56vh;overflow:auto}
+  .lx-det-act .act-row{padding:7px 0}
+  .lx-sechead{font-size:10.5px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);margin:12px 0 2px}
+  @media (max-width:900px){
+    .lx-det{grid-template-columns:minmax(0,1fr)}
+    .lx-det-act{border-left:none;border-top:1px solid var(--line);padding-left:0;padding-top:10px}
+  }
 </style>
 
 <div class="app">
@@ -1224,6 +1239,7 @@
         <button class="minibtn" id="poSegPkgs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('packages')" title="كل الطرود في جدول واحد · every package as one flat row" data-en="📦 Packages" data-ar="📦 الطرود">📦 Packages</button>
         <button class="minibtn" id="poSegProds" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('products')" title="كل المنتجات في جدول واحد · every product as one flat row" data-en="⫶ Products" data-ar="⫶ المنتجات">⫶ Products</button>
         <button class="minibtn" id="poSegCust" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('customers')" title="كل عميل مع منتجاته — الطلبات المنفصلة تبقى منفصلة · each customer with their products; separate orders stay separated" data-en="👤 Customers" data-ar="👤 العملاء">👤 Customers</button>
+        <button class="minibtn" id="poSegSplit" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="poSetView('split')" title="تكلفة كل فئة من نفس الفاتورة — الشحن والجمارك موزّعة بالنسبة والتناسب · what each category really cost from one checkout, with the shipping/tax/import shared out pro-rata" data-en="💵 Cost split" data-ar="💵 تقسيم التكلفة">💵 Cost split</button>
       </span>
       <input id="poSearch" placeholder="search PO #, amazon #, customer, product, GWD…" oninput="renderPurchases()" style="width:280px;padding:4px 8px;font-size:12px">
     </div>
@@ -1760,6 +1776,7 @@
       <button class="minibtn" id="gmTabSeq" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('seq')" data-en="⚙️ Workflows" data-ar="⚙️ الأتمتة">⚙️ Workflows</button>
       <button class="minibtn" id="gmTabReady" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('ready')" data-en="🩺 Readiness" data-ar="🩺 الجاهزية">🩺 Readiness</button>
       <button class="minibtn" id="gmTabDocs" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('docs')" data-en="📄 Docs" data-ar="📄 المستندات">📄 Docs</button>
+      <button class="minibtn" id="gmTabFcast" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('fcast')" data-en="🔮 Forecast" data-ar="🔮 التوقعات">🔮 Forecast</button>
       <button class="minibtn" id="gmTabTpl" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('tpl')" data-en="📝 Templates" data-ar="📝 القوالب">📝 Templates</button>
       <button class="minibtn" id="gmTabDash" style="border:0;border-radius:0;border-inline-start:1px solid var(--line)" onclick="gmTab('dash')" data-en="📊 Analyze" data-ar="📊 تحليل">📊 Analyze</button>
     </div>
@@ -1774,6 +1791,7 @@
     <div id="gmTplPane" class="hidden"></div>
     <div id="gmReadyPane" class="hidden"></div>
     <div id="gmDocsPane" class="hidden"></div>
+    <div id="gmFcastPane" class="hidden"></div>
     <div id="gmDashPane" class="hidden"></div>
   </div>
 </div>
@@ -1967,7 +1985,7 @@
      ClickUp checkout screenshot rendered BIG + the everyday action buttons.
      Sits BEFORE the editor modal so ✏️-from-popup paints the editor on top. -->
 <div id="lxInfoModal" class="az-modal hidden" onclick="if(event.target===this)lxInfoClose()">
-  <div class="az-box" style="width:640px;max-width:96vw;max-height:92vh;overflow:auto">
+  <div class="az-box" style="width:1020px;max-width:96vw;max-height:92vh;overflow:auto">
     <div class="az-head"><b id="lxInfoTitle">⌚ Order</b><span class="az-x" onclick="lxInfoClose()">✕</span></div>
     <div id="lxInfoBody" style="padding:12px 16px"></div>
   </div>
@@ -3797,7 +3815,7 @@ function renderLeluxe(){
     // so groups keep the sorted order inside; the same-order tie runs follow
     // adjacency and simply don't show under a scattering sort (correct).
     lxtSortApply("p",shown,([it,o],key)=>{
-      if(key==="qty") return Number(lxF(it,"quantity ordered"))||0;
+      if(key==="qty") return lxQtyOf(it).field||0;
       if(key==="due") return Number(it.due_date)||Infinity;
       if(key==="profile") return lxAcctSortVal(lxAcctChain(it,o));
       return ((o&&o.name)||"").toLowerCase();                  // order
@@ -3813,9 +3831,13 @@ function renderLeluxe(){
       return lxItemRow(it,o,{cols:true,tie,tieN});
     }).join("");
     // Σ totals footer: product count + Σ quantity in the qty column
-    const totQty=shown.reduce((a,[it])=>a+(Number(lxF(it,"quantity ordered"))||0),0);
+    // strict column sum (a blank qty adds 0 here — unlike lxCountLbl, where a
+    // row with no qty still counts as the 1 product it is), but read through the
+    // one canonical accessor so both totals agree on what "the qty" IS.
+    const totQty=shown.reduce((a,[it])=>a+(lxQtyOf(it).field||0),0);
+    const totBad=shown.filter(([it])=>lxQtyOf(it).mismatch).length;
     const pTotals=`<div class="poc-row bt-total">
-        <div class="bt-pin">Σ ${shown.length} منتج · products</div>
+        <div class="bt-pin">Σ ${shown.length} منتج · products${totBad?" "+tonePill("red",`⚠ ${totBad}`,`${totBad} product(s) shown have a NAME number that disagrees with the "Quantity ordered" field — this Σ may be wrong.`):""}</div>
         ${lxtCells("p",{qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${totQty}</b>`})}
       </div>`;
     const pcolHead=lxtHead("p","المنتج · product");
@@ -4012,6 +4034,11 @@ const LXT_COLS={
     {key:"pkgstatus", label:"حالة الطرد · pkg status",  w:120},
     {key:"customer",  label:"العميل · customer",    w:112, sortable:true},
     {key:"collect",   label:"💵 يؤخذ · 💵 collect",  w:96,  sortable:true},
+    // 💵 cost split (landed.py) — the category this line belongs to, its share of
+    // the checkout's shipping/tax/import, and what it therefore really cost
+    {key:"bucket",    label:"الفئة · category",     w:118, min:96, sortable:true},
+    {key:"share",     label:"شحن/جمارك · share",    w:92,  sortable:true},
+    {key:"landed",    label:"التكلفة · landed",     w:96,  sortable:true},
     {key:"ostatus",   label:"حالة الطلب · order status", w:104, sortable:true},
     {key:"pdue",      label:"الاستحقاق · due", w:96, sortable:true},
     {key:"qty",       label:"الكمية · qty",         w:40,  sortable:true},
@@ -4811,7 +4838,7 @@ function lxGoalCelebrate(milestone,month){
 //    10s poll below makes a value typed in ClickUp land here within ~12s. ──
 let GOALS=null, GOALS_BUSY=false, GOALS_POLL=null;
 const GL_OPEN={};                                    // category key → breakdown expanded
-const GL_COLORS={it:"#3e63dd",pc:"#12a594",watches:"#f59e0b",otlobly:"#f76808",itpc:"#3e63dd"};
+const GL_COLORS={it:"#3e63dd",pc:"#12a594",watches:"#f59e0b",otlobly:"#f76808",itpc:"#3e63dd",unsorted:"#94a3b8"};
 async function loadGoals(refresh){
   if(GOALS_BUSY) return;
   GOALS_BUSY=true;
@@ -4847,7 +4874,11 @@ function renderGoals(){
     if(it&&pc){
       const m={key:"itpc",label:it.label+" + "+pc.label,mode:"combo",
         target:+(it.target+pc.target).toFixed(2),actual:+(it.actual+pc.actual).toFixed(2),
-        n:(it.n||0)+(pc.n||0),need_per_day:+((it.need_per_day||0)+(pc.need_per_day||0)).toFixed(2),
+        // an order holding both a graphics card and an "Other IT" item feeds
+        // BOTH cards — union the ids so the combined bar says 1 order, not 2
+        n:new Set([...(it.order_ids||[]),...(pc.order_ids||[])]).size,
+        items:(it.items||0)+(pc.items||0),counts:true,
+        need_per_day:+((it.need_per_day||0)+(pc.need_per_day||0)).toFixed(2),
         breakdown:[...(it.breakdown||[]),...(pc.breakdown||[])].sort((a,b)=>String(b.day||"").localeCompare(String(a.day||""))),
         breakdown_more:(it.breakdown_more||0)+(pc.breakdown_more||0),
         warnings:[...(it.warnings||[]),...(pc.warnings||[])],
@@ -4897,18 +4928,24 @@ function renderGoals(){
 }
 function glCatCard(c){
   const color=GL_COLORS[c.key]||"var(--accent)";
-  const done=c.actual>=c.target, width=Math.min(100,c.target?c.actual/c.target*100:0);
-  const open=!!GL_OPEN[c.key], editable=CAN_ADMIN&&c.key!=="itpc";
+  const scored=c.counts!==false;                       // Unsorted is shown, never scored
+  const done=scored&&c.actual>=c.target, width=Math.min(100,c.target?c.actual/c.target*100:0);
+  const open=!!GL_OPEN[c.key], editable=CAN_ADMIN&&c.key!=="itpc"&&scored;
   const warns=(c.warnings||[]).filter(x=>x.kind!=="brand_missing");
   const missing=(c.warnings||[]).filter(x=>x.kind==="brand_missing");
-  const brands=c.mode==="brand"&&(c.brands||[]).length?` <span class="muted2" style="font-size:10.5px">(${poEsc(c.brands.join(", "))})</span>`:"";
+  const brands=(c.brands||[]).length?` <span class="muted2" style="font-size:10.5px">(${poEsc(c.brands.join(", "))})</span>`:"";
   const split=(c.split||[]).map(s=>`<span class="qchip" style="font-size:10.5px">${poEsc(s.label)}: <b>${lxGm(s.actual)}</b></span>`).join(" ");
   const dd=s=>s?`${s.slice(8)}/${s.slice(5,7)}`:"—";
+  const WARN={
+    no_amount:["⚠ بلا مبلغ","لا يوجد Total Amount على المهمة — عبّيه في ClickUp"],
+    parent_fallback:["⚠ Order #","احتُسب مبلغ مهمة الـ Order # لأن منتجاتها بلا أسعار"],
+    no_brand:["⚠ بلا براند","لم يُحدَّد Brand على المنتج — عيّنه في ClickUp لينتقل لبطاقته"],
+    brand_unclaimed:["⚠ براند غير مصنّف","هذا البراند لا تطالب به أي بطاقة — أضفه لبطاقتها من ⚙ الإعدادات"]};
   const rows=!open?"":`<div style="margin-top:8px;max-height:260px;overflow:auto">${
     (c.breakdown||[]).map(u=>`<div class="gl-row"${u.warn?' style="opacity:.75"':''}>
         <span class="n" title="${poEsc(u.top_name&&u.top_name!==u.name?u.top_name+" › "+u.name:u.name)}">${u.url?`<a href="${poEsc(u.url)}" target="_blank" rel="noopener" style="color:inherit">${poEsc(u.name||"—")}</a>`:poEsc(u.name||"—")}</span>
         ${u.brand?`<span class="pill" style="background:var(--bg3);color:var(--ink)">${poEsc(u.brand)}</span>`:""}
-        ${u.warn?`<span class="qchip alert" style="font-size:10px" title="${u.warn==="no_amount"?"لا يوجد Total Amount على المهمة — عبّيه في ClickUp":"احتُسب مبلغ مهمة الـ Order # لأن منتجاتها بلا أسعار"}">${u.warn==="no_amount"?"⚠ بلا مبلغ":"⚠ Order #"}</span>`:""}
+        ${u.warn&&WARN[u.warn]?`<span class="qchip alert" style="font-size:10px" title="${poEsc(WARN[u.warn][1])}">${WARN[u.warn][0]}</span>`:""}
         <span class="muted2" style="font-variant-numeric:tabular-nums">${dd(u.day)}</span>
         <b style="font-variant-numeric:tabular-nums">${u.usd?lxGm(u.usd):"—"}</b>
       </div>`).join("")||`<div class="muted2" style="font-size:12px;padding:6px 0">لا طلبات ضمن الفترة بعد · nothing in the window yet</div>`}
@@ -4917,19 +4954,23 @@ function glCatCard(c){
     <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
       <b style="font-size:13.5px">${editable?`<span class="gl-edit" onclick="glEditLabel(this,'${c.key}')" title="اضغط لتعديل الاسم · click to rename">${poEsc(c.label)}</span>`:poEsc(c.label)}</b>${brands}
       <span class="spacer" style="flex:1"></span>
-      <span style="font-weight:900;font-variant-numeric:tabular-nums;color:${done?"#16a34a":"inherit"}">${c.pct}%</span>
+      ${scored?`<span style="font-weight:900;font-variant-numeric:tabular-nums;color:${done?"#16a34a":"inherit"}">${c.pct}%</span>`
+        :`<span class="qchip" style="font-size:10.5px" title="مبالغ لم تُوجَّه لأي بطاقة — لا تدخل في مجموع الحملة">خارج الحملة</span>`}
     </div>
-    <div style="font-size:19px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:2px">${lxGm(c.actual)} <small style="font-size:12px;color:var(--muted)">/ ${editable?`<span class="gl-edit" onclick="glEditTarget(this,'${c.key}')" title="اضغط لتعديل الهدف · click to edit the target">${lxGm(c.target)}</span>`:lxGm(c.target)}</small></div>
-    <div class="gl-track"><span class="gl-fill" style="width:${Math.max(2,width)}%;background:${done?"linear-gradient(90deg,#16a34a,#22c55e)":color}"></span></div>
+    <div style="font-size:19px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:2px">${lxGm(c.actual)} ${scored?`<small style="font-size:12px;color:var(--muted)">/ ${editable?`<span class="gl-edit" onclick="glEditTarget(this,'${c.key}')" title="اضغط لتعديل الهدف · click to edit the target">${lxGm(c.target)}</span>`:lxGm(c.target)}</small>`:""}</div>
+    ${scored?`<div class="gl-track"><span class="gl-fill" style="width:${Math.max(2,width)}%;background:${done?"linear-gradient(90deg,#16a34a,#22c55e)":color}"></span></div>`
+      :`<div class="muted2" style="font-size:11px;margin:4px 0 6px">لا تُحتسب ضمن الحملة — عيّن البراند في ClickUp لتنتقل لبطاقتها · unrouted, not scored</div>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--muted)">
-      <span>${c.n||0} order${c.n===1?"":"s"}</span>
-      ${c.need_per_day?`<span>· ${lxGm(c.need_per_day)}/day</span>`:""}
+      <span title="عدد الطلبات المختلفة — الطلب الواحد بعدة منتجات يُحسب مرة واحدة">${c.n||0} order${c.n===1?"":"s"}</span>
+      ${c.items&&c.items!==c.n?`<span title="عدد المنتجات المسعّرة داخل هذه الطلبات">· ${c.items} منتج</span>`:""}
+      ${scored&&c.need_per_day?`<span>· ${lxGm(c.need_per_day)}/day</span>`:""}
       <span class="spacer" style="flex:1"></span>
       ${warns.length?`<span class="qchip alert" style="cursor:pointer;font-size:10.5px" onclick="glToggleBreak('${c.key}')" title="مهام تحتاج انتباه — افتح التفاصيل">⚠ ${warns.length}</span>`:""}
       <button class="minibtn" onclick="glToggleBreak('${c.key}')">${open?"▴":"▾"} تفاصيل</button>
     </div>
     ${split?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${split}</div>`:""}
-    ${missing.map(x=>`<div class="qchip alert" style="margin-top:6px" title="أضف خيار البراند في حقل Brand داخل قائمة ClickUp حتى تُفرز مهام الـPC — بدونه كل شيء يُحسب ضمن IT">⚠ البراند "${poEsc(x.name)}" غير موجود في ClickUp بعد</div>`).join("")}
+    ${missing.map(x=>`<div class="qchip alert" style="margin-top:6px" title="أضف خيار البراند في حقل Brand داخل قائمة ClickUp حتى تُفرز مهام هذه البطاقة">⚠ البراند "${poEsc(x.name)}" غير موجود في ClickUp بعد</div>`).join("")}
+    ${c.mode==="purchases"&&(c.brands||[]).length?`<div class="muted2" style="font-size:10.5px;margin-top:6px">يشمل طلبات Purchases + مهام ClickUp ببراند ${poEsc(c.brands.join(", "))} — لو أُدخل المنتج نفسه في الاثنين يُحسب مرتين</div>`:""}
     ${rows}</div>`;
 }
 function glToggleBreak(key){ GL_OPEN[key]=!GL_OPEN[key]; renderGoals(); }
@@ -4971,14 +5012,16 @@ function glSettingsRender(){
   const el=$("glSettings");
   if(!GOALS){ el.innerHTML=`<div class="muted2" style="padding:10px">Loading…</div>`; return; }
   const st=GOALS.settings||{}, wh=GOALS.webhook||{};
-  const pc=(st.categories||[]).find(c=>c.key==="pc")||{};
+  // every card that routes by Brand gets its own input — that's how an
+  // unclaimed brand (sandisk, MIX…) is moved off the Unsorted card without code
+  const branded=(st.categories||[]).filter(c=>["brand","all","purchases"].includes(c.mode));
   el.innerHTML=`
     <div style="font-weight:800;font-size:13px;margin-bottom:8px">⚙ إعدادات الحملة · campaign settings <span class="muted2" style="font-weight:400;font-size:11px">(الأهداف والأسماء تُعدَّل بالضغط عليها فوق مباشرة)</span></div>
     <div class="form-grid">
       <label class="fld"><span data-en="From" data-ar="من">من</span><input type="date" id="glWs" value="${poEsc(st.window_start||"")}"></label>
       <label class="fld"><span data-en="To" data-ar="إلى">إلى</span><input type="date" id="glWe" value="${poEsc(st.window_end||"")}"></label>
-      ${(st.categories||[]).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
-      <label class="fld"><span>${poEsc(pc.label||"")} brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هذه الفئة — مفصولة بفواصل، غير حساسة لحالة الأحرف · the ClickUp Brand options this category claims">?</span></span><input id="glBrands" value="${poEsc((pc.brands||[]).join(", "))}" placeholder="Other IT"></label>
+      ${(st.categories||[]).filter(c=>c.counts!==false).map(c=>`<label class="fld"><span>🎯 ${poEsc(c.label)} <span class="gm-q" title="الهدف بالدولار لهذه الفئة — اتركه فارغًا ليبقى كما هو · this category's target in USD (leave blank to keep it)">?</span></span><input type="number" id="glT_${c.key}" value="${Number(c.target)||""}" min="1" step="100" placeholder="$"></label>`).join("")}
+      ${branded.map(c=>`<label class="fld"><span>🏷 ${poEsc(c.label)} brands <span class="gm-q" title="أسماء خيارات Brand في ClickUp التي تُحسب ضمن هذه البطاقة — مفصولة بفواصل، غير حساسة لحالة الأحرف. البراند يفوز على القائمة: منتج ببراند ساعات داخل قائمة الـIT يُحسب ضمن Le Luxe · the ClickUp Brand options this card claims, on any list">?</span></span><input id="glB_${c.key}" value="${poEsc((c.brands||[]).join(", "))}" placeholder="—"></label>`).join("")}
       <label class="fld"><span>حالات مستثناة · excluded statuses <span class="gm-q" title="مهام بهذه الحالات لا تُحسب أبدًا (على مستوى الطلب أو المنتج)">?</span></span><input id="glExcl" value="${poEsc((st.excluded||[]).join(", "))}" placeholder="cancelled"></label>
       <label class="fld full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="glCombine" ${st.combine_it_pc?"checked":""} style="width:auto"> <span>${(()=>{const two=(st.categories||[]).filter(c=>["it","pc"].includes(c.key));
         // named from the cards themselves — these two get renamed from the page
@@ -5009,9 +5052,14 @@ async function glSettingsSave(btn){
   ((GOALS&&GOALS.settings&&GOALS.settings.categories)||[]).forEach(c=>{
     const el=$("glT_"+c.key);
     if(el&&String(el.value).trim()!=="") cats[c.key]={key:c.key,target:Number(el.value)};
+    // brands: only send when the field is actually rendered, so a card whose
+    // input isn't on screen never gets its claims wiped
+    const b=$("glB_"+c.key);
+    if(b){
+      const brands=(b.value||"").split(",").map(s=>s.trim()).filter(Boolean);
+      cats[c.key]=cats[c.key]||{key:c.key}; cats[c.key].brands=brands;
+    }
   });
-  const brands=($("glBrands").value||"").split(",").map(s=>s.trim()).filter(Boolean);
-  if(brands.length){ cats.pc=cats.pc||{key:"pc"}; cats.pc.brands=brands; }
   const list=Object.values(cats);
   if(list.length) body.categories=list;
   await glSaveSettings(body,btn);
@@ -5124,15 +5172,40 @@ async function lxGoalBackfill(btn){
   if(r2&&r2.ok){ toast(`✔ true dates written on ${r2.filled} rows`); LX_GOAL=null; lxGoalFetch(); }
   else toast((r2&&r2.error)||"backfill failed");
 }
-// "N products · ×U" — row count + Σ units ("quantity ordered"; a row with no
-// usable qty still counts as 1 unit — it exists). The ×U tail only when it
-// adds information: ≥1 real qty entered AND the unit total ≠ the row count.
+// ── the ONE place a product's unit count is decided ──────────────────────────
+// The board has always read the "Quantity ordered" FIELD, while the AZ (2) push
+// (_az2_qty, leluxe.py) prefers the leading number of the NAME — the split
+// convention "10 U.S. Polo…". _relabel_qty only keeps the two in step while
+// they already agree, so a hand-edited field forks them permanently and the
+// same parcel can read 30 here and 50 in ClickUp. We keep reading the FIELD
+// (changing that would silently restate every count on the board) and instead
+// make the disagreement VISIBLE — see lxQtyWarn.
+function lxNameQty(it){
+  const m=String((it&&it.name)||"").match(/^\s*(\d+)\b/);
+  return m?Number(m[1]):null;
+}
+function lxQtyOf(it){
+  const raw=lxF(it,"quantity ordered"), f=Number(raw);
+  const field=(raw!=null&&raw!==""&&isFinite(f))?f:null;
+  const name=lxNameQty(it);
+  return {field, name, mismatch:(field!=null&&name!=null&&field!==name),
+          units:(field>0?field:1)};   // no usable qty still counts as 1 — it exists
+}
+function lxQtyWarn(it){
+  const q=lxQtyOf(it); if(!q.mismatch) return "";
+  return tonePill("red","⚠",`الاسم يقول ${q.name} والحقل يقول ${q.field} · the product NAME says ${q.name} but the "Quantity ordered" field says ${q.field}. The board and the Products Σ count ${q.field}; the AZ (2) push counts ${q.name}. Fix one of them in the editor.`);
+}
+function lxUnits(items){ return (items||[]).reduce((a,it)=>a+lxQtyOf(it).units,0); }
+// "N products · ×U" — row count + Σ units. The ×U tail only when it adds
+// information: ≥1 real qty entered AND the unit total ≠ the row count.
 // (Deliberately NOT the Products-view Σ semantics, which is a strict column
 // sum of entered quantities — ||0.)
 function lxCountLbl(items){
-  items=items||[]; let any=false;
-  const s=items.reduce((a,it)=>{ const q=Number(lxF(it,"quantity ordered")); if(q>0){ any=true; return a+q; } return a+1; },0);
-  return `${items.length} product${items.length===1?"":"s"}${any&&s!==items.length?` · ×${s}`:""}`;
+  items=items||[];
+  const any=items.some(it=>lxQtyOf(it).field>0), s=lxUnits(items);
+  const bad=items.filter(it=>lxQtyOf(it).mismatch).length;
+  const warn=bad?tonePill("red",`⚠ ${bad}`,`${bad} product(s) here have a NAME number that disagrees with the "Quantity ordered" field — this total may be wrong. Open the product to see which.`):"";
+  return `${items.length} product${items.length===1?"":"s"}${any&&s!==items.length?` · ×${s}`:""}${warn}`;
 }
 function lxCardHtml(o){
   const open=LX_OPEN.isOpen(o.id), pkgs=o.packages||[], loose=o.items||[];
@@ -5291,6 +5364,7 @@ function lxVPkgHtml(o,g){
           <button class="lx-copy" title="copy the full product title" data-t="${poEsc(it.name)}" onclick="event.stopPropagation();lxCopyTitle(this)">📋</button>
         </div>
         ${qty!=null?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
+        ${lxQtyWarn(it)}
         ${lxCfPill("rd status",lxF(it,"rd status"))}
       </div>
       ${lxtCells("",{
@@ -5414,7 +5488,7 @@ function lxItemRow(it,parentO,opts){
         order: orderCell,
         profile: lxProfileCell(profile),
         status: `${lxDot(it)}${lxConfPill(it)}${lxStatusSelect(it)}`,
-        qty: qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>`:"",
+        qty: qty!=null?`<span class="muted2" style="font-size:11px" title="Quantity ordered">×${poEsc(qty)}</span>${lxQtyWarn(it)}`:lxQtyWarn(it),
         tracking: tnCell,
         gashstatus: lxCfPill("gash status",lxF(it,"gash status")),
         rdstatus: lxCfPill("rd status",lxF(it,"rd status")),
@@ -5433,6 +5507,7 @@ function lxItemRow(it,parentO,opts){
       </div>
       ${parentO?`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line);flex:0 0 auto" title="open ${poEsc(parentO.name)}" onclick="event.stopPropagation();lxJumpOrder(${parentO.id})">${lxShortName(parentO.name)}</button>`:""}
       ${qty!=null?`<span class="muted2" style="font-size:11px;flex:0 0 auto" title="Quantity ordered">×${poEsc(qty)}</span>`:""}
+      ${lxQtyWarn(it)}
       ${lxCfPill("rd status",lxF(it,"rd status"))}
     </div>
     ${lxtCells("",{
@@ -5742,7 +5817,18 @@ function lxInfoOpen(kind,id){
       +f('حالة غاش (الحقل) · GASH STATUS',gashRoll.val?lxCfPill("gash status",gashRoll.val):'')
       +f('التتبع الحي · Live tracking',liveRow);
   }
+  // ⚠ the NAME-vs-FIELD quantity fork, spelled out where the owner reads the row
+  const qwarn=(k==="item"&&lxQtyOf(row).mismatch)?(()=>{ const q=lxQtyOf(row);
+    return `<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:12.5px">
+      <div style="font-weight:800;color:#b42318">⚠ الكمية غير متطابقة · quantity mismatch</div>
+      <div class="muted2" style="margin-top:3px">اسم المنتج يبدأ بـ <b>${q.name}</b> بينما حقل «Quantity ordered» يساوي <b>${q.field}</b>.</div>
+      <div class="muted2">The product NAME starts with <b>${q.name}</b> but the <b>Quantity ordered</b> field is <b>${q.field}</b>. This board and the Products Σ count <b>${q.field}</b>; the AZ (2) push counts <b>${q.name}</b> — which is how one parcel can read 30 units here and 50 in ClickUp. Fix whichever is wrong in ✏️ Edit.</div>
+    </div>`; })():"";
   const rows=sec('📋 معلومات · info',infoRows)+sec('🚚 الشحن · shipping',shipRows);
+  // every row this panel covers → ONE activity request (an order rolls up its
+  // packages and products; a package its products; an item just itself)
+  const actIds=k==="order"?[row.id,...(lxPkgRows(order||row).map(r=>r.pk&&r.pk.id).filter(Boolean)),...its.map(i=>i.id)]
+    :k==="package"?[row.id,...its.map(i=>i.id)]:[row.id];
   // the ClickUp checkout screenshot — BIG; inherit pkg → order when the row has none
   let imgs=lxRowImgs(row), inh="";
   if(!imgs.length&&pkg&&pkg!==row){ imgs=lxRowImgs(pkg); inh=imgs.length?"pkg":""; }
@@ -5757,10 +5843,11 @@ function lxInfoOpen(kind,id){
     ?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('package',null,${row.id})">＋ إضافة طرد · Add package</button>
       <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`
     :k==="package"?`<button class="po-btn" onclick="lxInfoClose();lxOpenEditor('item',null,${row.id})">＋ إضافة منتج · Add product</button>`:"";
-  $("lxInfoBody").innerHTML=`
+  $("lxInfoBody").innerHTML=`<div class="lx-det"><div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       ${thumbs}${statusBit}${lxMergedStatusPill(tr)||lxNoDataPill(tr)}${lxMailPill(tn)}${tr&&!dlMoot?lxDeadlinePill(tr):""}${tr?lxDocsPill(tr):""}
     </div>
+    ${qwarn}
     ${dl&&!dlMoot?`<div style="border:1px solid ${urgent?'#e5484d':'var(--line)'};background:${urgent?'#fef2f2':'var(--bg2)'};border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div><div style="font-weight:800">⏳ موعد غاش النهائي · GAASH deadline</div>
         <div class="muted2" style="font-size:11.5px">بعده الطرد يضيع نهائياً · past this date the package is lost</div></div>
@@ -5778,8 +5865,29 @@ function lxInfoOpen(kind,id){
       ${gzGwds.length?`<button class="po-btn" onclick="lxGzOpen()">🚚 تسجيل في جيرزيم · Register at Gerizim</button>`:""}
       <button class="po-btn" onclick="lxInfoClose();lxOpenEditor('${k}',${row.id},null)">✏️ تعديل · Edit</button>
       ${addBtns}
-    </div>`;
+    </div>
+  </div>
+  <div class="lx-det-act">
+    <div class="lx-sechead" style="margin-top:0">🕘 النشاط · Activity</div>
+    <div id="lxDetAct" class="actfeed"><div class="muted2" style="font-size:12px;padding:8px 0">⏳…</div></div>
+  </div></div>`;
+  lxDetActivity(actIds);
   $("lxInfoModal").classList.remove("hidden");
+}
+// The per-row history, ClickUp's Activity rail: who changed which field, from
+// what to what, when. One request for the whole subtree (ids=), bounded
+// server-side — see activity.recent_page.
+async function lxDetActivity(ids){
+  const box=$("lxDetAct"); if(!box) return;
+  let d; try{
+    d=await (await fetch("/api/activity?entity=leluxe&limit=120&ids="
+      +encodeURIComponent((ids||[]).join(",")))).json();
+  }catch(e){ d=null; }
+  if(!$("lxDetAct")) return;                       // popup closed while loading
+  const evs=(d&&d.activity)||[];
+  $("lxDetAct").innerHTML=(evs.length?evs.map(actRow).join("")
+      :`<div class="empty" style="padding:10px 0">لا يوجد نشاط بعد · No activity yet. Edits from now on show up here.</div>`)
+    +((d&&d.truncated)?`<div class="muted2" style="font-size:11px;padding:8px 0;border-top:1px solid var(--line)">… أقدم من ذلك غير معروض · older activity not shown</div>`:"");
 }
 function lxFieldInput(fname,fdef,val){
   const id="lxf_"+LX_FIDS.length; LX_FIDS.push(fname);
@@ -7061,9 +7169,23 @@ function dueChip(s,done){
   else{ txt=String(s).slice(0,10); css="color:var(--muted)"; }
   return `<span class="qchip" style="font-size:10.5px;white-space:nowrap;${css}" title="${poEsc(String(s))}">📅 ${txt}</span>`;
 }
+// old → new, ClickUp's own wording ("changed GASH STATUS from X to Y"). Every
+// event has carried `old` since day one; the feed just never rendered it, which
+// is why a package that drifted 30 → 50 read as "set Quantity ordered to 50"
+// with no way to see where it came from. Same strikethrough+→ markup as the
+// sync report (lxSyncReportOpen).
+function actWas(v){ return `<s style="opacity:.55;font-weight:400">${poEsc(v)}</s>`; }
 function actText(e){
-  if(e.action==="set"&&e.field) return `set <b>${poEsc(e.field)}</b> to <b>${poEsc(e.new||"—")}</b>`;
+  if(e.action==="set"&&e.field){
+    const to=`<b dir="auto">${poEsc(e.new||"—")}</b>`;
+    return (e.old!=null&&e.old!=="")
+      ? `changed <b>${poEsc(e.field)}</b> from ${actWas(e.old)} to ${to}`
+      : `set <b>${poEsc(e.field)}</b> to ${to}`;
+  }
+  if(e.action==="moved")   return `moved ${poEsc(e.detail||"a product")}`
+    +((e.old||e.new)?` from ${actWas(e.old||"—")} to <b>${poEsc(e.new||"—")}</b>`:"");
   if(e.action==="added")   return `added ${poEsc(e.detail||"an item")}`;
+  if(e.action==="removed") return `removed ${poEsc(e.detail||"an item")}`;
   if(e.action==="created") return `created <b>${poEsc(e.label)}</b>`;
   if(e.action==="deleted") return poEsc(e.detail||"deleted something");
   if(e.action==="restored")return `restored <b>${poEsc(e.label)}</b>`;
@@ -7073,8 +7195,11 @@ function actText(e){
 }
 function actRow(e){
   const who=(e.user||"You"); const ini=who.trim().slice(0,2).toUpperCase();
-  const sub=(e.action==="set"||e.action==="deleted")&&e.detail&&e.action==="set"
-    ? `<div class="act-sub">on ${poEsc(e.detail)}</div>`:"";
+  // Don't say the same thing twice: added/removed/moved already name the thing,
+  // and a fieldless "set" (every event logged before per-field diffs existed)
+  // renders its detail AS the main line.
+  const sub=e.detail&&((e.action==="set"&&e.field)||e.action==="created")
+    ? `<div class="act-sub">${poEsc(e.detail)}</div>`:"";
   return `<div class="act-row">
     <span class="avatar">${poEsc(ini)}</span>
     <div class="act-body"><div><b>${poEsc(who)}</b> ${actText(e)}
@@ -8504,7 +8629,55 @@ function poFind(id){ return POS.find(p=>p.po_id===id); }
 function poSave(po){ clearTimeout(poSaveTimers[po.po_id||'new']); poSaveTimers[po.po_id||'new']=setTimeout(async()=>{
   const r=await post("/api/purchase",po);
   if(r.ok && r.purchase_order){ const i=POS.findIndex(x=>x.po_id===r.po_id); if(i>=0) POS[i]=r.purchase_order; }
+  poSplitsInvalidate(r&&r.po_id);          // prices/qty/category moved → the split did too
 },700); }
+
+/* ── 💵 Cost split ─────────────────────────────────────────────────────────
+   One Amazon checkout mixes Otlobly customer items, IT products and Le Luxe
+   watches. Its shipping/tax/import is cheaper than buying those categories
+   separately, so it can't be measured per category — the server shares it out
+   pro-rata by value (landed.py) and we only ever DISPLAY the result. The math
+   deliberately lives in one place: never re-implement the allocation here. */
+const PO_BUCKETS=[
+  {k:"otlobly", lab:"Otlobly",        c:"#0f766e", bg:"#ccfbf1"},
+  {k:"watches", lab:"⌚ Le Luxe",      c:"#6d28d9", bg:"#ede9fe"},
+  {k:"it",      lab:"🎮 Grafic cards", c:"#b45309", bg:"#fef3c7"},
+  {k:"pc",      lab:"💻 Other IT",     c:"#1d4ed8", bg:"#dbeafe"},
+];
+const PO_BUCKET={}; PO_BUCKETS.forEach(b=>PO_BUCKET[b.k]=b);
+const PO_BNONE={k:"_none", lab:"⚠ بلا فئة · uncategorized", c:"#b45309", bg:"#fef3c7"};
+function poBucketOf(k){ return PO_BUCKET[k]||PO_BNONE; }
+let PO_SPLITS={}, PO_SPLIT_FLIGHT=null;
+function poSplitsInvalidate(id){ if(id) delete PO_SPLITS[id]; else PO_SPLITS={}; }
+function poLineOf(poId,itemId){ const s=PO_SPLITS[poId]; return (s&&s._idx&&s._idx[itemId])||null; }
+// Fetch the per-line split for every PO on screen in ONE request, then repaint.
+// Cached per PO and dropped on save, so typing a price re-splits immediately.
+async function poSplitsEnsure(list){
+  if(!PO_MONEY) return;
+  const need=(list||[]).map(p=>p.po_id).filter(id=>!PO_SPLITS[id]);
+  if(!need.length) return;
+  const key=need.join(",");
+  if(PO_SPLIT_FLIGHT===key) return;              // one flight per set — no render loop
+  PO_SPLIT_FLIGHT=key;
+  let d=null;
+  try{ d=await post("/api/purchase/split",{po_ids:need}); }catch(e){}
+  PO_SPLIT_FLIGHT=null;
+  if(!d||!d.splits) return;
+  Object.keys(d.splits).forEach(id=>{ const s=d.splits[id];
+    s._idx={}; (s.lines||[]).forEach(l=>{ s._idx[l.item_id]=l; }); PO_SPLITS[id]=s; });
+  renderPurchases();
+}
+function poBucketSel(id,pi,ii,it,ln){
+  const cur=(it.bucket||"")||"";
+  const eff=poBucketOf(cur||((ln&&ln.bucket)||""));
+  const auto=!cur&&ln&&ln.bucket_auto;
+  const opts=[`<option value=""${cur?"":" selected"}>${auto?"— auto":"—"}</option>`]
+    .concat(PO_BUCKETS.map(b=>`<option value="${b.k}"${cur===b.k?" selected":""}>${b.lab}</option>`)).join("");
+  return `<select style="width:100%;font-size:11px;padding:2px 4px;border-radius:999px;border:1px solid var(--line);color:${eff.c};background:${eff.bg}"
+    title="${auto?'مرتبط بطلب زبون ⇒ Otlobly تلقائيًا · matched to a customer order ⇒ Otlobly automatically':'أي دفتر يخص هذا المنتج · which book this product belongs to'}"
+    onchange="event.stopPropagation();poItemBucket('${id}',${pi},${ii},this.value)">${opts}</select>`;
+}
+function poItemBucket(id,pi,ii,v){ poItemSet(id,pi,ii,'bucket',v||null); poSplitsInvalidate(id); renderPurchases(); }
 function poSet(id,f,v){ const p=poFind(id); if(p){ p[f]=v; poSave(p); } }
 function poPkgSet(id,pi,f,v){ const p=poFind(id); if(!p)return; p.packages[pi][f]=v;
   if(f==='tracking_number'){
@@ -8931,8 +9104,10 @@ function renderPurchases(){
   // Filter tabs (main Purchases page only, not the add-order card).
   const ftab=$("poFilters");
   if(ftab && !inAddCard){
-    [["poSegOrders","orders"],["poSegPkgs","packages"],["poSegProds","products"],["poSegCust","customers"]].forEach(([bid,v])=>{
-      const b=$(bid); if(b) b.classList.toggle("accent",PO_BOARD_VIEW===v); });
+    [["poSegOrders","orders"],["poSegPkgs","packages"],["poSegProds","products"],
+     ["poSegCust","customers"],["poSegSplit","split"]].forEach(([bid,v])=>{
+      const b=$(bid); if(b){ b.classList.toggle("accent",PO_BOARD_VIEW===v);
+        if(v==="split") b.style.display=PO_MONEY?"":"none"; } });   // COGS view — money roles only
     ftab.innerHTML=["all","late","soon","notrk"].map(k=>{ const f=PO_FILTERS[k], n=POS.filter(f.test).length;
       return `<span class="po-tab ${f.tone||''} ${PO_FILTER===k?'on':''}" onclick="PO_FILTER='${k}';renderPurchases()">${f.lab} · ${n}</span>`; }).join("");
     list=list.filter(PO_FILTERS[PO_FILTER].test);
@@ -8943,9 +9118,14 @@ function renderPurchases(){
     if(q) list=list.filter(p=>poSearchMatch(p,q));
   }
   if(!list.length){ mount.innerHTML=`<div class="panel" style="color:var(--muted)">${inAddCard?'':'No orders match this filter.'}${inAddCard?'No purchase orders yet.':''}</div>`; return; }
+  if(!inAddCard&&PO_BOARD_VIEW!=="orders") poSplitsEnsure(list);   // 💵 landed cost per line
   if(!inAddCard&&PO_BOARD_VIEW==="packages") return poRenderPkgsFlat(mount,list);
   if(!inAddCard&&PO_BOARD_VIEW==="products") return poRenderProdsFlat(mount,list);
   if(!inAddCard&&PO_BOARD_VIEW==="customers") return poRenderCustomers(mount,list);
+  if(!inAddCard&&PO_BOARD_VIEW==="split"){
+    if(!PO_MONEY){ poSetView("orders"); return; }
+    return poRenderSplitFlat(mount,list);
+  }
   // generic per-column sort (total / arrival / custom fields)
   if(!inAddCard) lxtSortApply("po",list=list.slice(),poSortVal);
   // Σ totals footer — order/item counts + (money roles only) Σ paid + Σ est
@@ -9038,6 +9218,9 @@ function poRenderProdsFlat(mount,list){
     if(key==="pdue"){ const d=poPkgDue(pk); return d?(Date.parse(d)||Infinity):Infinity; }
     if(key==="collect"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
       return (co&&co.amount_to_collect_usd)||0; }
+    if(key==="bucket") return poBucketOf(it.bucket||((poLineOf(p.po_id,it.item_id)||{}).bucket)).lab;
+    if(key==="share")  return (poLineOf(p.po_id,it.item_id)||{}).extras_usd||0;
+    if(key==="landed") return (poLineOf(p.po_id,it.item_id)||{}).landed_usd||0;
     if(key==="ostatus"){ const co=poOrderMap()[(it.customer_order_id||"").trim()];
       return String((co&&co.status)||"~").toLowerCase(); }
     return String(it.title||it.asin||"").toLowerCase();
@@ -9066,6 +9249,9 @@ function poItFlatRow(p,pk,pi,it,ii){
       ?`<b style="font-size:12px;color:var(--accent)" title="${poEsc(co.order_id)} — المطلوب من العميل · quoted total of this customer's order · عربون ${money(co.deposit_usd||0)} · المتبقي ${money(Math.round(((co.amount_to_collect_usd||0)-(co.deposit_usd||0))*100)/100)}">${money(co.amount_to_collect_usd)}</b>`
       :"")
     :`<span class="muted2" style="opacity:.5" title="غير مرتبط بطلب زبون بعد · not linked to a customer order yet">—</span>`;
+  // 💵 this line's slice of the Amazon checkout — item price + its pro-rata
+  // share of the shipping/tax/import that the whole cart was charged
+  const ln=poLineOf(p.po_id,it.item_id);
   const cells={
     order:`<button class="pill" style="background:var(--bg3);color:var(--ink);font-size:10px;cursor:pointer;border:1px solid var(--line)" title="فتح الطلب · open ${poEsc(p.po_id)}" onclick="event.stopPropagation();poJumpOrder('${p.po_id}')">${poEsc(p.po_id)}</button>`,
     oname: poNameCell(p.ship_to,true),
@@ -9074,6 +9260,11 @@ function poItFlatRow(p,pk,pi,it,ii){
     pkgstatus: pst?hexPill(CU_COLOR[pst]||"#8d8d8d",cuLabel(pst)):"",
     customer: it.customer_name?`<b style="font-size:11.5px">${poEsc(it.customer_name)}</b>`:`<span style="color:#b45309;font-size:10.5px">⚠ no customer</span>`,
     collect,
+    bucket: PO_MONEY?poBucketSel(p.po_id,pi,ii,it,ln):"",
+    share: (PO_MONEY&&ln)?(ln.extras_usd
+      ?`<span class="muted2" style="font-size:11px" title="${ln.override?'حصة مُدخلة يدويًا · hand-set share':'حصة هذا المنتج من الشحن والجمارك · this product\'s share of the checkout\'s shipping + tax + import'}">${ln.override?'✎ ':''}${money(ln.extras_usd)}</span>`
+      :`<span class="muted2" style="opacity:.5">—</span>`):"",
+    landed: (PO_MONEY&&ln)?`<b style="font-size:12px" title="سعر المنتج ${money(ln.items_usd)} + حصة الشحن ${money(ln.extras_usd)} · item price + its share of the extras${ln.unit_src==='est'?' — سعر تقديري · estimated unit price':''}">${money(ln.landed_usd)}${ln.unit_src==='est'?'<span class="muted2" style="font-weight:600">≈</span>':''}</b>`:"",
     ostatus: co?statusPill(co.status):"",
     pdue: poPkgDueCell(p,pk,pi),
     qty:`<span class="muted2" style="font-size:11px">×${it.qty||1}</span>`,
@@ -9180,6 +9371,91 @@ function poRenderCustomers(mount,list){
     </div>`;
   mount.innerHTML=boxDatalist()+custDatalist()+lxtHead("pop","المنتج · product")
     +lxtWrap("pop",sections+totals);
+  lxColwApply(); lxtGridApply("pop",mount);
+}
+// ── 💵 Cost split view: one collapsible section per CATEGORY (Otlobly / Le Luxe /
+// graphics cards / other IT). Answers "what did the watches on this checkout
+// actually cost me" without ever buying them separately — the shipping, tax and
+// import of the combined cart are shared out pro-rata by value (landed.py), so
+// the four category totals always add back up to what Amazon charged. ──
+let PO_BCOL=new Set(); try{ PO_BCOL=new Set(JSON.parse(localStorage.getItem("po_bcol")||"[]")); }catch(e){}
+function poBucketToggle(k){
+  PO_BCOL.has(k)?PO_BCOL.delete(k):PO_BCOL.add(k);
+  try{ localStorage.setItem("po_bcol",JSON.stringify([...PO_BCOL])); }catch(e){}
+  renderPurchases();
+}
+function poRenderSplitFlat(mount,list){
+  const groups=new Map();                        // bucket → tuples
+  let waiting=false;
+  list.forEach(p=>{
+    if(!PO_SPLITS[p.po_id]) waiting=true;
+    (p.packages||[]).forEach((pk,pi)=>(pk.items||[]).forEach((it,ii)=>{
+      const ln=poLineOf(p.po_id,it.item_id);
+      const k=(it.bucket||(ln&&ln.bucket)||"")||PO_BNONE.k;
+      if(!groups.has(k)) groups.set(k,[]);
+      groups.get(k).push([p,pk,pi,it,ii,ln]);
+    }));
+  });
+  // paid totals of the POs on screen — what the categories must add back up to
+  const paid=list.reduce((a,p)=>a+(Number(p.total_usd)||0),0);
+  const unbal=list.filter(p=>{ const s=PO_SPLITS[p.po_id]; return s&&s.basis==="breakdown"&&!s.balanced; });
+  const est=list.some(p=>{ const s=PO_SPLITS[p.po_id];
+    return s&&(s.lines||[]).some(l=>l.unit_src!=="paid"); });
+  const order=PO_BUCKETS.map(b=>b.k).concat([PO_BNONE.k]).filter(k=>groups.has(k));
+  let totItems=0,totShare=0,totLanded=0,totQty=0,totN=0;
+  const sec=order.map(k=>{
+    const rows=groups.get(k), b=poBucketOf(k), collapsed=PO_BCOL.has(k);
+    let items=0,share=0,landed=0,qty=0;
+    rows.forEach(([,,,it,,ln])=>{ qty+=Number(it.qty)||1;
+      if(ln){ items+=ln.items_usd; share+=ln.extras_usd; landed+=ln.landed_usd; } });
+    totItems+=items; totShare+=share; totLanded+=landed; totQty+=qty; totN+=rows.length;
+    const r2=n=>Math.round(n*100)/100;
+    const cells=lxtCells("pop",{
+      share:`<b style="font-size:12px" title="Σ حصة هذه الفئة من الشحن والجمارك · Σ this category's share of shipping + tax + import">${money(r2(share))}</b>`,
+      landed:`<b style="font-size:12px;color:var(--accent)" title="Σ التكلفة الحقيقية لهذه الفئة · Σ what this category really cost">${money(r2(landed))}</b>`,
+      qty:`<b style="font-size:12px" title="مجموع الكميات · total quantity">×${qty}</b>`,
+    });
+    const meta=`<div class="poc-meta"><div class="in">
+        ${fld("📦",`${rows.length} product${rows.length===1?"":"s"}`)}
+        ${fld(T("سعر المنتجات · items"),money(r2(items)))}
+        ${fld(T("شحن/جمارك · extras"),money(r2(share)),'color:#b45309;font-weight:700')}
+        ${paid>0?fld("%",`${(landed/paid*100).toFixed(1)}% ${T("من الفاتورة · of the checkout")}`):""}
+      </div></div>`;
+    const head=`<div class="pkg-head"><div class="pkg-title-row" onclick="if(event.target.closest('select,.pop,button,a,input,label'))return;poBucketToggle('${b.k}')" style="cursor:pointer">
+        <div class="bt-pin">
+          <span class="caret">${collapsed?"▸":"▾"}</span>
+          <b class="pkg-title" style="color:${b.c}">${poEsc(b.lab)}</b>
+        </div>
+        ${cells}
+      </div>${meta}</div>`;
+    if(collapsed) return `<div class="pkg">${head}</div>`;
+    return `<div class="pkg open">${head}<div class="pkg-body">${
+      rows.map(([p2,pk,pi,it,ii])=>poItFlatRow(p2,pk,pi,it,ii)).join("")}</div></div>`;
+  }).join("");
+  const r2=n=>Math.round(n*100)/100;
+  // The invariant made visible: Σ categories vs what was actually paid.
+  const drift=r2(totLanded-paid);
+  const banner=`<div class="panel" style="margin-bottom:10px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <b style="font-size:13px">💵 ${T("تكلفة كل فئة · what each category cost")}</b>
+      ${order.map(k=>{ const b=poBucketOf(k); const rows=groups.get(k);
+        const v=rows.reduce((a,[,,,,,ln])=>a+((ln&&ln.landed_usd)||0),0);
+        return `<span class="pill" style="color:${b.c};background:${b.bg};font-size:11.5px">${poEsc(b.lab)} · <b>${money(r2(v))}</b></span>`; }).join("")}
+      <span style="flex:1"></span>
+      ${waiting?`<span class="muted2" style="font-size:11px">…</span>`
+        :`<span class="muted2" style="font-size:11px" title="مجموع الفئات مقابل المدفوع فعليًا لأمازون · Σ categories vs what Amazon actually charged">Σ ${money(r2(totLanded))} / ${T("مدفوع · paid")} ${money(r2(paid))}
+          ${drift===0?'<b style="color:#15803d">✓</b>':`<b style="color:var(--warn)" title="افتح الطلب واضبط الإجمالي · open the order and fix its total">Δ ${money(drift)}</b>`}</span>`}
+    </div>
+    ${est?`<div class="panel" style="margin-bottom:10px;font-size:11.5px;color:#b45309">≈ ${T("بعض الأسعار تقديرية وليست المدفوع فعلاً — اكتب «سعر الوحدة المدفوع» في تعديل المنتج · some unit prices are estimates, not what was paid — type the paid unit price in the product editor")}</div>`:""}
+    ${unbal.length?`<div class="panel" style="margin-bottom:10px;font-size:11.5px;color:var(--warn)">⚠ ${unbal.length} ${T("طلب فيه تفصيل أمازون لا يساوي الإجمالي · order(s) whose typed Amazon breakdown doesn't equal the paid total")} — ${unbal.map(p=>`<button class="pill" style="cursor:pointer;border:1px solid var(--line);background:var(--bg3)" onclick="poEditOpen('${p.po_id}')">${poEsc(p.po_id)}</button>`).join(" ")}</div>`:""}`;
+  const totals=`<div class="poc-row bt-total">
+      <div class="bt-pin">Σ ${order.length} ${T("فئات · categories")} · ${totN} products</div>
+      ${lxtCells("pop",{
+        share:`<b style="font-size:12px">${money(r2(totShare))}</b>`,
+        landed:`<b style="font-size:12px;color:var(--accent)">${money(r2(totLanded))}</b>`,
+        qty:`<b style="font-size:12px">×${totQty}</b>`})}
+    </div>`;
+  mount.innerHTML=banner+boxDatalist()+custDatalist()+lxtHead("pop","المنتج · product")
+    +lxtWrap("pop",sec+totals);
   lxColwApply(); lxtGridApply("pop",mount);
 }
 // ── Custom-field cells (ClickUp-style): value display + inline editor ──
@@ -10404,7 +10680,7 @@ function pkeSet(f,v){ if(!PKE)return; poPkgSet(PKE.id,PKE.pi,f,v); if(f==='track
 async function pkeDelete(){ if(!PKE)return; const ref=PKE; PKE=null; $("pkgEditModal").classList.add("hidden"); await poDelPkg(ref.id,ref.pi); }
 // ── Order editor drawer: the PO fields that left the header ──
 let POE=null;
-function poEditOpen(id){ POE=id; poeRender(); $("poEditModal").classList.remove("hidden"); }
+function poEditOpen(id){ POE=id; POE_SPLIT=null; poeRender(); $("poEditModal").classList.remove("hidden"); }
 function poEditClose(){ $("poEditModal").classList.add("hidden"); POE=null; renderPurchases(); }
 function poeRender(){
   const p=poFind(POE); if(!p){ poEditClose(); return; }
@@ -10423,12 +10699,115 @@ function poeRender(){
       ${F.second_currency?`<div style="width:110px"><label class="fld">Total ${poEsc(cur2)}</label>
         <input style="width:100%" value="${p.total_aed!=null?p.total_aed:''}" placeholder="0.00" onchange="poeSet('total_aed',this.value)"></div>`:''}
     </div>
+    ${PO_MONEY?poeCostsHtml(p):''}
     <div class="az-actions" style="margin-top:16px;display:flex;justify-content:flex-end">
       <button class="accent" onclick="poEditClose()">تم · Done</button>
     </div>`;
+  if(PO_MONEY) poeSplitRefresh();
 }
 function poeSet(f,v){ if(POE) poSet(POE,f,v); }
 function poeSetBox(v){ if(POE){ poSetBox(POE,v); } }
+
+/* ── 💵 The Amazon order summary, typed once per checkout ───────────────────
+   Amazon charges shipping/tax/import on the CART, not per item — buying the
+   watches alone and the rest alone always costs more than the one combined
+   checkout, so the categories can't be measured separately. Typing the summary
+   here lets the server share those extras across the lines pro-rata by value
+   (landed.py), which is the only split that adds back up to what was paid. ── */
+const POE_COST_FIELDS=[
+  {k:"items_usd",   lab:"المنتجات · Items"},
+  {k:"shipping_usd",lab:"الشحن · Shipping"},
+  {k:"promo_usd",   lab:"خصم الشحن · Promo (−)"},
+  {k:"tax_usd",     lab:"الضريبة · Tax"},
+  {k:"import_usd",  lab:"الجمارك · Import"},
+  {k:"other_usd",   lab:"أخرى · Other"},
+];
+function poeCostsHtml(p){
+  const c=p.costs||{};
+  return `<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+    <label class="fld">💵 ملخّص فاتورة أمازون · Amazon order summary
+      <span class="muted2" style="font-weight:400">— ${T("يوزَّع الشحن والجمارك على المنتجات بالنسبة والتناسب · the shipping/tax/import gets shared across the products pro-rata")}</span></label>
+    <div style="display:flex;gap:6px;margin:6px 0 10px">
+      <textarea id="poeePaste" rows="2" style="flex:1;font-size:11.5px" placeholder="${T('الصق ملخّص الطلب من أمازون هنا · paste the Amazon order summary here (Items… Shipping… Order total…)')}"></textarea>
+      <button class="po-btn" style="flex:0 0 auto" title="${T('اقرأ الأرقام من النص · read the numbers out of the pasted text')}" onclick="poeParsePaste(this)">⤓ ${T('اقرأ · Parse')}</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${POE_COST_FIELDS.map(f=>`<div style="width:104px"><label class="fld" style="font-size:9.5px">${f.lab}</label>
+        <input style="width:100%" value="${c[f.k]!=null?c[f.k]:''}" placeholder="—" onchange="poeCostSet('${f.k}',this.value)"></div>`).join("")}
+    </div>
+    <div id="poeSplit" style="margin-top:10px">${poeSplitHtml(POE_SPLIT)}</div>
+  </div>`;
+}
+function poeCostSet(k,v){
+  const p=poFind(POE); if(!p) return;
+  const c=Object.assign({},p.costs||{});
+  c[k]=(v||'').trim()===''?null:Number(v);
+  if(!isFinite(c[k])) c[k]=null;
+  p.costs=POE_COST_FIELDS.every(f=>c[f.k]==null)?null:c;
+  poSave(p); poeRender();
+}
+async function poeParsePaste(btn){
+  const p=poFind(POE), box=$("poeePaste"); if(!p||!box) return;
+  const txt=(box.value||'').trim();
+  if(!txt){ toast(T("الصق ملخّص الطلب أولاً · paste the order summary first")); return; }
+  btn.disabled=true;
+  const d=await post("/api/purchase/parse_summary",{text:txt});
+  btn.disabled=false;
+  if(!d||!d.ok){ toast("⚠ "+((d&&d.error)||"parse failed")); return; }
+  const g=d.parsed, hits=Object.keys(g).filter(k=>g[k]!=null);
+  if(!hits.length){ toast(T("لم أجد أي أرقام في هذا النص · no summary numbers found in that text")); return; }
+  const c=Object.assign({},p.costs||{});
+  POE_COST_FIELDS.forEach(f=>{ if(g[f.k]!=null) c[f.k]=g[f.k]; });
+  c.source="parsed";
+  p.costs=c;
+  if(g.order_total_usd!=null) p.total_usd=g.order_total_usd;   // the paid total is on the same summary
+  poSave(p); poeRender();
+  toast(`⤓ ${hits.length} ${T("رقم · number(s) read")}`);
+}
+// Live preview of the split while the summary is still being typed. The math is
+// the server's (one implementation), so what shows here is exactly what saves.
+let POE_SPLIT=null;
+async function poeSplitRefresh(){
+  const p=poFind(POE); if(!p) return;
+  let d=null;
+  try{ d=await post("/api/purchase/split",{po:p}); }catch(e){}
+  if(!POE||!poFind(POE)||poFind(POE).po_id!==p.po_id) return;   // drawer moved on
+  POE_SPLIT=d; const n=$("poeSplit"); if(n) n.innerHTML=poeSplitHtml(d);
+}
+function poeSplitHtml(s){
+  if(!s) return `<span class="muted2" style="font-size:11px">…</span>`;
+  const r2=n=>Math.round(n*100)/100;
+  let chip;
+  if(s.basis==="none") chip=`<span class="muted2" style="font-size:11px">${T("اكتب الإجمالي المدفوع أولاً · type the paid total first")}</span>`;
+  else if(s.basis==="lump") chip=`<span class="pill" style="color:#1d4ed8;background:#dbeafe;font-size:11px" title="${T('لا يوجد تفصيل — الفرق بين الإجمالي وأسعار المنتجات هو ما يوزَّع · no breakdown typed; the gap between the paid total and the item prices is what gets shared out')}">${T("من الإجمالي · from the paid total")}</span>`;
+  else if(s.balanced) chip=`<span class="pill" style="color:#15803d;background:#dcfce7;font-size:11px">✓ ${T("مطابق · balanced")}</span>`;
+  else chip=`<span class="pill" style="color:#b42318;background:#fee2e2;font-size:11px" title="${T('التفصيل لا يساوي الإجمالي المدفوع · the typed lines do not add up to the paid total')}">Δ ${money(s.delta_usd)}</span>
+      <button class="po-btn" style="font-size:10.5px" title="${T('أضف الفرق إلى «أخرى» ليتطابق · put the difference in Other so it balances')}" onclick="poeBalance(${s.delta_usd})">→ ${T("أخرى · Other")}</button>`;
+  const buckets=Object.keys(s.by_bucket||{}).map(k=>{
+    const b=poBucketOf(k), v=s.by_bucket[k];
+    return `<span class="pill" style="color:${b.c};background:${b.bg};font-size:11px">${poEsc(b.lab)} · <b>${money(v.landed_usd)}</b></span>`;
+  }).join(" ");
+  const warn=[];
+  if((s.warnings||[]).includes("items_mismatch")) warn.push(T("أسعار المنتجات لا تساوي سطر «المنتجات» — الفرق يوزَّع مع الشحن · the per-product prices don't add up to the Items line; the gap is shared out with the extras"));
+  if((s.warnings||[]).includes("negative_extras")) warn.push(T("أسعار المنتجات أعلى من الإجمالي المدفوع · the product prices add up to MORE than the paid total"));
+  if((s.warnings||[]).includes("overrides_exceed_extras")) warn.push(T("الحصص المُدخلة يدويًا أكبر من الشحن والجمارك · the hand-set shares exceed the actual extras"));
+  if((s.warnings||[]).includes("weighted_by_qty")) warn.push(T("لا توجد أسعار — وُزّع حسب الكمية · no prices yet, so it was split by quantity"));
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px">
+      ${chip}
+      <span class="muted2">${T("منتجات · items")} <b style="color:var(--ink)">${money(s.items_usd)}</b>
+        + ${T("شحن/جمارك · extras")} <b style="color:#b45309">${money(s.extras_usd)}</b>
+        = <b style="color:var(--accent)">${money(r2(s.landed_usd))}</b></span>
+    </div>
+    ${buckets?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">${buckets}</div>`:""}
+    ${s.n_unassigned?`<div class="muted2" style="font-size:11px;margin-top:6px;color:#b45309">⚠ ${s.n_unassigned} ${T("منتج بلا فئة — عيّنها من عمود «الفئة» · product(s) with no category — set it in the category column")}</div>`:""}
+    ${warn.length?`<div class="muted2" style="font-size:11px;margin-top:6px;color:#b45309">${warn.map(w=>"⚠ "+w).join("<br>")}</div>`:""}`;
+}
+function poeBalance(delta){
+  const p=poFind(POE); if(!p||!delta) return;
+  const c=Object.assign({},p.costs||{});
+  c.other_usd=Math.round(((c.other_usd||0)+delta)*100)/100;
+  p.costs=c; poSave(p); poeRender();
+}
 
 /* ---- 📱 Notify customers (track_package WhatsApp) — per-package picker ---- */
 let NTF_CTX=null;
@@ -10510,6 +10889,19 @@ function ieRender(){
         <select style="width:100%" onchange="ieSet('status',this.value)">${statusOptions(it.status)}</select>
         <div style="font-size:10.5px;color:var(--muted);margin-top:2px">يرث حالة الطرد تلقائيًا — استثناءات فقط · inherits the package status; exceptions only</div></div>
     </div>
+    ${PO_MONEY?`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+      <label class="fld">💵 التكلفة · Cost <span class="muted2" style="font-weight:400">— ${T("الفئة تحدّد لأي دفتر تُحسب هذه التكلفة · the category decides which book this cost lands in")}</span></label>
+      <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px"><label class="fld" style="font-size:9.5px">الفئة · Category</label>
+          <select style="width:100%" onchange="ieBucket(this.value)">
+            <option value=""${it.bucket?"":" selected"}>— ${it.customer_order_id?T("تلقائي: Otlobly · auto: Otlobly"):T("غير محدّد · unset")}</option>
+            ${PO_BUCKETS.map(b=>`<option value="${b.k}"${it.bucket===b.k?" selected":""}>${b.lab}</option>`).join("")}
+          </select></div>
+        <div style="width:118px"><label class="fld" style="font-size:9.5px">سعر الوحدة المدفوع · Unit paid</label>
+          <input style="width:100%" value="${it.unit_paid_usd!=null?it.unit_paid_usd:''}" placeholder="${it.est_cost_usd!=null?'≈ '+it.est_cost_usd:'0.00'}" title="${T('ما دُفع فعلاً للوحدة — يتجاوز السعر التقديري · what was actually paid per unit; overrides the estimate')}" onchange="ieSet('unit_paid_usd',this.value)"></div>
+        <div style="width:130px"><label class="fld" style="font-size:9.5px">حصة الشحن يدويًا · Shipping share</label>
+          <input style="width:100%" value="${it.extra_override_usd!=null?it.extra_override_usd:''}" placeholder="${T('تلقائي · auto')}" title="${T('اتركه فارغًا ليُحسب بالنسبة والتناسب — املأه فقط لمنتج تعرف شحنه بالضبط · leave empty for the pro-rata share; fill it only for a product whose shipping you know exactly')}" onchange="ieSet('extra_override_usd',this.value)"></div>
+      </div></div>`:''}
     <label class="fld" style="margin-top:10px">تتبع هذا المنتج · Tracking # <span class="muted2" style="font-weight:400">(auto-moves it to the matching package)</span></label>
     <input class="mono" style="width:100%" value="${poEsc(it.tracking_number||'')}" placeholder="GWD…" onchange="ieTracking(this.value)">
     <label class="fld" style="margin-top:10px">ملاحظات · Notes</label>
@@ -10520,7 +10912,12 @@ function ieRender(){
       <button class="accent" onclick="itemEditClose()">تم · Done</button>
     </div>`;
 }
-function ieSet(f,v){ if(!IE)return; poItemSet(IE.id,IE.pi,IE.ii,f,v); if(f==='status'||f==='customer_name'||f==='title') ieRender(); }
+function ieSet(f,v){ if(!IE)return;
+  if(f==='unit_paid_usd'||f==='extra_override_usd'){ v=(v||'').trim()===''?null:Number(v);
+    if(v!=null&&!isFinite(v)) return; poSplitsInvalidate(IE.id); }
+  poItemSet(IE.id,IE.pi,IE.ii,f,v);
+  if(f==='status'||f==='customer_name'||f==='title'||f==='unit_paid_usd'||f==='extra_override_usd') ieRender(); }
+function ieBucket(v){ if(!IE)return; poItemBucket(IE.id,IE.pi,IE.ii,v); ieRender(); }
 async function ieLink(url){ if(!IE)return; await poItemLink(IE.id,IE.pi,IE.ii,url); ieRender(); }
 async function ieFetch(btn){ if(!IE)return; await poFetch(btn,IE.id,IE.pi,IE.ii); ieRender(); }
 function ieTracking(v){ if(!IE)return; const ref=IE; IE=null; $("itemEditModal").classList.add("hidden");
@@ -11371,7 +11768,7 @@ function bsRender(){
 // ═══ 📧 GAASH mail: automated clearance-email sequences — one chat per GWD ═══
 let GM={ov:null, cur:null, detail:null, timer:null, tab:"conv", edit:null, stats:null, wfOpen:new Set()};
 try{ const t=localStorage.getItem("gm_tab");                     // reopen on the tab the user was on
-  if(["conv","ov","seq","tpl","ready","docs","dash"].includes(t)) GM.tab=t; }catch(e){}
+  if(["conv","ov","seq","tpl","ready","docs","fcast","dash"].includes(t)) GM.tab=t; }catch(e){}
 const GM_STATE={active:["#0091ff","نشط · active"], waiting_reply:["#12a594","رد وصل · replied"],
   missing_docs:["#e5484d","ناقص مستندات · missing docs"], paused:["#8d8d8d","موقوف · paused"],
   cleared:["#30a46c","تخلّص · cleared"], goal_met:["#30a46c","الهدف تحقق · goal met"],
@@ -11383,7 +11780,7 @@ function gmTab(t){
   [["conv","gmTabConv","gmConvPane"],["ov","gmTabOv","gmOvPane"],
    ["seq","gmTabSeq","gmSeqPane"],
    ["tpl","gmTabTpl","gmTplPane"],["ready","gmTabReady","gmReadyPane"],
-   ["docs","gmTabDocs","gmDocsPane"],
+   ["docs","gmTabDocs","gmDocsPane"],["fcast","gmTabFcast","gmFcastPane"],
    ["dash","gmTabDash","gmDashPane"]].forEach(([k,b,p])=>{
     $(b).classList.toggle("accent",k===t);
     $(p).classList.toggle("hidden",k!==t);
@@ -11393,6 +11790,7 @@ function gmTab(t){
   if(t==="tpl") gmRenderTpl();
   if(t==="ready") gmRenderReady();
   if(t==="docs") gmDocsRender();
+  if(t==="fcast") gmFcastRender();
   if(t==="dash") gmDashLoad();
 }
 function gmChip(state){ const [c,l]=GM_STATE[state]||["#8d8d8d",state||"?"];
@@ -11853,8 +12251,12 @@ async function gmSendFilePick(){
 // no door at all: you had to go back out and start a sequence to paper it.
 // Everything on it is read from the boards, so there is nothing to fill in —
 // one press, and it is filed in the library AND ticked onto this message.
-async function gmSendDeclMake(btn){
+async function gmSendDeclMake(btn,kind){
   if(!GM.cur) return;
+  // kind="originality" is the SECOND paper — הצהרת מקוריות, the one customs
+  // asks for when it wants proof that branded goods are genuine. Same door,
+  // same one-press flow; only the words on the page differ.
+  const orig=kind==="originality", suf=orig?" - originality":" - declaration";
   if(btn) btn.disabled=true;
   GM.declMsg={ok:true,text:T("جارِ التحقق… · checking…")};
   gmIdsRender();
@@ -11862,9 +12264,9 @@ async function gmSendDeclMake(btn){
   // outgoing set — the fresh one supersedes it, and two declarations on one
   // email is how the wrong one gets read
   const stale=(((GM.ov||{}).ids)||[])
-    .filter(x=>x.name===GM.cur+" - declaration").map(x=>x.id);
+    .filter(x=>x.name===GM.cur+suf).map(x=>x.id);
   let r=null;
-  try{ r=await post("/api/gaash/declaration",{gwd:GM.cur}); }
+  try{ r=await post("/api/gaash/declaration",{gwd:GM.cur,kind:kind||"use"}); }
   catch(e){ r={ok:false,error:T("تعذّر الاتصال بالخادم · could not reach the server")}; }
   if(btn) btn.disabled=false;
   if(!r||!r.ok){
@@ -11886,7 +12288,9 @@ async function gmSendDeclMake(btn){
 // was the one carrying the mistake. The name is the link; ✕ still removes.
 function gmChipUrl(d){
   // decl:auto is written at send time, so its "file" is a route that builds it
-  if(d.id==="decl:auto") return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(GM.cur||"")}`;
+  if(d.id==="decl:auto"||d.id==="orig:auto")
+    return `/api/gaash/declaration_preview?gwd=${encodeURIComponent(GM.cur||"")}`+
+      (d.id==="orig:auto"?"&kind=originality":"");
   return d.filename?`/api/gaash/idfile?file=${encodeURIComponent(d.filename)}`:"";
 }
 // ✕ on a chip must drop it from THIS message, always. gmIdPick routes through
@@ -11916,8 +12320,9 @@ function gmSendChips(){
   const box=$("gmSendChips"); if(!box) return;
   const ids=((GM.ov||{}).ids)||[];
   // "decl:auto" has no library row — it is written when the message is sent
-  const docs=(GM.sendDocs||[]).map(id=>id==="decl:auto"
-    ?{id, name:(GM.cur||"")+" - declaration", auto:true}
+  const docs=(GM.sendDocs||[]).map(id=>(id==="decl:auto"||id==="orig:auto")
+    ?{id, name:(GM.cur||"")+(id==="orig:auto"?" - originality":" - declaration"),
+      auto:true}
     :ids.find(x=>x.id===id)).filter(Boolean);
   const files=GM.sendFiles||[];
   box.classList.toggle("hidden",!docs.length&&!files.length);
@@ -13021,6 +13426,7 @@ function gmIdsRender(){
   // hand — the reply box. The wizard papers its whole batch from the step-2 tick.
   const canGen=f.k==="declaration"&&GM.docTarget==="send"&&GM.cur;
   const had=canGen&&ids.some(x=>x.name===GM.cur+" - declaration");
+  const hadOrig=canGen&&ids.some(x=>x.name===GM.cur+" - originality");
   // the message outlives a re-render — this box is rewritten whole on every pick
   const msg=(canGen&&GM.declMsg)
     ?(GM.declMsg.ok
@@ -13034,7 +13440,10 @@ function gmIdsRender(){
       <span class="spacer"></span>
       ${canGen?`<button class="minibtn" onclick="gmSendDeclMake(this)"
         title="${T("يُملأ من اللوحات — الاسم، رقم الهوية، المحتويات · filled from the boards — name, ID number, contents")}">${
-        had?"↻ "+T("أعد الإنشاء · regenerate"):"＋ "+T("أنشئ تصريحاً · generate")} ${poEsc(GM.cur)}</button>`:""}
+        had?"↻ "+T("أعد الإنشاء · regenerate"):"＋ "+T("أنشئ تصريحاً · generate")} ${poEsc(GM.cur)}</button>
+      <button class="minibtn" onclick="gmSendDeclMake(this,'originality')"
+        title="${T("إقرار بأن البضاعة أصلية — يطلبه المكس للماركات · declares the goods are genuine — customs asks for it on branded parcels")}">${
+        hadOrig?"↻ ":"＋ "}${T("إقرار أصلية · originality")}</button>`:""}
       ${CAN_ADMIN?`<button class="minibtn" onclick="gmIdUpload()">＋ ${T("أضف هنا · add here")}</button>`:""}
     </div>
     ${msg}
@@ -13405,6 +13814,172 @@ async function gmDocsRender(){
   GM.docs=d.rows||[];
   if(GM_DOCS.mode==="action"&&!GM.docs.some(r=>r.state==="action"||r.state==="stopped")) GM_DOCS.mode="all";
   gmDocsDraw();
+}
+// ═══ 🔮 Forecast: what happens next to a parcel that has cleared customs ═══
+// The dates come from OUR OWN tracking history (forecast.py) — an empirical
+// "cleared → next status" table measured on a WORKING-DAY clock, because the
+// entire weekday spread in the raw data is the Fri/Sat weekend and nothing
+// else. Nothing here recomputes any of that; the server ships finished dates.
+let GM_FC={mode:"all", data:null};
+function gmFcMode(m){ GM_FC.mode=m; gmFcastDraw(); }
+const GM_FC_REASON={
+  thin_history:["gray","❔ "+"لا تاريخ كافٍ · not enough history",
+    "لم نجمع بعد ما يكفي من الطرود لنتوقع · we haven't seen enough parcels clear yet to predict"],
+  no_history:["gray","❔ "+"لا سجل تتبع · no tracking history",
+    "لا يوجد خط زمني محفوظ لهذا الطرد — اضغط فحص · no cached timeline for this parcel — press Check"],
+  no_clearance_time:["amber","⚠ "+"بلا وقت تخليص · no clearance time",
+    "غاش سجّل التخليص بدون وقت — لا يمكن حساب موعد · GAASH stamped the clearance with no time, so no date can be computed"],
+  not_cleared:["blue","↷ "+"تحرّك أصلاً · already moved",
+    "التتبع يقول إنه تجاوز التخليص — اللوحة متأخرة · tracking says it is past clearance; the board is behind"]};
+function gmFcReasonPill(r){
+  const [tone,lab,tip]=GM_FC_REASON[r.reason]||["gray","❔ "+(r.reason||"?"),""];
+  return tonePill(tone,T(lab),T(tip)+(r.last_label?" — "+r.last_label:""),{style:"font-size:10.5px"});
+}
+async function gmFcastRender(){
+  const p=$("gmFcastPane"); if(!p) return;
+  p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("جارِ التحميل… · loading…")}</div>`;
+  let d; try{ d=await (await fetch("/api/gaash/forecast")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ p.innerHTML=`<div class="muted2 panel" style="padding:14px">${T("تعذر التحميل · couldn't load")}</div>`; return; }
+  // product photos come from the boards themselves, exactly as the Docs tab
+  try{ await bsEnsureData(); }catch(e){}
+  GM_FC.data=d;
+  gmFcastDraw();
+}
+// GAASH's own wording is too long for a column cell ("Picked up by Gerizim
+// courier" clipped the pill and pushed the % onto a second line), so the pill
+// carries a short form and the tooltip keeps the full label + every alternative.
+// English like gaashBucketPill's SHORT map — carrier vocabulary isn't translated.
+const GM_FC_SHORT={AJ:"Gerizim pickup", D1:"Delivered", O1:"Entered w/h",
+  X4:"Received in branch", OD:"Out for delivery", SH:"In w/h",
+  CD:"Docs asked again", SD:"Docs asked again"};
+function gmFcNextPill(r,tip){
+  const full=r.next_label||r.next_text||"?";
+  const txt=GM_FC_SHORT[r.next_code]||full;
+  tip=(txt===full?"":full+"\n")+tip;
+  if(r.next_code==="D1") return tonePill("green",txt,tip,{style:"font-size:10.5px"});
+  // AJ is reused for the pre-clearance MOC step — if that ever shows up as the
+  // prediction it must not wear the pickup wording
+  if(r.next_code==="AJ"&&!/gerizim/i.test(full)) return hexPill("#f76808",full,tip,{style:"font-size:10.5px"});
+  // a customs code after clearance means the parcel got pulled BACK — warn
+  const HEX={AJ:"#0f9d9f", CD:"#f76808", SD:"#f76808"};
+  return hexPill(HEX[r.next_code]||"#4466ff",txt,tip,{style:"font-size:10.5px"});
+}
+function gmFcastDraw(){
+  const p=$("gmFcastPane"); if(!p) return;
+  const d=GM_FC.data; if(!d) return;
+  const rows=d.rows||[], m=d.model||{};
+  const M={all:()=>true, overdue:r=>!!r.overdue, unknown:r=>!r.ok};
+  const list=rows.filter(M[GM_FC.mode]||M.all);
+  const n=k=>rows.filter(M[k]).length;
+  const chip=(k,lab,c)=>`<button class="minibtn${GM_FC.mode===k?" accent":""}" style="padding:2px 10px;font-size:11.5px" onclick="gmFcMode('${k}')">${lab} <b>${c}</b></button>`;
+  const badge=b=>b==="leluxe"?"⌚":"📦";
+  const lxRows=(typeof bsLxRows==="function")?bsLxRows():[];
+  const hitOf=new Map();
+  rows.forEach(r=>{
+    let po=null,lx=null;
+    try{
+      if(r.board==="purchases") po=(typeof bsFindPo==="function")?bsFindPo(r.gwd)[0]||null:null;
+      else lx=(typeof bsFindLx==="function")?bsFindLx(r.gwd,lxRows):null;
+    }catch(e){}
+    hitOf.set(r.gwd,{po,lx});
+  });
+  const thumbs=r=>{
+    try{
+      const h=hitOf.get(r.gwd)||{};
+      if(r.board==="purchases") return h.po?poThumbStrip(h.po.pk.items,3):"";
+      return h.lx?lxThumbs(h.lx.items,3):"";
+    }catch(e){ return ""; }
+  };
+  const dayTxt=v=>{ const x=Number(v||0); return (x<10?x.toFixed(1):Math.round(x))+"d"; };
+  const clearedCell=r=>{
+    if(!r.cleared_at) return '<span class="muted2">—</span>';
+    const dt=String(r.cleared_at).slice(0,10);
+    return `<span class="mono" style="font-size:11px">${poEsc(dt)}</span> <span class="muted2" style="font-size:10px">${poEsc(r.cleared_weekday||"")}</span>`;
+  };
+  // how long it has been sitting, in WORKING days — a weekend adds nothing, so
+  // a parcel never looks stuck just because it cleared on a Thursday
+  const waitCell=r=>{
+    if(r.dwell_work_days==null) return '<span class="muted2">—</span>';
+    const tip=T("أيام عمل منذ التخليص (الجمعة والسبت لا تُحسب) · working days since clearance — Fri/Sat don't count")
+      +` · ${T("تقويمياً · calendar")} ${dayTxt(r.dwell_days)}`;
+    return r.overdue
+      ? `<b style="color:#dc2626" title="${poEsc(tip+" · "+T("تجاوز ٩٠٪ من السجل · past the historical p90"))}">⏳ ${dayTxt(r.dwell_work_days)}</b>`
+      : `<span title="${poEsc(tip)}">⏳ ${dayTxt(r.dwell_work_days)}</span>`;
+  };
+  const nextCell=r=>{
+    if(!r.ok) return gmFcReasonPill(r);
+    const alts=(r.alternatives||[]).slice(0,5)
+      .map(a=>`${Math.round(100*a.p)}% ${a.label} (n=${a.n})`).join("\n");
+    const pct=Math.round(100*(r.next_p||0));
+    return gmFcNextPill(r,T("الأكثر احتمالاً · most likely")+"\n"+alts)
+      +` <span class="muted2 mono" style="font-size:10px" title="${poEsc(T("من أصل · out of")+" n="+r.basis_n+" "+T("طرد مخلَّص · cleared parcels"))}">${pct}%</span>`;
+  };
+  const etaCell=r=>{
+    if(!r.ok) return '<span class="muted2">—</span>';
+    const tip=`${T("المدى · range")} ${r.eta_early} → ${r.eta_late}\n`
+      +`${T("الوسيط · median")} ${r.gap_work_days} ${T("يوم عمل · working days")}\n`
+      +`${T("مبني على · based on")} n=${r.basis_n} (${r.basis_sweeps} ${T("دفعة استلام · pickup runs")})`;
+    return `<b class="mono" style="font-size:11.5px" title="${poEsc(tip)}">${poEsc(r.eta)}</b>`
+      +` <span class="muted2" style="font-size:10px">${poEsc(r.eta_weekday||"")}</span>`;
+  };
+  const row=r=>{
+    const st=r.stale?tonePill("gray",T("قديم · stale"),
+      T("لم نفحص التتبع منذ فترة — قد يكون تحرّك · we haven't refreshed tracking in a while — it may already have moved"),
+      {style:"font-size:9.5px;border-style:dashed"}):"";
+    return `<div id="gmfr_${poEsc(r.gwd)}" style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line);font-size:12px${r.overdue?";background:#dc26260a":""}">
+      <span style="flex:none;width:14px" title="${r.board==="leluxe"?"Leluxe":"Purchases"}">${badge(r.board)}</span>
+      <b class="mono" style="font-size:11.5px;flex:none;width:104px;cursor:pointer" onclick="copyCtk('${poEsc(r.gwd)}')" title="${T("انسخ الرقم · copy")}">${poEsc(r.gwd)}</b>
+      <span style="flex:none;width:118px;overflow:hidden">${thumbs(r)}</span>
+      <span style="width:132px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.name||"")}">${poEsc(r.name||"")}</span>
+      <span style="width:118px;flex:none">${clearedCell(r)}</span>
+      <span style="width:96px;flex:none">${waitCell(r)}</span>
+      <span style="width:168px;flex:none;overflow:hidden">${nextCell(r)}</span>
+      <span style="width:120px;flex:none">${etaCell(r)}</span>
+      ${st}
+      <span class="spacer"></span>
+      <button class="minibtn" onclick="gmDocsCheck('${poEsc(r.gwd)}',this)" title="${T("فحص حي الآن · fresh live check")}">📄 ${T("فحص · Check")}</button>
+      <button class="minibtn" onclick="gmTab('conv');gmOpen('${poEsc(r.gwd)}')" title="${T("المحادثة · conversation")}">💬</button>
+    </div>`;
+  };
+  // The basis strip. When the model isn't ready this REPLACES the numbers with
+  // the honest reason — never a confident-looking date on thin evidence.
+  const top=(m.next||[])[0];
+  const basis=m.ready
+    ? `🔮 ${T("مبني على · learned from")} <b>${m.n}</b> ${T("انتقال · transitions")} · <b>${m.parcels}</b> ${T("طرد · parcels")} · <b>${m.sweeps}</b> ${T("دفعة استلام · pickup runs")}
+       · ${T("الوسيط · median")} <b>${(m.p50||0).toFixed(1)}</b> ${T("يوم عمل · working days")}
+       ${top?`· <b>${Math.round(100*top.p)}%</b> ${poEsc(top.label)}`:""}`
+    : `⚠ ${T("لا يوجد تاريخ كافٍ بعد · not enough history yet")} — <b>${m.n||0}</b> ${T("انتقال من · transitions from")} <b>${m.parcels||0}</b> ${T("طرد · parcels")}
+       (${T("نحتاج · we need")} ${(m.thresholds||{}).model_n||12}+)`;
+
+  p.innerHTML=`<div class="panel" style="padding:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <b style="font-size:13px">🔮 ${T("ما التالي بعد التخليص · what happens next")}</b>
+      <span class="spacer"></span>
+      ${chip("all",T("الكل · All"),rows.length)}
+      ${n("overdue")?chip("overdue","🔴 "+T("متأخر · overdue"),n("overdue")):""}
+      ${n("unknown")?chip("unknown","❔ "+T("غير معروف · unknown"),n("unknown")):""}
+      <button class="minibtn" onclick="gmFcastRender()" title="${T("أعد الحساب · recompute")}">↻</button>
+    </div>
+    <div class="muted2" style="font-size:10.5px;margin-bottom:8px;line-height:1.7">${basis}
+      <span style="opacity:.8"> · ${T("الجمعة والسبت عطلة — لا استلام فيهما أبداً · Fri/Sat are the weekend — a pickup has never landed on one")}</span>
+    </div>
+    <div style="overflow-x:auto">
+      <div style="min-width:1064px">
+        <div style="display:flex;gap:8px;align-items:center;padding:0 8px 4px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">
+          <span style="flex:none;width:14px"></span>
+          <span style="flex:none;width:104px">${T("رقم الطرد · parcel")}</span>
+          <span style="flex:none;width:118px">${T("المنتجات · products")}</span>
+          <span style="flex:none;width:132px">${T("الاسم · name")}</span>
+          <span style="flex:none;width:118px">${T("تخلّص في · cleared")}</span>
+          <span style="flex:none;width:96px">${T("ينتظر · waiting")}</span>
+          <span style="flex:none;width:168px">${T("التالي المتوقع · predicted next")}</span>
+          <span style="flex:none;width:120px">${T("متوقع في · expected")}</span>
+          <span class="spacer"></span>
+        </div>
+        ${list.length?list.map(row).join(""):`<div class="muted2" style="padding:18px;text-align:center">${T("لا طرود بانتظار الاستلام 🎉 · nothing waiting after clearance 🎉")}</div>`}
+      </div>
+    </div>
+  </div>`;
 }
 function gmDocsStatePill(r){
   if(r.state==="action"){
@@ -13830,20 +14405,33 @@ async function gmAcctHealthDraw(){
   try{ h=await (await fetch("/api/gaash/accounts/health")).json(); }catch(e){ return; }
   if(!h||h.ok){ box.innerHTML=""; return; }
   const n=(h.mismatched||[]).length;
+  // two different damages, and telling them apart is the whole point: an index
+  // that answers with the WRONG row (passwords intact, rebuild fixes it), or a
+  // table too damaged to read at all — where the mailboxes themselves are gone
+  // and only a backup brings them back. Saying "your passwords are fine" in the
+  // second case sends the owner looking for a problem that isn't there.
+  const gone=!!h.unreadable;
   box.innerHTML=`<div class="en-warn live" style="margin:6px 0;font-size:12px">
-    <b>⚠ ${T("قائمة الحسابات تالفة · this account list is damaged")}</b>
-    <div style="margin-top:3px">${T("البحث عن حساب يُرجع حساباً آخر بلا كلمة مرور — لذلك يرفض Gmail كل إرسال. كلمات المرور سليمة · looking an account up returns a DIFFERENT row with no password — which is why Gmail refuses every send. Your passwords are fine.")}</div>
-    <div class="muted2" style="margin-top:3px">${n} ${T("حساب لا يُقرأ · unreadable")}${h.junk?` · ${h.junk} ${T("صف غريب · junk row(s)")}`:""}</div>
-    ${CAN_ADMIN?`<button class="minibtn" style="margin-top:6px" onclick="gmAcctRepair(this)"
-      title="${T("يعيد بناء الجدول ويُبقي كل صندوق بريد وكلمة مروره · rebuilds the table, keeping every mailbox and its password")}">🔧 ${T("أصلح القائمة · Rebuild the list")}</button>`:""}</div>`;
+    <b>⚠ ${gone?T("قائمة الحسابات لا تُقرأ · this account list cannot be read"):T("قائمة الحسابات تالفة · this account list is damaged")}</b>
+    <div style="margin-top:3px">${gone
+      ?T("تلف في قاعدة البيانات أوقف قراءة الجدول، وقد تكون صناديق البريد نفسها ضاعت. أعد بناء القائمة، ثم استرجعها من النسخة الاحتياطية (restore_mail_accounts.py) لتعود بنفس المعرّفات وكلمات المرور — أو أضفها يدوياً · database damage stopped the table mid-read, and the mailboxes themselves may be gone with it. Rebuild the list, then restore it from a backup (restore_mail_accounts.py) to get the same ids and passwords back — or add them again by hand.")
+      :T("البحث عن حساب يُرجع حساباً آخر بلا كلمة مرور — لذلك يرفض Gmail كل إرسال. كلمات المرور سليمة · looking an account up returns a DIFFERENT row with no password — which is why Gmail refuses every send. Your passwords are fine.")}</div>
+    <div class="muted2" style="margin-top:3px">${gone?`${h.total||0} ${T("صندوق بريد يمكن قراءته · mailbox(es) still readable")}`:`${n} ${T("حساب لا يُقرأ · unreadable")}`}${h.junk?` · ${h.junk} ${T("صف غريب · junk row(s)")}`:""}</div>
+    ${CAN_ADMIN?`<button class="minibtn" style="margin-top:6px" onclick="gmAcctRepair(this,${gone?1:0})"
+      title="${gone?T("يعيد بناء الجدول — ما لا يمكن قراءته لا يمكن إنقاذه · rebuilds the table — what cannot be read cannot be kept"):T("يعيد بناء الجدول ويُبقي كل صندوق بريد وكلمة مروره · rebuilds the table, keeping every mailbox and its password")}">🔧 ${T("أصلح القائمة · Rebuild the list")}</button>`:""}</div>`;
 }
-async function gmAcctRepair(btn){
-  if(!confirm(T("يعيد بناء قائمة الحسابات ويحذف الصفوف غير المقروءة. كل صندوق بريد وكلمة مروره تبقى · Rebuilds the account list and drops the unreadable rows. Every mailbox and its password is kept."))) return;
+async function gmAcctRepair(btn, gone){
+  // promise only what the rebuild can deliver: it keeps every mailbox it can
+  // still READ, and when the table is unreadable that is none of them
+  if(!confirm(gone
+    ?T("الجدول لا يُقرأ، لذا سيُعاد بناؤه فارغاً — ثم استرجع صناديق البريد من نسخة احتياطية أو أضفها من جديد · The table cannot be read, so it will be rebuilt EMPTY — then restore the mailboxes from a backup, or add them again.")
+    :T("يعيد بناء قائمة الحسابات ويحذف الصفوف غير المقروءة. كل صندوق بريد وكلمة مروره تبقى · Rebuilds the account list and drops the unreadable rows. Every mailbox and its password is kept."))) return;
   btn.disabled=true; btn.textContent="…";
   const r=await post("/api/gaash/accounts/repair",{});
   btn.disabled=false;
   if(!r||!r.ok){ toast((r&&r.error)||T("تعذّر الإصلاح · repair failed")); gmAcctHealthDraw(); return; }
-  toast("🔧 "+T("أُصلحت · repaired")+" — "+(r.kept||[]).length+" "+T("صندوق بريد · mailbox(es)"));
+  toast(r.emptied?("🔧 "+T("أُعيد بناء القائمة فارغة — استرجع صناديق البريد · rebuilt empty — restore the mailboxes"))
+                 :("🔧 "+T("أُصلحت · repaired")+" — "+(r.kept||[]).length+" "+T("صندوق بريد · mailbox(es)")));
   await gmLoad(); gmSettingsOpen();
 }
 async function gmAcctAdd(btn){

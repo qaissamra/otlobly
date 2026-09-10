@@ -141,10 +141,44 @@ def _smtp_connect(timeout=30):
     return s
 
 
+def _is_mailbox(r):
+    """Is this row really a mailbox? A damaged table hands back cells that
+    belong to OTHER tables entirely — a row from sqlite_sequence, half a
+    package — and an address with an @ under a string id is the only shape
+    add_account ever stores."""
+    return (isinstance(r.get("email"), str) and "@" in r["email"]
+            and isinstance(r.get("id"), str))
+
+
+# A damaged mailbox table must not take the whole mail room down with it.
+# SQLite stops dead at the corrupt cell ("database disk image is malformed"),
+# and every caller that scanned the table raised with it: the 📧 view answered
+# 500, the reply poll died each cycle, and even ADDING an account failed — so
+# the one screen that could fix the problem was the one you could not open.
+# Read row by row instead and keep everything that arrives before the wall.
+# No ORDER BY: sorting materialises the whole table before the first row comes
+# back, which turns a partial read into no read at all. Sort in Python after.
+def _acct_rows(c, keep_junk=False):
+    """(rows, unreadable) — the mailboxes, and why the read stopped short."""
+    rows, err = [], None
+    try:
+        cur = c.execute("SELECT * FROM gaash_accounts")
+        while True:
+            r = cur.fetchone()
+            if r is None:
+                break
+            rows.append(dict(r))
+    except sqlite3.DatabaseError as e:
+        err = str(e)[:120]
+    if not keep_junk:
+        rows = [r for r in rows if _is_mailbox(r)]
+    rows.sort(key=lambda r: r.get("added_at") or "")
+    return rows, err
+
+
 def accounts(redact=True):
     with db.connect() as c:
-        rows = [dict(r) for r in c.execute(
-            "SELECT * FROM gaash_accounts ORDER BY added_at")]
+        rows, _ = _acct_rows(c)
     for a in rows:
         a.pop("seen_ids_json", None)
         if redact:
@@ -154,9 +188,15 @@ def accounts(redact=True):
 
 def _account(account_id):
     with db.connect() as c:
-        r = c.execute("SELECT * FROM gaash_accounts WHERE id=?",
-                      (account_id,)).fetchone()
-    return dict(r) if r else None
+        try:
+            r = c.execute("SELECT * FROM gaash_accounts WHERE id=?",
+                          (account_id,)).fetchone()
+            return dict(r) if r else None
+        except sqlite3.DatabaseError:
+            # the index is exactly what breaks first — fall back to the scan,
+            # which still finds the mailbox as long as its own page is intact
+            return next((r for r in _acct_rows(c)[0]
+                         if r.get("id") == account_id), None)
 
 
 # The ⚠/✓ chip reads gaash_accounts.last_error, which the IMAP poll owns —
@@ -224,9 +264,16 @@ def add_account(email_addr, app_password, label=None):
     if not pw:
         return {"ok": False, "error": "enter the app password"}
     with db.connect() as c:
-        row = c.execute("SELECT id FROM gaash_accounts WHERE email=?",
-                        (email_addr,)).fetchone()
-    existing_id = row["id"] if row else None
+        # a damaged table used to raise right here, so the owner could not even
+        # re-add the mailboxes it had swallowed — scan-with-fallback instead
+        try:
+            row = c.execute("SELECT id FROM gaash_accounts WHERE email=?",
+                            (email_addr,)).fetchone()
+            existing_id = row["id"] if row else None
+        except sqlite3.DatabaseError:
+            existing_id = next((r["id"] for r in _acct_rows(c)[0]
+                                if (r.get("email") or "").lower() == email_addr),
+                               None)
     try:
         with _smtp_connect(timeout=25) as s:
             s.login(email_addr, pw)
@@ -300,7 +347,11 @@ def remove_account(account_id):
         return {"ok": cur.rowcount > 0, "orphaned": orphaned}
 
 
-# The columns as they are declared, so a rebuild recreates the table exactly.
+# Last-resort shape for a rebuild. A rebuild prefers the table's OWN declared
+# SQL out of sqlite_master, because this constant cannot help drifting: it was
+# written before db.py's migration added the Sent-folder cursor, and a rebuild
+# that recreated the table from here made a table two columns short of the rows
+# it then tried to put back — the repair failed on its own INSERT.
 _ACCT_DDL = """CREATE TABLE gaash_accounts (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
@@ -311,33 +362,51 @@ _ACCT_DDL = """CREATE TABLE gaash_accounts (
   last_error TEXT,
   imap_uidvalidity INTEGER,
   imap_last_uid INTEGER,
-  seen_ids_json TEXT)"""
+  seen_ids_json TEXT,
+  sent_uidvalidity INTEGER,
+  sent_last_uid INTEGER)"""
+
+
+def _acct_create_sql(c):
+    """The table's own CREATE statement, so a rebuild reproduces the columns
+    this database actually has (migrations add some) rather than a copy that
+    can fall behind."""
+    try:
+        r = c.execute("SELECT sql FROM sqlite_master WHERE type='table' "
+                      "AND name='gaash_accounts'").fetchone()
+        sql = (r["sql"] if r else "") or ""
+    except sqlite3.DatabaseError:
+        sql = ""
+    return sql if sql.strip().lower().startswith("create table") else _ACCT_DDL
 
 
 def accounts_health():
     """Is the mailbox table readable — i.e. does looking an account up by id
     actually return THAT account? Cheap enough to call on every overview."""
-    bad, rows = [], []
     with db.connect() as c:
-        try:
-            rows = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
-        except Exception as e:  # noqa - a table too broken to scan
-            return {"ok": False, "unreadable": str(e)[:120], "junk": 0, "mismatched": []}
-        junk = [r for r in rows if not (isinstance(r.get("email"), str)
-                                        and "@" in r["email"])]
+        all_rows, unreadable = _acct_rows(c, keep_junk=True)
+        rows = [r for r in all_rows if _is_mailbox(r)]
+        junk = len(all_rows) - len(rows)
+        bad = []
         for r in rows:
-            if r in junk:
-                continue
-            got = c.execute("SELECT email FROM gaash_accounts WHERE id=?",
-                            (r["id"],)).fetchone()
+            try:
+                got = c.execute("SELECT email FROM gaash_accounts WHERE id=?",
+                                (r["id"],)).fetchone()
+            except sqlite3.DatabaseError:
+                got = None
             # the row that comes back must BE the row we asked for; a corrupt
             # index hands over a neighbour instead, and the app then tries to
             # send from a mailbox with no password
             if not got or got["email"] != r["email"]:
                 bad.append({"id": r["id"], "email": r["email"],
                             "got": (got["email"] if got else None)})
-    return {"ok": not bad and not junk, "junk": len(junk), "mismatched": bad,
-            "total": len(rows)}
+    out = {"ok": not bad and not junk and not unreadable, "junk": junk,
+           "mismatched": bad, "total": len(rows)}
+    if unreadable:
+        # the read stopped at a corrupt cell: whatever came back first is all
+        # there is, and the rebuild is the only way forward
+        out["unreadable"] = unreadable
+    return out
 
 
 def repair_accounts():
@@ -346,7 +415,9 @@ def repair_accounts():
     SQLite let this table grow duplicate rowids, so its primary-key index stops
     agreeing with the table: `WHERE id=?` hands back a NEIGHBOURING row. The app
     then sends using that row's (missing) password and Gmail answers
-    BadCredentials — a broken table wearing the mask of a wrong password.
+    BadCredentials — a broken table wearing the mask of a wrong password. Worse
+    still, the damage can spread until the table cannot be scanned at all and
+    holds nothing but cells belonging to other tables.
 
     Rescue every row that is really a mailbox (an address with an @, which is
     the only thing add_account will store), recreate the table, put them back,
@@ -354,34 +425,107 @@ def repair_accounts():
     Threads keep pointing at the same account ids."""
     before = accounts_health()
     with db.connect() as c:
-        rows = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
-        cols = [x[1] for x in c.execute("PRAGMA table_info(gaash_accounts)")]
+        all_rows, unreadable = _acct_rows(c, keep_junk=True)
+        create_sql = _acct_create_sql(c)
         good, seen = [], set()
-        for r in rows:
-            e = r.get("email")
-            if not (isinstance(e, str) and "@" in e) or r["id"] in seen:
+        for r in all_rows:
+            if not _is_mailbox(r) or r["id"] in seen:
                 continue                      # junk, or a duplicated id
             seen.add(r["id"])
             good.append(r)
-        if not good:
+        if not good and not unreadable:
             # never leave the owner with an empty mailbox list: without a single
             # rescuable row a rebuild would delete the only copy of the passwords
             return {"ok": False, "error": "no real mailbox rows to rescue — "
                     "not rebuilding", "before": before}
+        # …unless the table cannot be read at all. Then there is nothing left to
+        # protect, and refusing only locks the owner out of adding mailboxes
+        # again — every write to a table in this state raises too.
+        cols = list(good[0].keys()) if good else None
         c.execute("ALTER TABLE gaash_accounts RENAME TO gaash_accounts_bad")
-        c.execute(_ACCT_DDL)
-        c.executemany(
-            "INSERT INTO gaash_accounts (%s) VALUES (%s)"
-            % (",".join(cols), ",".join("?" * len(cols))),
-            [[g.get(k) for k in cols] for g in good])
-        c.execute("DROP TABLE gaash_accounts_bad")
+        c.execute(create_sql)
+        if good:
+            c.executemany(
+                "INSERT INTO gaash_accounts (%s) VALUES (%s)"
+                % (",".join(cols), ",".join("?" * len(cols))),
+                [[g.get(k) for k in cols] for g in good])
+        try:
+            c.execute("DROP TABLE gaash_accounts_bad")
+        except sqlite3.DatabaseError:
+            pass          # a tree too damaged to drop; the rename already
+                          # took its name, so it is out of the way regardless
         c.commit()
-        c.execute("REINDEX")
-        c.commit()
+        try:
+            # this table only: a bare REINDEX rebuilds every index in the
+            # database, so damage in an UNRELATED table (a duplicated settings
+            # key, say) would abort the mailbox repair that had just succeeded
+            c.execute("REINDEX gaash_accounts")
+            c.commit()
+        except sqlite3.DatabaseError:
+            pass
     after = accounts_health()
     return {"ok": after["ok"], "before": before, "after": after,
             "kept": [g["email"] for g in good],
-            "dropped": before.get("junk", 0)}
+            "dropped": before.get("junk", 0),
+            "emptied": not good}
+
+
+def restore_accounts(src_db):
+    """Put mailboxes back from a backup DB — the other half of a rebuild.
+
+    A rebuild can only keep what is still readable, and when the damage has
+    eaten the rows themselves there is nothing to keep: the owner is left with
+    an empty list and the app passwords are gone with it. Re-adding them by
+    hand means three fresh Google passwords AND new account ids — which
+    silently orphans every conversation already pinned to the old ones.
+
+    So lift the rows out of a backup instead. Same ids, same passwords, same
+    IMAP cursors (so the poll then reads the replies that landed while the
+    mail room was down), and the threads never notice anything happened.
+    A mailbox the live table still has always wins — this only fills holes.
+    """
+    rows = []
+    try:
+        # immutable: the snapshot is WAL-mode, and a plain read-only open of
+        # a WAL database still wants to CREATE its -shm sidecar — which fails
+        # on a file we just extracted and are about to delete
+        t = sqlite3.connect(f"file:{src_db}?mode=ro&immutable=1", uri=True)
+        t.row_factory = sqlite3.Row
+        rows, _ = _acct_rows(t)
+        t.close()
+    except sqlite3.DatabaseError as e:
+        return {"ok": False, "error": f"could not read the backup: {str(e)[:120]}"}
+    rows = [r for r in rows if (r.get("app_password") or "").strip()]
+    if not rows:
+        return {"ok": False, "error": "that backup holds no mailbox with a "
+                                      "password — try an older one"}
+    health = accounts_health()
+    repaired = None
+    if not health.get("ok"):
+        # the live table has to be sane before anything can be written INTO it
+        repaired = repair_accounts()
+        if not repaired.get("ok"):
+            return {"ok": False, "error": "the live account list could not be "
+                    "rebuilt first: " + str(repaired.get("error") or ""),
+                    "repair": repaired}
+    restored, kept = [], []
+    with db.connect() as c:
+        live, _ = _acct_rows(c)
+        have_id = {r["id"] for r in live}
+        have_email = {(r.get("email") or "").lower() for r in live}
+        cols = [x[1] for x in c.execute("PRAGMA table_info(gaash_accounts)")]
+        for r in rows:
+            if r["id"] in have_id or r["email"].lower() in have_email:
+                kept.append(r["email"])       # live already has it — leave it
+                continue
+            use = [k for k in cols if k in r]
+            c.execute("INSERT INTO gaash_accounts (%s) VALUES (%s)"
+                      % (",".join(use), ",".join("?" * len(use))),
+                      [r[k] for k in use])
+            restored.append(r["email"])
+        c.commit()
+    return {"ok": True, "restored": restored, "already_live": kept,
+            "repaired": bool(repaired), "health": accounts_health()}
 
 
 # --------------------------------------------------------------------------- #
@@ -470,6 +614,115 @@ def declaration_attachment(gwd):
         return None
     ext = ("." + fn.rsplit(".", 1)[1]) if "." in str(fn or "") else ".pdf"
     return (f"{g} - declaration{ext}", data, "application/pdf")
+
+
+# The second paper: GAASH asks for a "הצהרת מקוריות" (declaration of
+# originality) whenever customs doubts that branded goods are genuine. Same
+# rules as DECL_AUTO — written fresh from the boards at send time, never filed.
+ORIG_AUTO = "orig:auto"
+
+
+_ANNEX_CAP = 2                                  # proof pages per declaration
+
+
+def annex_images(gwd):
+    """[(image_bytes, caption)] — the proof that goes BEHIND the originality
+    declaration: the Amazon order screenshot the PO already carries, plus the
+    package's own photos if that is all there is.
+
+    Why inside the same PDF rather than beside it: GAASH's upload page takes
+    one file per document slot, so a screenshot sent as a second attachment has
+    nowhere to land — and a declaration of originality with the order behind it
+    is the whole point of the paper. Purchases parcels only: a Leluxe parcel
+    stores no order screenshot, and inventing one is not on."""
+    g = (gwd or "").strip().upper()
+    po, pk = _po_package(g)
+    if not po:
+        return []
+    order = str(po.get("amazon_order_number") or "").strip()
+    cap = (f"Amazon order {order} — order confirmation" if order
+           else "Amazon order — order confirmation")
+    names = [f for f in (po.get("attachments") or []) if f]
+    if not names and po.get("screenshot"):
+        names = [po["screenshot"]]
+    pkg_caps = []
+    if not names:                               # no order screenshot: the box itself
+        names = [f for f in ((pk or {}).get("pkg_images") or []) if f]
+        pkg_caps = [f"Package {(pk or {}).get('package_no') or ''} — photo"] * len(names)
+    out = []
+    try:
+        import purchases
+        for i, fn in enumerate(names[:_ANNEX_CAP]):
+            p = purchases.IMAGE_DIR / str(fn)
+            # never let a filename out of the store reach the filesystem
+            if p.resolve().parent != purchases.IMAGE_DIR.resolve() or not p.exists():
+                continue
+            out.append((p.read_bytes(), pkg_caps[i] if pkg_caps else cap))
+    except Exception:  # noqa — a missing picture must never sink the paper
+        return out
+    return out
+
+
+def originality_build(gwd):
+    """One package's declaration of ORIGINALITY as (filename, bytes), or
+    ValueError with a printable reason."""
+    import declaration
+    _declaration_fill_titles(gwd)               # blank PO titles → real names
+    return declaration.build_originality(
+        gwd=gwd, name=parcel_name(gwd), id_number=id_number_for_email(gwd),
+        contents=package_contents(gwd), order_code=package_order_code(gwd),
+        annex=annex_images(gwd))
+
+
+def originality_attachment(gwd):
+    """(filename, bytes, ctype) built right now — what ORIG_AUTO resolves to at
+    send time, or None when the parcel cannot be papered."""
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return None
+    try:
+        fn, data = originality_build(g)
+    except Exception:  # noqa — unprintable name, or no name on the parcel
+        return None
+    return (f"{g} - originality.pdf", data, "application/pdf")
+
+
+def originality_make(gwd, save=False):
+    """Can this package be papered with an originality declaration? Mirrors
+    declaration_make: builds it, throws the bytes away, names the reason."""
+    g = (gwd or "").strip().upper()
+    if not re.match(r"GWD\d+$", g):
+        return {"ok": False, "error": "not a tracking number", "gwd": g}
+    try:
+        fn, data = originality_build(g)
+    except ValueError as e:                     # a field that cannot be printed
+        return {"ok": False, "error": str(e), "gwd": g}
+    except Exception as e:  # noqa
+        return {"ok": False, "error": f"could not build it: {str(e)[:120]}",
+                "gwd": g}
+    name = f"{g} - originality"
+    if not save:
+        return {"ok": True, "gwd": g, "name": name, "id": ORIG_AUTO}
+    with db.connect() as c:
+        old = [dict(r) for r in c.execute(
+            "SELECT id, filename FROM gaash_ids WHERE name=?", (name,))]
+    for o in old:
+        ids_remove(o["id"])
+    res = ids_add(name, fn, data, folder="declaration")
+    return {**res, "name": name, "gwd": g}
+
+
+def auto_attachment(doc_id, gwd):
+    """The bytes behind one AUTO sentinel for one parcel, or None if `doc_id`
+    is not a sentinel at all. One place, so a new paper is wired once."""
+    if doc_id == DECL_AUTO:
+        return declaration_attachment(gwd)
+    if doc_id == ORIG_AUTO:
+        return originality_attachment(gwd)
+    return None
+
+
+AUTO_DOCS = (DECL_AUTO, ORIG_AUTO)
 
 
 def migrate_decl_auto():
@@ -1353,8 +1606,8 @@ def account_labels():
     address it went out from, not an account id, so every per-sender surface
     resolves the friendly name this way."""
     with db.connect() as c:
-        return {r["email"]: (r["label"] or "").strip()
-                for r in c.execute("SELECT email, label FROM gaash_accounts")}
+        return {r["email"]: (r.get("label") or "").strip()
+                for r in _acct_rows(c)[0]}
 
 
 def stat_detail(kind, limit=300):
@@ -2831,6 +3084,56 @@ def package_contents(gwd):
     return out
 
 
+_AMZ_ORDER = re.compile(r"\b\d{3}-\d{7}-\d{7}\b")
+
+
+def package_order_code(gwd):
+    """The Amazon order number this package came out of, or "".
+
+    An originality declaration is only checkable if it names the order an
+    officer can look up. Leluxe parcels carry it in the ClickUp ORDER card's
+    name ("Order # 112-0296508-3951454") one or two levels above the item row;
+    Purchases parcels carry it on the PO itself."""
+    g = (gwd or "").strip().upper()
+    if not g:
+        return ""
+    try:
+        row = _leluxe_row_for(g)
+    except Exception:  # noqa
+        row = None
+    if row:
+        seen, node = set(), row
+        for _ in range(4):                      # item → package → order → list
+            hay = str(node.get("name") or "")
+            d = node.get("data") or {}
+            for v in (d.get("fields") or {}).values():
+                hay += " " + str(v or "")
+            m = _AMZ_ORDER.search(hay)
+            if m:
+                return m.group(0)
+            pid = node.get("parent_local_id")
+            if not pid or pid in seen:
+                break
+            seen.add(pid)
+            try:
+                with db.connect() as c:
+                    r = c.execute("SELECT id, parent_local_id, name, data_json "
+                                  "FROM leluxe_orders WHERE id=?",
+                                  (pid,)).fetchone()
+            except Exception:  # noqa
+                break
+            if not r:
+                break
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:  # noqa
+                d = {}
+            node = {"id": r["id"], "parent_local_id": r["parent_local_id"],
+                    "name": r["name"], "data": d}
+    po, _pk = _po_package(g)
+    return str((po or {}).get("amazon_order_number") or "").strip()
+
+
 _TITLE_FETCH_CAP = 12                           # metered lookups per declaration
 
 
@@ -3153,9 +3456,9 @@ def _step_attachments(th, members=None):
         # the declaration is rebuilt from the boards for THIS email — so a name
         # or an ID corrected after enrollment is on the follow-up, and nothing
         # is kept on disk between sends
-        if doc_id == DECL_AUTO:
+        if doc_id in AUTO_DOCS:
             for m in (members or thread_members(th)):
-                got = declaration_attachment(m)
+                got = auto_attachment(doc_id, m)
                 if got:
                     out.append(got)
             continue
@@ -3817,7 +4120,7 @@ def _check_account(acct, setts, our_mids, thread_gwds):
 def check_replies():
     """Poll every account's inbox. Never raises."""
     with db.connect() as c:
-        accts = [dict(r) for r in c.execute("SELECT * FROM gaash_accounts")]
+        accts = _acct_rows(c)[0]
         our_mids = {r["message_id"] for r in c.execute(
             "SELECT message_id FROM gaash_msgs WHERE dir='out' "
             "AND message_id IS NOT NULL")}
@@ -4121,8 +4424,7 @@ def overview():
                           "opens": sum(x["opens"] for x in rows),
                           "clicks": sum(x["clicks"] for x in rows),
                           "first_open_at": min(firsts) if firsts else None}
-        accts = {r["id"]: r["email"] for r in
-                 c.execute("SELECT id, email FROM gaash_accounts")}
+        accts = {r["id"]: r["email"] for r in _acct_rows(c)[0]}
     labels = account_labels()
     pmap = parcel_name_map()            # one scan feeds every thread's name tag
     emap, smap = effective_id_map(pmap), parcel_src_map(pmap)

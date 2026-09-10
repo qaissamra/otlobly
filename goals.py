@@ -4,10 +4,10 @@ Goals engine — the 🏆 Goals page: one campaign window (2026-08-05 → 2026-0
 by default) summing order values from three kinds of sources into editable
 per-category targets:
 
-  clickup lists  — "IT Products" 901524960550 (mode rest + a PC brand split)
-                   and "Le Luxe Products" 901520351506 (mode all), value =
-                   the "Total Amount" currency field (USD despite its ILS
-                   label — owner-confirmed), dated by task date_created.
+  clickup lists  — "IT Products" 901524960550 and "Le Luxe Products"
+                   901520351506, value = the "Total Amount" currency field
+                   (USD despite its ILS label — owner-confirmed), dated by
+                   task date_created.
   purchases      — Otlobly POs from purchases.json via pnl._cogs_po_rows
                    (total_usd, AED fallback; order_placed → created_at date).
 
@@ -15,6 +15,12 @@ Value-unit rule (same rule as leluxe_goal, ported to raw ClickUp tasks): a
 top task's value = its non-excluded descendants' amounts when any descendant
 carries one, else the top's own amount — so "Order # …" parents and their
 product subtasks never double-count. Excluded statuses drop at both levels.
+
+Routing rule: one order routinely mixes a graphics card, a Le Luxe watch and
+an Otlobly product, so a unit goes to the card that claims its BRAND, whatever
+list it sits on (_classify). Only then does the list matter: an `all` card
+takes what's left on its own list, and that list's `rest` card is the visible
+leftover bucket. Cards flagged counts=False sit outside the campaign totals.
 
 Freshness: ClickUp results are reduced to units and cached per worker, keyed
 by the shared `goals:stamp` row in the settings table. The /webhook/clickup
@@ -61,24 +67,36 @@ DEFAULTS = {
     "team_id": "90151514222",
     "amount_field_id": "c7243d42-56b6-4a85-8634-e2f948f72be5",   # Total Amount
     "brand_field_id": "839ed479-bea9-4447-87d6-963dfe23843a",    # Brand
+    # Every card claims by Brand, and a brand claim CROSSES lists: one ClickUp
+    # order often mixes a graphics card, a Le Luxe watch and an Otlobly product,
+    # so the list a task sits on says nothing about which card it belongs to.
+    # `it` used to be a blind catch-all (mode "rest") — every brand no other card
+    # claimed landed on "Grafic cards", watches included. It now claims only the
+    # two graphics-card options (the ClickUp field really does carry both
+    # spellings). Whatever nobody claims falls to `unsorted`, which is VISIBLE
+    # and counts toward nothing — a silent drop is how money disappears.
     "categories": [
-        # `it` is the catch-all: untagged tasks plus every brand no other card
-        # claims (Graphic card, GOLD, Silver, sandisk…). `pc` claims ONE brand —
-        # "Other IT", the tag actually in use. It used to claim "PC", which was
-        # never an option on the ClickUp list, so that card could only read $0.
         {"key": "it", "label": "Grafic cards", "target": 20000.0,
-         "mode": "rest", "list_id": "901524960550"},
+         "mode": "brand", "list_id": "901524960550",
+         "brands": ["Graphic card", "grafic card"]},
         {"key": "pc", "label": "Other IT products", "target": 5000.0,
          "mode": "brand", "list_id": "901524960550", "brands": ["Other IT"]},
+        # mode "all" → the whole Le Luxe list counts; `brands` is what it ALSO
+        # claims from other lists (a GUESS watch filed on the IT list).
         {"key": "watches", "label": "Watches (Le Luxe)", "target": 10000.0,
-         "mode": "all", "list_id": "901520351506"},
+         "mode": "all", "list_id": "901520351506",
+         "brands": ["annie klein", "Nine west", "GUESS", "STEVE MADDEN", "BOSS",
+                    "HUGO WALLET", "POLO", "nautica", "Timberland", "Montblanc",
+                    "G-SHOCK", "GOLD", "Silver"]},
         {"key": "otlobly", "label": "Otlobly", "target": 10000.0,
-         "mode": "purchases"},
+         "mode": "purchases", "brands": ["Otlobly"]},
+        {"key": "unsorted", "label": "غير مصنف · Unsorted", "target": 0.0,
+         "mode": "rest", "list_id": "901524960550", "counts": False},
     ],
 }
 
-# What the inline editor may change; structure (key/mode) stays code-owned so a
-# stale saved blob can never break the engine.
+# What the inline editor may change; structure (key/mode/counts) stays code-owned
+# so a stale saved blob can never break the engine.
 _EDITABLE_CAT = ("label", "target", "brands", "list_id")
 CLICKUP_MODES = ("brand", "rest", "all")
 
@@ -149,7 +167,7 @@ def save_settings(body):
                 if not label:
                     return None, f"{cat['key']}: label is required"
                 cat["label"] = label
-            if "target" in inc:
+            if "target" in inc and cat.get("counts", True):
                 try:
                     target = float(inc["target"])
                 except (TypeError, ValueError):
@@ -157,11 +175,15 @@ def save_settings(body):
                 if target <= 0:
                     return None, f"{cat['key']}: target must be > 0"
                 cat["target"] = target
-            if "brands" in inc and cat["mode"] == "brand":
+            # Any card may claim brands now, not just mode "brand" — that's how a
+            # Le Luxe watch filed on the IT list reaches the Watches card. Only a
+            # pure brand card must keep at least one: `all`/`purchases` cards have
+            # a second source and may legitimately claim nothing.
+            if "brands" in inc and cat["mode"] in ("brand", "all", "purchases"):
                 if not isinstance(inc["brands"], list):
                     return None, f"{cat['key']}: brands must be a list"
                 brands = [str(x).strip() for x in inc["brands"] if str(x).strip()]
-                if not brands:
+                if not brands and cat["mode"] == "brand":
                     return None, f"{cat['key']}: needs at least one brand name"
                 cat["brands"] = brands
             if "list_id" in inc and cat["mode"] in CLICKUP_MODES:
@@ -355,6 +377,7 @@ def _units_from_tasks(tasks, excluded, amount_fid, brand_fid):
                 "task_id": task.get("id"),
                 "brand": _brand_of(task, brand_fid) or _brand_of(top, brand_fid),
                 "status": (task.get("status") or {}).get("status") or "",
+                "top_id": top.get("id"),        # the order a product belongs to
                 "top_name": top.get("name") or "",
                 "url": task.get("url"),
                 "warn": warn}
@@ -406,7 +429,9 @@ def _purchases_units(start_iso, end_iso):
         units.append({"usd": round(float(usd or 0.0), 2), "day": day,
                       "name": (pid + (" · " + extra if extra else "")) or "PO",
                       "task_id": pid, "brand": None,
-                      "status": po.get("status") or "", "top_name": pid,
+                      "status": po.get("status") or "",
+                      "top_id": pid,            # one PO = one order
+                      "top_name": pid,
                       "url": None, "warn": None if usd else "no_amount"})
     return units
 
@@ -454,25 +479,35 @@ def _clickup_lists(st, refresh=False, fetch=None):
                 continue
             units, opts = _units_from_tasks(tasks, st["excluded"],
                                             st["amount_field_id"], st["brand_field_id"])
+            for u in units:
+                u["list_id"] = lid           # _classify needs the source list
             lists[lid] = {"units": units, "brand_options": opts}
         _CACHE.update({"token": token, "at": time.time(), "lists": lists, "error": err})
         return lists, err
 
 
 def _classify(units, cats):
-    """Split one list's units among its categories: brand-mode categories
-    claim first (unit's own brand, already top-inherited); rest/all take the
-    remainder."""
+    """Route every ClickUp unit (from ALL lists at once) to one card.
+
+    A Brand claim wins and crosses lists — a GUESS watch filed on the IT list
+    still counts as Le Luxe, which is the whole point: an order mixes products,
+    the list it lives on does not. Only when no card claims the brand does the
+    list decide: the `all` card takes its own list, else that list's `rest` card
+    catches it. Brand claims resolve in category order, so keep them disjoint."""
     out = {c["key"]: [] for c in cats}
     brand_cats = [(c["key"], {_norm(b) for b in c.get("brands") or []})
-                  for c in cats if c.get("mode") == "brand"]
-    rest_keys = [c["key"] for c in cats if c.get("mode") in ("rest", "all")]
+                  for c in cats if c.get("brands")]
+    all_by_list = {str(c.get("list_id")): c["key"]
+                   for c in cats if c.get("mode") == "all"}
+    rest_by_list = {str(c.get("list_id")): c["key"]
+                    for c in cats if c.get("mode") == "rest"}
     for u in units:
         b = _norm(u.get("brand"))
         key = next((k for k, names in brand_cats if b and b in names), None)
-        if key is None and rest_keys:
-            key = rest_keys[0]
-        if key is not None:
+        if key is None:
+            lid = str(u.get("list_id") or "")
+            key = all_by_list.get(lid) or rest_by_list.get(lid)
+        if key in out:
             out[key].append(u)
     return out
 
@@ -501,44 +536,59 @@ def compute(refresh=False, now=None, fetch=None):
 
     lists, cerr = _clickup_lists(st, refresh=refresh, fetch=fetch)
 
-    per_cat_units = {}
-    for lid, blob in lists.items():
-        cats = [c for c in st["categories"]
-                if c.get("mode") in CLICKUP_MODES and str(c.get("list_id")) == lid]
-        for key, us in _classify(blob["units"], cats).items():
-            per_cat_units[key] = us
+    # One pass over every list's units: brand claims cross lists, so a per-list
+    # split would strand a Le Luxe watch that was filed on the IT list.
+    all_units = [u for blob in lists.values() for u in blob["units"]]
+    per_cat_units = _classify(all_units, st["categories"])
+    all_options = {_norm(o) for blob in lists.values()
+                   for o in blob.get("brand_options") or []}
 
     day_axis = [start + timedelta(days=i) for i in range(days_total)]
     combined_by_day = {d: 0.0 for d in day_axis}
     categories = []
     for cat in st["categories"]:
+        # ClickUp units are windowed here; PO units already are, inside
+        # pnl._cogs_po_rows — re-filtering them would drop a PO whose date
+        # doesn't parse, which the P&L still counts.
+        units = [u for u in per_cat_units.get(cat["key"], [])
+                 if u["day"] and start <= u["day"] <= end]
         if cat["mode"] == "purchases":
-            units = _purchases_units(st["window_start"], st["window_end"])
-        else:
-            units = [u for u in per_cat_units.get(cat["key"], [])
-                     if u["day"] and start <= u["day"] <= end]
+            units += _purchases_units(st["window_start"], st["window_end"])
+        if cat["mode"] == "rest":
+            # the leftover bucket: say WHY each row is here, so the fix (tag the
+            # Brand in ClickUp) is one click away. Copies — never stamp the cache.
+            units = [dict(u, warn=u.get("warn") or
+                          ("no_brand" if not u.get("brand") else "brand_unclaimed"))
+                     for u in units]
+        counts = cat.get("counts", True)
         actual = sum(u["usd"] for u in units)
-        for u in units:
-            if u["day"] in combined_by_day:
-                combined_by_day[u["day"]] += u["usd"]
+        if counts:
+            for u in units:
+                if u["day"] in combined_by_day:
+                    combined_by_day[u["day"]] += u["usd"]
         warnings = [{"kind": u["warn"], "name": u["name"], "task_id": u["task_id"]}
                     for u in units if u.get("warn")]
-        if cat["mode"] == "brand":
-            options = {_norm(o) for o in (lists.get(str(cat.get("list_id"))) or {})
-                       .get("brand_options") or []}
-            for b in cat.get("brands") or []:
-                if options and _norm(b) not in options:
-                    warnings.insert(0, {"kind": "brand_missing", "name": b, "task_id": None})
+        for b in cat.get("brands") or []:
+            if all_options and _norm(b) not in all_options:
+                warnings.insert(0, {"kind": "brand_missing", "name": b, "task_id": None})
         target = float(cat["target"])
         remaining = max(0.0, target - actual)
         breakdown = sorted(units, key=lambda u: (u["day"] or date.min, u["usd"]),
                            reverse=True)[:BREAKDOWN_CAP]
+        # "orders" means orders: a 5-product order is one order, not five. A
+        # mixed order feeding two cards counts once on each — hence order_ids,
+        # so the IT+PC combine can union instead of double-adding.
+        order_ids = sorted({u["top_id"] for u in units
+                            if u["usd"] > 0 and u.get("top_id")})
         categories.append({
             "key": cat["key"], "label": cat["label"], "mode": cat["mode"],
             "list_id": cat.get("list_id"), "brands": cat.get("brands"),
+            "counts": counts,
             "target": round(target, 2), "actual": round(actual, 2),
             "pct": round(actual / target * 100, 1) if target else 0.0,
-            "n": sum(1 for u in units if u["usd"] > 0),
+            "n": len(order_ids),
+            "items": sum(1 for u in units if u["usd"] > 0),
+            "order_ids": order_ids,
             "remaining": round(remaining, 2),
             "need_per_day": round(remaining / days_left, 2) if days_left else 0.0,
             "breakdown": [_ser_unit(u) for u in breakdown],
@@ -546,8 +596,11 @@ def compute(refresh=False, now=None, fetch=None):
             "warnings": warnings,
         })
 
-    target_total = sum(c["target"] for c in categories)
-    actual_total = sum(c["actual"] for c in categories)
+    # counts=False cards (the Unsorted bucket) are shown but never scored —
+    # their money is unrouted, not earned toward a target.
+    scored = [c for c in categories if c["counts"]]
+    target_total = sum(c["target"] for c in scored)
+    actual_total = sum(c["actual"] for c in scored)
     remaining_total = max(0.0, target_total - actual_total)
     pct = round(actual_total / target_total * 100, 1) if target_total else 0.0
     milestone = max((m for m in (25, 50, 75, 100) if pct >= m), default=0)

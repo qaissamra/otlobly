@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import landed
 import normalize
 import store
 from db import current_business
@@ -199,6 +200,14 @@ def _norm_item(raw):
         "est_cost_usd": raw.get("est_cost_usd"),
         "est_cost_src": raw.get("est_cost_src"),
         "est_cost_at": raw.get("est_cost_at"),
+        # 💵 Cost split (landed.py). One checkout mixes Otlobly / watches / IT,
+        # so each line carries which book it belongs to, what was actually PAID
+        # per unit (est_cost_usd is only a lookup), and an optional hand-set
+        # share of the shipping/tax/import extras for a line you know better
+        # than a pro-rata guess.
+        "bucket": landed.clean_bucket(raw.get("bucket")),
+        "unit_paid_usd": _num(raw.get("unit_paid_usd")),
+        "extra_override_usd": _num(raw.get("extra_override_usd")),
     }
 
 
@@ -224,6 +233,7 @@ def new_po(db, *, amazon_order_number, ship_to="", profile_box=None,
         "total_usd": float(total_usd) if total_usd not in (None, "") else None,
         "status": status,
         "clickup_task_id": None,
+        "costs": None,
         "packages": pkgs,
         "created_at": now_iso(),
         "updated_at": now_iso(),
@@ -362,6 +372,12 @@ def save_full(db, po_dict, orders):
         # older client that omits the dict must not wipe saved values
         "custom": (po_dict.get("custom") if isinstance(po_dict.get("custom"), dict)
                    else (existing or {}).get("custom")) or {},
+        # 💵 The Amazon order summary as typed/pasted (items · shipping · promo ·
+        # tax · import · other) — what landed.split_po shares out across the
+        # lines. Same omitted-key protection as `custom`: a client that doesn't
+        # post the key keeps what's on disk, an explicit null clears it.
+        "costs": (landed.clean_costs(po_dict.get("costs")) if "costs" in po_dict
+                  else (existing or {}).get("costs")),
         "clickup_task_id": (existing or {}).get("clickup_task_id"),
         "screenshot": (existing or {}).get("screenshot"),
         "attachments": ((existing or {}).get("attachments")
@@ -438,8 +454,12 @@ def _redact_po_money(po):
     Amazon totals and the per-item cost estimates are the business's COGS —
     fulfillment can pack and track without ever seeing them. money:False tells
     the UI to skip the money cells/footers entirely."""
-    po = {**po, "total_usd": None, "total_aed": None, "money": False}
-    po["packages"] = [{**pk, "items": [{**it, "est_cost_usd": None}
+    po = {**po, "total_usd": None, "total_aed": None, "money": False,
+          # the typed Amazon breakdown and the landed split ARE the COGS
+          "costs": None, "by_bucket": None}
+    po["packages"] = [{**pk, "items": [{**it, "est_cost_usd": None,
+                                        "unit_paid_usd": None,
+                                        "extra_override_usd": None}
                                        for it in pk.get("items", [])]}
                       for pk in po.get("packages", [])]
     return po
@@ -453,8 +473,25 @@ def summary(po, include_money=True):
         "n_items": len(items),
         "n_matched": sum(1 for it in items if it.get("matched")),
         "n_unmatched": sum(1 for it in items if not it.get("matched")),
+        # compact per-category landed totals for the board; the full split
+        # (per line) comes from /api/purchase/split on demand
+        "by_bucket": landed.bucket_totals(po),
     }
     return out if include_money else _redact_po_money(out)
+
+
+def split_costs(po_dict):
+    """💵 Landed-cost split for a saved PO *or* an unsaved draft from the editor.
+
+    The draft is put through the same normalization a save would apply, so the
+    preview shown while the owner is still typing is exactly the split that
+    gets stored — no "it changed when I hit save" surprises."""
+    return landed.split_po({
+        "po_id": po_dict.get("po_id"),
+        "total_usd": _num(po_dict.get("total_usd")),
+        "costs": landed.clean_costs(po_dict.get("costs")),
+        "packages": _norm_packages(po_dict.get("packages")),
+    })
 
 
 # --------------------------------------------------------------------------- #

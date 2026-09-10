@@ -4,15 +4,41 @@
     {
       "name": "otlobly-app",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders' && OTLOBLY_OTP_DEV=1 OTLOBLY_EMAIL_DEV=1 exec ./.venv/bin/python app.py"],
+      "runtimeArgs": [
+        "-c",
+        "cd '/Users/leluxegroup2/projects/otlobly-orders' && OTLOBLY_OTP_DEV=1 OTLOBLY_EMAIL_DEV=1 exec ./.venv/bin/python app.py"
+      ],
       "port": 8789,
       "autoPort": true
     },
     {
       "name": "otlobly-static-ui",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "cd '/Users/leluxegroup2/projects/otlobly-orders/web' && exec python3 -m http.server 8790"],
+      "runtimeArgs": [
+        "-c",
+        "cd '/Users/leluxegroup2/projects/otlobly-orders/web' && exec python3 -m http.server 8790"
+      ],
       "port": 8790
+    },
+    {
+      "name": "ux-preview",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "cd '/private/tmp/claude-501/-Users-leluxegroup2-projects-otlobly-orders/163e34d2-20db-4b1c-8e80-94157405018e/scratchpad/ux-phase0' && OTLOBLY_OTP_DEV=1 OTLOBLY_EMAIL_DEV=1 PORT=8803 exec /Users/leluxegroup2/projects/otlobly-orders/.venv/bin/python app.py"
+      ],
+      "port": 8803,
+      "autoPort": false
+    },
+    {
+      "name": "uxqa2",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "cd '/private/tmp/claude-501/-Users-leluxegroup2-projects-otlobly-orders/fb296f99-f358-4f88-8430-95dda87686c4/scratchpad/mainwt' && OTLOBLY_DATA_DIR='/private/tmp/claude-501/-Users-leluxegroup2-projects-otlobly-orders/fb296f99-f358-4f88-8430-95dda87686c4/scratchpad/snap' OTLOBLY_OTP_DEV=1 OTLOBLY_EMAIL_DEV=1 PORT=8812 exec /Users/leluxegroup2/projects/otlobly-orders/.venv/bin/python app.py"
+      ],
+      "port": 8812,
+      "autoPort": false
     }
   ]
 }

@@ -5,9 +5,13 @@ Self-checks for the 🏆 Goals engine (goals.py) + its routes.
 Proves: the value-unit rule on raw ClickUp tasks (descendants win over the
 parent amount, Order # parents never double-count, exclusion at both levels,
 orphan promotion, nesting); dropdown Brand decoding by orderindex and uuid
-with top-inheritance and case-blind claims; the missing-brand-option warning;
-Asia/Amman window edges; the Otlobly purchases category (total_usd, AED
-fallback, inclusive dates); settings validation + roundtrip; the stamp-keyed
+with top-inheritance and case-blind claims; that routing follows the BRAND
+across lists (one mixed order splits per product — a GUESS watch filed on the
+IT list scores as Le Luxe) with everything unclaimed landing in the visible,
+unscored Unsorted bucket; that "N orders" counts orders, not product lines;
+the missing-brand-option warning; Asia/Amman window edges; the Otlobly
+purchases category (total_usd, AED fallback, inclusive dates, plus
+Otlobly-branded ClickUp tasks); settings validation + roundtrip; the stamp-keyed
 cache (hit, bump-invalidation, refresh, TTL expiry, stale-on-error fallback);
 webhook signature verification; and that every /api/goals* route is
 admin-only while /webhook/clickup never bumps the stamp without a valid
@@ -56,7 +60,10 @@ LID_IT = "901524960550"
 LID_W = "901520351506"
 BRAND_OPTS = [{"id": "opt-gc", "name": "Graphic card", "orderindex": 0},
               {"id": "opt-pc", "name": "Other IT", "orderindex": 1},
-              {"id": "opt-au", "name": "GOLD", "orderindex": 2}]
+              {"id": "opt-au", "name": "GOLD", "orderindex": 2},
+              {"id": "opt-gu", "name": "GUESS", "orderindex": 3},
+              {"id": "opt-ot", "name": "Otlobly", "orderindex": 4},
+              {"id": "opt-sd", "name": "sandisk", "orderindex": 5}]
 
 
 def ms_amman(y, m, d, hh=12):
@@ -101,11 +108,20 @@ IT_TASKS = [
     task("t6a", "Bad card", "cancelled", AUG10, parent="t6", amount=400),
     task("t6b", "Good card", "ordered", AUG10, parent="t6", amount=200),
     # Amman window edges: 21:30 UTC = 00:30 next day in Amman
-    task("t7", "Edge in", "ordered", ms_utc(2026, 8, 4, 21, 30), amount=111),
+    task("t7", "Edge in", "ordered", ms_utc(2026, 8, 4, 21, 30), amount=111, brand="opt-gc"),
     task("t8", "Edge out", "ordered", ms_utc(2026, 9, 5, 21, 30), amount=77),
     # child inherits the top's PC brand
     task("t9", "Order # 999", "order number", AUG10, brand="opt-pc"),
     task("t9a", "Custom build", "ordered", AUG10, parent="t9", amount=600),
+    # THE REPORTED BUG: one order on the IT list mixing a graphics card, a Le
+    # Luxe watch, an Otlobly product and an unclaimed brand. Each product must
+    # land on its own card — the order it shares says nothing about that.
+    task("t10", "Order # 1010", "order number", AUG10),
+    task("t10a", "RTX 4060", "ordered", AUG10, parent="t10", amount=700, brand="opt-gc"),
+    task("t10b", "2 GUESS Mens Watch", "ordered", AUG10, parent="t10", amount=138, brand="opt-gu"),
+    task("t10c", "SOPOGER Arch", "ordered", AUG10, parent="t10", amount=29, brand="opt-ot"),
+    task("t10d", "SanDisk 1TB", "ordered", AUG10, parent="t10", amount=40, brand="opt-sd"),
+    task("t10e", "RTX 4070", "ordered", AUG10, parent="t10", amount=800, brand="opt-gc"),
 ]
 W_TASKS = [
     task("w1", "Rolex", "oredered", ms_amman(2026, 8, 6), amount=1000),
@@ -138,19 +154,30 @@ check("orphan promoted", by_id["t5"]["usd"] == 250)
 check("item-level cancel drops just the item",
       "t6a" not in by_id and by_id["t6b"]["usd"] == 200 and "t6" not in by_id)
 check("no double count anywhere",
-      round(sum(u["usd"] for u in units), 2) == 900 + 500 + 300 + 250 + 200 + 111 + 77 + 600)
-check("brand options collected", opts == ["GOLD", "Graphic card", "Other IT"])
+      round(sum(u["usd"] for u in units), 2)
+      == 900 + 500 + 300 + 250 + 200 + 111 + 77 + 600 + 700 + 138 + 29 + 40 + 800)
+check("brand options collected", opts == sorted(o["name"] for o in BRAND_OPTS))
+check("a product carries its order's id", by_id["t10a"]["top_id"] == "t10"
+      and by_id["t5"]["top_id"] == "t5")
 
 # ── 2 · brand decode + classification ─────────────────────────────────────── #
 print("brands")
 check("brand by orderindex", by_id["t1a"]["brand"] == "Graphic card")
 check("brand by uuid", by_id["t3"]["brand"] == "Other IT")
 check("child inherits top brand", by_id["t9a"]["brand"] == "Other IT")
-cats = [c for c in goals.DEFAULTS["categories"] if c.get("list_id") == LID_IT]
-split = goals._classify(units, cats)
+for u in units:
+    u["list_id"] = LID_IT            # what _clickup_lists stamps on every unit
+split = goals._classify(units, goals.DEFAULTS["categories"])
 check("pc claims case-blind", {u["task_id"] for u in split["pc"]} == {"t3", "t9a"})
-check("rest takes the remainder",
-      {u["task_id"] for u in split["it"]} == {"t1a", "t1b", "t2", "t5", "t6b", "t7", "t8"})
+check("Grafic cards claims ONLY the graphics brands",
+      {u["task_id"] for u in split["it"]} == {"t1a", "t7", "t10a", "t10e"})
+check("a GUESS watch filed on the IT list scores as Le Luxe",
+      {u["task_id"] for u in split["watches"]} == {"t10b"})
+check("an Otlobly-branded ClickUp product reaches the Otlobly card",
+      {u["task_id"] for u in split["otlobly"]} == {"t10c"})
+check("unclaimed + brandless fall to the visible Unsorted bucket",
+      {u["task_id"] for u in split["unsorted"]}
+      == {"t1b", "t2", "t5", "t6b", "t8", "t10d"})
 
 # ── 3 · compute: windows, totals, purchases ───────────────────────────────── #
 print("compute")
@@ -166,20 +193,40 @@ print("compute")
 ], "seq": 4}))
 snap = goals.compute(now=NOW, fetch=fake_fetch)
 cat = {c["key"]: c for c in snap["categories"]}
-check("it actual (edge-in counts, edge-out doesn't)", cat["it"]["actual"] == 1961.0)
+check("it actual (edge-in counts, edge-out doesn't)",
+      cat["it"]["actual"] == 900.0 + 111.0 + 700.0 + 800.0)
 check("pc actual", cat["pc"]["actual"] == 900.0)
-check("watches actual (cancelled dropped)", cat["watches"]["actual"] == 1250.0)
-check("otlobly actual (usd + aed fallback + inclusive end)",
-      cat["otlobly"]["actual"] == 550.0)
-check("totals", snap["totals"]["actual"] == 4661.0 and snap["totals"]["target"] == 45000.0)
+check("watches actual (own list, cancelled dropped, + the misfiled GUESS)",
+      cat["watches"]["actual"] == 1250.0 + 138.0)
+check("otlobly actual (usd + aed fallback + inclusive end + branded ClickUp task)",
+      cat["otlobly"]["actual"] == 550.0 + 29.0)
+check("unsorted collects the rest and is flagged unscored",
+      cat["unsorted"]["actual"] == 500.0 + 250.0 + 200.0 + 40.0
+      and cat["unsorted"]["counts"] is False)
+check("totals exclude the unsorted bucket",
+      snap["totals"]["actual"] == 2511.0 + 900.0 + 1388.0 + 579.0
+      and snap["totals"]["target"] == 45000.0)
+check("day-by-day matches the scored total",
+      round(sum(d["usd"] for d in snap["by_day"]), 2) == snap["totals"]["actual"])
 check("window days", snap["window"]["days_total"] == 32 and snap["window"]["elapsed"] == 16
       and snap["window"]["days_left"] == 17 and snap["window"]["active"])
-check("need per day", snap["totals"]["need_per_day"] == round((45000 - 4661) / 17, 2))
+check("need per day", snap["totals"]["need_per_day"] == round((45000 - 5378) / 17, 2))
 check("by_day edge slot", snap["by_day"][0]["d"] == "2026-08-05"
       and snap["by_day"][0]["usd"] == 111.0)
+check("n counts ORDERS, items counts product lines",
+      cat["it"]["n"] == 3 and cat["it"]["items"] == 4)
+check("order_ids deduped", cat["it"]["order_ids"] == ["t1", "t10", "t7"])
+check("a mixed order counts once on each card it feeds",
+      "t10" in cat["it"]["order_ids"] and "t10" in cat["watches"]["order_ids"]
+      and "t10" in cat["otlobly"]["order_ids"])
+check("unrouted rows say why, without losing the existing warnings",
+      {u["task_id"]: u["warn"] for u in cat["unsorted"]["breakdown"]}
+      == {"t1b": "no_amount", "t2": "parent_fallback", "t5": "no_brand",
+          "t6b": "no_brand", "t10d": "brand_unclaimed"})
 check("no clickup error", snap["clickup_error"] is None)
-check("warnings surfaced", any(w["kind"] == "no_amount" for w in cat["it"]["warnings"])
-      and any(w["kind"] == "parent_fallback" for w in cat["it"]["warnings"]))
+check("warnings surfaced on the card actually holding those rows",
+      any(w["kind"] == "no_amount" for w in cat["unsorted"]["warnings"])
+      and any(w["kind"] == "parent_fallback" for w in cat["unsorted"]["warnings"]))
 check("no brand_missing when the claimed brand exists",
       not any(w["kind"] == "brand_missing" for w in cat["pc"]["warnings"]))
 
@@ -192,7 +239,10 @@ snap2 = goals.compute(now=NOW, fetch=fake_fetch)
 cat2 = {c["key"]: c for c in snap2["categories"]}
 check("brand_missing warning", any(w["kind"] == "brand_missing" and w["name"] == "NoSuchBrand"
                                    for w in cat2["pc"]["warnings"]))
-check("unmatched brand units fall to rest", cat2["it"]["actual"] == 1961.0 + 900.0)
+check("a card that claims nothing real reads $0 — its units go to Unsorted, "
+      "never into another named card",
+      cat2["pc"]["actual"] == 0.0 and cat2["it"]["actual"] == 2511.0
+      and cat2["unsorted"]["actual"] == 990.0 + 900.0)
 goals.save_settings({"categories": [{"key": "pc", "brands": ["other it"]}]})  # case-blind on purpose
 goals.bump_stamp("test")
 snap3 = goals.compute(now=NOW, fetch=fake_fetch)
@@ -220,7 +270,7 @@ def err_fetch(lid):
 
 snap4 = goals.compute(now=NOW, fetch=err_fetch, refresh=True)
 cat4 = {c["key"]: c for c in snap4["categories"]}
-check("fetch error → stale units kept", cat4["watches"]["actual"] == 1250.0)
+check("fetch error → stale units kept", cat4["watches"]["actual"] == 1388.0)
 check("fetch error surfaced", "boom" in (snap4["clickup_error"] or ""))
 snap5 = goals.compute(now=NOW, fetch=fake_fetch, refresh=True)
 check("recovers after error", snap5["clickup_error"] is None)
@@ -234,8 +284,15 @@ check("target 0 rejected",
       goals.save_settings({"categories": [{"key": "it", "target": 0}]})[1] is not None)
 check("unknown category rejected",
       goals.save_settings({"categories": [{"key": "hax", "target": 5}]})[1] is not None)
-check("empty brands rejected",
+check("empty brands rejected on a pure brand card",
       goals.save_settings({"categories": [{"key": "pc", "brands": []}]})[1] is not None)
+check("empty brands allowed where a second source exists (watches = mode all)",
+      goals.save_settings({"categories": [{"key": "watches", "brands": []}]})[1] is None)
+check("an unscored card ignores a target edit instead of erroring",
+      goals.save_settings({"categories": [{"key": "unsorted", "target": 0}]})[1] is None
+      and goals.settings()["categories"][4]["target"] == 0.0)
+goals.save_settings({"categories": [{"key": "watches",
+                                     "brands": goals.DEFAULTS["categories"][2]["brands"]}]})
 check("non-numeric list rejected",
       goals.save_settings({"categories": [{"key": "it", "list_id": "abc"}]})[1] is not None)
 st, err = goals.save_settings({"combine_it_pc": True, "window_end": "2026-09-10",
@@ -246,8 +303,9 @@ rt = goals.settings()
 check("roundtrip", rt["combine_it_pc"] is True and rt["window_end"] == "2026-09-10"
       and rt["categories"][0]["target"] == 25000.0
       and rt["categories"][0]["label"] == "IT + metals")
-check("structure stays code-owned", rt["categories"][0]["mode"] == "rest"
-      and rt["categories"][3]["mode"] == "purchases")
+check("structure stays code-owned", rt["categories"][0]["mode"] == "brand"
+      and rt["categories"][3]["mode"] == "purchases"
+      and rt["categories"][4]["counts"] is False)
 goals.save_settings({"combine_it_pc": False, "window_end": "2026-09-05",
                      "categories": [{"key": "it", "target": 20000, "label": "IT products"}]})
 
