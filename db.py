@@ -94,6 +94,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   entity TEXT, entity_id TEXT, detail TEXT
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS az_carts (
+  id TEXT PRIMARY KEY,
+  business_id INTEGER,
+  ref TEXT,
+  kind TEXT,
+  status TEXT,
+  host TEXT,
+  profile_box TEXT,
+  po_id TEXT,
+  task_id TEXT,
+  created_at TEXT, updated_at TEXT,
+  doc TEXT NOT NULL                     -- the whole cart (az_carts.py), JSON
+);
+CREATE INDEX IF NOT EXISTS az_carts_status ON az_carts (status, host);
 CREATE TABLE IF NOT EXISTS meta_leads (
   lead_id TEXT PRIMARY KEY,
   source TEXT,                         -- messenger | instagram | leadform

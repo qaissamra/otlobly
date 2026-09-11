@@ -56,8 +56,9 @@
     { key: "deleted", label: "Deleted", bucket: "deleted" },
   ];
 
-  /** The tags an order wears: how it is paid for, where it came from, what is on file. */
-  function orderTags(o) {
+  /** The tags an order wears: how it is paid for, where it came from, what is on file,
+      and — since the AZ Studio hand-off (2026-09-11) — where its cart stands over there. */
+  function orderTags(o, ctx) {   // ctx: reserved for row facts that need the page (unused today)
     const out = [];
     if (o.source === "website") out.push(D.tag({ label: "From the website", icon: "globe-alt", title: "Placed through the public catalog" }));
     if (o.payment_plan === "prepaid") out.push(D.tag({ label: "Prepaid", tone: "success", title: "Pays in full up front, no commission" }));
@@ -87,6 +88,8 @@
     if (ctx.canEdit || o.address) facts.push(["Address", W.neLocCell(o, "address") || D.dash()]);
     if (o.deposit_usd > 0) facts.push(["Deposit", esc(money(o.deposit_usd))]);
     if (kind === "ordered" && o.amazon_order_number) facts.push(["Amazon order", mono(o.amazon_order_number)]);
+    const azc = ctx.azCart ? ctx.azCart(o) : null;
+    if (azc) facts.push(["AZ Studio", ctx.azFacts ? ctx.azFacts(azc) : esc(azc.status)]);
     if (o.est_delivery_customer) facts.push(["Promised", `${esc(o.est_delivery_customer)} ${W.dueChip(o.est_delivery_customer)}`]);
     if (kind === "deleted" && o.deleted_at) facts.push(["Deleted", `${esc(o.deleted_at)}${o.deleted_by ? " by " + esc(o.deleted_by) : ""}`]);
     if (o.notes) facts.push(["Notes", text(o.notes)]);
@@ -121,7 +124,17 @@
         { label: "Delete order", icon: "trash", danger: true, onclick: `neDelete('${esc(o.order_id)}','${esc((o.customer || "").replace(/'/g, ""))}')` },
       ].filter(Boolean);
     }
-    if (kind === "incart") return [{ label: "Back to the To-order queue", icon: "arrow-uturn-left", onclick: `neUncart('${esc(o.order_id)}')` }];
+    if (kind === "incart") {
+      const cart = ctx.azCart ? ctx.azCart(o) : null;
+      return [
+        // The hand-off to AZ Studio: one task for the buying account, the order number back
+        ctx.az && !cart ? { label: "Send to AZ Studio", icon: "paper-airplane", title: "Make a task on AZ Studio for the buying account; the Amazon order number comes back on its own", onclick: `azSendOpen(['${esc(o.order_id)}'])` } : null,
+        ctx.az && cart && ["queued", "sent", "delivered", "failed", "in_cart", "payment_added", "issue"].includes(cart.status)
+          ? { label: "Cancel the AZ Studio cart", icon: "x-mark", title: "Withdraw it before it is ordered; the order comes back to the queue", onclick: `azCartCancel('${esc(cart.id)}')` } : null,
+        ctx.az && cart && cart.status === "failed" ? { label: "Send to AZ Studio again", icon: "arrow-path", onclick: `azCartRequeue('${esc(cart.id)}')` } : null,
+        { label: "Back to the To-order queue", icon: "arrow-uturn-left", onclick: `neUncart('${esc(o.order_id)}')` },
+      ].filter(Boolean);
+    }
     if (kind === "deleted") return [
       ctx.canEdit ? { label: "Restore", icon: "arrow-path", onclick: `neRestore('${esc(o.trash_id)}')` } : null,
       ctx.canAdmin ? { label: "Remove permanently", icon: "x-mark", danger: true, onclick: `nePurge('${esc(o.trash_id)}','${esc((o.customer || "").replace(/'/g, ""))}')` } : null,
@@ -163,20 +176,29 @@
         render: (o) => (o.deposit_usd > 0 ? `<span class="ds-num">${esc(money(o.deposit_usd))}</span>` : D.dash()) } : null,
       ctx.money ? { key: "remaining", label: "Still owed", w: 110, align: "end", sortVal: (o) => (o.amount_to_collect_usd || 0) - (o.deposit_usd || 0),
         render: (o) => (o.amount_to_collect_usd != null ? `<span class="ds-num">${esc(money(o.amount_to_collect_usd - (o.deposit_usd || 0)))}</span>` : D.dash()) } : null,
-      { key: "tags", label: "Tags", w: 200, sortable: false, render: orderTags },
+      { key: "tags", label: "Tags", w: 200, sortable: false, render: (o) => orderTags(o, ctx) },
       { key: "promised", label: "Promised", w: 130, sortVal: (o) => (o.est_delivery_customer ? Date.parse(o.est_delivery_customer) || Infinity : Infinity),
         render: (o) => (o.est_delivery_customer ? `${esc(D.fmt.date(o.est_delivery_customer))} ${W.dueChip(o.est_delivery_customer, ["DELIVERED", "COLLECTED", "CANCELLED"].includes(o.status))}` : D.dash()) },
       { key: "attention", label: "Needs attention", w: 190, sortable: false, render: (o) => orderAttention(ctx, o, kind) },
     ].filter(Boolean).concat([
-      { key: "status", label: "Status", w: 140, pin: "end", sortVal: (o) => o.status || "~",
-        render: (o) => (kind === "deleted" ? D.badge({ label: "Deleted", tone: "danger" }) : W.statusPill(o.status)) },
+      // The AZ Studio hand-off rides under the status pill: this column is pinned, so where
+      // the purchase stands over there is on screen without scrolling to the Tags column.
+      { key: "status", label: "Status", w: 150, pin: "end", sortVal: (o) => o.status || "~",
+        render: (o) => (kind === "deleted" ? D.badge({ label: "Deleted", tone: "danger" })
+          : W.statusPill(o.status) + (ctx.azChip ? (ctx.azChip(o) ? `<div class="ds-fl-az">${ctx.azChip(o)}</div>` : "") : "")) },
       { key: "actions", label: "", w: 52, type: "actions", pin: "end", locked: true, sortable: false, menu: (o) => orderActions(ctx, o, kind) },
     ]);
     D.tableRender(el, {
       id: "ne_" + kind, ariaLabel: "Orders " + kind, columns: cols, rows, rowKey: (o) => o.order_id,
-      // Only the queue itself can be moved to the cart, so only it offers selection.
-      selectable: kind === "pending",
-      bulk: kind === "pending" ? [{ label: "Move to cart", icon: "shopping-cart", variant: "primary", onclick: "neMoveSelected()" }] : null,
+      // The queue can be moved to the cart or handed to AZ Studio; the cart view can
+      // only be handed over (orders already in the cart by hand still need a buyer).
+      selectable: kind === "pending" || (kind === "incart" && !!ctx.az),
+      bulk: kind === "pending" ? [
+        { label: "Move to cart", icon: "shopping-cart", variant: "primary", onclick: "neMoveSelected()" },
+        ctx.az ? { label: "Send to AZ Studio", icon: "paper-airplane", title: "One task on AZ Studio for the buying account you pick; the Amazon order number comes back on its own", onclick: "neSendSelected()" } : null,
+      ].filter(Boolean) : (kind === "incart" && ctx.az ? [
+        { label: "Send to AZ Studio", icon: "paper-airplane", variant: "primary", onclick: "neSendSelected()" },
+      ] : null),
       onSelect: (keys) => ctx.setSelection(keys),
       expandable: { render: (o) => orderDetail(ctx, o, kind), open: () => false },
       empty: kind === "pending"

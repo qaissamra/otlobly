@@ -74,6 +74,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   "couldn't load" panes, and drives the 🩹 #dbBanner (setDbState) from the reply and
   from the 60 s bell poll's db:{…}. app.py answers /api/* 401/403/404/500 as JSON;
   pages keep their redirects. Never add a new "couldn't load" without ${apiFailReason()}
+- az_roster.py / recommend.py / az_carts.py — the AZ Studio bridge (2026-09-10/11): the
+  roster AZ Studio pushes (`/api/worker/az_roster`), the buying-account recommendation
+  (pure rules, fail-closed on a stale roster), and the hand-off both ways — ticked orders
+  become one cart per buying account, AZ Studio polls `/api/worker/az_carts?host=` (or is
+  pushed via `az.send_cart`), makes one task, and `/api/worker/az_result` writes the
+  purchase order here when the buyer types the Amazon order number there (once)
 - account_rd.py — per-account RD history for AZ Studio's Accounts Tool
   (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
 - flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →

@@ -6,6 +6,7 @@ the Multilogin profile behind a box (B19, B22…):
   * profile_info(box) — last IP, fraud score, proxy country, running?, run budget
   * check_ip(box)     — live exit-IP check (proxied through the AZ app, no browser)
   * launch(box)       — start the profile's browser and leave it open (manual use)
+  * send_cart(cart)   — hand a purchase to AZ Studio as a task (depth 2; az_carts.py)
 
 Reads the roster through AZ Studio's Otlobly bridge (2026-09-10): GET /api/otlobly/*
 behind a bearer of its own (env AZ_OTLOBLY_TOKEN) at AZ_STUDIO_URL — the droplet
@@ -109,6 +110,34 @@ def all_profiles(force=False):
     _cache["profiles"] = rows
     _cache["ts"] = time.time()
     return rows
+
+
+def configured():
+    """Can this host call AZ Studio directly (the bearer is set)? Without it the carts
+    still reach AZ Studio — every host polls for them with the worker token."""
+    return bool(AZ_TOKEN)
+
+
+def send_cart(payload, timeout=25):
+    """Hand one cart straight to AZ Studio (depth 2, 2026-09-11): POST /api/otlobly/carts.
+    Returns AZ Studio's answer ({ok, task_id, existed, host, …} or {ok:false, error, code});
+    a transport failure is {ok:false, transport:true, error} so the caller leaves the
+    cart queued for the poll instead of marking it failed."""
+    if not configured():
+        return {"ok": False, "transport": True, "error": "AZ_OTLOBLY_TOKEN is not set here"}
+    try:
+        return _post(f"{AZ_APP}/api/otlobly/carts", payload, timeout=timeout)
+    except error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode() or "{}")
+        except Exception:  # noqa: BLE001
+            body = {}
+        if e.code in (400, 404) and body.get("error"):
+            return {"ok": False, "error": body.get("error"), "code": body.get("code") or "",
+                    "host": body.get("host")}
+        return {"ok": False, "transport": True, "error": _why(e)}
+    except (error.URLError, ValueError, OSError) as e:
+        return {"ok": False, "transport": True, "error": _why(e)}
 
 
 def bust_cache():

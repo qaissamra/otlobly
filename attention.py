@@ -191,6 +191,37 @@ def _brain():
     return rows("deadlines", "late", "urgent"), rows("urgent", "stale", "urgent")
 
 
+def _az_carts(today):
+    """Hand-offs to AZ Studio that need a person here: refused (no such account on that
+    host), flagged as an Issue by the buyer, or queued with nobody taking them."""
+    try:
+        import az_carts
+        carts = az_carts.list_(limit=200)
+    except Exception:  # noqa: BLE001 — no table yet on an old file, or a bare CLI run
+        return []
+    out = []
+    for c in carts:
+        st = c.get("status")
+        who = c.get("customer") or c.get("ref") or c.get("id")
+        arg = (c.get("order_ids") or [None])[0] if c.get("kind") == "orders" else c.get("po_id")
+        view = "needorder" if c.get("kind") == "orders" else "purchases"
+        age = _days_since((c.get("updated_at") or "")[:10], today)
+        if st == "failed":
+            out.append(_item("az:" + c["id"], "az_failed", f"AZ Studio refused the cart for {who}",
+                             (c.get("error") or "")[:160] + " — pick another account and send again",
+                             severity="urgent", age_days=age, view=view, arg=arg))
+        elif st == "issue":
+            out.append(_item("az:" + c["id"], "az_issue", f"Issue on AZ Studio: {who}",
+                             ((c.get("az_note") or "the buyer flagged it")[:160]
+                              + (f" · {c.get('profile_box')}" if c.get("profile_box") else "")),
+                             severity="urgent", age_days=age, view=view, arg=arg))
+        elif st in ("queued", "sent") and age is not None and age >= 1:
+            out.append(_item("az:" + c["id"], "az_waiting", f"Nobody on AZ Studio took the cart for {who}",
+                             f"queued {age} d ago for {c.get('host') or 'any host'} — is AZ Studio running?",
+                             severity="soon", age_days=age, view=view, arg=arg))
+    return out
+
+
 def build(business_id=None):
     """The tenant's Needs attention queue. Reads are scoped by the tenancy
     contextvar, exactly like brain.build()."""
@@ -199,6 +230,7 @@ def build(business_id=None):
     past_deadline, urgent = _brain()
     groups = [
         _group("flags", "Action-required email", _flags()),
+        _group("az", "AZ Studio hand-offs", _az_carts(today)),
         _group("deadline", "Past deadline", past_deadline + late_pkg),
         _group("docs", "Customs documents requested", docs),
         _group("no_tracking", "No tracking number yet", no_trk),

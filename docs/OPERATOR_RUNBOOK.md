@@ -31,7 +31,8 @@ open the Tatabu console. Those are the owner's. If a page says "no permission", 
 2. **The bell** (top bar). New GAASH replies, document requests, database health.
 3. **Sales › Leads** — new messages from Messenger, Instagram and the lead forms.
 4. **Fulfillment › To order** — everything customers asked for that is not bought yet.
-5. **Buy on Amazon** in AZ Studio, then record the purchase order.
+5. **Buy on Amazon**: send the ticked orders to AZ Studio (the purchase order writes itself
+   when the buyer types the Amazon order number there), or buy yourself and record it.
 6. **Fulfillment › Purchase orders** — GWD numbers, shipping checks, documents, statuses.
 7. **Fulfillment › Package prep** — what arrived at the office, what to tell the customer.
 8. **Finance › Deposits** — every shekel or dollar that changed hands.
@@ -103,10 +104,40 @@ field applies exactly these rules and prefers the account with the fewest recent
 **RD** means a refund or dispute was filed on the Amazon side for that order. An account
 that ran an RD is spent and never takes a big order again. "no rd" means clean.
 
-**Place the order** in that account's browser profile (Multilogin on your computer), then
-copy the Amazon order number and the order total from the checkout page.
+**Hand the purchase to AZ Studio (the normal way).** On **To order**, tick the customer
+orders that go on one Amazon order, then **Send to AZ Studio** in the bar at the bottom.
+In the box that opens: pick the buying account (the recommendation is offered, with the
+reason; the list shows every account AZ Studio knows), pick the AZ Studio host when there
+is more than one (the droplet, az-studio, is the one Sara and you work on), and press
+**Send**. The orders move to **In cart** under that account, and within a minute AZ Studio
+shows one task named after the customer, on that account, with every product and what to
+collect. Whoever works the task there (you, or Sara) puts the products in the Amazon cart,
+adds the payment and places the order. When they pick **Ordered** on AZ Studio, it asks for
+the Amazon order number and the total once; Otlobly then writes the purchase order itself,
+and the customer orders flip to ORDERED with the number, the account and the delivery
+date. You never type the Amazon order number twice.
 
-**Record it in Otlobly.** Top bar **+ Add order** opens the purchase-order form:
+What the tag on the order row means (To order, In cart view, and on the purchase order):
+
+| Tag | Meaning | What to do |
+|---|---|---|
+| AZ Studio: Queued | No AZ Studio host has taken it yet (they ask every minute) | Nothing; if it stays a day, the bell says so — check AZ Studio is running |
+| AZ Studio: On AZ Studio | The task exists there | Nothing; the buyer works it |
+| AZ Studio: In the Amazon cart / Payment added | The buyer is that far | Nothing |
+| AZ Studio: Ordered 113-… | Placed; the purchase order was written from it | Check Purchases; add the GAASH number when it comes |
+| AZ Studio: AZ Studio refused it | That host has no account by that name | Row menu: pick another account, **Send to AZ Studio again** |
+| AZ Studio: Issue on AZ Studio | The buyer flagged a problem (the note is in the tag's tooltip and in the bell) | Talk to the buyer; fix; send again or cancel |
+
+**Cancel the AZ Studio cart** (row menu, In cart view) withdraws it before it is ordered
+and puts the orders back in the queue; the task already made on AZ Studio stays there for
+its person to delete. A purchase order already recorded here can be handed over the same
+way from its row menu, **Send to AZ Studio**: the number and total come back onto it.
+
+**Place the order yourself (the other way).** Open that account's browser profile
+(Multilogin on your computer), place the order, then copy the Amazon order number and the
+order total from the checkout page.
+
+**Record it in Otlobly by hand.** Top bar **+ Add order** opens the purchase-order form:
 
 | Field | What to put |
 |---|---|
