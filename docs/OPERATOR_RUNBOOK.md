@@ -108,14 +108,17 @@ that ran an RD is spent and never takes a big order again. "no rd" means clean.
 orders that go on one Amazon order, then **Send to AZ Studio** in the bar at the bottom.
 In the box that opens: pick the buying account (the recommendation is offered, with the
 reason; the list shows every account AZ Studio knows), pick the AZ Studio host when there
-is more than one (the droplet, az-studio, is the one Sara and you work on), and press
+is more than one (the droplet, az-studio, is the one Sara and you work on — press **Make
+default** next to it once and the box pre-selects it for everyone from then on), and press
 **Send**. The orders move to **In cart** under that account, and within a minute AZ Studio
 shows one task named after the customer, on that account, with every product and what to
 collect. Whoever works the task there (you, or Sara) puts the products in the Amazon cart,
 adds the payment and places the order. When they pick **Ordered** on AZ Studio, it asks for
 the Amazon order number and the total once; Otlobly then writes the purchase order itself,
 and the customer orders flip to ORDERED with the number, the account and the delivery
-date. You never type the Amazon order number twice.
+date. You never type the Amazon order number twice. Both of you buy: a task belongs to
+whoever takes it first — the moment one of you picks **In the cart** on AZ Studio the other
+sees it on the order's tag here, so nobody buys the same cart twice.
 
 What the tag on the order row means (To order, In cart view, and on the purchase order):
 

@@ -8295,9 +8295,20 @@ async function azSendOpen(orderIds, poId){
   if(!AZ_SEND.profile&&AZ_RECO&&AZ_RECO.ok&&AZ_RECO.recommended) azSendUse(AZ_RECO.recommended);   // the recommendation is the default; any pick overrides it
 }
 function azSendHostChips(){
-  const c=AZ_CARTS||{}; const known=[...new Set([c.default_host||""].concat(Object.keys(c.hosts||{})).filter(Boolean))];
-  return known.map(h=>DS.button({label:h,size:"sm",variant:AZ_SEND.host===h?"primary":"secondary",title:T("مضيف AZ Studio الذي يأخذ المهمة · the AZ Studio host that takes the task"),onclick:`azSendHost('${poEsc(h)}')`})).join(" ")
-    +" "+DS.button({label:T("أول من يسأل · first host to ask"),size:"sm",variant:AZ_SEND.host?"secondary":"primary",onclick:"azSendHost('')"});
+  const c=AZ_CARTS||{}; const def=c.default_host||""; const known=[...new Set([def].concat(Object.keys(c.hosts||{})).filter(Boolean))];
+  return known.map(h=>DS.button({label:h,size:"sm",variant:AZ_SEND.host===h?"primary":"secondary",title:T("مضيف AZ Studio الذي يأخذ المهمة · the AZ Studio host that takes the task")+(h===def?" — "+T("الافتراضي · the default"):""),onclick:`azSendHost('${poEsc(h)}')`})).join(" ")
+    +" "+DS.button({label:T("أول من يسأل · first host to ask"),size:"sm",variant:AZ_SEND.host?"secondary":"primary",onclick:"azSendHost('')"})
+    +(AZ_SEND.host&&AZ_SEND.host!==def?" "+DS.button({label:T("اجعله الافتراضي · Make default"),size:"sm",variant:"ghost",title:T("يُختار تلقائياً في المرة القادمة، للجميع · pre-selected next time, for everyone"),onclick:"azSendHostDefault()"}):"");
+}
+// the buyers' host, saved once for everyone: the send box pre-selects it from then on
+// (both AZ Studio hosts push the roster and poll, so without it the pre-selected chip flips)
+async function azSendHostDefault(){
+  if(!AZ_SEND||!AZ_SEND.host) return;
+  let r; try{ r=await post("/api/az/host",{host:AZ_SEND.host}); }catch(e){ r=null; }
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذر الحفظ · couldn't save")); return; }
+  if(AZ_CARTS){ AZ_CARTS.default_host=r.default_host||AZ_SEND.host; if(r.hosts) AZ_CARTS.hosts=r.hosts; }
+  const el=$("azSendHosts"); if(el) el.innerHTML=azSendHostChips();
+  toast(T("صار المضيف الافتراضي · now the default host")+": "+AZ_SEND.host);
 }
 function azSendHost(h){ if(!AZ_SEND) return; AZ_SEND.host=h||""; const el=$("azSendHosts"); if(el) el.innerHTML=azSendHostChips(); }
 function azSendUse(v){ if(!AZ_SEND) return; AZ_SEND.profile=(v||"").trim(); azRecoSync("bulkModal", AZ_SEND.profile); }
