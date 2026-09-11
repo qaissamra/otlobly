@@ -1591,6 +1591,26 @@ def api_az_carts_requeue():
     return jsonify({"ok": True, "cart": cart, "pushed": pushed})
 
 
+@app.route("/api/az/host", methods=["POST"])
+@auth.require("edit_order")
+@auth.require_feature("multilogin")
+def api_az_host():
+    """Remember the AZ Studio host new carts go to — the chip the send box pre-selects.
+    Both hosts push the roster and poll every minute, so without a saved choice the
+    pre-selected chip flips between the Mac and the droplet; the buyers work on the
+    droplet, so it is set once, for everyone. Empty clears it (back to the roster's
+    host, else the latest poller)."""
+    import az_carts
+    b = request.get_json(force=True, silent=True) or {}
+    host = str(b.get("host") or "").strip()[:80]
+    old = db.get_setting(az_carts.HOST_KEY) or ""
+    db.set_setting(az_carts.HOST_KEY, host)
+    if host != old:
+        activity.log("az_host", "setting", az_carts.HOST_KEY, "AZ Studio default host",
+                     field="host", old=old, new=host, user=_user())
+    return jsonify({"ok": True, "default_host": az_carts.default_host(), "hosts": az_carts.hosts()})
+
+
 @app.route("/api/az/track_fetch", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("multilogin")

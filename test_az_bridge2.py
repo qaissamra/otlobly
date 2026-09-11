@@ -187,6 +187,11 @@ def test_http():
     d = c.get("/api/az/carts").get_json()
     check("the carts list answers with labels and hosts", d["ok"] and any(x["id"] == cid for x in d["carts"])
           and d["labels"]["queued"] and d["direct"] is False)
+    r = c.post("/api/az/host", json={"host": "mac-mini"})
+    check("the operator can make a host the default for everyone", r.status_code == 200
+          and r.get_json()["default_host"] == "mac-mini" and c.get("/api/az/carts").get_json()["default_host"] == "mac-mini")
+    r = c.post("/api/az/host", json={"host": "az-studio"})
+    check("and change it again", r.status_code == 200 and c.get("/api/az/carts").get_json()["default_host"] == "az-studio")
     # the AZ Studio host polls (worker token), claims, acks
     check("worker poll without the bearer is 401", c.get("/api/worker/az_carts?host=az-studio").status_code == 401)
     r = c.get("/api/worker/az_carts?host=az-studio", headers=W)
@@ -265,7 +270,7 @@ def test_wiring():
     for s in ("function azCartsEnsure(", "function azCartFor(", "function azCartForPo(", "function azCartChip(",
               "async function azSendOpen(", "function azSendFoot(", "async function azSendGo(", "function neSendSelected(",
               "async function azCartCancel(", "async function azCartRequeue(", "azBoxMenu('azSendPick'", "azRecoLine('azSendUse'",
-              '"/api/az/send"', '"/api/az/carts"', "azChip:o=>azCartChip(azCartFor(o.order_id))",
+              '"/api/az/send"', '"/api/az/carts"', "azChip:o=>azCartChip(azCartFor(o.order_id))", "azSendHostDefault()", 'post("/api/az/host"',
               "const az=azCartChip(azCartForPo(p.po_id));"):
         check(f"index.html has {s[:44]}", s in idx)
     check("the To-order queue loads the carts before painting", "try{ await azCartsEnsure(true); }catch(e){}" in idx)
@@ -282,11 +287,11 @@ def test_wiring():
     svg = (HERE / "static" / "ds" / "icons.svg").read_text(encoding="utf-8")
     check("the paper-airplane icon exists in the sprite", 'id="i-paper-airplane"' in svg)
     ap = (HERE / "app.py").read_text(encoding="utf-8")
-    for route in ('"/api/az/send"', '"/api/az/carts"', '"/api/az/carts/cancel"', '"/api/az/carts/requeue"',
+    for route in ('"/api/az/send"', '"/api/az/carts"', '"/api/az/carts/cancel"', '"/api/az/carts/requeue"', '"/api/az/host"',
                   '"/api/worker/az_carts"', '"/api/worker/az_carts/ack"', '"/api/worker/az_result"'):
         check(f"app.py has {route}", route in ap)
     sw = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
-    check("service worker cache bumped (v27)", 'const CACHE = "otl-off-v27"' in sw)
+    check("service worker cache bumped (v28)", 'const CACHE = "otl-off-v28"' in sw)
     rb = (HERE / "docs" / "OPERATOR_RUNBOOK.md").read_text(encoding="utf-8")
     check("the runbook explains the hand-off", "Send to AZ Studio" in rb and "AZ Studio refused it" in rb)
     check("the schema has the az_carts table", "CREATE TABLE IF NOT EXISTS az_carts" in (HERE / "db.py").read_text(encoding="utf-8"))
