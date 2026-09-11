@@ -111,6 +111,8 @@
     stale: T("Stale", "neutral"), missing_id: T("No ID", "warning"), conflict: T("Conflict", "danger"),
     // Added in Phase 2 for the Needs attention queue (attention.py emits these three).
     action_email: T("Action required", "danger"), unpriced: T("No price", "warning"), over_quota: T("Over plan limit", "danger"),
+    // The AZ Studio hand-off (attention.py, 2026-09-11): refused, flagged by the buyer, nobody took it.
+    az_failed: T("AZ Studio refused it", "danger"), az_issue: T("Issue on AZ Studio", "danger"), az_waiting: T("Waiting for AZ Studio", "neutral"),
   };
 
   const maps = { order, poItem, pkg, bucket, gerizim, docs, gmThread, lead, payment, sync, flag, role, tier, attention };

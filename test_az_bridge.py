@@ -226,7 +226,10 @@ def test_wiring():
     for route in ('"/api/worker/az_roster"', '"/api/az/roster"', '"/api/az/recommend"'):
         check(f"app.py has {route}", route in ap)
     sw = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
-    check("service worker cache bumped (v26)", 'const CACHE = "otl-off-v26"' in sw)
+    import re as _re
+    m = _re.search(r'const CACHE = "otl-off-v(\d+)"', sw)
+    check("service worker cache at v26 or later (v26 shipped the picker)", bool(m) and int(m.group(1)) >= 26
+          and "v26:" in sw)
     check("recommend fails closed at 2 hours", recommend.STALE_HOURS == 2 and az_roster.STALE_MIN == 120)
     csv_rows = [["https://www.amazon.com/dp/B0TEST", "12.50", 2], ["https://x/y,z", "", 1]]
     check("the shopping list is link,price,qty (AZ Studio's positional layout)",

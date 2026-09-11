@@ -209,6 +209,9 @@
       ctx.flags.clickup ? { label: "Send to ClickUp", icon: "arrow-top-right-on-square", onclick: `clickupPO(this,'${esc(p.po_id)}',false)` } : null,
       { label: "Estimate every package", icon: "calculator", onclick: `poEstimateCost('${esc(p.po_id)}')` },
       { divider: true },
+      // The hand-off (depth 2): the whole order becomes one AZ Studio task on its buying
+      // account; the Amazon order number and total come back onto this PO by themselves
+      ctx.az ? { label: "Send to AZ Studio", icon: "paper-airplane", title: "Make a task on AZ Studio for this order's buying account; the Amazon order number and total come back onto it", onclick: `azSendOpen(null,'${esc(p.po_id)}')` } : null,
       // AZ Studio's Products page imports a sheet laid out as link · price · qty — this is that sheet
       { label: "Shopping list (CSV)", icon: "arrow-down-tray", title: "One row per product (link, price, qty), ready for AZ Studio's Products import", onclick: `poShoppingList('${esc(p.po_id)}','csv')` },
       { label: "Copy shopping list", icon: "clipboard", title: "The same rows, to the clipboard", onclick: `poShoppingList('${esc(p.po_id)}','copy')` },

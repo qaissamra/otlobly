@@ -6717,6 +6717,7 @@ async function loadNeedOrder(){
   try{ const r=await fetch("/api/needorder"); if(!r.ok) throw new Error("HTTP "+r.status); d=await r.json(); }
   catch(e){ $("neChrome").innerHTML=""; $("needList").innerHTML=DS.errorState({text:"Couldn't load the queue"+poEsc(apiFailReason()),retry:{onclick:"loadNeedOrder()"}}); return; }
   NE_DATA=d; NEED_ORDERS=d.orders||[];
+  try{ await azCartsEnsure(true); }catch(e){}          // where each hand-off stands (chips on the rows)
   renderNeedOrder();
 }
 // The board's saved views ARE the old sections; switching one repaints the board.
@@ -6782,6 +6783,12 @@ function neCtx(){
     lateDays:o=>{ const n=dueDays(o.est_delivery_customer);
       return (n!=null&&n<0&&!["DELIVERED","COLLECTED","CANCELLED"].includes(o.status))?Math.abs(n):null; },
     setSelection:keys=>{ NE_CART_SEL=keys.slice(); },
+    // the hand-off to AZ Studio (bridge depth 2)
+    // gated like the server routes: the business's multilogin feature (not the card flag)
+    az: CAN_EDIT && !!(((((typeof ME!=="undefined"&&ME)||{}).business||{}).features||{}).multilogin),
+    azCart:o=>azCartFor(o.order_id),
+    azChip:o=>azCartChip(azCartFor(o.order_id)),
+    azFacts:c=>azCartFacts(c),
   };
 }
 
@@ -6797,7 +6804,8 @@ function renderIncart(){
   const money=!(d.money===false||(d.cost_usd==null&&d.total_usd==null));
   DS.inCart.chrome("cartChrome",{ money,
     stats:{count:d.count||0, products:d.products||0, revenue:d.total_usd||0, cost:d.cost_usd||0} });
-  DS.inCart.board("cartList", d.orders||[], { money });
+  azCartsEnsure();
+  DS.inCart.board("cartList", d.orders||[], { money, azChip:o=>azCartChip(azCartFor(o.order_id)) });
 }
 
 function cartCostInput(v){
@@ -7681,6 +7689,7 @@ async function loadPurchases(){
   if(!d){ toast(T("تعذّر تحميل المشتريات · Couldn't load Purchases")); return; }
   POS=d.purchase_orders||[]; PO_STATUSES=d.statuses||PO_STATUSES;
   PO_MONEY=d.money!==false;                     // false = COGS redacted for this role
+  azCartsEnsure();                              // the hand-off chips on the profile cell (repaints on arrival)
   // The CRM list — names for the customer cell's datalist, and the FULL records
   // (phone/address/city/ID) keyed BOTH by normalized name and by phone core, so
   // the 👤 Customers view can show a contact line without a second request.
@@ -7844,8 +7853,9 @@ function poProfileCell(p){ const v=(p.profile_box||"").trim();
   // profile_box is Purchases' own field, but it holds the same B-codes as
   // Leluxe's ClickUp NAME dropdown — so the same code wears the same colour on
   // both boards. The "—" stays: a table column needs a placeholder.
-  return v?lxProfileChip(v,`${T('البروفايل · profile')}: ${v}`)
-    :`<span class="muted2" style="opacity:.5">—</span>`; }
+  const az=azCartChip(azCartForPo(p.po_id));        // where the hand-off to AZ Studio stands, if there is one
+  return (v?lxProfileChip(v,`${T('البروفايل · profile')}: ${v}`)
+    :`<span class="muted2" style="opacity:.5">—</span>`)+(az?`<div class="ds-fl-az">${az}</div>`:""); }
 // editable package due date — a colored due chip that becomes a date input on click
 // the customer order a package belongs to promises a delivery date
 // (est_delivery_customer, same value the Orders table shows). When a package has no
@@ -8212,6 +8222,128 @@ function azRecoHtml(use, cur){
 function azRecoLine(use, cur){ azRosterEnsure(); return `<div class="az-reco" data-use="${poEsc(use)}" data-cur="${poEsc(cur||"")}" style="font-size:var(--ds-t-xs);margin-top:5px;line-height:1.5">${azRecoHtml(use,cur)}</div>`; }
 function azRecoSync(modalId, v){ const m=$(modalId); if(!m) return; const inp=m.querySelector("input.pobox"); if(inp) inp.value=v;
   m.querySelectorAll(".az-reco").forEach(el=>{ el.dataset.cur=v; el.innerHTML=azRecoHtml(el.dataset.use,v); }); }
+// ── Send to AZ Studio: the hand-off both ways (bridge depth 2, 2026-09-11) ──
+// The ticked orders (or one purchase order) become ONE cart for ONE buying account
+// (/api/az/send); AZ Studio makes a task from it and posts every step back, and the
+// purchase order is written here when the buyer types the Amazon order number there.
+// AZ_CARTS mirrors /api/az/carts (60 s); the boards read it through ctx.azCart/azChip.
+let AZ_CARTS=null, AZ_CARTS_TS=0, AZ_CARTS_LOADING=null, AZ_SEND=null;
+const AZ_CART_TONE={delivered:"info",failed:"danger",in_cart:"warning",payment_added:"info",ordered:"success",issue:"danger",done:"success"};
+// The chip's own words are SHORT (it shares a fixed-height row with the status pill); the
+// full sentence, the host, the account and the Amazon number live in its tooltip.
+const AZ_CART_SHORT={queued:"Queued",sent:"Reaching",delivered:"On AZ Studio",failed:"Refused",in_cart:"In the cart",payment_added:"Payment added",ordered:"Ordered",issue:"Issue",done:"Done",cancelled:"Cancelled"};
+function azCartsEnsure(force){
+  if(!force && AZ_CARTS && Date.now()-AZ_CARTS_TS<60*1000) return Promise.resolve(AZ_CARTS);
+  if(AZ_CARTS_LOADING) return AZ_CARTS_LOADING;
+  AZ_CARTS_LOADING=(async()=>{
+    let d=null;
+    try{ const r=await fetch("/api/az/carts"); d=r.ok?await r.json():null; }catch(e){ d=null; }
+    const before=JSON.stringify((AZ_CARTS&&AZ_CARTS.carts)||[]);
+    AZ_CARTS=d&&d.ok?d:(AZ_CARTS||{ok:false,carts:[],hosts:{},default_host:"",labels:{}}); AZ_CARTS_TS=Date.now(); AZ_CARTS_LOADING=null;
+    if(before!==JSON.stringify(AZ_CARTS.carts||[])){   // something moved: repaint the board that shows it
+      if(VIEW==="needorder"&&NE_DATA) renderNeedOrder();
+      else if(VIEW==="purchases") renderPurchases();
+      else if(VIEW==="incart"&&CART_DATA) renderIncart();
+    }
+    return AZ_CARTS;
+  })();
+  return AZ_CARTS_LOADING;
+}
+function azCartFor(orderId){ const cs=(AZ_CARTS&&AZ_CARTS.carts)||[]; return cs.find(c=>c.status!=="cancelled"&&(c.order_ids||[]).includes(orderId))||null; }
+function azCartForPo(poId){ const cs=(AZ_CARTS&&AZ_CARTS.carts)||[]; return cs.find(c=>c.status!=="cancelled"&&c.po_id===poId)||null; }
+function azCartLabel(c){ const L=(AZ_CARTS&&AZ_CARTS.labels)||{}; return L[c.status]||c.status||""; }
+function azCartChip(c){
+  if(!c) return "";
+  const tip=[azCartLabel(c), c.host?`${T("على · on")} ${c.host}`:"", c.profile_box?`${T("حساب · account")} ${c.profile_box}`:"",
+             c.order_number?`Amazon ${c.order_number}`:"", c.order_total_usd!=null?money(c.order_total_usd):"", c.error||"", c.az_note?`${T("ملاحظة · note")}: ${c.az_note}`:""].filter(Boolean).join(" · ");
+  return DS.tag({label:AZ_CART_SHORT[c.status]||azCartLabel(c), icon:"paper-airplane", tone:AZ_CART_TONE[c.status], title:"AZ Studio: "+tip, cls:"az-cart-chip"});
+}
+function azCartFacts(c){
+  if(!c) return "";
+  const bits=[`<b>${poEsc(azCartLabel(c))}</b>`];
+  if(c.profile_box) bits.push(lxProfileChip(c.profile_box,c.profile_box));
+  if(c.host) bits.push(`${T("على · on")} ${poEsc(c.host)}`);
+  if(c.task_id) bits.push(`${T("مهمة · task")} <span class="mono">${poEsc(c.task_id)}</span>`);
+  if(c.order_number) bits.push(`Amazon <span class="mono">${poEsc(c.order_number)}</span>`);
+  if(c.order_total_usd!=null) bits.push(money(c.order_total_usd));
+  if(c.po_id) bits.push(`<span class="mono">${poEsc(c.po_id)}</span>`);
+  if(c.error) bits.push(`<span style="color:var(--danger)">${poEsc(c.error)}</span>`);
+  if(c.az_note) bits.push(`<span class="muted2">${poEsc(c.az_note)}</span>`);
+  return bits.join(" · ");
+}
+async function azSendOpen(orderIds, poId){
+  if(!CAN_EDIT) return;
+  const carts=await azCartsEnsure(true);
+  AZ_SEND={order_ids:(orderIds||[]).slice(), po_id:poId||null, profile:"", host:(carts&&carts.default_host)||"", rows:[]};
+  if(poId){
+    const p=poFind(poId); if(!p) return;
+    AZ_SEND.profile=(p.profile_box||"").trim();
+    const n=(p.packages||[]).reduce((a,pk)=>a+(pk.items||[]).length,0);
+    AZ_SEND.rows=[{id:poId,label:poId,sub:[p.ship_to||"",`${n} ${T("منتج · products")}`].filter(Boolean).join(" · ")}];
+  }else{
+    const list=NE_DATA?[...(NE_DATA.orders||[]),...(NE_DATA.in_cart||[])]:[];
+    AZ_SEND.rows=AZ_SEND.order_ids.map(id=>{ const o=list.find(x=>x.order_id===id)||{};
+      return {id, label:id, sub:[o.customer||"",`${(o.items||[]).length} ${T("منتج · products")}`,o.amount_to_collect_usd!=null?money(o.amount_to_collect_usd):""].filter(Boolean).join(" · ")}; });
+    const boxes=[...new Set(AZ_SEND.order_ids.map(id=>{ const o=list.find(x=>x.order_id===id); return o&&(o.profile_box||"").trim(); }).filter(Boolean))];
+    if(boxes.length===1) AZ_SEND.profile=boxes[0];
+  }
+  if(!AZ_SEND.rows.length) return;
+  bulkOpen(T("إرسال إلى AZ Studio · Send to AZ Studio"));
+  AZ_SEND.rows.forEach(r=>bulkRow(r.id,r.label,r.sub,""));
+  azSendFoot();
+  await azRosterEnsure();
+  if(!AZ_SEND.profile&&AZ_RECO&&AZ_RECO.ok&&AZ_RECO.recommended) azSendUse(AZ_RECO.recommended);   // the recommendation is the default; any pick overrides it
+}
+function azSendHostChips(){
+  const c=AZ_CARTS||{}; const known=[...new Set([c.default_host||""].concat(Object.keys(c.hosts||{})).filter(Boolean))];
+  return known.map(h=>DS.button({label:h,size:"sm",variant:AZ_SEND.host===h?"primary":"secondary",title:T("مضيف AZ Studio الذي يأخذ المهمة · the AZ Studio host that takes the task"),onclick:`azSendHost('${poEsc(h)}')`})).join(" ")
+    +" "+DS.button({label:T("أول من يسأل · first host to ask"),size:"sm",variant:AZ_SEND.host?"secondary":"primary",onclick:"azSendHost('')"});
+}
+function azSendHost(h){ if(!AZ_SEND) return; AZ_SEND.host=h||""; const el=$("azSendHosts"); if(el) el.innerHTML=azSendHostChips(); }
+function azSendUse(v){ if(!AZ_SEND) return; AZ_SEND.profile=(v||"").trim(); azRecoSync("bulkModal", AZ_SEND.profile); }
+function azSendPick(v,el){ azSendUse(v); const menu=el&&el.closest(".pop-menu"); if(menu) menu.classList.remove("open"); }
+function azSendFoot(){
+  bulkFoot(`<div style="display:flex;flex-direction:column;gap:10px;width:100%;text-align:start">
+    <div><div class="lbl">${T("حساب الشراء · Buying account")}</div>
+      <div style="display:flex;gap:6px;align-items:center">${DS.input({id:"azSendBox",cls:"pobox mono",size:"sm",value:AZ_SEND.profile,placeholder:"E-B50…",ariaLabel:T("حساب الشراء · Buying account"),attrs:{list:"poBoxList",oninput:"azSendUse(this.value)"}})}${azBoxMenu('azSendPick',AZ_SEND.profile)}</div>
+      ${azRecoLine('azSendUse',AZ_SEND.profile)}</div>
+    <div><div class="lbl">${T("مضيف AZ Studio · AZ Studio host")}</div><div id="azSendHosts" style="display:flex;gap:6px;flex-wrap:wrap">${azSendHostChips()}</div></div>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
+      <span class="muted2" style="font-size:var(--ds-t-xs);margin-inline-end:auto">${T("تنتقل الطلبات إلى السلة وتظهر مهمة واحدة على AZ Studio؛ رقم طلب أمازون يعود وحده · the orders move to In cart and one task appears on AZ Studio; the Amazon order number comes back on its own")}</span>
+      ${DS.button({label:T("إلغاء · Cancel"),variant:"secondary",onclick:"bulkClose()"})}
+      ${DS.button({label:T("إرسال · Send"),variant:"primary",icon:"paper-airplane",onclick:"azSendGo(this)"})}
+    </div></div>`);
+}
+async function azSendGo(btn){
+  if(!AZ_SEND) return;
+  const inp=$("azSendBox"); if(inp) AZ_SEND.profile=(inp.value||"").trim();
+  if(!AZ_SEND.profile){ toast(T("اختر حساب الشراء أولاً · choose the buying account first")); return; }
+  if(btn) btn.disabled=true;
+  let r; try{ r=await post("/api/az/send",{order_ids:AZ_SEND.order_ids,po_id:AZ_SEND.po_id,profile_box:AZ_SEND.profile,host:AZ_SEND.host}); }catch(e){ r={error:T("تعذر الوصول إلى الخادم · couldn't reach the server")}; }
+  if(btn) btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||T("فشل الإرسال · send failed")); return; }
+  bulkClose(); AZ_SEND=null; NE_CART_SEL=[];
+  const c=r.cart||{};
+  toast(c.status==="delivered"?`${T("وصلت إلى AZ Studio · reached AZ Studio")}${c.host?" ("+c.host+")":""}`
+        :c.status==="failed"?`AZ Studio: ${c.error||T("رفضها · refused it")}`
+        :T("في الطابور — يلتقطها AZ Studio خلال دقيقة · queued — AZ Studio picks it up within a minute"));
+  await azCartsEnsure(true);
+  if(VIEW==="needorder") loadNeedOrder(); else if(VIEW==="purchases") loadPurchases(); else if(VIEW==="incart") loadIncart();
+}
+function neSendSelected(){ const ids=NE_CART_SEL.slice(); if(!ids.length) return; azSendOpen(ids); }
+async function azCartCancel(id){
+  let r; try{ r=await post("/api/az/carts/cancel",{id}); }catch(e){ r={}; }
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذر الإلغاء · couldn't cancel")); return; }
+  toast(T("أُلغيت · cancelled")+(r.restored?` · ${r.restored} ${T("عادت إلى الطابور · back to the queue")}`:""));
+  await azCartsEnsure(true); if(VIEW==="needorder") loadNeedOrder(); else if(VIEW==="purchases") loadPurchases();
+}
+async function azCartRequeue(id){
+  const c=((AZ_CARTS&&AZ_CARTS.carts)||[]).find(x=>x.id===id);
+  if(c&&c.kind==="orders"){ azSendOpen(c.order_ids||[]); return; }      // pick the account again in the same box
+  let r; try{ r=await post("/api/az/carts/requeue",{id}); }catch(e){ r={}; }
+  if(!r||!r.ok){ toast((r&&r.error)||T("تعذر الإرسال · couldn't send")); return; }
+  toast(T("أُرسلت من جديد · sent again")); await azCartsEnsure(true); if(VIEW==="purchases") loadPurchases(); else loadNeedOrder();
+}
 function poSetBox(id,v){ const p=poFind(id); if(p){ p.profile_box=(v||'').trim(); poSave(p); renderPurchases(); } }
 const PO_FILTERS={
   all:{lab:"All",test:()=>true},
@@ -8530,6 +8662,8 @@ function poCtx(inAddCard){
     money: PO_MONEY,
     addCard: !!inAddCard,
     flags: (QSETTINGS&&QSETTINGS.card_flags)||{},
+    // the hand-off to AZ Studio: gated like its server routes (the business feature)
+    az: CAN_EDIT && !!(((((typeof ME!=="undefined"&&ME)||{}).business||{}).features||{}).multilogin),
     mailReady: gmAvail(),
     isOpen: p=>inAddCard?true:poIsOpen(p),
     setOpen: (id,open)=>{ PO_VIEW[id]=open?"open":"closed";

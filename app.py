@@ -1452,6 +1452,145 @@ def api_az_recommend():
     return jsonify(res)
 
 
+def _az_app_url():
+    """The link AZ Studio shows back to this app (the To-order page)."""
+    base = (os.environ.get("PORTAL_BASE_URL") or request.url_root or "").rstrip("/")
+    return base + "/app"
+
+
+@app.route("/api/az/send", methods=["POST"])
+@auth.require("edit_order")
+@auth.require_feature("multilogin")
+def api_az_send():
+    """Hand a purchase to AZ Studio (bridge depth 2, 2026-09-11): the ticked customer
+    orders (or one purchase order) become ONE cart for ONE buying account, stored as a
+    cart row (az_carts.py) and delivered either straight away (az.send_cart, when this host
+    holds the bridge token) or by the AZ Studio host's own poll within a minute. The
+    orders move to IN_CART under that account; the purchase order is written here only
+    when AZ Studio reports the Amazon order number."""
+    import az
+    import az_carts
+    import purchases
+    b = request.get_json(force=True, silent=True) or {}
+    profile = (b.get("profile_box") or "").strip()
+    host = (b.get("host") or "").strip()[:80]
+    note = (b.get("note") or "").strip()
+    if not profile:
+        return jsonify({"ok": False, "error": "choose the buying account first"}), 400
+    ids = [str(x).strip() for x in (b.get("order_ids") or []) if str(x).strip()]
+    po_id = (b.get("po_id") or "").strip()
+    if po_id:
+        pdb = purchases.load()
+        po = purchases.find(pdb, po_id)
+        if not po:
+            return jsonify({"ok": False, "error": "purchase order not found"}), 404
+        if az_carts.open_for_po(po_id):
+            return jsonify({"ok": False, "error": f"{po_id} is already on AZ Studio", "code": "duplicate"}), 409
+        doc = az_carts.build_from_po(po, host=host, by=_user(), note=note, url=_az_app_url(),
+                                     orders=db.list_orders())
+        doc["profile_box"] = profile
+        if (po.get("profile_box") or "") != profile:
+            po["profile_box"] = profile
+            po["updated_at"] = purchases.now_iso()
+            purchases.save(pdb)
+    else:
+        orders = [o for o in (db.get_order(x) for x in ids) if o]
+        if not orders:
+            return jsonify({"ok": False, "error": "no orders to send"}), 400
+        dup = az_carts.open_for_orders([o["order_id"] for o in orders])
+        if dup:
+            return jsonify({"ok": False, "code": "duplicate",
+                            "error": "already on AZ Studio: " + ", ".join(sorted(dup)),
+                            "orders": sorted(dup)}), 409
+        doc = az_carts.build_from_orders(orders, profile, host=host, by=_user(), note=note, url=_az_app_url())
+        if not doc["items"]:
+            return jsonify({"ok": False, "error": "these orders have no products with a link or an ASIN"}), 400
+    cart = az_carts.create(doc)
+    if not po_id:
+        # into the cart, under that account — the same move the Move-to-cart button makes
+        _incart_set([o["order_id"] for o in orders if o.get("status") in store.PREORDER_STATUSES], "IN_CART")
+        for o in orders:
+            if (o.get("profile_box") or "") != profile:
+                db.update_order(o["order_id"], {"profile_box": profile}, auth.actor())
+            activity.log("set", "order", o["order_id"], _olabel(o), field="profile_box", new=profile,
+                         detail=f"sent to AZ Studio ({host or 'first host to ask'}) as {cart['id']}", user=_user())
+    else:
+        activity.log("set", "purchase", po_id, _polabel(po), detail=f"sent to AZ Studio on {profile} as {cart['id']}",
+                     user=_user())
+    pushed = None
+    if az.configured():
+        pushed = az.send_cart(az_carts.payload(cart))
+        if pushed.get("ok"):
+            cart = az_carts.ack(cart["id"], pushed.get("host") or host, True, pushed.get("task_id"),
+                                existed=bool(pushed.get("existed")))
+        elif not pushed.get("transport"):
+            cart = az_carts.ack(cart["id"], pushed.get("host") or host, False, error=pushed.get("error"),
+                                code=pushed.get("code"))
+    return jsonify({"ok": True, "cart": cart, "pushed": pushed, "delivered": cart.get("status") == "delivered"})
+
+
+@app.route("/api/az/carts")
+@auth.require("view_orders")
+@auth.require_feature("multilogin")
+def api_az_carts():
+    """Every hand-off to AZ Studio and where it stands, plus the hosts that poll us."""
+    import az
+    import az_carts
+    return jsonify({"ok": True, "carts": az_carts.list_(limit=300), "hosts": az_carts.hosts(),
+                    "default_host": az_carts.default_host(), "direct": az.configured(),
+                    "labels": az_carts.LABEL})
+
+
+@app.route("/api/az/carts/cancel", methods=["POST"])
+@auth.require("edit_order")
+@auth.require_feature("multilogin")
+def api_az_carts_cancel():
+    """Withdraw a cart (before it is ordered). The orders come back to the To-order queue;
+    a task already made on AZ Studio stays there for its person to delete."""
+    import az_carts
+    b = request.get_json(force=True, silent=True) or {}
+    cart, why = az_carts.cancel(b.get("id"))
+    if why:
+        return jsonify({"ok": False, "error": why, "cart": cart}), (404 if why == "not found" else 409)
+    n = 0
+    for oid in cart.get("order_ids") or []:
+        o = db.get_order(oid)
+        if o and o.get("status") == "IN_CART":
+            back = o.get("cart_prev_status") or "QUOTED"
+            if back not in store.PREORDER_STATUSES:
+                back = "QUOTED"
+            db.update_order(oid, {"status": back, "cart_prev_status": None}, auth.actor())
+            n += 1
+    activity.log("set", "order" if cart.get("kind") == "orders" else "purchase", cart.get("po_id") or cart["id"],
+                 cart.get("customer") or cart["id"], detail=f"AZ Studio cart {cart['id']} cancelled", user=_user())
+    return jsonify({"ok": True, "cart": cart, "restored": n})
+
+
+@app.route("/api/az/carts/requeue", methods=["POST"])
+@auth.require("edit_order")
+@auth.require_feature("multilogin")
+def api_az_carts_requeue():
+    """Send a failed (or cancelled) cart again, optionally to another host."""
+    import az
+    import az_carts
+    b = request.get_json(force=True, silent=True) or {}
+    if b.get("profile_box"):
+        az_carts.update(b.get("id"), profile_box=str(b["profile_box"]).strip())
+    cart, why = az_carts.requeue(b.get("id"), host=b.get("host"))
+    if why:
+        return jsonify({"ok": False, "error": why, "cart": cart}), (404 if why == "not found" else 409)
+    pushed = None
+    if az.configured():
+        pushed = az.send_cart(az_carts.payload(cart))
+        if pushed.get("ok"):
+            cart = az_carts.ack(cart["id"], pushed.get("host") or cart.get("host"), True, pushed.get("task_id"),
+                                existed=bool(pushed.get("existed")))
+        elif not pushed.get("transport"):
+            cart = az_carts.ack(cart["id"], pushed.get("host") or cart.get("host"), False,
+                                error=pushed.get("error"), code=pushed.get("code"))
+    return jsonify({"ok": True, "cart": cart, "pushed": pushed})
+
+
 @app.route("/api/az/track_fetch", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("multilogin")
@@ -4747,6 +4886,73 @@ def worker_az_roster():
         return jsonify(az_roster.meta())
     res = az_roster.store(request.get_json(force=True, silent=True) or {})
     return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/api/worker/az_carts")
+def worker_az_carts():
+    """AZ Studio's poll (bridge depth 2): the carts queued for the asking host, each
+    claimed atomically as it is handed over (az_carts.claim), so two hosts can never both
+    make the same task. Answered with the wire payload the intake takes."""
+    if not _worker_ok():
+        abort(401)
+    import az_carts
+    host = (request.args.get("host") or "").strip()[:80]
+    carts = az_carts.claim(host, limit=int(request.args.get("limit") or 20))
+    return jsonify({"ok": True, "host": host, "count": len(carts),
+                    "carts": [az_carts.payload(c) for c in carts]})
+
+
+@app.route("/api/worker/az_carts/ack", methods=["POST"])
+def worker_az_carts_ack():
+    """The host's answer after taking a cart: the task exists (ok, task_id) or it could not
+    make one (error, code — e.g. no_profile)."""
+    if not _worker_ok():
+        abort(401)
+    import az_carts
+    b = request.get_json(force=True, silent=True) or {}
+    cart = az_carts.ack(b.get("id"), b.get("host"), bool(b.get("ok")), task_id=b.get("task_id"),
+                        error=b.get("error"), code=b.get("code"), existed=bool(b.get("existed")))
+    if not cart:
+        return jsonify({"ok": False, "error": "unknown cart"}), 404
+    if cart.get("status") == "failed":
+        activity.log("set", "order" if cart.get("kind") == "orders" else "purchase",
+                     cart.get("po_id") or cart["id"], cart.get("customer") or cart["id"],
+                     detail=f"AZ Studio ({cart.get('host') or '?'}) refused cart {cart['id']}: {cart.get('error')}",
+                     user="AZ Studio")
+    return jsonify({"ok": True, "status": cart["status"]})
+
+
+@app.route("/api/worker/az_result", methods=["POST"])
+def worker_az_result():
+    """Where a hand-off stands on AZ Studio (in cart / payment added / ordered / issue /
+    done). "ordered" with the Amazon order number writes the purchase order here and flips
+    the customer orders — the same path a hand-typed PO takes (az_carts.apply_ordered)."""
+    if not _worker_ok():
+        abort(401)
+    import az_carts
+    import cfg
+    b = request.get_json(force=True, silent=True) or {}
+    cart = az_carts.get(b.get("id")) or az_carts.find_by_ref(b.get("ref"))
+    if not cart:
+        return jsonify({"ok": False, "error": "unknown cart"}), 404
+    cart = az_carts.result(cart["id"], b)
+    ev = str(b.get("status") or "")
+    label = cart.get("customer") or cart["id"]
+    ent = "order" if cart.get("kind") == "orders" else "purchase"
+    if ev == "ordered" and (cart.get("order_number") or "").strip():
+        buf = cfg.get(cfg.load(), "pipeline.delivery_buffer_days", settings_mod.DELIVERY_BUFFER_DAYS)
+        try:
+            po, how, changes = az_carts.apply_ordered(cart, buffer_days=buf, actor={"username": "az-studio"})
+        except Exception as e:  # noqa: BLE001 — say so; AZ Studio keeps the result in its outbox
+            app.logger.exception("az_result: could not write the PO for %s", cart["id"])
+            return jsonify({"ok": False, "error": f"could not write the purchase order: {str(e)[:200]}"}), 500
+        return jsonify({"ok": True, "status": "ordered", "po_id": po["po_id"], "how": how,
+                        "orders_updated": [oid for oid, _ in changes]})
+    if ev in ("issue", "in_cart", "payment_added", "done"):
+        activity.log("set", ent, cart.get("po_id") or cart["id"], label,
+                     detail=f"AZ Studio ({cart.get('host') or '?'}): {az_carts.LABEL.get(cart['status'], ev)}"
+                            + (f" — {b.get('note')}" if b.get("note") else ""), user=b.get("by") or "AZ Studio")
+    return jsonify({"ok": True, "status": cart["status"], "po_id": cart.get("po_id")})
 
 
 @app.route("/api/worker/result", methods=["POST"])
