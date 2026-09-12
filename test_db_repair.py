@@ -14,6 +14,8 @@ after two rebuilds in an hour it STOPS and asks for a human instead of looping.
     ./.venv/bin/python test_db_repair.py
     OTLOBLY_CORRUPT_FIXTURE=/path/to/real-corrupt.db ./.venv/bin/python test_db_repair.py
 """
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -57,7 +59,8 @@ def fresh_dir(name):
 def use(path):
     """Point db at `path` (dbrepair reads db.DB_FILE at call time)."""
     db.DB_FILE = Path(path)
-    db._reported["done"] = False
+    db._reported.update(done=False, at=0.0, n=0)
+    db._quiet.clear()                            # a throttled log line reads as silence
     db._last_verdict.update(t=0.0, v="ok")
     return Path(path)
 
@@ -366,6 +369,111 @@ def report_corruption_files_one_marker_and_ignores_locks():
         os.environ["OTLOBLY_DBREPAIR"] = "1"
 
 
+def corruption_that_keeps_being_detected_always_reaches_a_repair_request():
+    """2026-09-12, 09:42 → 19:26 UTC. The live database was corrupt for nine and a
+    half hours. The sentinel noticed every single time — ~57 quick_check failures,
+    all logged — and not one repair was ever requested, with not one line saying
+    why: `_reported["done"]`, set at 01:21 UTC, is per-process and was permanent,
+    and all three early returns in request_repair were a bare `return False`.
+
+    What is pinned here: no pass is ever mute, an unconsumed request is re-filed
+    instead of dead-ending, and a repair the master DOES apply re-arms the latch so
+    the next fault is treated as a new event."""
+    d = fresh_dir("wedge")
+    live = make_db(d / "otlobly.db")
+    smash_page(live, root_of(live, "settings"))
+    os.environ.pop("OTLOBLY_DBREPAIR", None)
+    import db_sentinel
+    retry_was, cap_was = db.REPAIR_RETRY_S, db.REPAIR_MAX_REQUESTS
+    try:
+        use(live)
+        db_sentinel._fail["n"] = 0
+        db.REPAIR_RETRY_S = 10_000               # no retry window is open yet
+
+        def a_pass():
+            """One sentinel 10-minute pass; returns everything it printed."""
+            db._quiet.clear()                    # simulate the throttle window elapsing
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                db_sentinel.check_once()
+            return buf.getvalue()
+
+        out = a_pass()
+        check("the first pass files the request", db.repair_marker_path().exists()
+              and "REPAIR requested" in out)
+        h = json.loads(db.health_path().read_text())
+        check("health.json flips to repairing, and stamps since when",
+              h.get("ok") is False and h.get("repairing") is True and h.get("unwell_since"))
+
+        out = a_pass()                           # the master never forked: marker still there
+        check("a refused pass NAMES the guard that refused it",
+              "repair NOT requested" in out and "already requested" in out)
+
+        # nine and a half hours, ten minutes at a time
+        mute, filed = 0, 0
+        for i in range(57):
+            out = a_pass()
+            if not out.strip():
+                mute += 1
+            if "REPAIR requested" in out or "REPAIR RE-requested" in out:
+                filed += 1
+            if i == 9:
+                db.REPAIR_RETRY_S = 0            # the retry window opens
+        check(f"not one of 57 passes is mute ({mute} were)", mute == 0)
+        check(f"an unconsumed request gets re-filed, not dead-ended ({filed} re-filings)",
+              filed >= 1)
+        check("…and it stops re-filing instead of churning workers for ever",
+              filed <= db.REPAIR_MAX_REQUESTS)
+        body = json.loads(db.repair_marker_path().read_text())
+        check("the marker counts the unapplied attempts (evidence for a human)",
+              int(body.get("attempts") or 1) > 1)
+        h = json.loads(db.health_path().read_text())
+        check("once it gives up, health.json says broken with NOBODY repairing "
+              "(the banner's third state)",
+              h.get("ok") is False and h.get("repairing") is False
+              and h.get("maintenance") is False)
+
+        # the master repairs (04:52) — then a NEW corruption hours later (09:42)
+        db.repair_marker_path().unlink()
+        db.REPAIR_RETRY_S = 10_000
+        out = a_pass()
+        check("after a repair is applied, a NEW fault files a NEW request",
+              "latch re-armed" in out and "REPAIR requested" in out
+              and db.repair_marker_path().exists())
+
+        # the other two guards are allowed to refuse — never in silence
+        db.repair_marker_path().unlink()
+        use(live)
+        os.environ["OTLOBLY_DBREPAIR"] = "1"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            r = db.request_repair("malformed", "in the repair subprocess")
+        check("the repair-subprocess guard refuses out loud",
+              r is False and "NOT requested" in buf.getvalue())
+        os.environ.pop("OTLOBLY_DBREPAIR", None)
+        db._quiet.clear()
+        db.maintenance_marker_path().write_text(json.dumps({"at": db.now_iso(),
+                                                            "reason": "test"}))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            r = db.request_repair("malformed", "humans only")
+        check("the maintenance guard refuses out loud",
+              r is False and "maintenance marker present" in buf.getvalue())
+        db.maintenance_marker_path().unlink()
+        since = json.loads(db.health_path().read_text()).get("unwell_since")
+        db.write_health({"ok": False, "error": "still broken", "at": db.now_iso(),
+                         "repairing": False})
+        check("the unwell clock starts on the ok→broken edge and never restarts",
+              json.loads(db.health_path().read_text()).get("unwell_since") == since)
+        check("through all of it the live file was never renamed or replaced",
+              live.exists() and not list(d.glob("otlobly.db.corrupt-*"))
+              and not list(d.glob("otlobly.db.pre-restore-*")))
+    finally:
+        db.REPAIR_RETRY_S, db.REPAIR_MAX_REQUESTS = retry_was, cap_was
+        db_sentinel._fail["n"] = 0
+        os.environ["OTLOBLY_DBREPAIR"] = "1"
+
+
 def the_guarded_connection_reports_by_itself():
     d = fresh_dir("guard")
     live = make_db(d / "otlobly.db")
@@ -462,6 +570,7 @@ def main():
     print("staged restore:");          a_staged_restore_is_applied_by_preflight_only()
     print("build without swap:");      a_build_that_never_swapped_is_harmless()
     print("report_corruption:");       report_corruption_files_one_marker_and_ignores_locks()
+    print("the 9½-hour wedge:");       corruption_that_keeps_being_detected_always_reaches_a_repair_request()
     print("the guarded connection:");  the_guarded_connection_reports_by_itself()
     print("the API answer:");          the_api_answers_json_503()
     print("the real fixture:");        the_real_fixture_if_present()

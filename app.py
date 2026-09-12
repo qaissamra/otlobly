@@ -420,7 +420,7 @@ def health_db():
     h = db.read_health()
     extra = {"sqlite_version": sqlite3.sqlite_version,
              "repairing": bool(h.get("repairing")), "maintenance": bool(h.get("maintenance")),
-             "last_repair": h.get("last_repair")}
+             "since": h.get("unwell_since") or h.get("at"), "last_repair": h.get("last_repair")}
     try:
         raw = sqlite3.connect(db.DB_FILE, timeout=5)        # plain: a probe must not file a repair
         try:
@@ -461,7 +461,8 @@ def _api_db_error(e):
     h = db.read_health()
     return jsonify({"ok": False, "db_error": True, "error": str(e)[:200],
                     "repairing": bool(h.get("repairing")),
-                    "maintenance": bool(h.get("maintenance")), "retry_in": 30}), 503
+                    "maintenance": bool(h.get("maintenance")),
+                    "since": h.get("unwell_since") or h.get("at"), "retry_in": 30}), 503
 
 
 @app.route("/healthz")
@@ -2559,7 +2560,9 @@ def api_notifications():
     h = db.read_health()
     return jsonify({"ok": True, "needs_quote": needs_quote, "events": out,
                     "db": {"ok": h.get("ok", True) is not False, "repairing": bool(h.get("repairing")),
-                           "maintenance": bool(h.get("maintenance")), "error": (h.get("error") or "")[:160]}})
+                           "maintenance": bool(h.get("maintenance")),
+                           "since": h.get("unwell_since") or h.get("at"),
+                           "error": (h.get("error") or "")[:160]}})
 
 
 def _safe_seg(v, fallback):
