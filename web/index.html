@@ -7589,7 +7589,12 @@ async function saveSettings(b){
 
 let POS=null, PO_MONEY=true, PO_STATUSES=["CANCELLED","REFUNDED","OUT_OF_STOCK","RETURNED"];   // exception-only; ""=inherit package
 let PO_COLLAPSED=openStore({inverted:true, persist:"po_collapsed"});
-let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}}; let PO_BOXES=["B19","B22","B27","B31","B85"];   // seeded with the live AZ Studio names by azRosterEnsure() const poSaveTimers={};
+let PO_CUSTNAMES=[], PO_CUSTORDERS={}, PO_CUSTMAP={byName:{},byCore:{}};
+let PO_BOXES=["B19","B22","B27","B31","B85"];   // seeded with the live AZ Studio names by azRosterEnsure()
+// 🛑 own line, always: a trailing // comment appended to the line above once swallowed this
+// declaration whole, and poSave() then threw on its first statement — the whole Purchases
+// board silently stopped saving for two days (34f5920, 2026-09-10).
+const poSaveTimers={};
 function poEsc(s){return (s==null?"":String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function importClickup(btn){
   btn.disabled=true; const old=btn.innerHTML; btn.innerHTML='<span class="spin"></span> Importing…';
@@ -9615,11 +9620,18 @@ function popClose(x){ x.classList.remove("open"); x.style.cssText=""; }   // cle
 // Action ⋯ menus live inside overflow-clipped tables/scrollers (To-order, Purchases
 // rows), so a plain absolute dropdown gets cut off. Place it position:FIXED at the
 // button — right-aligned, flipping above when it would run off the bottom.
-function popPlace(btn,m){
+function popPlace(btn,m,keepSide){
   const r=btn.getBoundingClientRect(), w=m.offsetWidth||190, h=m.offsetHeight||130;
   m.style.position="fixed"; m.style.zIndex=99; m.style.insetInlineEnd="auto";
   m.style.left=Math.max(8,Math.min(r.right-w,innerWidth-w-8))+"px";
-  m.style.top=((r.bottom+4+h>innerHeight-8)?Math.max(8,r.top-h-4):r.bottom+4)+"px";
+  // The side is decided ONCE, when the menu opens, and then kept. A status menu
+  // shrinks as you type in its search box (cuFilter): re-placing it with a fresh
+  // side would let it flip above/below under the cursor mid-search, and NOT
+  // re-placing an upward menu left it hanging in mid-table, detached from the pill
+  // it belongs to (a 320px list filtered down to 219px opened a 100px gap).
+  const up=keepSide?m.dataset.popUp==="1":(r.bottom+4+h>innerHeight-8);
+  m.dataset.popUp=up?"1":"0";
+  m.style.top=(up?Math.max(8,r.top-h-4):r.bottom+4)+"px";
 }
 function popToggle(btn){ const m=btn.nextElementSibling; const wasOpen=m.classList.contains("open");
   document.querySelectorAll(".pop-menu.open").forEach(popClose);
@@ -9766,8 +9778,12 @@ function pkgCuSelect(p,pk,pi){
     </div></span>`;
 }
 function cuFilter(inp){ const q=(inp.value||'').trim().toLowerCase();
-  [...inp.parentElement.querySelectorAll('.cu-item')].forEach(it=>{
-    it.style.display=!q||it.textContent.toLowerCase().includes(q)?'':'none'; }); }
+  const m=inp.parentElement;
+  [...m.querySelectorAll('.cu-item')].forEach(it=>{
+    it.style.display=!q||it.textContent.toLowerCase().includes(q)?'':'none'; });
+  // the list just changed height — re-anchor to the pill, same side it opened on
+  const btn=m.previousElementSibling;
+  if(m.classList.contains('open')&&btn&&btn.classList.contains('statussel')) popPlace(btn,m,true); }
 // ── Package info card: everything about one package on one simple screen —
 //    the statuses, every date (with the GAASH days-left counter big), and all
 //    the actions as plain buttons instead of tooltips + the ⋯ menu. ──
