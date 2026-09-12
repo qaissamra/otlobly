@@ -1972,15 +1972,37 @@ function setOffline(on){ on=!!on; if(on===OFFLINE) return; OFFLINE=on;
 // poll, which carries db:{ok,repairing,maintenance} read off health.json.
 let LAST_API_FAIL=null;                          // {at,status,reason,db}
 let DB_STATE={ok:true};
+// "for 3 h" out of health.json's unwell_since — silent under two minutes, so a
+// repair that really does take seconds is not dressed up as an incident.
+function dbUnwellFor(d){
+  const t=Date.parse((d&&(d.since||d.at))||"");
+  if(!isFinite(t)) return "";
+  const m=Math.floor((Date.now()-t)/60000);
+  if(m<2||m>60*24*30) return "";
+  const h=Math.floor(m/60), dd=Math.floor(m/1440);
+  const ar=(n,one,two,few)=>n===1?one:n===2?two:`${n} ${n<=10?few:one}`;  // 1 / 2 / 3-10
+  return " — "+(dd>=1?T(`منذ ${ar(dd,"يوم","يومين","أيام")} · for ${dd}d`)
+              : h>=1 ?T(`منذ ${ar(h,"ساعة","ساعتين","ساعات")} · for ${h}h`)
+              :       T(`منذ ${ar(m,"دقيقة","دقيقتين","دقائق")} · for ${m} min`));
+}
 function setDbState(d){
   d=d||{ok:true}; DB_STATE=d;
   const b=$("dbBanner"); if(!b) return;
   const bad=d.ok===false||d.repairing||d.maintenance;
-  b.classList.toggle("show",!!bad); b.classList.toggle("hard",!!d.maintenance);
+  const stalled=d.ok===false&&!d.repairing&&!d.maintenance;
+  b.classList.toggle("show",!!bad); b.classList.toggle("hard",!!(d.maintenance||stalled));
   if(!bad) return;
+  // THREE states, not two. Until 2026-09-12 everything that was not `maintenance`
+  // printed the soft "repairing itself — seconds" line, so {ok:false, repairing:false,
+  // maintenance:false} — broken with NOBODY repairing it, because the self-heal had
+  // wedged silently (db.request_repair) — read as a reassuring promise. The owner
+  // believed the app was fine for nine and a half hours that day. `stalled` is red,
+  // says no repair is running, and says since when.
   b.textContent=d.maintenance
     ?T("🚨 قاعدة البيانات متوقفة وتحتاج شخصاً — التصليح التلقائي توقف · Database needs a human — automatic repair has stopped; some pages will not load")
-    :T("🩹 قاعدة البيانات تُصلَّح تلقائياً الآن — ثوانٍ، وستُحمَّل الصفحات وحدها · Database is repairing itself — seconds; pages reload on their own");
+    :stalled
+      ?T("⚠️ قاعدة البيانات معطوبة ولا يجري أي إصلاح — أبلِغ المالك الآن وأعِد تشغيل الخدمة · Database is unwell and NO repair is running — tell the owner now; the service needs a restart")+dbUnwellFor(d)
+      :T("🩹 قاعدة البيانات تُصلَّح تلقائياً الآن — ثوانٍ، وستُحمَّل الصفحات وحدها · Database is repairing itself — seconds; pages reload on their own");
 }
 function apiFailReason(){                        // " — why", if an API call just failed
   const f=LAST_API_FAIL; if(!f||Date.now()-f.at>15000) return "";
@@ -1990,14 +2012,17 @@ function _apiNote(url,r,body){
   let reason;
   if(body&&body.db_error) reason=body.maintenance
       ?T("قاعدة البيانات متوقفة — تحتاج شخصاً · database unavailable — needs a human")
-      :T("قاعدة البيانات تُصلَّح الآن — سنعيد المحاولة · database is being repaired — retrying");
+      :body.repairing
+        ?T("قاعدة البيانات تُصلَّح الآن — سنعيد المحاولة · database is being repaired — retrying")
+        :T("قاعدة البيانات معطوبة ولا يجري إصلاح · database is unwell and no repair is running");
   else if(r.status===401) reason=T("انتهت الجلسة — أعد تسجيل الدخول · session expired — sign in again");
   else if(r.status===403) reason=T("لا صلاحية لهذا القسم · no permission for this section");
   else if(r.status===404) reason=T("هذه النسخة لا تعرف الطلب · this build lacks that endpoint");
   else if(r.status>=500) reason=(body&&body.error)?String(body.error).slice(0,140):T("خطأ في الخادم · server error")+" "+r.status;
   else reason=(body&&body.error)?String(body.error).slice(0,140):"HTTP "+r.status;
   LAST_API_FAIL={at:Date.now(),status:r.status,reason,db:!!(body&&body.db_error)};
-  if(body&&body.db_error) setDbState({ok:false,repairing:!body.maintenance,maintenance:!!body.maintenance});
+  if(body&&body.db_error) setDbState({ok:false,repairing:!!body.repairing,
+      maintenance:!!body.maintenance,since:body.since});   // never ASSUME a repair is running
   if(r.status===401&&!/\/api\/me$/.test(url)&&(!window._lastAuthToast||Date.now()-window._lastAuthToast>60000)){
     window._lastAuthToast=Date.now(); toast("🔒 "+reason); }
 }

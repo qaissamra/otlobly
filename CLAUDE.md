@@ -57,7 +57,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   `otlobly.db.maintenance` (humans only). Workers detect corruption in ONE place —
   db.connect() returns a guarded connection whose errors go through
   db.report_corruption (quick_check confirms; a lock/full disk never triggers) —
-  answer JSON 503 `{db_error:true}` on /api/*, and step aside. 🛑 RULE: never
+  answer JSON 503 `{db_error:true}` on /api/*, and step aside. Since 2026-09-12 a
+  repair request can never dead-end: db.request_repair LOGS every refusal (which
+  guard, why) and its per-process latch RE-ARMS — the instant the marker is gone
+  (that request was applied, so the next fault is a new event) and again after
+  DB_REPAIR_RETRY_S=600 s with the marker still there (nobody forked, so nobody ran
+  pre_fork), giving up loudly after 6 tries instead of churning workers. That latch
+  being permanent is why 2026-09-12 stayed corrupt for 9½ h with ~57 sentinel
+  detections, zero repair requests and zero log lines. 🛑 RULE: never
   DROP/ALTER/REINDEX or rename/replace the live file on a corrupt DB — request a
   repair (that in-place surgery is how one damaged page became nine outages)
 - db_sentinel.py — inside every worker: 10-min quick_check + an HOURLY snapshot
@@ -67,13 +74,19 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   request_repair. Newest 3 kept. `/api/restore` no longer swaps the file: it stages
   `otlobly.db.pending-restore` + requests a repair; the master applies it with no
   worker alive (old file kept as `otlobly.db.pre-restore-<ts>`). `/api/notifications`
-  carries `db:{ok,repairing,maintenance}` from health.json for the UI banner
+  carries `db:{ok,repairing,maintenance,since}` from health.json for the UI banner
+  (health.json stamps `unwell_since` on the ok→broken edge, so the banner can say
+  how long it has been unwell)
 - web/index.html "honest failures": the global fetch wrapper (next to setOffline)
   reads every failed /api/* JSON answer once, records the reason (apiFailReason —
   session expired / no permission / database repairing / server error) for the
   "couldn't load" panes, and drives the 🩹 #dbBanner (setDbState) from the reply and
-  from the 60 s bell poll's db:{…}. app.py answers /api/* 401/403/404/500 as JSON;
-  pages keep their redirects. Never add a new "couldn't load" without ${apiFailReason()}
+  from the 60 s bell poll's db:{…}. The banner has THREE states, not two: repairing
+  (soft orange), maintenance (red), and — since 2026-09-12 — stalled, i.e. ok:false
+  with nobody repairing, red and dated ("for 9h"). That state used to print the soft
+  "repairing itself — seconds" line, and the owner believed it for 9½ hours.
+  app.py answers /api/* 401/403/404/500 as JSON; pages keep their redirects. Never
+  add a new "couldn't load" without ${apiFailReason()}
 - az_roster.py / recommend.py / az_carts.py — the AZ Studio bridge (2026-09-10/11): the
   roster AZ Studio pushes (`/api/worker/az_roster`), the buying-account recommendation
   (pure rules, fail-closed on a stale roster), and the hand-off both ways — ticked orders

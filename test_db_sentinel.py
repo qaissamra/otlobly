@@ -149,9 +149,22 @@ def the_bell_carries_the_database_health():
     d = cl.get("/api/notifications").get_json() or {}
     check("notifications include db health", isinstance(d.get("db"), dict) and d["db"].get("ok") is True)
     db.write_health({"ok": False, "error": "x", "repairing": True, "maintenance": False, "at": db.now_iso()})
-    d = cl.get("/api/notifications").get_json() or {}
-    check("…and reflect a repair in progress", d.get("db", {}).get("repairing") is True)
+    d = (cl.get("/api/notifications").get_json() or {}).get("db", {})
+    check("…and reflect a repair in progress", d.get("repairing") is True)
+    check("…and carry since-when, so the banner can say HOW LONG", bool(d.get("since")))
+    # the 2026-09-12 state the banner used to render as "repairing itself — seconds"
+    db.write_health({"ok": False, "error": "unattended", "repairing": False,
+                     "maintenance": False, "at": db.now_iso()})
+    d = (cl.get("/api/notifications").get_json() or {}).get("db", {})
+    check("…and pass the STALLED state through unsoftened (broken, nobody repairing)",
+          d.get("ok") is False and d.get("repairing") is False
+          and d.get("maintenance") is False and bool(d.get("since")))
+    probe = cl.get("/api/health/db").get_json() or {}
+    check("/api/health/db carries it too (the off-host watchdog reads this)",
+          probe.get("repairing") is False and bool(probe.get("since")))
     db.write_health({"ok": True, "error": "", "repairing": False, "maintenance": False, "at": db.now_iso()})
+    check("recovery clears the unwell clock", not
+          json.loads(db.health_path().read_text()).get("unwell_since"))
 
 
 def main():

@@ -11,6 +11,11 @@ Mac had them. This thread fixes both, from inside the app:
 
   every 10 min  PRAGMA quick_check(1) on the live file. A structural verdict →
                 db.request_repair → the master rebuilds (see gunicorn.conf.py).
+                If the request does NOT go through, that is said out loud with the
+                consecutive-failure count, and health.json is flipped to the honest
+                "broken, nobody repairing" whenever no marker proves otherwise —
+                2026-09-12 ran 57 of these checks in silence behind a banner that
+                promised "seconds" (db.request_repair's note has the full story).
   every hour    conn.backup() → otlobly.snapshot-<YYYYmmdd-HH>.db, then a FULL
                 PRAGMA integrity_check on the SNAPSHOT (off the hot file; catches
                 index↔table mismatches quick_check skips). Passes → a `.ok` sidecar,
@@ -36,6 +41,9 @@ CHECK_S = int(os.environ.get("DB_SENTINEL_CHECK_S", "600"))
 SNAPSHOT_S = int(os.environ.get("DB_SENTINEL_SNAPSHOT_S", "3600"))
 KEEP = 3
 _started = False
+# Consecutive failed quick_checks. Not cosmetic: on 2026-09-12 this counter would
+# have read 57 while the log said nothing at all about a repair.
+_fail = {"n": 0}
 
 
 def _snap_dir():
@@ -73,9 +81,27 @@ def _structural(verdict):
 def check_once():
     v = quick_verdict()
     if _structural(v):
-        print(f"[sentinel] quick_check: {v[:120]}", flush=True)
-        db.request_repair(v, "sentinel quick_check")
+        _fail["n"] += 1
+        mins = _fail["n"] * CHECK_S // 60
+        print(f"[sentinel] quick_check: {v[:120]} "
+              f"(consecutive failure #{_fail['n']}, ~{mins} min unwell)", flush=True)
+        db.request_repair(v, f"sentinel quick_check #{_fail['n']}")
+        # db.request_repair has just logged whether it filed one and, if not, WHICH
+        # guard refused (it is never silent any more). What only the sentinel can
+        # add: how long this has gone on, and the fact that after all that there is
+        # no pending request at all — broken with nobody coming. Say it, and flip
+        # health.json to match so the banner and /api/health/db stop promising
+        # "seconds". The 2026-09-12 outage is exactly this state.
+        if not db.repair_marker_path().exists() and not db.maintenance_marker_path().exists():
+            print(f"[sentinel] NO repair is pending after {_fail['n']} failed checks "
+                  f"(~{mins} min unwell) — see the [db] line above for why", flush=True)
+            try:
+                db.write_health({"ok": False, "error": v[:300], "at": db.now_iso(),
+                                 "repairing": False})
+            except Exception as e:               # noqa: BLE001
+                print(f"[sentinel] health.json: {e}", flush=True)
         return False
+    _fail["n"] = 0
     if not db.repair_marker_path().exists() and not db.maintenance_marker_path().exists():
         try:
             db.write_health({"ok": True, "error": "", "at": db.now_iso(),

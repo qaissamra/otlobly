@@ -570,6 +570,15 @@ def write_health(d):
     from paths import write_json_atomic
     cur = read_health()
     cur.update(d)
+    # Since WHEN. `at` is the last write of any kind, which is useless for "how long
+    # has this been broken" — so the ok→broken edge stamps unwell_since once and
+    # every later write preserves it. The UI needs it to say "for 9 h" instead of
+    # the "seconds" it promised the owner all through 2026-09-12.
+    if cur.get("ok") is False:
+        cur.setdefault("unwell_since", cur.get("at") or now_iso())
+    else:
+        cur.pop("unwell_since", None)
+        HEALTH.pop("unwell_since", None)
     HEALTH.update(cur)
     write_json_atomic(health_path(), dict(HEALTH))
 
@@ -596,7 +605,42 @@ _NOT_CORRUPTION = ("locked", "busy", "readonly", "read-only", "no such", "syntax
                    "datatype mismatch", "not an error", "authorization", "unsupported")
 _CORRUPTION_CUES = ("malformed", "not a database", "corrupt", "out of order")
 _last_verdict = {"t": 0.0, "v": "ok"}
-_reported = {"done": False}
+# The repair-request latch. `at` is when this process last filed one and `n` how
+# many times it has — both exist because "done" alone was PERMANENT: see
+# request_repair's 2026-09-12 note.
+_reported = {"done": False, "at": 0.0, "n": 0}
+_quiet = {}                                      # _say() throttle: key -> last printed at
+
+# A filed request is only ever applied by the gunicorn master's pre_fork hook, and
+# pre_fork only runs when a worker DIES. So a request that no worker has died over
+# is a request nobody will ever see: after this long, re-file it and step aside again.
+REPAIR_RETRY_S = int(os.environ.get("DB_REPAIR_RETRY_S", "600"))
+# ...but not forever. This many unapplied requests from one process means the master
+# is not repairing at all; stop churning workers and say so honestly instead.
+REPAIR_MAX_REQUESTS = int(os.environ.get("DB_REPAIR_MAX_REQUESTS", "6"))
+
+
+def _say(key, msg, every=60.0):
+    """print() at most once per `every` seconds per `key`.
+
+    request_repair is called from every failing request as well as from the 10-min
+    sentinel, so an unthrottled refusal line would flood the log — but ONE line a
+    minute is the whole difference between a visible outage and the silent nine and
+    a half hours of 2026-09-12."""
+    now = time.time()
+    if now - _quiet.get(key, 0.0) < every:
+        return
+    _quiet[key] = now
+    print(msg, flush=True)
+
+
+def _marker_note(path):
+    """When a marker was filed and why, for a log line. Never raises."""
+    try:
+        d = json.loads(path.read_text())
+        return f"filed {d.get('at')}: {str(d.get('reason') or d.get('verdict') or '')[:80]}"
+    except (OSError, ValueError, AttributeError):
+        return "unreadable"
 
 
 def is_corruption(exc):
@@ -653,38 +697,115 @@ def report_corruption(exc):
 def request_repair(verdict, reason=""):
     """Ask the gunicorn master to run dbrepair.py with no worker alive.
 
-    Files the repair-request marker (first writer wins; the second worker is a
+    Files the repair-request marker (first writer wins; a second worker is a
     no-op), writes health.json for the UI banner, and — under gunicorn — asks THIS
     worker to exit gracefully one second later, after the caller's reply has gone
     out. The master notices the marker in pre_fork, stops the other worker too, runs
     dbrepair.py preflight with nobody holding the file, and forks fresh workers.
     Callers: report_corruption (a confirmed quick_check verdict), the sentinel (a
-    failed hourly integrity_check on a snapshot), /api/restore (a staged file to
-    apply). Returns True when this call filed the request. Never raises."""
+    failed quick_check or hourly integrity_check), /api/restore (a staged file to
+    apply). Returns True when this call filed the request. Never raises.
+
+    🛑 EVERY EXIT FROM HERE SAYS SOMETHING, and the latch is never permanent.
+    On 2026-09-12 the live database was corrupt from 09:42 to 19:26 UTC. The
+    sentinel called this ~57 times; it returned False in complete silence every
+    time, so nine and a half hours of a wedged self-heal left no trace at all in
+    the logs. Two things were wrong:
+      · all three early returns were `return False` with no print — the one print
+        sat AFTER the marker write, so a refusal was mute (fixed: _say, throttled
+        to a line a minute so a per-request caller cannot flood the log);
+      · `_reported["done"]` was a per-process, permanent latch. Set at 01:21 UTC,
+        it deafened that worker for the rest of its life — including a brand-new
+        corruption event eight hours later. And because pre_fork only runs when a
+        worker dies, a request nobody dies over is never applied, so the marker sat
+        unconsumed and the latch never had a reason to clear. That is also why
+        health.json said repairing:false while the file was broken: the latch
+        blocked the only code path that writes repairing:true.
+    The latch now re-arms two ways: the moment the marker is gone (our request was
+    applied — a NEW corruption deserves a NEW request), and after REPAIR_RETRY_S
+    with it still there (nobody forked; re-file and step aside again), up to
+    REPAIR_MAX_REQUESTS before it gives up loudly instead of churning workers."""
     try:
         if os.environ.get("OTLOBLY_DBREPAIR"):
+            _say("guard:dbrepair",
+                 "[db] repair NOT requested: this IS the repair subprocess "
+                 "(it reads damaged pages on purpose)")
             return False
         if maintenance_marker_path().exists():     # humans-only mode: answer 503s, no restarts
+            _say("guard:maintenance",
+                 "[db] repair NOT requested: maintenance marker present — humans only "
+                 f"({_marker_note(maintenance_marker_path())})")
             return False
+        if _reported["n"] and not repair_marker_path().exists():
+            # Our request was applied (the master consumed the marker), so forget the
+            # whole history: whatever happens next is a NEW corruption event and
+            # deserves a NEW request. THIS is the re-arm that 2026-09-12 needed —
+            # the 04:52 repair left the workers' latch set, and the 09:42 corruption
+            # eight hours later could never get past it.
+            print(f"[db] repair latch re-armed after "
+                  f"{int(time.time() - (_reported['at'] or 0.0))}s: the previous request "
+                  f"was applied (marker gone) — the next fault is a NEW event", flush=True)
+            _reported.update(done=False, at=0.0, n=0)
+        escalating = False                     # True only when re-filing OUR stale request
         if _reported["done"]:
+            waited = time.time() - (_reported["at"] or 0.0)
+            if waited >= REPAIR_RETRY_S:
+                escalating = True
+                print(f"[db] repair request filed {int(waited)}s ago is STILL unconsumed "
+                      f"(no fork, no preflight) — re-filing and stepping aside again", flush=True)
+                _reported["done"] = False
+            else:
+                _say("guard:latched",
+                     f"[db] repair NOT requested: already requested {int(waited)}s ago by "
+                     f"this process (pid {os.getpid()}); re-arming in "
+                     f"{max(0, int(REPAIR_RETRY_S - waited))}s")
+                return False
+        if _reported["n"] >= REPAIR_MAX_REQUESTS:
+            _say("guard:spent",
+                 f"[db] repair requested {_reported['n']} times from this process and "
+                 f"never applied — NOT restarting again, a human is needed "
+                 f"({str(verdict)[:100]})", every=300.0)
+            try:                                   # tell the truth: broken, nobody repairing
+                write_health({"ok": False, "error": str(verdict)[:300], "at": now_iso(),
+                              "repairing": False})
+            except Exception as e:                 # noqa: BLE001
+                print(f"[db] health.json not written: {e}", flush=True)
             return False
-        _reported["done"] = True
-        body = json.dumps({"verdict": str(verdict)[:300], "error": str(reason)[:200],
-                           "pid": os.getpid(), "at": now_iso()})
+        _reported.update(done=True, at=time.time(), n=_reported["n"] + 1)
+        body = {"verdict": str(verdict)[:300], "error": str(reason)[:200],
+                "pid": os.getpid(), "at": now_iso(), "attempts": 1}
         try:
             fd = os.open(repair_marker_path(), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
             with os.fdopen(fd, "w") as f:
-                f.write(body)
+                f.write(json.dumps(body))
             first = True
         except FileExistsError:
             first = False
+            if escalating:
+                # OUR own stale request, deliberately re-filed: keep the original as
+                # evidence and count the retry, so a human reading the marker can see
+                # that the master never applied it. A marker filed by ANOTHER worker is
+                # never touched — first writer wins, and its mtime stays put.
+                try:
+                    from paths import write_json_atomic
+                    try:
+                        old = json.loads(repair_marker_path().read_text())
+                    except (OSError, ValueError):
+                        old = dict(body)
+                    old.update({"attempts": int(old.get("attempts") or 1) + 1,
+                                "last_at": body["at"], "last_pid": body["pid"],
+                                "last_verdict": body["verdict"]})
+                    write_json_atomic(repair_marker_path(), old)
+                except Exception as e:             # noqa: BLE001 — evidence, never the point
+                    print(f"[db] marker not re-stamped: {e}", flush=True)
         try:
             write_health({"ok": False, "error": str(verdict)[:300], "at": now_iso(),
                           "repairing": True, "maintenance": False})
         except Exception as e:                   # noqa: BLE001
             print(f"[db] health.json not written: {e}", flush=True)
-        print(f"[db] REPAIR {'requested' if first else 'already requested'} "
-              f"({str(verdict)[:120]}); this worker steps aside", flush=True)
+        print(f"[db] REPAIR {'requested' if first else ('RE-requested' if escalating else 'already requested')} "
+              f"({str(verdict)[:120]}); attempt {_reported['n']} from pid {os.getpid()}; "
+              f"this worker steps aside", flush=True)
         if os.environ.get("OTLOBLY_GUNICORN_MASTER"):
             import signal
             import threading
