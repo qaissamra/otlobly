@@ -515,8 +515,13 @@ def restore_accounts(src_db):
                                       "password — try an older one"}
     health = accounts_health()
     repaired = None
-    if not health.get("ok"):
-        # the live table has to be sane before anything can be written INTO it
+    if health.get("unreadable") or health.get("mismatched"):
+        # the live table has to be sane before anything can be written INTO it.
+        # Junk rows ALONE are not that case: the table reads, every reader
+        # filters through _is_mailbox, and a rebuild with nothing to rescue
+        # refuses by design — on 2026-09-14 that refusal dead-ended the one
+        # restore path (33 junk rows, 0 real) six days after the mailboxes
+        # were lost. Insert straight into the readable table instead.
         repaired = repair_accounts()
         if not repaired.get("ok"):
             return {"ok": False, "error": "the live account list could not be "

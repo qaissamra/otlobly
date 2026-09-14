@@ -427,6 +427,27 @@ def main():
         check("restoring twice changes nothing — live always wins",
               again["ok"] and not again["restored"]
               and len(again["already_live"]) == 2)
+        # 5. the 2026-09-14 shape: the live table READS but holds nothing
+        #    except rows salvaged from other tables — 0 real mailboxes. A
+        #    rebuild refuses (nothing to rescue), so the restore must not
+        #    depend on one: insert straight into the readable table
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_accounts")
+            c.execute("INSERT INTO gaash_accounts (id,email,label) "
+                      "VALUES ('86caqpgzz','86caqpgzz','86caqpgz1')")
+            c.execute("INSERT INTO gaash_accounts (id,email,label) "
+                      "VALUES ('2026-09-06T08:29:33+00:00','2026-09-06T08:29:33+00:00','')")
+            c.commit()
+        junk_only = gm.accounts_health()
+        check("junk-only table: readable, not ok, nothing mismatched",
+              not junk_only["ok"] and junk_only["junk"] == 2
+              and junk_only["total"] == 0 and not junk_only["mismatched"]
+              and not junk_only.get("unreadable"))
+        res5 = gm.restore_accounts(src)
+        check("…and the backup still restores into it, WITHOUT a rebuild",
+              res5["ok"] and not res5["repaired"]
+              and res5["restored"] == ["one@test.com", "two@test.com"]
+              and [a["email"] for a in gm.accounts()] == ["one@test.com", "two@test.com"])
         with db.connect() as c:
             c.execute("DELETE FROM gaash_accounts")
         check("a backup with no usable mailbox is refused, not obeyed",
