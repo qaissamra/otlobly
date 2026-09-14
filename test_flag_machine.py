@@ -426,6 +426,53 @@ def main():
     fm.save_settings({"phrases": "action required", "senders": ""})
     _clear_flags()
 
+    print("— per-inbox rules (each account its own flag) —")
+    fm.save_settings({"phrases": "action required", "senders": "",
+                      "word_phrases": ""})
+    own = fm.add_inbox("owner000@gmail.com", "iiiijjjjkkkkllll", "OWNER",
+                       verify=lambda e, pw: (7, 42))
+    check("a new inbox follows the shared rules",
+          [a for a in fm.inboxes() if a["id"] == own["id"]][0]["uses_shared"]
+          and fm.rules_of([a for a in fm.inboxes()
+                           if a["id"] == own["id"]][0])["phrases"]
+          == ["action required"])
+    res, err = fm.set_rules(own["id"], {"senders": "xm.com",
+                                        "word_phrases": "xm", "phrases": ""})
+    got = {a["id"]: a for a in fm.inboxes()}
+    check("its own rules replace the shared set for THAT inbox only",
+          err is None and not res["uses_shared"]
+          and not got[own["id"]]["uses_shared"]
+          and got[own["id"]]["rules"]["senders"] == ["xm.com"]
+          and got[own["id"]]["rules"]["phrases"] == []
+          and got[fid]["uses_shared"]
+          and got[fid]["rules"]["phrases"] == ["action required"])
+    fm.save_settings({"phrases": "urgent reply"})     # the shared field moves…
+    got2 = {a["id"]: a for a in fm.inboxes()}
+    check("…and editing the shared rules can never retarget it",
+          got2[own["id"]]["rules"]["senders"] == ["xm.com"]
+          and got2[own["id"]]["rules"]["phrases"] == []
+          and got2[fid]["rules"]["phrases"] == ["urgent reply"])
+    check("the XM inbox flags an XM sender and ignores action-required",
+          fm.match_mail("Monthly statement", "XM <no-reply@xm.com>",
+                        got2[own["id"]]["rules"]) == "from: xm.com"
+          and fm.match_mail("Action required: verify", "a@amazon.com",
+                            got2[own["id"]]["rules"]) is None)
+    check("…while the Amazon inbox still only answers to its own phrase",
+          fm.match_mail("URGENT REPLY needed", "a@amazon.com",
+                        got2[fid]["rules"]) == "urgent reply"
+          and fm.match_mail("Monthly statement", "XM <no-reply@xm.com>",
+                            got2[fid]["rules"]) is None)
+    fm.set_rules(own["id"], {"use_shared": True, "senders": "xm.com"})
+    check("use_shared hands it back, even with fields still filled in",
+          [a for a in fm.inboxes() if a["id"] == own["id"]][0]["uses_shared"])
+    check("three empty fields mean shared too, and an unknown inbox errors",
+          fm.set_rules(own["id"], {})[0]["uses_shared"]
+          and fm.set_rules("nope", {"senders": "x"})[1] == "no such inbox")
+    check("rules_json never leaks to the UI payload",
+          all("rules_json" not in a for a in fm.inboxes()))
+    fm.remove_inbox(own["id"])
+    fm.save_settings({"phrases": "action required"})
+
     print("— dedupe index —")
     _mk_flag("watch@gmail.com", "<m1@x>")
     _mk_flag("watch@gmail.com", "<m1@x>")      # INSERT OR IGNORE

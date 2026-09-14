@@ -974,7 +974,7 @@
     <button id="pkgprepBtn" onclick="setView('pkgprep')" title="تجهيز الطرود — مين جاهز نغلّفله ومين ناقصه قطع · customers whose pieces arrived: ready to pack vs waiting"><span class="ic">🎁</span><span data-en="Package prep" data-ar="تجهيز الطرود">Package prep</span></button>
     <button id="bulkSearchBtn" onclick="setView('bulksearch')" title="الصق مجموعة أرقام تتبع GWD ودفعة وحدة شوف وين كل طرد — مشتريات أو ليلوكس، الحالة والقيمة · paste many GWD tracking numbers, see where each package lives (Purchases or Leluxe), its status and value"><span class="ic">🔎</span><span data-en="Bulk search" data-ar="بحث جماعي">Bulk search</span></button>
     <button id="gaashMailBtn" onclick="setView('gaashmail')" title="سلاسل إيميلات التخليص الجمركي — محادثة لكل طرد، ٤ إيميلات تلقائية، تتبع الردود · automated GAASH clearance email sequences — one chat per package, 4 templated emails, reply tracking"><span class="ic">📧</span><span data-en="GAASH mail" data-ar="بريد جمارك">GAASH mail</span></button>
-    <button id="flagsBtn" onclick="setView('flags')" title="مراقبة صناديق بريد — أي إيميل جديد عنوانه فيه action required ينبّه على تيليجرام كل دقيقة حتى ترد done · watched Gmail inboxes — a new email whose subject says action required nags on Telegram every minute until you reply done"><span class="ic">🚩</span><span data-en="Flags" data-ar="الأعلام">Flags</span></button>
+    <button id="flagsBtn" onclick="setView('flags')" title="مراقبة صناديق Gmail — أي إيميل جديد يطابق قاعدة (عبارة في العنوان، كلمة كاملة، أو المُرسِل) ينبّه على تيليجرام كل دقيقة حتى ترد done · watched Gmail inboxes — a new email that matches a rule (a phrase in the subject, a whole word, or who sent it) nags on Telegram every minute until you reply done"><span class="ic">🚩</span><span data-en="Flags" data-ar="الأعلام">Flags</span></button>
     <div class="nav-sec" data-en="Insights" data-ar="التحليلات">Insights</div>
     <button id="pnlBtn" onclick="setView('pnl')"><span class="ic">📊</span><span data-en="P&amp;L" data-ar="الأرباح والخسائر">P&amp;L</span></button>
     <button id="activityBtn" onclick="setView('activity')" title="see who changed what, and when"><span class="ic">🕑</span><span data-en="Activity" data-ar="النشاط">Activity</span></button>
@@ -3951,7 +3951,7 @@ const LXT_COLS={
   // 🚩 flag history — every flagged email ever, open and closed alike
   "fh":[
     {key:"sender",  label:"من · from",                w:170, sortable:true},
-    {key:"matched", label:"طابق · matched",           w:130, sortable:true},
+    {key:"matched", label:"المطابقة · matched",       w:130, sortable:true},
     {key:"profile", label:"البروفايل · profile",      w:110, sortable:true},
     {key:"inbox",   label:"الصندوق · inbox",          w:170, sortable:true},
     {key:"state",   label:"الحالة · state",           w:84,  sortable:true},
@@ -13595,6 +13595,8 @@ function flagDraw(){
       ${(a.last_seen||[]).length?`<button class="minibtn" title="${T("آخر الرسائل التي قرأها فعلاً · what it actually read")}" onclick="this.parentElement.nextElementSibling.classList.toggle('hidden')">🔍 ${a.last_seen.length}</button>`:`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("لم يقرأ شيئاً بعد · nothing read yet")}</span>`}
       ${a.active?"":`<span class="muted2" style="font-size:var(--ds-t-xs)">${T("موقوف · paused")}</span>`}
       <span class="spacer"></span>
+      <button class="minibtn" onclick="flagRulesToggle('${poEsc(a.id)}')" title="${T("ماذا يراقب هذا الصندوق — ولا أحد غيره · what THIS inbox watches for — nothing else is touched")}"
+        style="${a.uses_shared?"":"border-color:var(--accent);color:var(--accent)"}">🎯 ${poEsc(flagRuleSummary(a))}</button>
       ${CAN_ADMIN&&a.last_error?`<button class="minibtn" onclick="flagInboxFix('${poEsc(a.email)}')" title="${T("أدخل كلمة مرور تطبيق جديدة لهذا الحساب · enter a fresh app password for this account")}">🔑</button>`:""}
       ${CAN_ADMIN?`<button class="minibtn" onclick="flagInboxActive('${poEsc(a.id)}',${a.active?0:1})" title="${a.active?T("إيقاف مؤقت — يحتفظ بكلمة المرور والموضع · pause — keeps the password and cursor"):T("تشغيل · resume")}">${a.active?"⏸":"▶"}</button>
       <button class="minibtn" onclick="flagInboxRemove('${poEsc(a.id)}')">🗑</button>`:""}</div>
@@ -13608,6 +13610,17 @@ function flagDraw(){
           ${(m.gwds||[]).map(g=>`<span class="mono" style="flex:none;font-size:var(--ds-t-xs)">${poEsc(g)}</span>`).join("")}
           <span class="spacer"></span>
           <span class="muted2" style="flex:none;font-size:var(--ds-t-xs)">${poEsc(relTime(m.at))}</span></div>`).join("")}
+      </div>
+      <div id="flagRules_${poEsc(a.id)}" class="hidden" style="padding:7px 0 10px 10px;border-inline-start:2px solid var(--accent);margin-inline-start:4px">
+        <div class="muted2" style="font-size:var(--ds-t-xs);margin-bottom:5px">🎯 ${T("قواعد هذا الصندوق وحده — تعديلها لا يمسّ باقي الصناديق · the rules for THIS inbox alone — changing them touches no other inbox")}</div>
+        <label style="display:flex;gap:6px;align-items:center;font-size:var(--ds-t-sm);cursor:pointer;margin-bottom:5px">
+          <input type="checkbox" id="flagRSh_${poEsc(a.id)}" ${a.uses_shared?"checked":""} onchange="flagRulesShared('${poEsc(a.id)}')" ${CAN_ADMIN?"":"disabled"}>
+          <span>${T("استخدم القواعد المشتركة (من إعدادات المراقبة تحت) · use the shared rules from ⚙ watch settings below")}</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:var(--ds-t-sm)">
+          <label>${T("عبارات · phrases")}: <input id="flagRP_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.phrases||[]).join(", "))}" style="width:190px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
+          <label>${T("من مرسل · from sender")}: <input id="flagRF_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.senders||[]).join(", "))}" style="width:160px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
+          <label>${T("كلمة كاملة · whole word")}: <input id="flagRW_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.word_phrases||[]).join(", "))}" style="width:130px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
+          ${CAN_ADMIN?`<button class="accent" onclick="flagRulesSave('${poEsc(a.id)}',this)">💾 ${T("حفظ · Save")}</button>`:""}</div>
       </div>`).join("")
       ||`<div class="muted2" style="font-size:var(--ds-t-sm);padding:4px 0">${T("لا صناديق بعد · none yet")}</div>`}
     ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
@@ -13631,17 +13644,44 @@ function flagDraw(){
       <span class="spacer"></span>
       <span class="muted2" style="flex:none;font-size:var(--ds-t-xs)" title="${poEsc(g.seen_at||"")}">${poEsc(relTime(g.seen_at))}</span></div>`).join("")
       ||`<div class="muted2" style="font-size:var(--ds-t-sm);padding:6px 0">${T("لا أرقام بعد · none yet")}</div>`}`;
+  // same rule as the add-inbox form above: every action on this page (Done,
+  // ⏸/▶/🗑, a profile chip) ends in flagLoad() → this repaint, which would
+  // silently put the SAVED settings back over a half-typed rule. The row
+  // stamps itself dirty on the first keystroke; a successful Save clears it.
+  const ks={dirty:sb.dataset.dirty==="1",
+            on:($("flagSetOn")||{}).checked, gwd:($("flagSetGwd")||{}).checked,
+            phr:(($("flagSetPhr")||{}).value), from:(($("flagSetFrom")||{}).value),
+            word:(($("flagSetWord")||{}).value), poll:(($("flagSetPoll")||{}).value),
+            rep:(($("flagSetRep")||{}).value)};
+  // the app's settings idiom (.form-grid + label.fld, labels above fields,
+  // Save in the footer) — the rule fields read as one group, the cadence
+  // pair as another, instead of a flex strip wrapping wherever label length falls
   sb.innerHTML=`
     <b style="font-size:var(--ds-t-sm)">⚙ ${T("إعدادات المراقبة · watch settings")}</b>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:var(--ds-t-sm);margin-top:6px">
+    <div class="muted2" style="font-size:var(--ds-t-xs);margin-top:2px">${T("هذه القواعد المشتركة — يتبعها كل صندوق ليس له قواعد خاصة (🎯 بجانب الصندوق) · the SHARED rules — followed by every inbox that has no rules of its own (🎯 on the inbox row)")}</div>
+    <div oninput="this.parentElement.dataset.dirty='1'" onchange="this.parentElement.dataset.dirty='1'">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:var(--ds-t-sm);margin:6px 0 10px">
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="flagSetOn" ${s.enabled?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>${T("مفعّل · enabled")}</b></label>
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer" title="${T("يقرأ نص كل إيميل ليلتقط أرقام GWD — بدون فتحه أو تعليمه مقروء · reads each email's text to catch GWD numbers — never marks anything read")}"><input type="checkbox" id="flagSetGwd" ${s.collect_gwds?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>📦 ${T("اجمع أرقام الطرود · collect GWDs")}</b></label>
-      <label>${T("عبارات المطابقة · match phrases")}: <input id="flagSetPhr" value="${poEsc((s.phrases||[]).join(", "))}" style="width:230px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق عنوان الإيميل بغض النظر عن حالة الأحرف · comma-separated — matched inside the subject, case-insensitive")}"></label>
-      <label>${T("من مرسل · from sender")}: <input id="flagSetFrom" value="${poEsc((s.senders||[]).join(", "))}" placeholder="xm.com" style="width:180px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق داخل خانة «من» كاملة، الاسم والعنوان · comma-separated — matched inside the whole From header, display name and address")}"></label>
-      <label>${T("كلمة كاملة في العنوان · whole word in subject")}: <input id="flagSetWord" value="${poEsc((s.word_phrases||[]).join(", "))}" placeholder="xm" style="width:150px" ${CAN_ADMIN?"":"disabled"} title="${T("كلمة كاملة فقط — «xm» تطابق XM ولا تطابق Xmas · whole word only — “xm” matches XM, never Xmas")}"></label>
-      <label>${T("فحص البريد كل (دقائق) · check mail every (min)")}: <input id="flagSetPoll" type="number" min="1" value="${s.poll_interval_min||2}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
-      <label>${T("تكرار التنبيه كل (دقائق) · repeat alert every (min)")}: <input id="flagSetRep" type="number" min="1" value="${s.repeat_min||1}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
-      ${CAN_ADMIN?`<button class="accent" onclick="flagSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
+    </div>
+    <div class="form-grid">
+      <div class="full"><label class="fld" title="${T("مفصولة بفواصل — تطابق عنوان الإيميل بغض النظر عن حالة الأحرف · comma-separated — matched inside the subject, case-insensitive")}">${T("عبارات المطابقة · match phrases")}</label><input id="flagSetPhr" value="${poEsc((s.phrases||[]).join(", "))}" style="width:100%" ${CAN_ADMIN?"":"disabled"}></div>
+      <div><label class="fld" title="${T("مفصولة بفواصل — تطابق داخل خانة «من» كاملة، الاسم والعنوان · comma-separated — matched inside the whole From header, display name and address")}">${T("المُرسِل · from sender")}</label><input id="flagSetFrom" value="${poEsc((s.senders||[]).join(", "))}" placeholder="xm.com" style="width:100%" ${CAN_ADMIN?"":"disabled"}></div>
+      <div><label class="fld" title="${T("كلمة كاملة فقط — «xm» تطابق XM ولا تطابق Xmas · whole word only — “xm” matches XM, never Xmas")}">${T("كلمة كاملة في العنوان · whole word in subject")}</label><input id="flagSetWord" value="${poEsc((s.word_phrases||[]).join(", "))}" placeholder="xm" style="width:100%" ${CAN_ADMIN?"":"disabled"}></div>
+      <div><label class="fld">${T("فحص البريد كل (دقائق) · check mail every (min)")}</label><input id="flagSetPoll" type="number" min="1" value="${s.poll_interval_min||2}" style="width:100%" ${CAN_ADMIN?"":"disabled"}></div>
+      <div><label class="fld">${T("تكرار التنبيه كل (دقائق) · repeat alert every (min)")}</label><input id="flagSetRep" type="number" min="1" value="${s.repeat_min||1}" style="width:100%" ${CAN_ADMIN?"":"disabled"}></div>
+      ${CAN_ADMIN?`<div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="flagSettingsSave(this)">💾 ${T("حفظ · Save")}</button></div>`:""}
+    </div></div>`;
+  if(ks.dirty){
+    if($("flagSetOn"))   $("flagSetOn").checked=!!ks.on;
+    if($("flagSetGwd"))  $("flagSetGwd").checked=!!ks.gwd;
+    if($("flagSetPhr"))  $("flagSetPhr").value=ks.phr||"";
+    if($("flagSetFrom")) $("flagSetFrom").value=ks.from||"";
+    if($("flagSetWord")) $("flagSetWord").value=ks.word||"";
+    if($("flagSetPoll")) $("flagSetPoll").value=ks.poll||"";
+    if($("flagSetRep"))  $("flagSetRep").value=ks.rep||"";
+    sb.dataset.dirty="1";
+  }
   flagHistDraw();
 }
 // ── 🗒 history: every flagged email, open and closed. Closing a flag only
@@ -13671,7 +13711,10 @@ function flagHistDraw(){
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(r.subject||"(no subject)")}</b></span></div>`;
     return `<div class="poc-row">${pin}${lxtCells("fh",{
       sender:  `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.sender||"—")}</span>`,
-    matched: r.matched_phrase?`<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${T("القاعدة التي أطلقت التنبيه · the rule that fired")}">${poEsc(r.matched_phrase)}</span>`:`<span class="muted2">—</span>`,
+      // the tooltip carries the VALUE first (a long user-typed rule clips at
+      // 130px), the explanation second — Q-008b: an affordance-only title
+      // "looks handled" while the reader still cannot read the cell
+      matched: r.matched_phrase?`<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poEsc(r.matched_phrase)} · ${T("القاعدة التي أطلقت التنبيه · the rule that fired")}">${poEsc(r.matched_phrase)}</span>`:`<span class="muted2">—</span>`,
       profile: r.profile?lxProfileChip(r.profile,r.profile):`<span class="muted2">—</span>`,
       inbox:   `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.email||"")}</span>`,
       state:   r.state==="open"?tonePill("red",T("مفتوح · open"),T("ما زال ينبّه · still nagging"))
@@ -13693,6 +13736,35 @@ async function flagDone(btn){
   const r=await post("/api/flags/done",{});
   btn.disabled=false;
   if(r&&r.ok) toast("✅ "+T("سكّرت · closed")+" "+(r.closed||0));
+  flagLoad();
+}
+// 🎯 per-inbox rules: the chip text, the editor toggle, the save.
+function flagRuleSummary(a){
+  const r=(a&&a.rules)||{}, bits=[];
+  (r.phrases||[]).forEach(x=>bits.push(x));
+  (r.word_phrases||[]).forEach(x=>bits.push(T("كلمة · word")+" "+x));
+  (r.senders||[]).forEach(x=>bits.push(T("من · from")+" "+x));
+  const txt=bits.join(" · ")||T("بلا قاعدة · no rule");
+  const cut=txt.length>34?txt.slice(0,33)+"…":txt;
+  return (a&&a.uses_shared?"":"★ ")+cut;
+}
+function flagRulesToggle(id){
+  const el=$("flagRules_"+id); if(el) el.classList.toggle("hidden");
+}
+function flagRulesShared(id){
+  // ticking "use the shared rules" greys its own fields — the state you are
+  // about to save, visible before you save it
+  const on=!!(($("flagRSh_"+id)||{}).checked);
+  ["flagRP_","flagRF_","flagRW_"].forEach(p=>{ const e=$(p+id); if(e) e.disabled=on; });
+}
+async function flagRulesSave(id,btn){
+  btn.disabled=true;
+  const v=p=>((($(p+id)||{}).value)||"");
+  const r=await post("/api/flags/inbox/rules",{id,use_shared:!!(($("flagRSh_"+id)||{}).checked),
+    phrases:v("flagRP_"), senders:v("flagRF_"), word_phrases:v("flagRW_")});
+  btn.disabled=false;
+  if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
+  toast(r.uses_shared?("🎯 "+T("يتبع القواعد المشتركة · follows the shared rules")):("🎯 "+T("قواعد خاصة محفوظة · own rules saved")));
   flagLoad();
 }
 async function flagInboxAdd(btn){
@@ -13743,6 +13815,8 @@ async function flagSettingsSave(btn){
   btn.disabled=false;
   if(!r||!r.ok){ toast((r&&r.error)||"failed"); return; }
   toast("💾 "+T("حُفظت · saved"));
+  // saved = nothing half-typed left to protect; let the repaint show the server's copy
+  const sb=$("flagSettingsBox"); if(sb) delete sb.dataset.dirty;
   flagLoad();
 }
 function gmSettingsOpen(){
