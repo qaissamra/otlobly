@@ -5,8 +5,10 @@ OBSERVATION ONLY: `select(readonly=True)` + `BODY.PEEK[…]` (headers always,
 plus a 64 KB partial body when GWD collection is on) — PEEK and EXAMINE both
 guarantee nothing is ever marked read; no mail is ever sent, no attachment is
 ever saved, no body text is ever stored, and the accounts are not linked to
-anything. A NEW message whose subject contains a match phrase (default
-"action required") raises an open flag; while any flag is open the owner
+anything. A NEW message raises an open flag when it hits a rule — a phrase
+inside the subject (default "action required"), a WHOLE word in the subject
+("xm" flags «XM Global» and never «Xmas»), or a fragment of the From header
+("xm.com"), because who sent it is often the whole point; while any flag is open the owner
 gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
 (env FLAGS_BOT_TOKEN; the chat id is the shared TELEGRAM_CHAT_ID — chat ids
 are global per user) until they reply «done»/«تم» in that bot's chat. This
@@ -31,6 +33,7 @@ import imaplib
 import json
 import os
 import re
+import sqlite3
 import threading
 import time
 import uuid
@@ -64,6 +67,8 @@ DONE_WORDS = ("done", "تم", "خلص", "خلصت", "تمام")
 DEFAULTS = {
     "enabled": True,
     "phrases": ["action required"],   # subject substrings, case-insensitive
+    "word_phrases": [],               # subject WHOLE words — "xm" ≠ "xmas"
+    "senders": [],                    # From: fragments — "xm.com", "@xm."
     "poll_interval_min": 2,           # IMAP pass cadence
     "repeat_min": 1,                  # nag cadence — the every-minute ask
     "collect_gwds": True,             # harvest GWD numbers from EVERY message
@@ -81,21 +86,37 @@ def settings():
     return st
 
 
+RULE_FIELDS = (("phrases", "match phrases"),
+               ("word_phrases", "whole-word phrases"),
+               ("senders", "senders"))
+
+
+def _rule_list(raw):
+    """One settings field → a clean list, or None when it is neither a list
+    nor the comma-separated text the UI sends."""
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    if not isinstance(raw, list):
+        return None
+    return [x for x in (" ".join(str(r).split()) for r in raw) if x]
+
+
 def save_settings(body):
     """Validate + persist the 🚩 settings form. Returns (settings, error)."""
     st = settings()
     b = body or {}
-    if "phrases" in b:
-        raw = b["phrases"]
-        if isinstance(raw, str):                 # the UI sends comma-separated
-            raw = raw.split(",")
-        if not isinstance(raw, list):
-            return None, "phrases must be a list or comma-separated text"
-        phrases = [" ".join(str(p).split()) for p in raw]
-        phrases = [p for p in phrases if p]
-        if not phrases:
-            return None, "at least one match phrase is required"
-        st["phrases"] = phrases
+    for key, label in RULE_FIELDS:
+        if key in b:
+            got = _rule_list(b[key])
+            if got is None:
+                return None, f"{label} must be a list or comma-separated text"
+            st[key] = got
+    # the phrase field used to be the only rule, so it was mandatory. Now a
+    # watch can live on senders alone — but never on nothing: an empty rule
+    # set reads every inbox forever and can never fire, which LOOKS armed.
+    if not any(st[k] for k, _ in RULE_FIELDS):
+        return None, ("at least one match rule is required — a phrase, "
+                      "a whole word, or a sender")
     try:
         if "poll_interval_min" in b:
             st["poll_interval_min"] = int(b["poll_interval_min"])
@@ -237,10 +258,40 @@ def poll_updates(get=None, send=None):
 # --------------------------------------------------------------------------- #
 # Inboxes (Gmail + app passwords) — verified on add, stored in flag_inboxes
 # --------------------------------------------------------------------------- #
+def _is_inbox(r):
+    """Is this row really a watched inbox? A damaged table hands back cells
+    that belong to OTHER tables entirely — on 2026-09-12 the rebuild salvaged
+    Le Luxe cards and audit lines into this one — and an address with an @
+    under a string id is the only shape add_inbox ever stores.
+    (gaash_mail._is_mailbox, same problem, same test.)"""
+    return (isinstance(r.get("email"), str) and "@" in r["email"]
+            and isinstance(r.get("id"), str))
+
+
+def _inbox_rows(c, keep_junk=False):
+    """(rows, unreadable) — the inboxes, and why the read stopped short.
+    Row by row and no ORDER BY (the gaash_mail._acct_rows discipline): a
+    corrupt cell then costs the rows behind it, not the whole list, and the
+    one screen that can fix the watch still opens. Sort in Python after."""
+    rows, err = [], None
+    try:
+        cur = c.execute("SELECT * FROM flag_inboxes")
+        while True:
+            r = cur.fetchone()
+            if r is None:
+                break
+            rows.append(dict(r))
+    except sqlite3.DatabaseError as e:
+        err = str(e)[:120]
+    if not keep_junk:
+        rows = [r for r in rows if _is_inbox(r)]
+    rows.sort(key=lambda r: r.get("added_at") or "")
+    return rows, err
+
+
 def inboxes(redact=True):
     with db.connect() as c:
-        rows = [dict(r) for r in c.execute(
-            "SELECT * FROM flag_inboxes ORDER BY added_at")]
+        rows, _ = _inbox_rows(c)
     for a in rows:
         a.pop("seen_ids_json", None)
         try:
@@ -361,6 +412,55 @@ def set_active(inbox_id, active):
 # --------------------------------------------------------------------------- #
 # Matching
 # --------------------------------------------------------------------------- #
+def restore_inboxes(src_db):
+    """Put the watched inboxes back from a backup zip's database — same ids,
+    same app passwords, same IMAP cursors, so the poll then reads the mail
+    that landed while the watch was blind and the open flags stay bound to
+    the inbox they came from.
+
+    Why this exists: on 2026-09-12 the corruption ate this table's page and
+    the rebuild salvaged rows belonging to OTHER tables into it. Nothing
+    raised — poll_once selects WHERE active=1, the junk rows carry text
+    there, so it matched nothing and the machine kept polling an EMPTY list
+    while stamping "last poll: 2 minutes ago". Re-adding by hand would mint
+    new ids (orphaning every open flag) and needs 7 app passwords back from
+    Google. An inbox the live table still has always wins — this only fills
+    holes. (gaash_mail.restore_accounts, same shape.)"""
+    rows = []
+    try:
+        # immutable: the snapshot is WAL-mode, and a plain read-only open
+        # still wants to CREATE its -shm sidecar next to a file we just
+        # extracted and are about to delete
+        t = sqlite3.connect(f"file:{src_db}?mode=ro&immutable=1", uri=True)
+        t.row_factory = sqlite3.Row
+        rows, _ = _inbox_rows(t)
+        t.close()
+    except sqlite3.DatabaseError as e:
+        return {"ok": False, "error": f"could not read the backup: {str(e)[:120]}"}
+    rows = [r for r in rows if (r.get("app_password") or "").strip()]
+    if not rows:
+        return {"ok": False, "error": "that backup holds no watched inbox "
+                                      "with a password — try an older one"}
+    restored, kept = [], []
+    with db.connect() as c:
+        live, _ = _inbox_rows(c)
+        have_id = {r["id"] for r in live}
+        have_email = {(r.get("email") or "").lower() for r in live}
+        cols = [x[1] for x in c.execute("PRAGMA table_info(flag_inboxes)")]
+        for r in rows:
+            if r["id"] in have_id or r["email"].lower() in have_email:
+                kept.append(r["email"])       # live already has it — leave it
+                continue
+            use = [k for k in cols if k in r]
+            c.execute("INSERT INTO flag_inboxes (%s) VALUES (%s)"
+                      % (",".join(use), ",".join("?" * len(use))),
+                      [r[k] for k in use])
+            restored.append(r["email"])
+        c.commit()
+    return {"ok": True, "restored": restored, "already_live": kept,
+            "watching": len(inboxes())}
+
+
 def _parse_date_hdr(s):
     """The email's own Date header → ISO string, or None on garbage."""
     try:
@@ -385,6 +485,49 @@ def match_subject(subject, phrases):
     return None
 
 
+def match_word(subject, words):
+    """The whole-word subject phrase that fires, or None. This exists BESIDE
+    match_subject because a two-letter brand cannot be a substring rule:
+    "xm" would flag every «Xmas» sale. Word edges are Unicode, so an Arabic
+    rule behaves the same way; lookarounds rather than \\b so a rule that
+    starts or ends on punctuation still works."""
+    s = " ".join(str(subject or "").casefold().split())
+    for w in words or []:
+        wn = " ".join(str(w or "").casefold().split())
+        if wn and re.search(r"(?<!\w)" + re.escape(wn) + r"(?!\w)", s):
+            return w
+    return None
+
+
+def match_sender(sender, senders):
+    """The From: fragment that fires, or None. Matched against the WHOLE
+    header, display name included, so "xm" catches «XM <no-reply@xm.com>»
+    and "xm.com" catches only the domain — the narrower rule is the one to
+    type, since a bare "xm" also lives inside maxmind.com."""
+    s = " ".join(str(sender or "").casefold().split())
+    for f in senders or []:
+        fn = " ".join(str(f or "").casefold().split())
+        if fn and fn in s:
+            return f
+    return None
+
+
+def match_mail(subject, sender, st):
+    """WHY this email is flagged — the rule that fired, or None. The label
+    is what the 🗒 history shows under "matched", so a sender hit reads
+    «from: xm.com» and never pretends the subject said it."""
+    hit = match_subject(subject, st.get("phrases"))
+    if hit:
+        return hit
+    hit = match_word(subject, st.get("word_phrases"))
+    if hit:
+        return f"word: {hit}"
+    hit = match_sender(sender, st.get("senders"))
+    if hit:
+        return f"from: {hit}"
+    return None
+
+
 # GAASH parcel numbers as they appear in prose. Digits only, no separators —
 # no dash/space variant exists anywhere in this codebase, so don't invent one.
 # (leluxe.GWD_CANON's "GWD + 9 digits" is advisory; never gate on the length.)
@@ -405,7 +548,7 @@ def gwd_tokens(text):
 # --------------------------------------------------------------------------- #
 # Poll pass — read new mail, raise flags
 # --------------------------------------------------------------------------- #
-def _check_inbox(inbox, phrases, collect_gwds=False):
+def _check_inbox(inbox, st, collect_gwds=False):
     """Poll one Gmail INBOX. Returns (new_flags, new_gwds, patch).
     Raises on connection errors (poll_once catches per inbox).
 
@@ -475,7 +618,7 @@ def _check_inbox(inbox, phrases, collect_gwds=False):
                 for g in gwd_tokens(text):
                     new_gwds.append({"gwd": g, "msg_id": mid, "subject": subj,
                                      "sender": sender})
-            phrase = match_subject(subj, phrases)
+            phrase = match_mail(subj, sender, st)
             seen_log.append({"uid": uid, "subject": subj[:120],
                              "sender": sender[:80], "at": db.now_iso(),
                              "hit": bool(phrase),
@@ -515,8 +658,8 @@ def poll_once():
     raised = 0
     for a in boxes:
         try:
-            flags, found, patch = _check_inbox(a, st["phrases"],
-                                               collect_gwds=st["collect_gwds"])
+            flags, found, patch = _check_inbox(
+                a, st, collect_gwds=st["collect_gwds"])
         except Exception as e:  # noqa
             msg = str(e)[:150]
             if "AUTHENTICATIONFAILED" in msg.upper():

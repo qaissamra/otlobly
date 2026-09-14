@@ -5446,6 +5446,46 @@ def api_gaash_accounts_restore():
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
+@app.route("/api/flags/inboxes/restore", methods=["POST"])
+def api_flags_inboxes_restore():
+    """Put the 🚩 watched inboxes back from a backup zip — same auth and same
+    streaming shape as /api/gaash/accounts/restore, and it touches ONE table.
+    For 2026-09-12, when the rebuild left this table holding rows salvaged
+    from OTHER tables: the watch matched nothing, said nothing, and the app
+    passwords for seven inboxes were gone with the page."""
+    if not _backup_ok():
+        abort(401)
+    import flag_machine as fm
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    staging = db.DB_FILE.with_name(db.DB_FILE.name + f".flagsrc-{stamp}")
+    up = tempfile.NamedTemporaryFile(prefix="otlobly-flagrestore-",
+                                     suffix=".zip", delete=False)
+    try:
+        # stream, like /api/backup: the zip is ~100 MB and the instance is 512
+        shutil.copyfileobj(request.stream, up, length=1024 * 1024)
+        up.close()
+        if not os.path.getsize(up.name):
+            abort(400, "empty body — POST the backup zip as the raw body")
+        try:
+            with zipfile.ZipFile(up.name) as z, z.open("otlobly.db") as src, \
+                    open(staging, "wb") as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+        except Exception as e:        # noqa: BLE001
+            abort(400, f"could not read otlobly.db from the zip: {e}")
+        res = fm.restore_inboxes(staging)
+    finally:
+        for f in (up.name, staging):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+    if res.get("ok"):
+        db.audit(auth.actor() or {"username": "worker"},
+                 "flag_inboxes_restore", "flags",
+                 ",".join(res.get("restored") or []), "from backup")
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
 @app.route("/api/worker/seed", methods=["POST"])
 def worker_seed():
     """One-time data import from the Mac → server (orders / customers / purchases).
