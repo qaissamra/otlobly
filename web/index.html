@@ -13616,11 +13616,11 @@ function flagDraw(){
         <label style="display:flex;gap:6px;align-items:center;font-size:var(--ds-t-sm);cursor:pointer;margin-bottom:5px">
           <input type="checkbox" id="flagRSh_${poEsc(a.id)}" ${a.uses_shared?"checked":""} onchange="flagRulesShared('${poEsc(a.id)}')" ${CAN_ADMIN?"":"disabled"}>
           <span>${T("استخدم القواعد المشتركة (من إعدادات المراقبة تحت) · use the shared rules from ⚙ watch settings below")}</span></label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:var(--ds-t-sm)">
-          <label>${T("عبارات · phrases")}: <input id="flagRP_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.phrases||[]).join(", "))}" style="width:190px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
-          <label>${T("من مرسل · from sender")}: <input id="flagRF_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.senders||[]).join(", "))}" style="width:160px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
-          <label>${T("كلمة كاملة · whole word")}: <input id="flagRW_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.word_phrases||[]).join(", "))}" style="width:130px" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></label>
-          ${CAN_ADMIN?`<button class="accent" onclick="flagRulesSave('${poEsc(a.id)}',this)">💾 ${T("حفظ · Save")}</button>`:""}</div>
+        <div class="form-grid" style="max-width:560px">
+          <div class="full"><label class="fld">${T("عبارات المطابقة · match phrases")}</label><input id="flagRP_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.phrases||[]).join(", "))}" style="width:100%" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></div>
+          <div><label class="fld">${T("المُرسِل · from sender")}</label><input id="flagRF_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.senders||[]).join(", "))}" placeholder="xm.com" style="width:100%" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></div>
+          <div><label class="fld">${T("كلمة كاملة في العنوان · whole word in subject")}</label><input id="flagRW_${poEsc(a.id)}" value="${poEsc((a.rules&&a.rules.word_phrases||[]).join(", "))}" placeholder="xm" style="width:100%" ${(!CAN_ADMIN||a.uses_shared)?"disabled":""}></div>
+          ${CAN_ADMIN?`<div class="full" style="display:flex;justify-content:flex-end"><button class="accent" onclick="flagRulesSave('${poEsc(a.id)}',this)">💾 ${T("حفظ · Save")}</button></div>`:""}</div>
       </div>`).join("")
       ||`<div class="muted2" style="font-size:var(--ds-t-sm);padding:4px 0">${T("لا صناديق بعد · none yet")}</div>`}
     ${CAN_ADMIN?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
