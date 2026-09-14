@@ -8,7 +8,10 @@ ever saved, no body text is ever stored, and the accounts are not linked to
 anything. A NEW message raises an open flag when it hits a rule — a phrase
 inside the subject (default "action required"), a WHOLE word in the subject
 ("xm" flags «XM Global» and never «Xmas»), or a fragment of the From header
-("xm.com"), because who sent it is often the whole point; while any flag is open the owner
+("xm.com"), because who sent it is often the whole point. Rules live in the
+SHARED settings, and any inbox may carry its OWN set instead (rules_json) —
+the buying accounts watch Amazon's "action required" while the owner's own
+inbox watches XM, and neither can retarget the other; while any flag is open the owner
 gets ONE batched message every repeat_min minutes from a DEDICATED flags bot
 (env FLAGS_BOT_TOKEN; the chat id is the shared TELEGRAM_CHAT_ID — chat ids
 are global per user) until they reply «done»/«تم» in that bot's chat. This
@@ -132,6 +135,47 @@ def save_settings(body):
         st["collect_gwds"] = bool(b["collect_gwds"])
     db.set_setting(SETTINGS_KEY, st)
     return st, None
+
+
+def rules_of(inbox, st=None):
+    """The rules this ONE inbox polls by: its own set, or the shared ones.
+
+    An inbox with no rules_json (every row until it is given one) follows the
+    shared settings, so nothing changes for an existing watch. An inbox WITH a
+    set is sealed off from the shared field entirely — editing "action
+    required" can never again retarget the inbox that only wants XM."""
+    st = st if st is not None else settings()
+    own = inbox.get("rules_json") if isinstance(inbox, dict) else None
+    if own:
+        try:
+            got = json.loads(own)
+        except (ValueError, TypeError):
+            got = None
+        if isinstance(got, dict) and any(got.get(k) for k, _ in RULE_FIELDS):
+            return {k: [str(x) for x in (got.get(k) or [])] for k, _ in RULE_FIELDS}
+    return {k: list(st.get(k) or []) for k, _ in RULE_FIELDS}
+
+
+def set_rules(inbox_id, body):
+    """Give one inbox its own rules, or hand it back to the shared set.
+    body {use_shared:true} (or three empty fields) clears the override.
+    Returns (row-ish dict, error)."""
+    b = body or {}
+    got = {}
+    for key, label in RULE_FIELDS:
+        parsed = _rule_list(b.get(key, []))
+        if parsed is None:
+            return None, f"{label} must be a list or comma-separated text"
+        got[key] = parsed
+    shared = bool(b.get("use_shared")) or not any(got.values())
+    payload = None if shared else json.dumps(got, ensure_ascii=False)
+    with db.connect() as c:
+        cur = c.execute("UPDATE flag_inboxes SET rules_json=? WHERE id=?",
+                        (payload, inbox_id))
+        c.commit()
+    if not cur.rowcount:
+        return None, "no such inbox"
+    return {"id": inbox_id, "uses_shared": shared, "rules": got}, None
 
 
 # --------------------------------------------------------------------------- #
@@ -290,9 +334,14 @@ def _inbox_rows(c, keep_junk=False):
 
 
 def inboxes(redact=True):
+    st = settings()
     with db.connect() as c:
         rows, _ = _inbox_rows(c)
     for a in rows:
+        # the UI shows what this inbox ACTUALLY watches for, shared or its own
+        a["uses_shared"] = not (a.get("rules_json") or "").strip()
+        a["rules"] = rules_of(a, st)
+        a.pop("rules_json", None)
         a.pop("seen_ids_json", None)
         try:
             a["last_seen"] = list(reversed(json.loads(a.pop("last_seen_json", None) or "[]")))
@@ -548,8 +597,8 @@ def gwd_tokens(text):
 # --------------------------------------------------------------------------- #
 # Poll pass — read new mail, raise flags
 # --------------------------------------------------------------------------- #
-def _check_inbox(inbox, st, collect_gwds=False):
-    """Poll one Gmail INBOX. Returns (new_flags, new_gwds, patch).
+def _check_inbox(inbox, rules, collect_gwds=False):
+    """Poll one Gmail INBOX against the rules THAT inbox watches by. Returns (new_flags, new_gwds, patch).
     Raises on connection errors (poll_once catches per inbox).
 
     A flag needs the header only. GWD collection needs the text of EVERY
@@ -618,7 +667,7 @@ def _check_inbox(inbox, st, collect_gwds=False):
                 for g in gwd_tokens(text):
                     new_gwds.append({"gwd": g, "msg_id": mid, "subject": subj,
                                      "sender": sender})
-            phrase = match_mail(subj, sender, st)
+            phrase = match_mail(subj, sender, rules)
             seen_log.append({"uid": uid, "subject": subj[:120],
                              "sender": sender[:80], "at": db.now_iso(),
                              "hit": bool(phrase),
@@ -659,7 +708,7 @@ def poll_once():
     for a in boxes:
         try:
             flags, found, patch = _check_inbox(
-                a, st, collect_gwds=st["collect_gwds"])
+                a, rules_of(a, st), collect_gwds=st["collect_gwds"])
         except Exception as e:  # noqa
             msg = str(e)[:150]
             if "AUTHENTICATIONFAILED" in msg.upper():

@@ -3774,6 +3774,66 @@ def api_flags_inbox_active():
     return jsonify(fm.set_active(b.get("id"), bool(b.get("active"))))
 
 
+@app.route("/api/flags/inbox/rules", methods=["POST"])
+@auth.require("admin_actions")
+@auth.require_feature("leluxe")
+def api_flags_inbox_rules():
+    """Give ONE inbox its own rules, or hand it back to the shared set.
+    The owner's own mailbox watches XM; the buying accounts watch Amazon's
+    "action required" — one shared field could not hold both."""
+    import flag_machine as fm
+    b = request.get_json(force=True, silent=True) or {}
+    res, err = fm.set_rules(b.get("id"), b)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    db.audit(auth.actor(), "flag_inbox_rules", "flags", str(b.get("id") or ""),
+             "shared" if res["uses_shared"] else json.dumps(res["rules"],
+                                                            ensure_ascii=False))
+    return jsonify({"ok": True, **res})
+
+
+@app.route("/api/worker/flags_rules", methods=["GET", "POST"])
+def api_worker_flags_rules():
+    """Read or set the 🚩 rules headlessly — worker bearer token, like the
+    other /api/worker/* routes. GET lists every inbox with the rules it
+    actually polls by. POST takes {shared:{…}} for the shared set and/or
+    {inboxes:[{id|email, …rule fields, use_shared}]} for overrides, so the
+    watch can be retargeted from a script instead of a browser session."""
+    if not _backup_ok():
+        abort(401)
+    import flag_machine as fm
+    if request.method == "GET":
+        return jsonify({"ok": True, "shared": fm.settings(),
+                        "inboxes": [{k: a[k] for k in
+                                     ("id", "email", "label", "active",
+                                      "uses_shared", "rules") if k in a}
+                                    for a in fm.inboxes()]})
+    b = request.get_json(force=True, silent=True) or {}
+    out = {"ok": True}
+    if isinstance(b.get("shared"), dict):
+        st, err = fm.save_settings(b["shared"])
+        if err:
+            return jsonify({"ok": False, "error": err}), 400
+        out["shared"] = st
+    done, missing = [], []
+    by_email = {(a.get("email") or "").lower(): a["id"] for a in fm.inboxes()}
+    for one in (b.get("inboxes") or []):
+        iid = one.get("id") or by_email.get(str(one.get("email") or "").lower())
+        res, err = fm.set_rules(iid, one)
+        if err:
+            missing.append({"inbox": one.get("email") or one.get("id"),
+                            "error": err})
+            continue
+        done.append({"inbox": one.get("email") or iid, **res})
+    out["inboxes"] = done
+    if missing:
+        out["not_applied"] = missing
+    db.audit(auth.actor() or {"username": "worker"}, "flags_rules", "flags",
+             ",".join(str(d.get("inbox")) for d in done),
+             "shared updated" if "shared" in out else "per-inbox only")
+    return jsonify(out)
+
+
 @app.route("/api/flags/done", methods=["POST"])
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
