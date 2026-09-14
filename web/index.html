@@ -1230,7 +1230,7 @@
   <!-- 🚩 Flag machine — watched inboxes, open flags, the every-minute Telegram nag -->
   <div id="flagsView" class="hidden">
     <div class="toolbar"><h2 style="margin:0;font-size:var(--ds-t-lg);font-weight:800">🚩 <span data-en="Flags" data-ar="الأعلام">Flags</span></h2>
-      <span class="muted2" style="font-size:var(--ds-t-sm)" data-en="watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done" data-ar="يراقب صناديق Gmail للقراءة فقط — أي إيميل جديد عنوانه فيه “action required” ينبّه على تيليجرام كل دقيقة حتى ترد done">watches Gmail inboxes read-only — a new email whose subject says “action required” nags on Telegram every minute until you reply done</span></div>
+      <span class="muted2" style="font-size:var(--ds-t-sm)" data-en="watches Gmail inboxes read-only — a new email that matches a rule below (a phrase in the subject, a whole word, or who sent it) nags on Telegram every minute until you reply done" data-ar="يراقب صناديق Gmail للقراءة فقط — أي إيميل جديد يطابق قاعدة من الأسفل (عبارة في العنوان، كلمة كاملة، أو المُرسِل) ينبّه على تيليجرام كل دقيقة حتى ترد done">watches Gmail inboxes read-only — a new email that matches a rule below (a phrase in the subject, a whole word, or who sent it) nags on Telegram every minute until you reply done</span></div>
     <div class="panel" style="max-width:760px"><div id="flagOpenBox" class="muted2" style="font-size:var(--ds-t-sm)">loading…</div></div>
     <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagInboxBox"></div></div>
     <div class="panel" style="max-width:760px;margin-top:14px"><div id="flagGwdBox"></div></div>
@@ -3951,6 +3951,7 @@ const LXT_COLS={
   // 🚩 flag history — every flagged email ever, open and closed alike
   "fh":[
     {key:"sender",  label:"من · from",                w:170, sortable:true},
+    {key:"matched", label:"طابق · matched",           w:130, sortable:true},
     {key:"profile", label:"البروفايل · profile",      w:110, sortable:true},
     {key:"inbox",   label:"الصندوق · inbox",          w:170, sortable:true},
     {key:"state",   label:"الحالة · state",           w:84,  sortable:true},
@@ -13636,6 +13637,8 @@ function flagDraw(){
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="flagSetOn" ${s.enabled?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>${T("مفعّل · enabled")}</b></label>
       <label style="display:flex;gap:6px;align-items:center;cursor:pointer" title="${T("يقرأ نص كل إيميل ليلتقط أرقام GWD — بدون فتحه أو تعليمه مقروء · reads each email's text to catch GWD numbers — never marks anything read")}"><input type="checkbox" id="flagSetGwd" ${s.collect_gwds?"checked":""} ${CAN_ADMIN?"":"disabled"}> <b>📦 ${T("اجمع أرقام الطرود · collect GWDs")}</b></label>
       <label>${T("عبارات المطابقة · match phrases")}: <input id="flagSetPhr" value="${poEsc((s.phrases||[]).join(", "))}" style="width:230px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق عنوان الإيميل بغض النظر عن حالة الأحرف · comma-separated — matched inside the subject, case-insensitive")}"></label>
+      <label>${T("من مرسل · from sender")}: <input id="flagSetFrom" value="${poEsc((s.senders||[]).join(", "))}" placeholder="xm.com" style="width:180px" ${CAN_ADMIN?"":"disabled"} title="${T("مفصولة بفواصل — تطابق داخل خانة «من» كاملة، الاسم والعنوان · comma-separated — matched inside the whole From header, display name and address")}"></label>
+      <label>${T("كلمة كاملة في العنوان · whole word in subject")}: <input id="flagSetWord" value="${poEsc((s.word_phrases||[]).join(", "))}" placeholder="xm" style="width:150px" ${CAN_ADMIN?"":"disabled"} title="${T("كلمة كاملة فقط — «xm» تطابق XM ولا تطابق Xmas · whole word only — “xm” matches XM, never Xmas")}"></label>
       <label>${T("فحص البريد كل (دقائق) · check mail every (min)")}: <input id="flagSetPoll" type="number" min="1" value="${s.poll_interval_min||2}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
       <label>${T("تكرار التنبيه كل (دقائق) · repeat alert every (min)")}: <input id="flagSetRep" type="number" min="1" value="${s.repeat_min||1}" style="width:60px" ${CAN_ADMIN?"":"disabled"}></label>
       ${CAN_ADMIN?`<button class="accent" onclick="flagSettingsSave(this)">💾 ${T("حفظ · Save")}</button>`:""}</div>`;
@@ -13645,6 +13648,7 @@ function flagDraw(){
 // marks it done — nothing is ever deleted, it just had nowhere to be seen.
 function fhSortVal(r,k){
   if(k==="sender")  return (r.sender||"").toLowerCase();
+  if(k==="matched") return (r.matched_phrase||"").toLowerCase();
   if(k==="profile") return (r.profile||"").toLowerCase();
   if(k==="inbox")   return (r.email||"").toLowerCase();
   if(k==="state")   return r.state||"";
@@ -13658,7 +13662,7 @@ function flagHistDraw(){
   const byMsg={};                       // GWDs found in the same email
   ((FLAGS||{}).gwds||[]).forEach(g=>{ (byMsg[g.msg_id]=byMsg[g.msg_id]||[]).push(g.gwd); });
   let rows=((FLAGS||{}).history||[]).map(r=>({...r,gwds:byMsg[r.msg_id]||[]}));
-  if(term) rows=rows.filter(r=>[r.subject,r.sender,r.email,r.profile,(r.gwds||[]).join(" ")]
+  if(term) rows=rows.filter(r=>[r.subject,r.sender,r.email,r.profile,r.matched_phrase,(r.gwds||[]).join(" ")]
     .join(" ").toLowerCase().includes(term));
   rows=lxtSortApply("fh",rows.slice(),fhSortVal);
   const rowsHtml=rows.map(r=>{
@@ -13667,6 +13671,7 @@ function flagHistDraw(){
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${poEsc(r.subject||"(no subject)")}</b></span></div>`;
     return `<div class="poc-row">${pin}${lxtCells("fh",{
       sender:  `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.sender||"—")}</span>`,
+    matched: r.matched_phrase?`<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${T("القاعدة التي أطلقت التنبيه · the rule that fired")}">${poEsc(r.matched_phrase)}</span>`:`<span class="muted2">—</span>`,
       profile: r.profile?lxProfileChip(r.profile,r.profile):`<span class="muted2">—</span>`,
       inbox:   `<span class="muted2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${poEsc(r.email||"")}</span>`,
       state:   r.state==="open"?tonePill("red",T("مفتوح · open"),T("ما زال ينبّه · still nagging"))
@@ -13731,6 +13736,8 @@ async function flagSettingsSave(btn){
     enabled:!!($("flagSetOn")||{}).checked,
     collect_gwds:!!($("flagSetGwd")||{}).checked,
     phrases:(($("flagSetPhr")||{}).value)||"",
+    senders:(($("flagSetFrom")||{}).value)||"",
+    word_phrases:(($("flagSetWord")||{}).value)||"",
     poll_interval_min:(($("flagSetPoll")||{}).value)||2,
     repeat_min:(($("flagSetRep")||{}).value)||1});
   btn.disabled=false;

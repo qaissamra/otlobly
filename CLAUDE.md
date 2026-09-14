@@ -95,10 +95,23 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   purchase order here when the buyer types the Amazon order number there (once)
 - account_rd.py — per-account RD history for AZ Studio's Accounts Tool
   (`/api/worker/account_rd`, worker token); AZ Studio joins it with the Multilogin fleet
-- flag_machine.py — 🚩 watched Gmail inboxes ("action required" subject →
-  dedicated flags-bot Telegram nag every minute until the owner replies done);
-  daemon gated by env FLAG_MACHINE=1, set ONLY in the Render dashboard (like
-  GAASH_MAILER — never the plist, never .env); bot token = env FLAGS_BOT_TOKEN
+- flag_machine.py — 🚩 watched Gmail inboxes → dedicated flags-bot Telegram nag
+  every minute until the owner replies done; daemon gated by env FLAG_MACHINE=1,
+  set ONLY in the Render dashboard (like GAASH_MAILER — never the plist, never
+  .env); bot token = env FLAGS_BOT_TOKEN. THREE kinds of rule since 2026-09-14,
+  any one of which may stand alone (never none): a phrase inside the subject
+  ("action required"), a WHOLE word in the subject ("xm" flags «XM Global» and
+  never «Xmas» — a two-letter brand cannot be a substring rule), and a fragment
+  of the From header ("xm.com"), because who sent it is often the whole point;
+  the 🗒 history's "matched" column says which one fired
+- restore_flag_inboxes.py — the 🚩 watch list back from a backup zip, ONE table,
+  same ids + app passwords + IMAP cursors (worker token → POST
+  /api/flags/inboxes/restore). On 2026-09-12 the corruption ate flag_inboxes'
+  page and the rebuild refilled it with rows salvaged from OTHER tables; the
+  poll selects WHERE active=1, the junk carries text there, so it matched
+  nothing and the machine polled an EMPTY list for days while stamping "last
+  poll: 2 minutes ago". Hence also flag_machine._is_inbox: junk rows are
+  FILTERED out of the list, never deleted out of a sick DB
 
 ## Deploy
 Render Blueprint (render.yaml): pushing to GitHub main auto-deploys

@@ -13,6 +13,7 @@ single-runner lease), route permissions, and the bell.
 """
 
 import os
+import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from email import message_from_bytes, policy
@@ -94,6 +95,36 @@ def main():
     hm = message_from_bytes(bytes(m), policy=policy.default)
     check("rfc2047 round-trip", "=?utf-8?" in bytes(m).decode("ascii", "ignore")
           and fm.match_subject(str(hm.get("Subject")), P))
+    print("— whole-word + sender matchers (the XM rule) —")
+    W = ["xm"]
+    check("whole word fires", fm.match_word("XM Global: your account", W) == "xm")
+    check("whole word at the end", fm.match_word("Re: XM", W) == "xm")
+    check("punctuation is a word edge", fm.match_word("[XM] statement", W))
+    check("Xmas does NOT fire — the reason match_word exists",
+          fm.match_word("Xmas sale 50% off", W) is None
+          and fm.match_subject("Xmas sale 50% off", W) == "xm")
+    check("inside a longer word does not fire",
+          fm.match_word("maxmind report", W) is None)
+    F = ["xm.com"]
+    check("sender matches the address",
+          fm.match_sender("XM <no-reply@xm.com>", F) == "xm.com")
+    check("sender is case-insensitive",
+          fm.match_sender("No-Reply@XM.COM", F) == "xm.com")
+    check("a lookalike domain does not fire",
+          fm.match_sender("billing@maxmind.com", F) is None)
+    check("empty sender header", fm.match_sender(None, F) is None)
+    ST = {"phrases": ["action required"], "word_phrases": W, "senders": F}
+    check("match_mail: subject phrase keeps its own label",
+          fm.match_mail("Action required: verify", "a@b.c", ST)
+          == "action required")
+    check("match_mail: a whole word says so",
+          fm.match_mail("Your XM statement", "a@b.c", ST) == "word: xm")
+    check("match_mail: WHO sent it, whatever the subject said",
+          fm.match_mail("monthly statement", "XM <no-reply@xm.com>", ST)
+          == "from: xm.com")
+    check("match_mail: nothing fires on ordinary mail",
+          fm.match_mail("your parcel shipped", "gaash@x.com", ST) is None)
+
     check("date header parses",
           (fm._parse_date_hdr("Wed, 13 Aug 2026 09:15:00 +0300") or "")
           .startswith("2026-08-13"))
@@ -153,7 +184,18 @@ def main():
     check("interval 0 rejected", err is not None)
     _, err = fm.save_settings({"repeat_min": "x"})
     check("non-numeric interval rejected", err is not None)
-    fm.save_settings({"phrases": "action required"})    # back to default
+    st, err = fm.save_settings({"senders": "xm.com, @xmglobal.",
+                                "word_phrases": "xm"})
+    check("sender + whole-word rules save as lists", err is None
+          and st["senders"] == ["xm.com", "@xmglobal."]
+          and st["word_phrases"] == ["xm"])
+    st, err = fm.save_settings({"phrases": " , "})
+    check("phrases may be emptied once another rule stands",
+          err is None and st["phrases"] == [] and st["senders"])
+    _, err = fm.save_settings({"phrases": "", "senders": "", "word_phrases": ""})
+    check("but a watch with NO rule at all is refused", err is not None)
+    fm.save_settings({"phrases": "action required", "senders": "",
+                      "word_phrases": ""})               # back to default
 
     print("— inboxes —")
     r = fm.add_inbox("not-an-email", "pw")
@@ -342,6 +384,46 @@ def main():
     check("nag line: profile · email + sent time + done hint",
           "AZ Profile 7 · watch@gmail.com" in txt and "sent" in txt
           and "done" in txt)
+    _clear_flags()
+
+    print("— sender rule end to end (a poll that fires on WHO sent it) —")
+    fm.save_settings({"phrases": "action required", "senders": "xm.com"})
+    _M45 = _mail("Monthly statement", "XM Global <no-reply@xm.com>",
+                 "Thu, 14 Aug 2026 08:00:00 +0300", "<fake-45@xm.com>",
+                 "your statement is ready")
+
+    class _FakeIMAP45(_FakeIMAP):
+        """Same mailbox, one message further on: uid 45 from XM, with a
+        subject no phrase rule would ever catch."""
+
+        def status(self, folder, what):
+            return ("OK", [b"INBOX (UIDVALIDITY 7 UIDNEXT 46)"])
+
+        def uid(self, cmd, *args):
+            if cmd == "search":
+                return ("OK", [b"45"])
+            if cmd == "FETCH":
+                spec = args[1]
+                if "HEADER" in spec:
+                    payload = bytes(_M45).split(b"\r\n\r\n", 1)[0].split(b"\n\n", 1)[0]
+                    return ("OK", [(b"45 (BODY[HEADER])", payload)])
+                return ("OK", [(b"45 (BODY[]<0>)", bytes(_M45))])
+            return ("OK", [])
+
+    _il.IMAP4_SSL = _FakeIMAP45
+    try:
+        xm = fm.poll_once()
+    finally:
+        _il.IMAP4_SSL = _real_imap
+    # every active inbox sees the same fake mailbox, so flag one by inbox
+    fl45 = [f for f in fm.open_flags() if f["email"] == "watch@gmail.com"]
+    check("an XM email with a plain subject is flagged by its sender",
+          xm >= 1 and len(fl45) == 1
+          and fl45[0]["subject"] == "Monthly statement"
+          and fl45[0]["matched_phrase"] == "from: xm.com")
+    check("the history says WHY it fired",
+          all(h["matched_phrase"] == "from: xm.com" for h in fm.all_flags()[0]))
+    fm.save_settings({"phrases": "action required", "senders": ""})
     _clear_flags()
 
     print("— dedupe index —")
@@ -585,6 +667,60 @@ def main():
     d = ful.get("/api/notifications").get_json()
     check("gone after done",
           not [e for e in d["events"] if e["type"] == "flag_open"])
+
+    print("— corrupt table: junk rows + restore from a backup (2026-09-12) —")
+    _ok = lambda e, pw: (7, 42)             # injected verifier — no network
+    fm.add_inbox("b70@gmail.com", "aaaabbbbccccdddd", "B70", verify=_ok)
+    fm.add_inbox("sb10@gmail.com", "eeeeffffgggghhhh", "S-B10", verify=_ok)
+    mine = {"b70@gmail.com", "sb10@gmail.com"}
+    # what the rebuild actually left behind: rows salvaged from OTHER tables,
+    # with TEXT where active=1 is expected — so the poll matched nothing and
+    # the watch went dark without a single error line
+    with db.connect() as c:
+        c.execute("INSERT INTO flag_inboxes (id,email,label,app_password,"
+                  "active,added_at) VALUES (?,?,?,?,?,?)",
+                  ("86caqpha6", "86caqpha6", "86caqph9j", "145", "item",
+                   "9 Anne Klein AK-1362RGRG Diamond Dial Watch"))
+        c.commit()
+    live = [a["email"] for a in fm.inboxes()]
+    check("junk rows never reach the 🚩 list",
+          "86caqpha6" not in live and mine <= set(live))
+    with db.connect() as c:
+        raw = c.execute("SELECT COUNT(*) n FROM flag_inboxes").fetchone()["n"]
+    check("…they are still in the table — filtered, not deleted on a sick DB",
+          raw == len(live) + 1)
+
+    snap = _TMP / "backup-copy.db"          # stand-in for the backup zip's db
+    with db.connect() as c:
+        t = sqlite3.connect(snap)
+        c.backup(t)
+        t.close()
+    src = sqlite3.connect(str(snap))
+    src.row_factory = sqlite3.Row
+    gone = [dict(r) for r in src.execute(
+        "SELECT id,email,app_password FROM flag_inboxes WHERE email LIKE '%@%'")]
+    src.close()
+    with db.connect() as c:                 # now lose them, the way the page did
+        c.execute("DELETE FROM flag_inboxes WHERE email LIKE '%@%'")
+        c.commit()
+    check("the watch is blind: no inbox at all, and the poll reads nothing",
+          fm.inboxes() == [] and fm.poll_once() == 0)
+    res = fm.restore_inboxes(snap)
+    back = {a["email"]: a for a in fm.inboxes()}
+    check("restore brings every inbox back under its OWN id — open flags stay "
+          "bound", res["ok"] and sorted(res["restored"]) == sorted(
+              r["email"] for r in gone)
+          and all(back[r["email"]]["id"] == r["id"] for r in gone))
+    check("…and with the app password, so Google is not asked for a new one",
+          all(back[r["email"]]["has_password"] for r in gone))
+    res2 = fm.restore_inboxes(snap)
+    check("restoring twice changes nothing — an inbox live still has wins",
+          res2["ok"] and res2["restored"] == []
+          and sorted(res2["already_live"]) == sorted(r["email"] for r in gone)
+          and len(fm.inboxes()) == len(gone))
+    bad = fm.restore_inboxes(_TMP / "not-a-database.db")
+    check("an unreadable backup is refused, not half-applied",
+          not bad["ok"] and bad.get("error"))
 
     print()
     if fails:
