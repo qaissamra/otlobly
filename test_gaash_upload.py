@@ -39,7 +39,15 @@ PAGE = '''<!DOCTYPE html><html><body>
 <input class="form-control" id="PackageId" name="PackageId" readonly="readonly" type="text" value="GWD004721753" />
 <input accept="application/pdf" class="input-file" id="UploadedFiles" max="2097152" name="UploadedFiles" type="file" />
 <input type="submit" id="form-submit" value="&#215;&#169;&#215;&#156;&#215;&#151;" />
-</form></body></html>'''
+</form>
+<div class="row"><h4>תאריך פקיעת תוקף הקישור : 22/09/2026</h4></div></body></html>'''
+
+# what their page says once the link has expired (GWD004802571, fetched 2026-09-21)
+EXPIRED = '''<!DOCTYPE html><html lang="he" dir="rtl"><head><title>הודעות למשתמש</title></head>
+<body><div class="container body-content"><div class="row">
+    <h3>לקוח יקר,<br>פג תוקף הקישור.<br>לקבלת מידע נוסף יש לפנות לאתר הרכישה.</h3>
+    <h4>תאריך פקיעת תוקף הקישור : 20/09/2026</h4>
+</div></div><footer><p>&copy; 2026 - GAASH</p></footer></body></html>'''
 
 
 def _png(ct=2, w=2, h=2):
@@ -88,6 +96,31 @@ def main():
         check("a non-GWD is refused", False)
     except gu.UploadError:
         check("a non-GWD is refused", True)
+    check("the link's expiry is read off an open page too", info.get("expires") == "2026-09-22")
+
+    print("— an EXPIRED link (their deadline passed) is said as such —")
+    gu._get = lambda url, timeout=25: (EXPIRED, [])
+    try:
+        gu.page_info("GWD004802571", [8])
+        check("a closed link raises LinkExpired", False)
+    except gu.LinkExpired as e:
+        check("a closed link raises LinkExpired, carrying the date GAASH printed",
+              e.expired_on == "2026-09-20" and "packageId=GWD004802571" in e.url)
+        check("…and GAASH's own words", "פג תוקף הקישור" in e.says)
+        check("…and a message that names the deadline, not a typo in the number",
+              "closed this parcel's upload link on 20 Sep 2026" in str(e)
+              and "parcel number" not in str(e) and "Nothing was sent" in str(e))
+        check("…which is still an UploadError (every old except-clause catches it)",
+              isinstance(e, gu.UploadError))
+    gu._get = lambda url, timeout=25: ("<html><body><h3>שגיאה כללית</h3></body></html>", [])
+    try:
+        gu.page_info("GWD004802571", [8])
+        check("an unknown formless page raises", False)
+    except gu.LinkExpired:
+        check("an unknown formless page is NOT called expired", False)
+    except gu.UploadError as e:
+        check("an unknown formless page is reported in GAASH's own words", "שגיאה כללית" in str(e))
+    gu._get = fake_get
 
     print("— PDF wrapping (their form takes application/pdf only) —")
     pdf = b"%PDF-1.4 already a pdf"

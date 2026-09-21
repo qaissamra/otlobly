@@ -3,7 +3,7 @@
    fails (never on a 4xx/5xx), so deploys still show up immediately and a 401 can
    never be masked or stored. Cache-served responses carry X-Otl-Cache: 1 so the
    page can show its offline strip. Writes (non-GET) are never intercepted. */
-const CACHE = "otl-off-v29";         // v29: the Docs tab reads ClickUp itself (Le Luxe + IT), days left, Upload on every row
+const CACHE = "otl-off-v30";         // v30: a closed GAASH upload link says so (Docs tab + wizard)
                                      // v28: the AZ Studio default host (Make default in the send box)
                                      // v27: Send to AZ Studio + the hand-off chips (step 2, depth 2)
                                      // v26: the AZ Studio roster picker + recommendation (step 2, depth 1)

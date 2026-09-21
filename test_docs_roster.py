@@ -21,6 +21,7 @@ import json
 import os
 import tempfile
 import time
+from datetime import timedelta
 from pathlib import Path
 
 _TMP = Path(tempfile.mkdtemp(prefix="otlobly-docsroster-"))
@@ -415,6 +416,26 @@ def main():
               calls["ops"] == 1 and not d2.get("gaash_deadline") and d2.get("deadline_skipped"))
         R.check("GWD004803012")
         check("a fresh post-arrival deadline is not re-read on every check", calls["ops"] == 1)
+        # 2026-09-21: GWD004802571's link closed the day after its deadline. A passed
+        # deadline is read again daily, so a link GAASH reopens is noticed
+        today = R.amman_today()
+        past = {"gaash_deadline": "2026-01-01", "gaash_arrival": "2025-11-27T10:00:00+03:00",
+                "gaash_deadline_checked": (today - timedelta(days=1)).isoformat() + "T12:00:00+03:00"}
+        check("a PASSED deadline is read again (GAASH can reopen a closed link)", R._deadline_due(past) is True)
+        check("…at most once a day",
+              R._deadline_due(dict(past, gaash_deadline_checked=today.isoformat() + "T00:30:00+03:00")) is False)
+        check("…on the Amman calendar (22:30 UTC is already the next day there)",
+              R._amman_date("2026-09-21T22:30:00+00:00") == "2026-09-22"
+              and R._amman_date("2026-09-21T20:59:00+00:00") == "2026-09-21")
+        R._update_data("GWD004803012", lambda x: x.update(
+            gaash_deadline="2026-01-01",
+            gaash_deadline_checked=(today - timedelta(days=1)).isoformat() + "T12:00:00+03:00"))
+        n0 = calls["ops"]
+        R.check("GWD004803012")
+        check("…through the real check too: a landed parcel's passed deadline is read again",
+              calls["ops"] == n0 + 1 and R.get("GWD004803012")["data"]["gaash_deadline"] == "2026-10-21")
+        R.check("GWD004803012")
+        check("…and not again the same day", calls["ops"] == n0 + 1)
         tracking.docs_status = lambda tn, timeout=25: None
         R.check("GWD004803012")
         d = R.get("GWD004803012")["data"]
@@ -462,6 +483,38 @@ def main():
           plan.get("ok") and plan.get("asked_types") == [6, 7, 8] and asked_for == [[6, 7, 8]])
     check("…and its declaration reads the ClickUp name",
           (plan.get("declaration") or {}).get("name") == "FAISAL")
+    gaash_upload.page_info = lambda gwd, types: {"slots": [{"type": t, "label": ""} for t in types],
+                                                 "expires": "2026-10-21"}
+    try:
+        plan = client("emp").get("/api/gaash/upload/plan?gwd=GWD004803012").get_json() or {}
+    finally:
+        gaash_upload.page_info = real_pi
+    check("the plan carries the link's expiry and whether the parcel has landed (a real deadline)",
+          plan.get("expires") == "2026-10-21" and plan.get("arrived") is True)
+
+    def closed(gwd, types):
+        raise gaash_upload.LinkExpired("2026-09-20", "לקוח יקר, פג תוקף הקישור.",
+                                       f"https://ops.gaashwd.com/fileUpload?packageId={gwd}&type=8")
+    gaash_upload.page_info = closed
+    ver0 = R.meta().get("ver")
+    try:
+        resp = client("emp").get("/api/gaash/upload/plan?gwd=GWD004803012")
+        body = resp.get_json() or {}
+    finally:
+        gaash_upload.page_info = real_pi
+    check("a CLOSED link answers 409 with the date, GAASH's own words and their page",
+          resp.status_code == 409 and body.get("expired") is True and body.get("expired_on") == "2026-09-20"
+          and "פג תוקף" in (body.get("gaash_says") or "") and "packageId=GWD004803012" in (body.get("url") or "")
+          and "20 Sep 2026" in (body.get("error") or ""))
+    check("…and the date GAASH printed becomes the landed parcel's deadline, so the tab says closed too",
+          R.get("GWD004803012")["data"]["gaash_deadline"] == "2026-09-20" and R.meta().get("ver") != ver0)
+    check("the date is stored once (the same date again does not reload every open tab)",
+          R.note_expiry("GWD004803012", "2026-09-20") is False)
+    check("a parcel that has not landed keeps no date (the page's date ROLLS until arrival)",
+          R.note_expiry("GWD004802554", "2026-10-30") is False
+          and not R.get("GWD004802554")["data"].get("gaash_deadline"))
+    check("a reopened link's new date replaces the old one", R.note_expiry("GWD004803012", "2026-10-21") is True
+          and R.get("GWD004803012")["data"]["gaash_deadline"] == "2026-10-21")
 
     print("— live: the webhook re-reads ClickUp, debounced; a new parcel checks itself —")
     check("DOCS_ROSTER_LIVE=0: nothing is scheduled", R.schedule_refresh() is False)

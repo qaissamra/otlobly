@@ -50,7 +50,8 @@ def main():
     check("…after leluxe.js (the page modules load in nav order)",
           '/static/ds/gaash.js' in idx and idx.index('/static/ds/leluxe.js') < idx.index('/static/ds/gaash.js'))
     check("the service worker precaches it", '"/static/ds/gaash.js"' in sw)
-    check("the offline cache was bumped for it", 'const CACHE = "otl-off-v2' in sw and 'otl-off-v20"' not in sw)
+    check("the offline cache was bumped for it",
+          int((re.search(r'const CACHE = "otl-off-v(\d+)"', sw) or ["", "0"])[1]) >= 21)
     check("it exports DS.gaash", "D.gaash = {}" in gm)
     for fn in ["tabs", "chrome", "conversations", "overview", "wfExpansion", "workflows", "readiness",
                "docs", "docsBadge", "docsFilter", "readyFilter", "fcFilter", "forecast", "cases", "templates", "analyze"]:
@@ -162,6 +163,25 @@ def main():
           "const x=r.row||null;" in idx and "row.gaash_deadline=x.gaash_deadline" in idx)
     check("the parcel number copies on click again (lost in Batch C)", "copyCtk(" in gm and ".ds-gm-copy" in css)
     check("Refresh from ClickUp is one button away", '"gmDocsRefresh(this)"' in gm and '"/api/gaash/docs_roster/refresh"' in idx)
+    print("— a CLOSED upload link says so (2026-09-21, GWD004802571) —")
+    acts = between(gm, 'key: "actions"', "} },")
+    check("a passed deadline reads 'Link closed', not a bare 'Late'",
+          'label: "Link closed"' in between(gm, "G.docsDays = ", "\n  };") and "G.docsLinkClosed = " in gm)
+    check("once the link is closed Mail/Open mail is the main button for a parcel GAASH asks about",
+          "const mailFirst = closed && asking;" in acts and acts.count('variant: mailFirst ? "primary" : "ghost"') == 2
+          and 'variant: asking && !closed ? "primary" : "secondary"' in acts)
+    gu_open = between(idx, "async function guOpen(gwd){", "\n}")
+    check("the wizard shows the closed-link panel instead of 'check the parcel number'",
+          "if(d&&d.expired){ guExpired(gwd,d); return; }" in gu_open and "function guExpired(gwd,d){" in idx)
+    ge = between(idx, "function guExpired(gwd,d){", "\n}")
+    check("...which offers email (a new mail, or the existing conversation) and GAASH's own page",
+          "gmNewOpen([${q}])" in ge and "gmOpen(${q})" in ge and "d.gaash_says" in ge and 'href="${poEsc(d.url)}"' in ge)
+    check("a link that closes mid-wizard lands on the same panel (review refetch and send)",
+          "if(d&&d.expired){ guExpired(gwd,d); return; }" in between(idx, "async function guEnterReview(){", "\n}")
+          and "if(r&&r.expired){ guExpired(GU.gwd,r); return; }" in between(idx, "async function guSend(btn){", "\n}"))
+    check("an open link shows how long it has left, only once the parcel has landed",
+          "guExpiryLine(p)" in between(idx, "function guRender(){", "\n}")
+          and "if(!p||!p.expires||!p.arrived) return \"\";" in idx)
     check("forecast keeps queue + cases as one pane, two views",
           'onclick: "gmFcView(\'queue\')"' in gm and 'onclick: "gmFcView(\'cases\')"' in gm and "G.cases = " in gm)
     check("the prediction pills stay index.html's (tonePill/hexPill, never gaashBucketPill)",
@@ -170,6 +190,29 @@ def main():
     check("analyze: KPIs plus a table, the raw <table> is gone", 'id: "gm_dash"' in gm and "ds-gm-fun" in gm
           and "<table>" not in between(idx, "async function gmDashLoad(){", "\n}"))
     check("every loader keeps its honest failure path", idx.count("apiFailReason()") >= 6 and "DS.errorState({text:\"Couldn't load\"+apiFailReason()" in idx)
+
+    # GAASH sent GWD004803012's ask as TWO upload links (type=8, then type=6&type=7);
+    # the column read the first only and said "Passport" where they wanted three papers
+    fn = ("function docsAskedTypes(ds){" + between(idx, "function docsAskedTypes(ds){", "\n}") + "\n}\n"
+          + "function docsUploadLink(ds){" + between(idx, "function docsUploadLink(ds){", "\n}") + "\n}\n")
+    js = fn + """
+      const ds = {links: [{type: 3, url: "https://ops.gaashwd.com/WebForms/HawbPersonalIdEntry.aspx?h=x&m=1"},
+                          {type: 0, url: "https://ops.gaashwd.com/fileUpload?packageId=GWD004803012&type=8"},
+                          {type: 0, url: "https://ops.gaashwd.com/fileUpload?packageId=GWD004803012&type=6&type=7"}]};
+      console.log(JSON.stringify(docsAskedTypes(ds)) + "|" + JSON.stringify(docsAskedTypes({links: []})));
+      console.log(docsUploadLink(ds));
+      console.log(docsUploadLink({links: [{type: 0, url: "https://ops.gaashwd.com/fileUpload?packageId=GWD1&type=6&type=7"}]}));"""
+    try:
+        out = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+        lines = out.stdout.strip().split("\n")
+        check("'Asked for' reads EVERY upload link GAASH sent, never the Israeli-ID form",
+              lines[:1] == ['["8","6","7"]|[]'])
+        check("...and the pill's link opens ONE page with every slot they named (its x3 is what a click gets)",
+              lines[1:2] == ["https://ops.gaashwd.com/fileUpload?packageId=GWD004803012&type=8&type=6&type=7"])
+        check("...while a single link is passed through untouched",
+              lines[2:3] == ["https://ops.gaashwd.com/fileUpload?packageId=GWD1&type=6&type=7"])
+    except FileNotFoundError:
+        print("  --  node not installed; skipped the asked-types run")
 
     print("— what left index.html —")
     check("GM_STATE (a colour registry) is gone; gmChip delegates", "const GM_STATE=" not in idx and 'DS.status.badge("gmThread", state' in idx)
@@ -182,7 +225,8 @@ def main():
       global.window = global; global.document = { getElementById: () => null, querySelector: () => null };
       const DS = global.DS = { esc: (s) => String(s), attrs: () => "", cls: (...a) => a.filter(Boolean).join(" "), dash: () => "-",
         fmt: { number: (v) => String(v), money: (v) => String(v), relative: (v) => v, title: (v) => v, datetime: (v) => v },
-        status: { badge: (e, v) => v }, icon: () => "", button: () => "", badge: () => "", tag: () => "", attention: () => "",
+        status: { badge: (e, v) => v }, icon: () => "", button: () => "", badge: (o) => `BADGE:${o.label}|${o.tone}`, tag: () => "",
+        attention: (o) => `ATTN:${o.label || o.kind}|${o.tone || ""}`,
         thumbs: () => "", subTable: () => "", tabs: () => "", pageHeader: () => "", filterBar: () => "", paintHost: () => null,
         table: () => "", tableMount: () => null, tableGet: () => null, tableRender: () => null, skeleton: () => "", empty: () => "",
         stat: () => "", kpis: () => "", switch: () => "", checkbox: () => "", input: () => "", textarea: () => "", field: () => "",
@@ -199,6 +243,13 @@ def main():
       if (G.docsFilter([{state:"action",source:"it"},{state:"action",source:"purchases"}], "action", ["leluxe","it"]).length !== 1) throw new Error("docsFilter sources");
       if (G.docsFilter([{state:"info",source:"purchases"}], "all").length !== 1) throw new Error("docsFilter no sources = all");
       if (G.fcFilter([{ok:true,overdue:true},{ok:false}], "unknown").length !== 1) throw new Error("fcFilter");
+      // a passed deadline = GAASH's link closed: red while they ask, a plain fact otherwise
+      const cAsk = G.docsDays({arrived:true, gaash_deadline:"2026-09-20", days_left:-1, state:"action"});
+      if (!/^ATTN:Link closed\|danger/.test(cAsk)) throw new Error("docsDays closed+asked: " + cAsk);
+      const cInfo = G.docsDays({arrived:true, gaash_deadline:"2026-09-20", days_left:-1, state:"info"});
+      if (!/^ATTN:Link closed\|neutral/.test(cInfo)) throw new Error("docsDays closed+info: " + cInfo);
+      if (G.docsLinkClosed({arrived:false, gaash_deadline:"2026-09-20", days_left:-1})) throw new Error("not landed is never closed");
+      if (!/^BADGE:1 day\|danger/.test(G.docsDays({arrived:true, gaash_deadline:"2026-09-22", days_left:1}))) throw new Error("docsDays 1 day");
       if (G.TABS.length !== 8) throw new Error("TABS");
       console.log("node ok");
     """

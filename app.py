@@ -3165,6 +3165,41 @@ def _upload_dry_run():
     return True if v is None else bool(v)
 
 
+def _parcel_arrived(tn):
+    """Has this parcel provably landed? Only then is the date on GAASH's upload
+    page its real deadline — before that the page prints a rolling one."""
+    import docs_roster
+    try:
+        s = docs_roster.summary(tn)
+        if s is not None:
+            return bool(s.get("arrived"))
+    except Exception:  # noqa - the roster is extra; the boards' banner answers
+        pass
+    try:
+        return bool((gaash_mail.docs_state_for(tn) or {}).get("arrived"))
+    except Exception:  # noqa
+        return False
+
+
+def _link_expired(tn, e):
+    """The wizard's answer when GAASH's page says the link has expired: the
+    date, GAASH's own words and the page, so it can say what happened and
+    offer the way that is left (email)."""
+    _note_link_expiry(tn, e.expired_on)
+    return jsonify({"ok": False, "expired": True, "expired_on": e.expired_on,
+                    "gaash_says": e.says, "url": e.url, "error": str(e)}), 409
+
+
+def _note_link_expiry(tn, iso):
+    """The date GAASH's upload page just printed becomes the stored deadline of
+    a landed roster parcel, so the tab and the wizard cannot disagree."""
+    import docs_roster
+    try:
+        docs_roster.note_expiry(tn, iso)
+    except Exception:  # noqa - bookkeeping must never block the wizard
+        pass
+
+
 def _pick_doc_bytes(gwd, pick):
     """(filename, bytes, human label) for one picked document.
     Resolved SERVER-side — document bytes never round-trip through the browser."""
@@ -3262,8 +3297,13 @@ def api_gaash_upload_plan():
             or asked or [gaash_mail.UPLOAD_TYPE_FALLBACK])
     try:
         info = gaash_upload.page_info(tn, want)
+    except gaash_upload.LinkExpired as e:
+        # their 35-day deadline passed: not a wrong number, not a broken page.
+        # The wizard says so and points at the one way left (email GAASH).
+        return _link_expired(tn, e)
     except gaash_upload.UploadError as e:
         return jsonify({"ok": False, "error": str(e)}), 502
+    _note_link_expiry(tn, info.get("expires"))
     cust = gaash_mail.customer_for_gwd(tn) or {}
 
     def _lib_size(fn):
@@ -3290,6 +3330,10 @@ def api_gaash_upload_plan():
         "asked_type": (asked[0] if asked else None),
         "plan_types": want,           # exactly what these slots were fetched for
         "slots": info["slots"],
+        # the link's expiry as GAASH's page prints it (their deadline once the
+        # parcel has landed; before that a rolling date, so the wizard says so)
+        "expires": info.get("expires") or "",
+        "arrived": _parcel_arrived(tn),
         "types": gaash_upload.DOC_TYPES, "dry_run": _upload_dry_run(),
         "max_bytes": gaash_upload.MAX_BYTES,
         "library": lib,
@@ -3334,6 +3378,8 @@ def api_gaash_upload():
                          "source": p.get("source"), "source_id": p.get("id"),
                          "label": label})
         res = gaash_upload.upload(tn, docs, dry_run=dry)
+    except gaash_upload.LinkExpired as e:      # closed between the plan and the send
+        return _link_expired(tn, e)
     except gaash_upload.UploadError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:  # noqa

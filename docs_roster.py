@@ -939,10 +939,42 @@ def _deadline_due(d):
     # real expiry — arrival invalidates it (PR #141)
     if d.get("gaash_arrival") and chk[:10] < str(d["gaash_arrival"])[:10]:
         return True
+    # a PASSED deadline is read again once a day: GAASH can reopen a closed link
+    # (after an email), and the tab must not keep saying "closed" for the two
+    # weeks DL_EVERY would wait. Reading a landed parcel's page mints nothing.
+    today = amman_today().isoformat()
+    if str(d["gaash_deadline"])[:10] < today and _amman_date(chk) < today:
+        return True
     try:
         return datetime.fromisoformat(chk) <= _now() - DL_EVERY
     except (ValueError, TypeError):
         return True
+
+
+def note_expiry(gwd, iso):
+    """The upload wizard just read the link's expiry off GAASH's page, open or
+    closed. For a parcel that has landed that date IS the deadline (the same
+    line tracking.ops_deadline reads), so store it: the tab must not say "3
+    days" while the wizard says "closed". Before arrival the page prints GAASH's
+    rolling number (scrape + 35), which is not a deadline, so it is ignored.
+    True when the stored deadline changed (the open tab is told to reload)."""
+    iso = str(iso or "")[:10]
+    r = get(gwd) if re.match(r"\d{4}-\d{2}-\d{2}$", iso) else None
+    if not r:
+        return False
+    d = r["data"]
+    if not (d.get("gaash_arrival") or (d.get("docs_state") or {}).get("arrived")):
+        return False
+    moved = d.get("gaash_deadline") != iso
+
+    def apply(x):
+        x["gaash_deadline"] = iso
+        x["gaash_deadline_checked"] = db.now_iso()
+        x["deadline_skipped"] = ""
+    _update_data(r["gwd"], apply)
+    if moved:
+        _bump()
+    return moved
 
 
 def refresh_tracking_one(gwd, docs=None):
@@ -1064,6 +1096,24 @@ def summary(gwd):
 # --------------------------------------------------------------------------- #
 # Small shared helpers
 # --------------------------------------------------------------------------- #
+def _amman_date(iso):
+    """The Asia/Amman calendar date of a stored timestamp ("" if unreadable).
+    Stamps carry the writer's offset (+00:00 on Render, +03:00 here), so a bare
+    [:10] would put a 01:00 Amman read on the previous day."""
+    try:
+        t = datetime.fromisoformat(str(iso))
+    except (ValueError, TypeError):
+        return ""
+    if t.tzinfo is None:
+        return t.date().isoformat()
+    try:
+        from zoneinfo import ZoneInfo
+        return t.astimezone(ZoneInfo("Asia/Amman")).date().isoformat()
+    except Exception:  # noqa: BLE001 — Jordan is fixed UTC+3
+        from datetime import timezone
+        return t.astimezone(timezone(timedelta(hours=3))).date().isoformat()
+
+
 def amman_today():
     try:
         from zoneinfo import ZoneInfo
