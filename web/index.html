@@ -13021,7 +13021,9 @@ async function gmDocsPoll(){
   if(!p||!p.offsetParent||document.hidden||GM_DOCS.busy) return;
   let v=null; try{ v=await (await fetch("/api/gaash/docs_roster/version")).json(); }catch(e){ v=null; }
   if(!v||!v.ok) return;
-  const moved=v.ver&&GM_DOCS.ver&&v.ver!==GM_DOCS.ver;
+  // "" → a first version counts too: a tab opened before the very first ClickUp
+  // read must still reload when that read lands
+  const moved=!!v.ver&&v.ver!==GM_DOCS.ver;
   GM_DOCS.roster=Object.assign({},GM_DOCS.roster||{},v);
   if(moved) await gmDocsRender(true);
 }

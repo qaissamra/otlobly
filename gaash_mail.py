@@ -5302,7 +5302,11 @@ def docs_queue(names=True):
     # ── ClickUp itself: Le Luxe Products + IT Products (docs_roster) ──
     roster = docs_roster.rows()
     for g, p in roster.items():
-        if not p["open"]:
+        # finished in ClickUp → gone — EXCEPT while GAASH is still asking for
+        # documents: a yellow must never hide behind a status someone set early
+        # (it stays listed, so the sweep keeps re-checking it until it clears)
+        asking = ((p["data"].get("docs_state") or {}).get("state") == "action")
+        if not p["open"] and not asking:
             gone.add(g)
             continue
         if _past_customs(p["data"].get("tracking_status"), p["data"].get("gerizim_status"), None):

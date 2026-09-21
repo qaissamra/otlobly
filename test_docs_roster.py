@@ -262,6 +262,22 @@ def main():
     R.refresh(force=True, fetch=fake_fetch())   # back to the full feed (IT-P2 returns, IT-P9 goes)
     check("a full read replaces the copy: the deleted task is back, the event-only task is gone",
           R.get("GWD004802554")["open"] is True and R.get("GWD004809991")["open"] is False)
+    ELSE = json.loads(json.dumps([x for x in IT if x["id"] == "IT-P2"][0]))
+    ELSE["list"] = {"id": "999", "name": "Somewhere else"}           # home list is NOT ours…
+    ELSE["locations"] = [{"id": "901524960550", "name": "IT Products"}]  # …but it is filed in IT
+    R.apply_events(["IT-P2"], fetch_task=lambda tid: (ELSE, None))
+    check("a task that lives elsewhere but is ALSO filed in one of our lists keeps its parcel open",
+          R.get("GWD004802554")["open"] is True)
+    import leluxe
+    real_http, real_tok = leluxe._http, leluxe._token
+    leluxe._token = lambda: "t"
+    leluxe._http = lambda url, *a, **k: (200, {"tasks": [IT[1]], "last_page": False})
+    try:
+        tasks, err = R._fetch_slim("901524960550")
+    finally:
+        leluxe._http, leluxe._token = real_http, real_tok
+    check("a list that never ends is reported as an error, never read as complete",
+          tasks is None and "more than 60 pages" in (err or ""))
 
     print("— docs_queue: ClickUp first, the boards fill in —")
     # a Purchases parcel (Otlobly) and a board-only Le Luxe parcel
@@ -308,10 +324,35 @@ def main():
           byg.get("GWD004700777", {}).get("origin") == "board")
     check("Otlobly (Purchases) parcels are still served - the tab decides to hide them",
           byg.get("GWD004752290", {}).get("source") == "purchases")
+    with db.connect() as c:          # finished in ClickUp, but GAASH is still asking
+        c.execute("UPDATE gaash_parcels SET data_json=? WHERE gwd='GWD004700002'",
+                  (json.dumps({"docs_state": {"state": "action", "links": [], "codes": [818], "arrived": True},
+                               "docs_checked": "2026-09-21T08:00:00+03:00"}),))
+    check("a parcel GAASH is still asking about never hides behind a ClickUp status",
+          "GWD004700002" in {r["gwd"] for r in gm.docs_queue()["rows"]})
+    with db.connect() as c:
+        c.execute("UPDATE gaash_parcels SET data_json='{}' WHERE gwd='GWD004700002'")
     order = [r["gwd"] for r in q["rows"]]
     check("yellow first, stopped last", q["rows"][0]["state"] == "action" and q["rows"][-1]["state"] == "stopped")
     check("inside the yellow rows, the fewest days left first",
           order.index("GWD004803012") < order.index("GWD004752290"))
+
+    print("— photos: a dead ASIN costs one metered look-up a week, not one per pass —")
+    import amazon_import
+    real_ip = amazon_import.import_product
+    asked = []
+    amazon_import.import_product = lambda a, conf=None, refresh=False: (asked.append(a) or {"error": "no such product"})
+    try:
+        with db.connect() as c:     # an open parcel whose product has an ASIN and no photo
+            c.execute("INSERT OR REPLACE INTO gaash_parcels (gwd, source, open, cu_json, data_json) VALUES (?,?,?,?,?)",
+                      ("GWD004808888", "it", 1, json.dumps({"products": [{"id": "X1", "name": "x", "asin": "B0DEAD0000",
+                                                                            "image": ""}], "lists": ["it"]}), "{}"))
+        R.fill_photos(); R.fill_photos()
+        check("the dead ASIN was asked for once, then left alone", asked.count("B0DEAD0000") == 1)
+    finally:
+        amazon_import.import_product = real_ip
+        with db.connect() as c:
+            c.execute("DELETE FROM gaash_parcels WHERE gwd='GWD004808888'")
 
     print("— the bell and the worker never touch the network —")
     real = (goals._fetch_tasks, tracking.docs_status, tracking.get_session, tracking.ops_deadline)
@@ -381,6 +422,12 @@ def main():
               d["docs_state"]["state"] == "action" and d.get("docs_error")
               and d["docs_checked"] == "2026-09-21T20:00:00+03:00")
         tracking.docs_status = lambda tn, timeout=25: ANSWER.get(tn)
+        before = calls["ops"]
+        tracking.get_session = lambda *a, **k: (_ for _ in ()).throw(AssertionError("timeline read"))
+        R.check("GWD004803012", with_tracking=False)
+        tracking.get_session = lambda *a, **k: ("https://api", "nonce")
+        check("the after-upload re-check reads the banner only (no timeline, no deadline)",
+              calls["ops"] == before and R.get("GWD004803012")["data"]["docs_state"]["state"] == "action")
         r = client("emp").post("/api/gaash/docs_check", json={"tracking": "GWD004803012"}).get_json()
         check("the tab's Check route returns the refreshed deadline for the row",
               r.get("ok") and (r.get("row") or {}).get("gaash_deadline") == "2026-10-21"

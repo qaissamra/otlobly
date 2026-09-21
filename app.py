@@ -3102,7 +3102,7 @@ def api_leluxe_refresh_tracking():
     return jsonify({"ok": True, **res})
 
 
-def _docs_check_one(tn):
+def _docs_check_one(tn, with_tracking=True):
     """Fresh GAASH docs-banner check for one parcel, persisted to WHICHEVER
     board(s) carry the number (each store call is a no-op elsewhere).
 
@@ -3118,7 +3118,7 @@ def _docs_check_one(tn):
     a roster parcel also gets its GAASH timeline and — only once it has landed
     — its upload deadline."""
     import docs_roster
-    return docs_roster.check(tn)
+    return docs_roster.check(tn, with_tracking=with_tracking)
 
 
 @app.route("/api/leluxe/docs_status")
@@ -3353,7 +3353,9 @@ def api_gaash_upload():
         types = sorted({int(d["type"]) for d in docs})
         _stamp_docs_sent(tn, types, src="upload", user=_user())
         try:
-            res["docs_state"] = _docs_check_one(tn)      # 🟡 → 🔵 without a manual re-check
+            # 🟡 → 🔵 without a manual re-check. Banner only: this request already
+            # spent ~25 s on GAASH's page, and the timeline/deadline can wait for Check
+            res["docs_state"] = _docs_check_one(tn, with_tracking=False)
         except Exception:  # noqa
             pass
         activity.log("uploaded", "purchase", tn, tn,

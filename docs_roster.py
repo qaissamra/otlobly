@@ -49,6 +49,8 @@ MIN_GAP_S = 10             # background passes: at most one per 10 s
 DEBOUNCE_S = 3             # …and only once a webhook burst has been quiet this long
 DL_EVERY = timedelta(days=14)   # the boards' deadline cadence (leluxe.refresh_tracking)
 ASIN_PHOTOS_PER_RUN = 6    # Amazon look-ups are metered (SerpAPI) — capped per run
+PHOTO_TRIED_KEY = "docs:photo_tried"   # {ASIN: when a look-up last found no photo}
+PHOTO_RETRY = timedelta(days=7)        # …tried again only after this long
 
 GWD_CANON = re.compile(r"GWD\d{9}$")
 _ORDER = re.compile(r"^\s*order\s*#", re.I)
@@ -293,13 +295,32 @@ def meta():
     return m if isinstance(m, dict) else {}
 
 
-def _bump(**extra):
-    m = meta()
-    m.update(extra)
-    m["ver"] = os.urandom(4).hex()
-    m["changed_at"] = db.now_iso()
-    db.set_setting(META_KEY, m)
+def _meta_update(fn):
+    """Read-modify-write the roster meta in ONE immediate transaction: two
+    workers stamping it at once must not drop each other's version bump (a lost
+    bump = an open tab that never reloads for that change)."""
+    with db.connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r = c.execute("SELECT value FROM settings WHERE key=?", (META_KEY,)).fetchone()
+        try:
+            m = json.loads(r["value"]) if r else {}
+        except (ValueError, TypeError):
+            m = {}
+        if not isinstance(m, dict):
+            m = {}
+        fn(m)
+        c.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                  "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                  (META_KEY, json.dumps(m, ensure_ascii=False)))
     return m
+
+
+def _bump(**extra):
+    def f(m):
+        m.update(extra)
+        m["ver"] = os.urandom(4).hex()
+        m["changed_at"] = db.now_iso()
+    return _meta_update(f)
 
 
 # --------------------------------------------------------------------------- #
@@ -425,20 +446,27 @@ def fill_photos(limit=ASIN_PHOTOS_PER_RUN):
     """Fetch the Amazon photo for products that have an ASIN but no photo yet.
     import_product caches by ASIN forever, so each ASIN costs one look-up ever.
     Products with no ASIN keep their empty slot: nothing is guessed by name."""
+    # amazon_import caches SUCCESSES only: without this ledger a dead ASIN would
+    # cost a metered SerpAPI call on every background pass, forever
+    tried = db.get_setting(PHOTO_TRIED_KEY) or {}
+    tried = tried if isinstance(tried, dict) else {}
+    cutoff = (_now() - PHOTO_RETRY).isoformat(timespec="seconds")
     todo = []
     for g, r in rows().items():
         if not r["open"]:
             continue
         for p in r["cu"].get("products") or []:
-            if p.get("asin") and not p.get("image") and p["asin"] not in todo:
-                todo.append(p["asin"])
-    got = {}
+            a = p.get("asin")
+            if a and not p.get("image") and a not in todo and str(tried.get(a) or "") < cutoff:
+                todo.append(a)
+    got, asked = {}, []
     if todo:
         try:
             import amazon_import
             import cfg
             conf = cfg.load()
             for a in todo[:limit]:
+                asked.append(a)
                 try:
                     img = (amazon_import.import_product(a, conf) or {}).get("image")
                 except Exception:  # noqa: BLE001
@@ -447,6 +475,14 @@ def fill_photos(limit=ASIN_PHOTOS_PER_RUN):
                     got[a] = img
         except Exception:  # noqa: BLE001
             pass
+    if asked:
+        now = db.now_iso()
+        fresh = db.get_setting(PHOTO_TRIED_KEY) or {}
+        fresh = fresh if isinstance(fresh, dict) else {}
+        fresh.update({a: now for a in asked if a not in got})
+        for a in got:
+            fresh.pop(a, None)
+        db.set_setting(PHOTO_TRIED_KEY, fresh)
     if not got:
         return 0
     n = 0
@@ -531,12 +567,15 @@ def _fetch_slim(list_id):
         if s_ != 200:
             return None, f"list {list_id} fetch failed ({s_})"
         batch = (body or {}).get("tasks") or []
-        last = (body or {}).get("last_page", True)
+        last, n = (body or {}).get("last_page", True), len(batch)
         out.extend(x for x in (_slim(t) for t in batch) if x)
         del body, batch
-        if last or page > 60:
+        if last or not n:
             break
         page += 1
+        if page > 60:          # 6,000+ tasks: stop — and say so, because a PARTIAL
+            return None, (f"list {list_id} has more than 60 pages — "   # list read as
+                          "not read, so nothing closes")               # complete closes parcels
     return out, None
 
 
@@ -607,15 +646,17 @@ def _rebuild(cache, errors, full):
         for r in c.execute("SELECT source, COUNT(*) n FROM gaash_parcels "
                            "WHERE open=1 GROUP BY source"):
             counts[r["source"]] = r["n"]
-    m = meta()
-    m.pop("new", None)
-    if full:
-        m.update(at=db.now_iso(), error="; ".join(errors), lists_ok=sorted(lists))
-    m.update(counts=counts, touched_at=db.now_iso(), stamp=_stamp())
-    if changed:
-        m.update(ver=os.urandom(4).hex(), changed_at=db.now_iso())
-    m.setdefault("ver", os.urandom(4).hex())
-    db.set_setting(META_KEY, m)
+    stamp = _stamp()
+
+    def f(m):
+        m.pop("new", None)
+        if full:
+            m.update(at=db.now_iso(), error="; ".join(errors), lists_ok=sorted(lists))
+        m.update(counts=counts, touched_at=db.now_iso(), stamp=stamp)
+        if changed:
+            m.update(ver=os.urandom(4).hex(), changed_at=db.now_iso())
+        m.setdefault("ver", os.urandom(4).hex())
+    m = _meta_update(f)
     return dict(m, refreshed=True, changed=changed)
 
 
@@ -645,9 +686,7 @@ def refresh(force=False, max_age=MAX_AGE_S, fetch=None):
                 continue
             fetched[src] = [x for x in (_slim(t, src) for t in tasks) if x]
         if not fetched:
-            m = meta()
-            m.update(error="; ".join(errors), tried=db.now_iso())
-            db.set_setting(META_KEY, m)
+            m = _meta_update(lambda m: m.update(error="; ".join(errors), tried=db.now_iso()))
             return dict(m, refreshed=False, changed=[])
 
         def put(cache):
@@ -686,10 +725,14 @@ def apply_events(task_ids, fetch_task=None):
             for src in list(ls):
                 ls[src] = [t for t in (ls[src] or []) if t.get("id") != tid]
             if task:
-                lid = str((task.get("list") or {}).get("id") or task.get("list_id") or "")
-                src = src_of.get(lid)
-                if src:                          # moved to another list = not ours any more
+                # its home list AND every other list ClickUp says it also sits in
+                # (tasks-in-multiple-lists): judging by the home list alone would
+                # drop a task that lives elsewhere but is filed in one of OUR lists
+                homes = [str((task.get("list") or {}).get("id") or task.get("list_id") or "")]
+                homes += [str((loc or {}).get("id") or "") for loc in task.get("locations") or []]
+                for src in dict.fromkeys(src_of[h] for h in homes if h in src_of):
                     ls.setdefault(src, []).append(_slim(task, src))
+                # none of ours → it moved away, and its parcel closes on the rebuild
     return _rebuild(_tasks_update(patch), [], full=False)
 
 
@@ -796,10 +839,19 @@ def _bg_run():
                 return
 
 
+_FOLLOW_LOCK = threading.Lock()
+
+
 def _follow(gwds):
     """After a refresh: the first GAASH check for parcels that just appeared,
     then any missing photos. Slow (GAASH answers in 10-25 s), so never on a
-    request thread."""
+    request thread — and one at a time per process, so two Refresh clicks
+    cannot both pay for the same metered photo look-up."""
+    with _FOLLOW_LOCK:
+        _follow_locked(gwds)
+
+
+def _follow_locked(gwds):
     # only open parcels nobody has asked GAASH about — the very first read
     # "changes" all ~150 numbers, most of them long finished
     fresh = []
@@ -964,7 +1016,7 @@ def refresh_tracking_one(gwd, docs=None):
     return {"arrived": verdict == "arrived", "deadline": deadline, "skipped": None if want_dl else why}
 
 
-def check(tn):
+def check(tn, with_tracking=True):
     """THE docs check — the tab's Check and Check all, the upload wizard's
     after-send re-check and the nightly worker sweep all land here. GAASH's
     banner is stored on every board that carries the number (a no-op where
@@ -985,10 +1037,11 @@ def check(tn):
         pass
     if get(tn) is not None:
         store_docs_state(tn, docs)
-        try:
-            refresh_tracking_one(tn, docs)
-        except Exception as e:  # noqa: BLE001
-            print(f"[docs_roster] tracking for {tn} failed: {e}", flush=True)
+        if with_tracking:
+            try:
+                refresh_tracking_one(tn, docs)
+            except Exception as e:  # noqa: BLE001
+                print(f"[docs_roster] tracking for {tn} failed: {e}", flush=True)
     return docs
 
 
