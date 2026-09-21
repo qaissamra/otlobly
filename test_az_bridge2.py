@@ -15,6 +15,7 @@ idempotently. The staff routes, the bell group and the UI wiring are pinned too.
 import datetime as dt
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -291,7 +292,9 @@ def test_wiring():
                   '"/api/worker/az_carts"', '"/api/worker/az_carts/ack"', '"/api/worker/az_result"'):
         check(f"app.py has {route}", route in ap)
     sw = (HERE / "web" / "sw.js").read_text(encoding="utf-8")
-    check("service worker cache bumped (v28)", 'const CACHE = "otl-off-v28"' in sw)
+    m28 = re.search(r'const CACHE = "otl-off-v(\d+)"', sw)
+    check("service worker cache at v28 or later (v28 shipped the default host)",
+          bool(m28) and int(m28.group(1)) >= 28 and "v28:" in sw)
     rb = (HERE / "docs" / "OPERATOR_RUNBOOK.md").read_text(encoding="utf-8")
     check("the runbook explains the hand-off", "Send to AZ Studio" in rb and "AZ Studio refused it" in rb)
     check("the schema has the az_carts table", "CREATE TABLE IF NOT EXISTS az_carts" in (HERE / "db.py").read_text(encoding="utf-8"))

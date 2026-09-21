@@ -40,6 +40,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
   each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,
   loops until done, logs to docs_sweep.log)
+- docs_roster.py — the 📄 GAASH mail › Docs tab's parcels, read straight from the two
+  ClickUp lists (Le Luxe Products 901520351506 + IT Products 901524960550) into
+  `gaash_parcels` (cu_json = what ClickUp says, data_json = what GAASH says). The goals.py
+  ClickUp webhooks also re-read the ONE task each delivery names (~40 KB) into a slim copy
+  of both lists (settings `docs:roster_tasks`) — a full read is 18 MB / ~25 s, so it runs only
+  on first use, when older than 15 min, and nightly — and a tracking number typed in ClickUp
+  appears on the tab within seconds (15 s version poll). `docs_roster.check` is THE
+  docs check (banner + timeline + deadline, never before arrival). Since 2026-09-21: the Le
+  Luxe mirror had been stale since 09-04 and hid parcels GAASH was asking about.
+  DOCS_ROSTER_LIVE=0 keeps it off the network (tests)
 - db_watch.py / com.otlobly.dbwatch.plist — every 10 min: asks the live app whether
   its DB still reads (`/api/health/db`) and Telegrams the owner the first time it
   does not. Deliberately OFF Render: it watches for the app dying, so anything

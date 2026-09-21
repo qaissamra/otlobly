@@ -2508,16 +2508,19 @@ def api_notifications():
                                "view": "leluxe"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass
-    # 📄 parcels whose GAASH page is asking for documents (or shows clearance
-    # stopped) — one standing item, ts = the newest docs check so a state flip
-    # re-surfaces it without re-pinging on every poll. Counted by the SAME
-    # function the 📄 Docs tab renders (names=False skips its name/thread
-    # enrichment), so the bell number and the tab can never disagree.
+    # 📄 parcels whose GAASH page is asking for documents — one standing item,
+    # ts = the newest docs check so a state flip re-surfaces it without
+    # re-pinging on every poll. Counted by the SAME function the 📄 Docs tab
+    # renders (names=False skips its name/thread enrichment), and as the tab's
+    # default view shows it: the two ClickUp lists, "Needs upload" only. A
+    # STOPPED parcel no longer rings — GAASH has closed it; it needs a call to
+    # GAASH, not documents (it still lists under the tab's Stopped view).
     try:
         import features
         if current_user.has("edit_fulfillment") and features.has(db.current_business(), "leluxe"):
             _q = gaash_mail.docs_queue(names=False)
-            _hot = [r for r in _q["rows"] if r["state"] in ("action", "stopped")]
+            _hot = [r for r in _q["rows"]
+                    if r["state"] == "action" and r["source"] in ("leluxe", "it")]
             n_docs = len(_hot)
             ts_docs = max((r.get("docs_checked") or "" for r in _hot), default="")
             if n_docs:
@@ -3099,7 +3102,7 @@ def api_leluxe_refresh_tracking():
     return jsonify({"ok": True, **res})
 
 
-def _docs_check_one(tn):
+def _docs_check_one(tn, with_tracking=True):
     """Fresh GAASH docs-banner check for one parcel, persisted to WHICHEVER
     board(s) carry the number (each store call is a no-op elsewhere).
 
@@ -3107,19 +3110,15 @@ def _docs_check_one(tn):
     stores record docs_error and leave docs_checked (the last success) and
     docs_state untouched, so a dead check can't masquerade as a fresh answer.
     A 'noanswer' state (GAASH has no such number) is a real verdict and is
-    stored like any other."""
-    import tracking
-    docs = tracking.docs_status(tn)
-    # docs=None → the stores stamp docs_error only, keeping the last known
-    # state AND its true age: a transient failure must never erase a real
-    # yellow, nor re-freshen a stale blue.
-    leluxe_mod.store_docs_state(tn, docs)
-    try:
-        import purchases as purchases_mod
-        purchases_mod.store_docs_state(tn, docs)
-    except Exception:  # noqa: BLE001 — purchases store hiccup must not lose the answer
-        pass
-    return docs
+    stored like any other.
+
+    The work lives in docs_roster.check (one implementation for this route, the
+    worker sweep, the after-upload re-check and the roster's own auto-check):
+    the answer lands on the Le Luxe mirror, Purchases AND the Docs roster, and
+    a roster parcel also gets its GAASH timeline and — only once it has landed
+    — its upload deadline."""
+    import docs_roster
+    return docs_roster.check(tn, with_tracking=with_tracking)
 
 
 @app.route("/api/leluxe/docs_status")
@@ -3140,14 +3139,19 @@ def api_leluxe_docs_status():
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
 def api_gaash_docs_check():
-    """The 📄 Docs queue's per-row Re-check — same check as
-    /api/leluxe/docs_status but reachable by fulfillment (the queue's gate)."""
+    """The 📄 Docs queue's per-row Check — same check as
+    /api/leluxe/docs_status but reachable by fulfillment (the queue's gate).
+    `row` carries what the check refreshed beyond the banner (a ClickUp parcel's
+    deadline, days left and GAASH status) so the row redraws without a reload."""
+    import docs_roster
     import tracking
     b = request.get_json(force=True, silent=True) or {}
     tn = tracking.clean_tracking(b.get("tracking") or "")
     if not tn:
         return jsonify({"ok": False, "error": "tracking required"}), 400
-    return jsonify({"ok": True, "tracking": tn, "docs": _docs_check_one(tn)})
+    docs = _docs_check_one(tn)
+    return jsonify({"ok": True, "tracking": tn, "docs": docs,
+                    "row": docs_roster.summary(tn.upper())})
 
 
 # --------------------------------------------------------------------------- #
@@ -3349,7 +3353,9 @@ def api_gaash_upload():
         types = sorted({int(d["type"]) for d in docs})
         _stamp_docs_sent(tn, types, src="upload", user=_user())
         try:
-            res["docs_state"] = _docs_check_one(tn)      # 🟡 → 🔵 without a manual re-check
+            # 🟡 → 🔵 without a manual re-check. Banner only: this request already
+            # spent ~25 s on GAASH's page, and the timeline/deadline can wait for Check
+            res["docs_state"] = _docs_check_one(tn, with_tracking=False)
         except Exception:  # noqa
             pass
         activity.log("uploaded", "purchase", tn, tn,
@@ -4083,9 +4089,45 @@ def api_gaash_readiness():
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
 def api_gaash_docs_queue():
-    """📄 the docs-upload queue: every open parcel (both boards) with its GAASH
-    docs banner — yellow upload-asked first, with GAASH's own upload links."""
-    return jsonify(gaash_mail.docs_queue())
+    """📄 the docs-upload queue: every open parcel of the two ClickUp lists (Le
+    Luxe Products + IT Products, read live) plus the boards' own, with its
+    GAASH docs banner — yellow upload-asked first, with GAASH's own upload links.
+    Never waits on ClickUp once the roster has been read: a stale roster (older
+    than 10 min, or a webhook has fired since) is re-read in the BACKGROUND and
+    the open tab's 15-second poll picks the new version up. Only the very first
+    read (an empty roster) happens inline — a two-list read costs 10-30 s."""
+    import docs_roster
+    try:
+        if not docs_roster.meta().get("at"):
+            docs_roster.follow_up(docs_roster.refresh().get("changed"))
+        elif docs_roster.stale():
+            docs_roster.schedule_refresh("stale")
+    except Exception:  # noqa: BLE001 — the queue must still draw
+        app.logger.exception("docs roster refresh")
+    return jsonify({**gaash_mail.docs_queue(), "roster": docs_roster.version()})
+
+
+@app.route("/api/gaash/docs_roster/version")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_docs_roster_version():
+    """The open Docs tab's 15-second poll: has ClickUp changed the parcel list?
+    Local reads only — the webhook does the fetching."""
+    import docs_roster
+    return jsonify({"ok": True, **docs_roster.version()})
+
+
+@app.route("/api/gaash/docs_roster/refresh", methods=["POST"])
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_docs_roster_refresh():
+    """The tab's "Refresh from ClickUp": re-read both lists now. A parcel that
+    just appeared gets its first GAASH check (and its photo) in the background."""
+    import docs_roster
+    res = docs_roster.refresh(force=True)
+    docs_roster.follow_up(res.get("changed"))      # first checks + photos, off-request
+    return jsonify({"ok": not (res.get("error") and not res.get("refreshed")),
+                    "changed": res.get("changed") or [], **docs_roster.version()})
 
 
 @app.route("/api/gaash/forecast")
@@ -5108,8 +5150,16 @@ def worker_docs_sweep():
              uploaded, or a blue that turned yellow, must not sit stale)}"""
     if not _worker_ok():
         abort(401)
+    import docs_roster
+    t0 = time.time()
     b = request.get_json(force=True, silent=True) or {}
     want = [str(g).strip().upper() for g in (b.get("gwds") or []) if str(g).strip()]
+    try:                    # the nightly run starts from what ClickUp says NOW —
+        # by age only: webhooks already re-read the lists in the background, and a
+        # two-list read (10-30 s) on every call would eat the checks' time budget
+        docs_roster.refresh(max_age=1800)
+    except Exception:  # noqa: BLE001 — the boards' parcels still get checked
+        app.logger.exception("docs roster refresh (worker)")
     q = gaash_mail.docs_queue(names=False)
     if want:
         todo = [r for r in q["rows"] if r["gwd"] in want]
@@ -5129,8 +5179,13 @@ def worker_docs_sweep():
                      or (cutoff and (r["docs_checked"] or "") < cutoff))
                     and (r.get("docs_error") or "") <= retry_floor)]
     batch = max(1, min(int(b.get("batch") or 3), 3))
-    picked, results = todo[:batch], []
-    for r in picked:
+    picked, results = [], []
+    for r in todo[:batch]:
+        # a ClickUp parcel's check also reads its timeline and deadline (~40 s
+        # worst case) — never START one past 60 s, inside gunicorn's 120 s
+        if picked and time.time() - t0 > 60:
+            break
+        picked.append(r)
         docs = _docs_check_one(r["gwd"])
         results.append({"gwd": r["gwd"], "source": r["source"],
                         "state": (docs or {}).get("state") or "error",
@@ -6439,6 +6494,15 @@ def clickup_webhook():
         if goals.verify_signature(request.get_data(),
                                   request.headers.get("X-Signature", "")):
             goals.bump_stamp("webhook")
+            # 📄 the Docs tab's parcels come from the same two lists: the task
+            # this delivery names is re-read in the background (debounced), so a
+            # tracking number typed in ClickUp lands on the tab by itself, and a
+            # parcel that just appeared gets its first GAASH check. The payload is
+            # trusted only after the signature check above.
+            import docs_roster
+            _b = request.get_json(force=True, silent=True) or {}
+            docs_roster.schedule_refresh("webhook", task_id=_b.get("task_id")
+                                         if isinstance(_b, dict) else None)
     except Exception:  # noqa — never fail a webhook delivery
         app.logger.exception("clickup webhook")
     return jsonify({"ok": True})

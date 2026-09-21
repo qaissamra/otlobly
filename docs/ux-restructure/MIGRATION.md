@@ -27,7 +27,7 @@ Update this file in **every** PR of the restructure. "Screens" = `screens/before
 | `gaashmail` › seq | ⚙️ Workflows | T1 (+T3 builder) | Shipping › GAASH mail › Workflows | `gaash-mail-workflows.jpg` | **migrated** (Batch C) — the builder itself is Phase 5 |
 | `gaashmail` › tpl | 📝 Templates | T1 (+T3 editor) | Shipping › GAASH mail › Templates | `gaash-mail-templates.jpg` | **migrated** (Batch C), editor on DS fields |
 | `gaashmail` › ready | 🩺 Readiness | T1 | Shipping › GAASH mail › Readiness (feeds Needs attention) | `gaash-mail-readiness.jpg` | **migrated** (Batch C) |
-| `gaashmail` › docs | 📄 Docs | T1 | Shipping › GAASH mail › Docs (feeds Needs attention) | `gaash-mail-docs.jpg` | **migrated** (Batch C) — the upload wizard (`gu*`) is Phase 5 |
+| `gaashmail` › docs | 📄 Docs | T1 | Shipping › GAASH mail › Docs (feeds Needs attention) | `gaash-mail-docs.jpg` | **migrated** (Batch C); **reads ClickUp itself since 2026-09-21** (see "The Docs tab reads ClickUp") — the upload wizard (`gu*`) is Phase 5 |
 | `gaashmail` › fcast | 🔮 Forecast | T4 | Shipping › GAASH mail › Forecast | `gaash-mail-forecast.jpg` | **migrated** (Batch C), queue + cases |
 | `gaashmail` › dash | 📊 Analyze | T4 | Shipping › GAASH mail › Analyze | `gaash-mail-analyze.jpg` | **migrated** (Batch C) |
 | `flags` | 🚩 Flags | T1 | Needs attention (open flags, Phase 2 ✓) + Settings › Integrations (inboxes; routed at `#/settings/inboxes` until Phase 7) | `flags.jpg` | in progress |
@@ -832,3 +832,42 @@ and the DataTable's 15px row checkbox became the whole cell (`table.js`, every b
 **Nothing was removed.** The profile panel's every field, the order history and its two buttons
 live in the drawer; the legacy pages keep their own title rows; the Orders page keeps the old
 home dashboard above its board (a question for the owner, noted in §24).
+
+## The Docs tab reads ClickUp (2026-09-21)
+
+**The owner called GAASH mail › Docs "the most important page" and "not functional".** Nothing in
+the code had broken it; four things together emptied it:
+
+1. **Its source was a stale mirror.** Docs listed parcels from `leluxe_orders`, which had not synced
+   from ClickUp since the 2026-09-04 corruption (auto-sync off since). Eight open parcels were
+   invisible, two of them with GAASH asking for documents that day (GWD004802571, GWD004803012).
+2. **IT Products was never a source** (only the Goals page read it).
+3. **Days left was off-screen**: column 9 of 11, 1362 px in.
+4. **Upload only rendered when GAASH handed out a link**, and "Upload asked" counted stopped
+   parcels, so the tab opened on four GAASH-closed parcels with no button anywhere.
+
+**What changed.** `docs_roster.py` reads both ClickUp lists (Le Luxe Products + IT Products) into
+`gaash_parcels` — one row per GWD, `cu_json` written by the refresh and `data_json` by the checks,
+never the same column. The existing ClickUp webhooks (goals.py) now also re-read the one task each
+delivery names into a slim copy of both lists (a full read is 18 MB — ClickUp ships every dropdown's
+options with every task — so it runs on first use, past 15 min, and nightly, slimmed page by page:
+4 MB kept instead of 81), and a parcel that appears gets its first GAASH check by itself; the open
+tab polls `/api/gaash/docs_roster/version` every 15 s and reloads in place. `docs_queue` merges the
+roster with the boards field by field (which also fixes the blank Deadline cell: the regrouped
+package row that used to win carried no deadline). The Check is ONE function, `docs_roster.check`
+(banner + timeline + deadline, the deadline never read before arrival). The upload wizard's
+resolvers read the roster first (asked slots, name on package, contents, Amazon order).
+
+**The tab.** Table id `gm_docs_v2` (a saved `order` would otherwise pin the old column order);
+columns Parcel · Days left · Documents · Asked for · Name on package · Products (photos) · ClickUp
+status · Order · GAASH status · Checked; views All · Needs upload · In customs · Not checked · No
+answer · Stopped; sources Le Luxe · IT · Otlobly (Otlobly off by default, remembered); Upload,
+Check and Mail as labelled buttons on every row (Upload asks first before starting GAASH's clock
+on a parcel neither asked about nor arrived); click-to-copy GWD and the unusual-number tag are back.
+The bell counts Needs upload on Le Luxe + IT only.
+
+**Nothing was removed.** Board-only parcels still list; Otlobly is one click away; the wizard, the
+by-order view, Check all and the enroll buttons are unchanged. Pinned by `test_docs_roster.py`
+(66 checks, fake tasks copied from the real list-endpoint JSON) and the new block in
+`test_ds_gaash.py`.
+

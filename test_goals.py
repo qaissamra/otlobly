@@ -36,6 +36,7 @@ os.environ["OTLOBLY_SECRET"] = "x"
 os.environ["CLICKUP_API_TOKEN"] = "test-token"  # never used: fetch is injected
 os.environ["LELUXE_PACE"] = "0"
 os.environ["LELUXE_PUSH_DISABLED"] = "1"
+os.environ["DOCS_ROSTER_LIVE"] = "0"   # the Docs roster never reads the real ClickUp lists here
 for k in ("LELUXE_DIGEST", "LELUXE_TG_BOT", "GAASH_MAILER",
           "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
     os.environ.pop(k, None)                     # every daemon stays off

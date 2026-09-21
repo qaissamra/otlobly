@@ -355,16 +355,27 @@
   };
 
   // ---------------------------------------------------------------- docs
+  // The parcels come from the two ClickUp lists themselves (docs_roster.py: Le Luxe
+  // Products + IT Products, read live and refreshed by ClickUp's webhook), plus what
+  // the Le Luxe mirror and Purchases still carry. Purchases is the "Otlobly" source,
+  // hidden until asked for — the owner runs the two ClickUp lists.
   const DOCS_MODE = {
-    action: (r) => r.state === "action" || r.state === "stopped", unchecked: (r) => r.state === "unchecked" || r.state === "error",
-    watching: (r) => r.state === "info" || r.state === "plain", noanswer: (r) => r.state === "noanswer", all: () => true,
+    all: () => true,
+    action: (r) => r.state === "action",
+    watching: (r) => r.state === "info" || r.state === "plain",
+    unchecked: (r) => r.state === "unchecked" || r.state === "error",
+    noanswer: (r) => r.state === "noanswer",
+    stopped: (r) => r.state === "stopped",
   };
-  G.docsFilter = (rows, mode) => (rows || []).filter(DOCS_MODE[mode] || DOCS_MODE.all);
+  G.DOCS_SOURCES = [{ key: "leluxe", label: "Le Luxe" }, { key: "it", label: "IT" }, { key: "purchases", label: "Otlobly" }];
+  const docsSrcLabel = (s) => (G.DOCS_SOURCES.find((x) => x.key === s) || {}).label || srcLabel(s);
+  /** rows -> the ones this view shows. `sources` (a list of keys) is optional: without it every source passes. */
+  G.docsFilter = (rows, mode, sources) => (rows || []).filter((r) => (!sources || sources.includes(r.source)) && (DOCS_MODE[mode] || DOCS_MODE.all)(r));
   /** The documents state as one badge, from the shared status registry. */
   G.docsBadge = (r) => {
     let key = r.state, title = "";
     if (r.state === "action") title = "GAASH asks for documents" + ((r.codes || []).includes(818) ? " (customer ID)" : "");
-    else if (r.state === "stopped") title = "Customs clearance stopped";
+    else if (r.state === "stopped") title = "GAASH closed this parcel's clearance (a final status, no upload link) - contact GAASH";
     else if (r.state === "noanswer") title = "GAASH has no record of this number - check the tracking number";
     else if (r.state === "error") { key = "unchecked"; title = "The last check failed - try again"; }
     else if (r.state === "unchecked") title = "Not checked yet - press Check";
@@ -372,29 +383,93 @@
     else title = "No request, customs is processing";
     return D.status.badge("docs", key, { title });
   };
-  const DOCS_RANK = { action: 0, stopped: 1, unchecked: 2, error: 2, noanswer: 3, info: 4, plain: 4 };
-  /** ctx: {mode, view:"order"|"flat", busy, done, total, thumbs(r), boardStatus(r)->html, gaash(r)->html,
-            orderKey(r), orderName(r), asked(r)->text, uploadLink(r)->url, errChip(r)->html, ago(iso)} */
+  const DOCS_RANK = { action: 0, unchecked: 1, error: 1, info: 2, plain: 2, noanswer: 3, stopped: 4 };
+  /** Days until GAASH's upload link expires - the owner's first question about every parcel.
+      Same thresholds as the Le Luxe board's deadline pill: over 7 grey, 7 or fewer amber,
+      3 or fewer red. Before arrival there is no deadline at all (GAASH starts the 35 days
+      when the box lands), and reading it early would start the clock - so the cell says so. */
+  G.docsDays = (r) => {
+    // not in Israel yet: there is no real deadline, and a date read before arrival is
+    // GAASH's ROLLING read + 35 - showing it as "Late 12 d" would be a lie
+    if (!r.arrived) return `<span class="ds-muted" title="${esc("GAASH's 35 days start when the parcel lands in Israel" + (r.gaash_deadline ? ` (the ${r.gaash_deadline} on file was read before arrival - not a real deadline)` : ""))}">Not arrived</span>`;
+    if (!r.gaash_deadline) {
+      const why = r.deadline_skipped ? `The deadline was not read: ${r.deadline_skipped}` : "Press Check to read GAASH's deadline";
+      return `<span class="ds-muted" title="${esc(why)}">Press Check</span>`;
+    }
+    const tip = `GAASH upload deadline ${r.gaash_deadline}`;
+    if (r.days_left == null) return day(r.gaash_deadline);
+    if (r.days_left < 0) return D.attention({ kind: "late", detail: `${-r.days_left} d`, title: tip });
+    const tone = r.days_left <= 3 ? "danger" : r.days_left <= 7 ? "warning" : "neutral";
+    return D.badge({ label: r.days_left === 0 ? "Today" : `${r.days_left} ${r.days_left === 1 ? "day" : "days"}`, tone, icon: "clock", title: tip });
+  };
+  /** The name GAASH reads off the label. ClickUp's NAME ON PACKAGEE is the truth; a name
+      the owner picked in GAASH mail wins over it; the Settings default is only assumed. */
+  G.docsName = (r) => {
+    const nm = String(r.pname || r.name || "").trim();
+    if (!nm) return D.dash();
+    const tag = r.pname_src === "default" ? D.tag({ label: "default", tone: "neutral", title: "NAME ON PACKAGEE is blank in ClickUp - the Settings default name is assumed" })
+      : r.pname_src === "pick" ? D.tag({ label: "picked", tone: "info", title: "Chosen in GAASH mail - it wins over ClickUp" }) : "";
+    return `<span class="ds-gm-run"><span class="ds-truncate" dir="auto" title="${esc(nm)}">${esc(nm)}</span>${tag}</span>`;
+  };
+  /** Product photos from ClickUp (the board's cached photo, else Amazon by the ASIN).
+      A product with no ASIN keeps an empty slot that says what would fill it. */
+  G.docsPhotos = (r) => D.thumbs((r.products || []).map((p) => ({ image: p.image, title: `${p.qty > 1 ? p.qty + " x " : ""}${p.name}`, asin: p.asin, url: p.url })), {
+    max: 3, total: false, countWhenBlank: false, empty: "",
+    emptyLabel: "No photo - add the ASIN in ClickUp",
+    label: (it, g) => g.items.map((x) => x.title).filter(Boolean).join(" · "),
+    onclick: (it) => (it.url ? `event.stopPropagation();window.open(${q(it.url)},'_blank','noopener')` : null),
+  });
+  /** ClickUp's own status for the parcel's products, in ClickUp's colour ("mixed" when they
+      disagree), plus the GASH STATUS stage the owner keeps in ClickUp. */
+  G.docsCuStatus = (r) => {
+    const sts = [];
+    (r.products || []).forEach((p) => { if (p.status && !sts.some((s) => s.status === p.status)) sts.push(p); });
+    const main = sts.length === 1 ? D.badge({ label: sts[0].status, hex: sts[0].color, title: "Status in ClickUp" })
+      : sts.length > 1 ? D.badge({ label: "mixed", tone: "neutral", title: sts.map((s) => s.status).join(" · ") }) : "";
+    const stage = (r.gash_stage || []).map((g) => D.tag({ label: g, tone: "neutral", title: "GASH STATUS in ClickUp" })).join("");
+    return main || stage ? `<span class="ds-gm-run">${main}${stage}</span>` : "";
+  };
+  const docsParcel = (r) => `<span class="ds-gm-id"><button type="button" class="ds-gm-copy ds-mono" title="Copy ${esc(r.gwd)}" onclick="event.stopPropagation();copyCtk(${esc(q(r.gwd))})"><b>${esc(r.gwd)}</b></button>`
+    + `<span class="ds-gm-src">${esc(docsSrcLabel(r.source))}</span>`
+    + (r.unusual ? D.tag({ label: "unusual number", tone: "warning", title: "A GAASH number is GWD + 9 digits - check it in ClickUp" }) : "") + `</span>`;
+  const docsOrder = (r, fallback) => {
+    const o = r.order;
+    if (o && o.name) return o.url ? `<a class="ds-truncate" dir="auto" href="${esc(o.url)}" target="_blank" rel="noopener" title="Open ${esc(o.name)} in ClickUp" onclick="event.stopPropagation()">${esc(o.name)}</a>` : text(o.name);
+    return text(fallback);
+  };
+  /** ctx: {mode, view:"order"|"flat", sources:[keys], busy, done, total, thumbs(r), boardStatus(r)->html, gaash(r)->html,
+            orderKey(r), orderName(r), asked(r)->text, errChip(r)->html, roster:{live, at, counts, error}} */
   G.docs = (mount, all, ctx) => {
     const el = hostOf(mount); if (!el) return;
     all = all || [];
-    let rows = G.docsFilter(all, ctx.mode);
-    const n = (k) => all.filter(DOCS_MODE[k]).length;
+    const sources = ctx.sources || ["leluxe", "it"];
+    const shown = all.filter((r) => sources.includes(r.source));
+    let rows = G.docsFilter(shown, ctx.mode);
+    const n = (k) => shown.filter(DOCS_MODE[k]).length;
     const byOrder = ctx.view !== "flat";
+    const nSrc = (k) => all.filter((r) => r.source === k).length;
+    const ro = ctx.roster || {};
+    const synced = ro.at ? `synced ${D.fmt.relative(ro.at)}` : "not read yet";
+    const rosterHint = `<span class="ds-muted ds-gm-hint" title="${esc(ro.error ? "ClickUp: " + ro.error : ro.live ? "ClickUp tells the app about every change, so new tracking numbers appear by themselves" : "ClickUp's webhook is not connected - the list refreshes when the page opens (Goals, Connect, reconnects it)")}">ClickUp ${ro.live ? "live" : "webhook not connected"} · ${esc(synced)}${ro.error ? " · read failed" : ""}</span>`;
     const bar = D.filterBar({
-      views: [{ key: "action", label: "Upload asked", count: n("action") }, { key: "unchecked", label: "Unchecked", count: n("unchecked") }, { key: "watching", label: "In customs", count: n("watching") },
-        n("noanswer") ? { key: "noanswer", label: "No answer", count: n("noanswer") } : null, { key: "all", label: "All", count: all.length }].filter(Boolean).map((v) => Object.assign(v, { active: ctx.mode === v.key })),
+      views: [{ key: "all", label: "All", count: shown.length }, { key: "action", label: "Needs upload", count: n("action") },
+        { key: "watching", label: "In customs", count: n("watching") }, { key: "unchecked", label: "Not checked", count: n("unchecked") },
+        n("noanswer") ? { key: "noanswer", label: "No answer", count: n("noanswer") } : null, { key: "stopped", label: "Stopped", count: n("stopped") }]
+        .filter(Boolean).map((v) => Object.assign(v, { active: ctx.mode === v.key })),
       onView: "gmDocsMode(KEY)",
-      chips: [{ label: "By order", icon: "rectangle-stack", active: byOrder, onclick: "gmDocsView('order')", title: "One order's parcels sit together" },
-        { label: "Flat parcels", icon: "list-bullet", active: !byOrder, onclick: "gmDocsView('flat')", title: "One row per parcel, no grouping" }],
+      chips: G.DOCS_SOURCES.map((s) => ({ label: s.label, value: num(nSrc(s.key)), active: sources.includes(s.key), onclick: `gmDocsSource('${s.key}')`,
+        title: s.key === "purchases" ? "Otlobly's own purchase orders - hidden unless you switch them on" : `Parcels from the ClickUp list ${s.label} Products` }))
+        .concat([{ label: "By order", icon: "rectangle-stack", active: byOrder, onclick: "gmDocsView('order')", title: "One order's parcels sit together" },
+          { label: "Flat parcels", icon: "list-bullet", active: !byOrder, onclick: "gmDocsView('flat')", title: "One row per parcel, no grouping" }]),
       right: ctx.busy
         ? [`<span class="ds-muted ds-gm-hint" aria-live="polite">Checking <b class="ds-num">${esc(ctx.done)}/${esc(ctx.total)}</b></span>`, D.button({ label: "Stop", icon: "x-mark", size: "sm", variant: "secondary", onclick: "gmDocsStop()" })]
-        : (rows.length ? [D.button({ label: `Check all (${num(rows.length)})`, icon: "document-magnifying-glass", size: "sm", variant: "secondary", onclick: "gmDocsCheckAll()", title: "Check every row shown, one after another · each check takes 10-25 s" })] : []),
+        : [rosterHint, D.button({ label: "Refresh", icon: "arrow-path", size: "sm", variant: "ghost", onclick: "gmDocsRefresh(this)", title: "Read both ClickUp lists again now" })]
+          .concat(rows.length ? [D.button({ label: `Check all (${num(rows.length)})`, icon: "document-magnifying-glass", size: "sm", variant: "secondary", onclick: "gmDocsCheckAll()", title: "Ask GAASH about every row shown, one after another - each check takes 10-25 s" })] : []),
     });
     // By order: parcels sharing an order sit together, first-appearance order, whatever the sort.
     let runs = null;
     if (byOrder) {
-      const t = D.tableGet("gm_docs"), st = t && t.state && t.state.sort;
+      const t = D.tableGet("gm_docs_v2"), st = t && t.state && t.state.sort;
       const col = st && [...docsCols(ctx, true)].find((c) => c.key === st.key);
       const groups = [], byKey = new Map();
       rows.forEach((r) => { const k = ctx.orderKey(r); let g = byKey.get(k); if (!g) { g = { key: k, rows: [] }; byKey.set(k, g); groups.push(g); } g.rows.push(r); });
@@ -409,37 +484,38 @@
     }
     const cols = docsCols(ctx, byOrder, runs);
     paintTable(el, bar, {
-      id: "gm_docs", seedVersion: 1, ariaLabel: "Customs documents", columns: cols, rows, rowKey: (r) => r.gwd,
+      id: "gm_docs_v2", seedVersion: 1, ariaLabel: "Customs documents", columns: cols, rows, rowKey: (r) => r.gwd,
       onSort: byOrder ? () => W.gmDocsDraw() : null,
       rowClass: (r) => { const run = runs && runs.get(r.gwd); return run && run.n > 1 ? (run.i ? "ds-gm-tied" : "ds-gm-tie-first") : null; },
-      empty: { title: "Nothing here", text: ctx.mode === "action" ? "GAASH is not asking anyone for documents right now." : "Switch the view to see other parcels." },
+      empty: { title: "Nothing here", text: ctx.mode === "action" ? "GAASH is not asking for documents on any parcel shown." : "Switch the view or the sources to see other parcels." },
       footer: { gwd: `<b>${esc(num(rows.length))} parcels</b>` },
     });
   };
   function docsCols(ctx, byOrder, runs) {
     const run = (r) => (runs && runs.get(r.gwd)) || null;
+    const orderCell = (r) => {
+      const x = run(r);
+      if (!x || x.n < 2) return docsOrder(r, ctx.orderName(r));
+      return x.i ? `<span class="ds-gm-tie" title="Same order as the parcel above">${D.icon("arrow-uturn-left", { size: 12 })}<span>same order</span></span>`
+        : `<span class="ds-gm-run">${docsOrder(r, x.name || "Order")}${D.tag({ label: `${x.n} parcels`, tone: "neutral", icon: "cube" })}${x.allThreads ? "" : D.button({ label: `Enroll all ${x.n}`, icon: "envelope", size: "sm", variant: "ghost", title: "One email for all these parcels - enroll them together", onclick: `event.stopPropagation();gmNewOpen(${JSON.stringify(x.gwds)},{group:true})` })}</span>`;
+    };
     return [
-      { key: "gwd", label: "Parcel", w: 200, pin: "start", locked: true, sortVal: (r) => r.gwd, render: (r) => parcel(r.gwd, r.source) },
-      byOrder ? { key: "order", label: "Order", w: 220, sortable: false,
-        render: (r) => { const x = run(r); if (!x || x.n < 2) return text(ctx.orderName(r));
-          return x.i ? `<span class="ds-gm-tie" title="Same order as the parcel above">${D.icon("arrow-uturn-left", { size: 12 })}<span>same order</span></span>`
-            : `<span class="ds-gm-run">${text(x.name || "Order")}${D.tag({ label: `${x.n} parcels`, tone: "neutral", icon: "cube" })}${x.allThreads ? "" : D.button({ label: `Enroll all ${x.n}`, icon: "envelope", size: "sm", variant: "ghost", title: "One email for all these parcels - enroll them together", onclick: `event.stopPropagation();gmNewOpen(${JSON.stringify(x.gwds)},{group:true})` })}</span>`; } } : null,
-      { key: "products", label: "Products", w: 132, sortable: false, render: (r) => (ctx.thumbs ? ctx.thumbs(r) : "") || D.dash() },
-      { key: "name", label: "Name", w: 150, sortVal: (r) => r.pname || r.name || "~",
-        render: (r) => { const nm = r.pname || r.name || ""; return nm ? `<span class="ds-truncate${/^faisal$/i.test(nm.trim()) ? " ds-muted" : ""}" dir="auto" title="${esc(r.name || nm)}">${esc(nm)}</span>` : D.dash(); } },
-      { key: "docs", label: "Documents", w: 170, sortVal: (r) => (DOCS_RANK[r.state] == null ? 3 : DOCS_RANK[r.state]), render: (r) => G.docsBadge(r) + (ctx.errChip ? ctx.errChip(r) : "") },
+      { key: "gwd", label: "Parcel", w: 200, pin: "start", locked: true, sortVal: (r) => r.gwd, render: docsParcel },
+      { key: "days", label: "Days left", w: 120, sortVal: (r) => (r.gaash_deadline && r.arrived ? (r.days_left == null ? 9999 : r.days_left) : 99999), render: G.docsDays },
+      { key: "docs", label: "Documents", w: 160, sortVal: (r) => (DOCS_RANK[r.state] == null ? 2 : DOCS_RANK[r.state]), render: (r) => G.docsBadge(r) + (ctx.errChip ? ctx.errChip(r) : "") },
       { key: "asked", label: "Asked for", w: 190, sortVal: (r) => (r.state === "action" ? ctx.asked(r) || "~" : "~"), render: (r) => (r.state === "action" ? text(ctx.asked(r)) : D.dash()) },
-      { key: "status", label: "Board status", w: 150, sortable: false, render: (r) => (ctx.boardStatus ? ctx.boardStatus(r) : D.dash()) },
+      { key: "name", label: "Name on package", w: 180, sortVal: (r) => r.pname || r.name || "~", render: G.docsName },
+      { key: "products", label: "Products", w: 150, sortable: false, render: (r) => ((r.products || []).length ? G.docsPhotos(r) : (ctx.thumbs ? ctx.thumbs(r) : "")) || D.dash() },
+      { key: "cu", label: "ClickUp status", w: 170, sortable: false, render: (r) => G.docsCuStatus(r) || (ctx.boardStatus ? ctx.boardStatus(r) : "") || D.dash() },
+      { key: "order", label: "Order", w: 220, sortable: false, render: orderCell },
       { key: "gash", label: "GAASH status", w: 150, sortVal: (r) => r.label || r.bucket || "~", render: (r) => (ctx.gaash ? ctx.gaash(r) : "") || D.dash() },
-      { key: "deadline", label: "Deadline", w: 120, sortVal: (r) => (r.gaash_deadline ? (r.days_left == null ? 9999 : r.days_left) : 99999),
-        render: (r) => { if (!r.gaash_deadline) return D.dash(); const tip = "GAASH deadline " + r.gaash_deadline;
-          if (r.days_left == null) return `<span class="ds-mono" title="${esc(tip)}">${esc(r.gaash_deadline)}</span>`;
-          return r.days_left < 0 ? D.attention({ kind: "late", detail: `${-r.days_left} d`, title: tip }) : `<span class="ds-num" title="${esc(tip)}">${esc(r.days_left)} d left</span>`; } },
-      { key: "checked", label: "Checked", w: 130, sortVal: (r) => r.docs_checked || "~",
+      { key: "checked", label: "Checked", w: 120, sortVal: (r) => r.docs_checked || "~",
         render: (r) => (r.docs_checked ? rel(r.docs_checked) : D.dash()) + (r.stale && r.state !== "unchecked" ? D.tag({ label: "stale", tone: "neutral", title: "The last check is old - re-check" }) : "") },
-      { key: "actions", label: "", w: 170, type: "actions", pin: "end", locked: true, sortable: false,
-        render: (r) => `<span class="ds-actions">${ctx.uploadLink(r) ? D.button({ label: "Upload", icon: "arrow-up-tray", size: "sm", variant: "secondary", title: "Pick the documents, review them, then upload to GAASH", onclick: `guOpen(${q(r.gwd)})` }) : ""}${iconBtn("document-magnifying-glass", "Check with GAASH now", `gmDocsCheck(${q(r.gwd)},this)`)}${r.thread_state ? openConv(r.gwd) : enrollBtn(r.gwd)}</span>` },
-    ].filter(Boolean);
+      { key: "actions", label: "", w: 300, type: "actions", pin: "end", locked: true, sortable: false,
+        render: (r) => `<span class="ds-actions">${D.button({ label: "Upload", icon: "arrow-up-tray", size: "sm", variant: r.state === "action" ? "primary" : "secondary", title: r.state === "action" ? "GAASH is asking - pick the documents, preview them, then upload" : "Pick the documents, preview them, then upload to GAASH", onclick: `gmDocsUpload(${q(r.gwd)})` })}`
+          + `${D.button({ label: "Check", icon: "document-magnifying-glass", size: "sm", variant: "ghost", title: "Ask GAASH now: documents, status and deadline", onclick: `gmDocsCheck(${q(r.gwd)},this)` })}`
+          + `${r.thread_state ? D.button({ label: "Open mail", icon: "chat-bubble-left-right", size: "sm", variant: "ghost", title: "Open the GAASH conversation", onclick: `gmTab('conv');gmOpen(${q(r.gwd)})` }) : D.button({ label: "Mail", icon: "envelope", size: "sm", variant: "ghost", title: "Enroll in a GAASH mail workflow", onclick: `gmNewOpen([${q(r.gwd)}])` })}</span>` },
+    ];
   }
 
   // ---------------------------------------------------------------- forecast (queue + cases)
