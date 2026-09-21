@@ -722,6 +722,9 @@ body.ds-shell-on #dsTopbar { position: sticky; inset-block-start: 0; z-index: va
 /* ── GAASH mail (Batch C) ── */
 .ds-gm-id { display: inline-flex; align-items: center; gap: var(--ds-s2); min-inline-size: 0; max-inline-size: 100%; }
 .ds-gm-src { font-size: var(--ds-t-xs); color: var(--ds-muted); flex: 0 0 auto; }
+.ds-gm-copy { font: inherit; color: inherit; background: none; border: 0; padding: 0; min-block-size: 24px; cursor: copy; }
+.ds-gm-copy:hover b { text-decoration: underline; }
+.ds-gm-copy:focus-visible { outline: none; box-shadow: var(--ds-focus); border-radius: var(--ds-r-sm); }
 .ds-gm-unread { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 18px; block-size: 18px; padding-inline: 5px; border-radius: var(--ds-r-pill); background: var(--ds-danger-dot); color: var(--ds-on-solid); font-size: var(--ds-t-xs); font-weight: var(--ds-w-bold); flex: 0 0 auto; }
 .ds-gm-prog { display: inline-flex; align-items: center; gap: var(--ds-s2); }
 .ds-gm-name { display: inline-flex; align-items: center; gap: var(--ds-s1); min-inline-size: 0; max-inline-size: 100%; }

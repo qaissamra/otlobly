@@ -658,10 +658,19 @@ def docs_asked_type(gwd):
 
 
 def docs_state_for(gwd):
-    """The last docs banner stored for this parcel, from either board."""
+    """The last docs banner stored for this parcel — the ClickUp roster first
+    (the Docs tab's own store, the only one an IT Products parcel has), then
+    either board."""
     g = (gwd or "").strip().upper()
     if not g:
         return None
+    try:
+        import docs_roster
+        ds = ((docs_roster.get(g) or {}).get("data") or {}).get("docs_state")
+        if isinstance(ds, dict):
+            return ds
+    except Exception:  # noqa - the roster is extra; the boards still answer
+        pass
     try:
         row = _leluxe_row_for(g)
         ds = ((row or {}).get("data") or {}).get("docs_state")
@@ -2702,6 +2711,14 @@ def _id_number_for(gwd):
                     core = normalize.phone_core(str(v or ""))
                     if core and core in by_phone:
                         return by_phone[core]
+        try:                                  # 2b) ClickUp's phone fields (Docs roster)
+            import docs_roster
+            for ph in ((docs_roster.get(g) or {}).get("cu") or {}).get("phones") or []:
+                core = normalize.phone_core(str(ph or ""))
+                if core and core in by_phone:
+                    return by_phone[core]
+        except Exception:  # noqa
+            pass
         nm = _fold(_customer_for(g))          # 3) name fallback
         if nm in by_name:
             return by_name[nm]
@@ -2800,9 +2817,22 @@ def parcel_name(gwd):
     return _picked_name(gwd) or _board_name(gwd) or _default_name()
 
 
+def _roster_name(gwd):
+    """ClickUp's NAME ON PACKAGEE for this parcel, read live by docs_roster (the
+    product task's, else its order's) — "" when ClickUp leaves it blank."""
+    try:
+        import docs_roster
+        return str(((docs_roster.get(gwd) or {}).get("cu") or {}).get("name") or "").strip()
+    except Exception:  # noqa
+        return ""
+
+
 def _board_name(gwd):
-    """What the BOARDS say this parcel ships under, ignoring pick and default."""
-    nm = _name_on_pkg_for(gwd)
+    """What the BOARDS say this parcel ships under, ignoring pick and default.
+    ClickUp itself (the Docs roster) comes first: the Le Luxe mirror can be weeks
+    stale, and on 2026-09-21 it showed the default FAISAL for parcels ClickUp
+    ships under Nuray and red shot — the wrong ID on a customs paper."""
+    nm = _roster_name(gwd) or _name_on_pkg_for(gwd)
     if nm:
         return nm
     for k, v in _cf_for_gwd(gwd).items():       # a Purchases column of that name
@@ -2947,7 +2977,19 @@ def _board_name_map():
                     out[tn] = ship
     except Exception:  # noqa
         pass
+    out.update(_roster_name_map())         # ClickUp itself beats the stale mirror
     return out
+
+
+def _roster_name_map():
+    """{GWD: ClickUp NAME ON PACKAGEE} for every Docs-roster parcel that has one."""
+    try:
+        import docs_roster
+        return {g: str(r["cu"].get("name") or "").strip()
+                for g, r in docs_roster.rows().items()
+                if str(r["cu"].get("name") or "").strip()}
+    except Exception:  # noqa
+        return {}
 
 
 def parcel_name_map():
@@ -2991,6 +3033,11 @@ def _all_parcel_gwds():
                 tn = str(pk.get("tracking_number") or "").strip().upper()
                 if re.match(r"GWD\d+$", tn or ""):
                     out.add(tn)
+    except Exception:  # noqa
+        pass
+    try:                                   # the Docs roster (both ClickUp lists)
+        import docs_roster
+        out.update(docs_roster.rows())
     except Exception:  # noqa
         pass
     return out
@@ -3073,6 +3120,18 @@ def tracking_map():
                            "gz": _bucket(pk.get("gerizim_status")) or "",
                            "label": (ts.get("label") if isinstance(ts, dict)
                                      else (str(ts)[:40] if ts else "")) or ""}
+    except Exception:  # noqa
+        pass
+    try:            # an IT Products parcel exists only in the Docs roster
+        import docs_roster
+        for tn, r in docs_roster.rows().items():
+            if tn in out:
+                continue
+            d, ts = r["data"], r["data"].get("tracking_status")
+            out[tn] = {"gash_status": ", ".join(r["cu"].get("gash") or []),
+                       "bucket": _bucket(ts) or "",
+                       "gz": _bucket(d.get("gerizim_status")) or "",
+                       "label": (ts.get("label") if isinstance(ts, dict) else "") or ""}
     except Exception:  # noqa
         pass
     return out
@@ -3400,6 +3459,18 @@ def package_contents(gwd):
     g = (gwd or "").strip().upper()
     if not g:
         return []
+    try:                                        # ── ClickUp itself (Docs roster) ──
+        import docs_roster
+        prods = ((docs_roster.get(g) or {}).get("cu") or {}).get("products") or []
+        out = [{"title": str(p.get("name") or "").strip(),
+                "qty": _int_or(p.get("qty"), 1)}
+               for p in prods
+               if str(p.get("name") or "").strip()
+               and not _PKG_LABEL.match(str(p.get("name") or ""))]
+        if out:
+            return out
+    except Exception:  # noqa - the roster is extra; the boards still answer
+        pass
     out = []
     try:                                        # ── Leluxe: the item ROWS ──
         with db.connect() as c:
@@ -3485,6 +3556,14 @@ def package_order_code(gwd):
     g = (gwd or "").strip().upper()
     if not g:
         return ""
+    try:                                        # ClickUp's own "Order # …" card
+        import docs_roster
+        m = _AMZ_ORDER.search(str((((docs_roster.get(g) or {}).get("cu") or {})
+                                   .get("order") or {}).get("name") or ""))
+        if m:
+            return m.group(0)
+    except Exception:  # noqa
+        pass
     try:
         row = _leluxe_row_for(g)
     except Exception:  # noqa
@@ -5120,8 +5199,11 @@ def readiness():
     return {"ok": True, "rows": rows}
 
 
-_DOCS_ORDER = {"action": 0, "stopped": 1, "unchecked": 2, "info": 3, "plain": 3,
-               "error": 3, "noanswer": 4}
+# yellow first (the owner acts on these), then the never-checked, then the blue
+# watchlist, then GAASH's "no record" — and STOPPED LAST: GAASH has closed those
+# (a final status, no upload link), they need a call to GAASH, not documents
+_DOCS_ORDER = {"action": 0, "unchecked": 1, "error": 1, "info": 2, "plain": 2,
+               "noanswer": 3, "stopped": 4}
 
 
 def _past_customs(ts, gz, stage):
@@ -5144,25 +5226,26 @@ def _past_customs(ts, gz, stage):
 
 
 def docs_queue(names=True):
-    """📄 the docs-upload queue: every parcel from BOTH boards still IN customs,
-    with its GAASH docs banner (tracking.docs_status shape stored by the sweeps
-    as docs_state) — 'action' = GAASH is asking for documents (yellow, carries
-    the upload links), 'stopped' = clearance halted, 'info'/'plain' = blue
-    in-customs, 'unchecked' = the sweep hasn't reached it yet, 'noanswer' =
-    GAASH has no such number. Parcels past customs (Gerizim has them, or
-    cleared/delivered — see _past_customs) are NOT listed: their docs question
-    is settled. One row per GWD, and if ANY row of a parcel says past-customs
-    the whole parcel drops out.
+    """📄 the docs-upload queue: every parcel still IN customs, with its GAASH
+    docs banner (tracking.docs_status shape, stored by the checks as docs_state)
+    — 'action' = GAASH is asking for documents (yellow, carries the upload
+    links), 'stopped' = clearance halted, 'info'/'plain' = blue in-customs,
+    'unchecked' = nobody has asked GAASH yet, 'noanswer' = GAASH has no such
+    number. One row per GWD.
+
+    Where the parcels come from (2026-09-21): the two ClickUp lists THEMSELVES,
+    read live by docs_roster (Le Luxe Products + IT Products) — the Le Luxe
+    mirror had not synced for 17 days and IT Products was never read, so the
+    parcels GAASH was asking about that day were not on the tab. The mirror and
+    the Purchases store still contribute: their stored answers fill in, their
+    board-only parcels still list, and a roster parcel's identity (list, order,
+    products, ClickUp status, name on package) comes from ClickUp. Any record
+    saying a parcel is past customs — or ClickUp saying it is finished — drops
+    the whole parcel.
 
     names=False skips the name/thread enrichment — the notifications bell only
-    needs the counts, and it polls every 60s."""
-    today = datetime.now().astimezone().date()
-
-    def _days_left(dl):
-        try:
-            return (date.fromisoformat(str(dl)[:10]) - today).days
-        except (ValueError, TypeError):
-            return None
+    needs the counts, and it polls every 60s. Nothing here calls the network."""
+    import docs_roster
 
     def _stale(checked):
         if not checked:
@@ -5173,31 +5256,61 @@ def docs_queue(names=True):
         except (ValueError, TypeError):
             return True
 
-    best = {}   # gwd → row; a docs_state-carrying row beats an unchecked twin
-    gone = set()  # any row saying past-customs drops the whole parcel
+    best = {}     # gwd → row, merged field by field across every record of it
+    gone = set()  # any record saying past-customs drops the whole parcel
 
-    def _add(gwd, source, name, d):
+    def _add(gwd, source, name, d, ident=False):
         ds = d.get("docs_state") if isinstance(d.get("docs_state"), dict) else None
-        old = best.get(gwd)
-        if old and old["_has_ds"] and not ds:
-            return
-        ts = d.get("tracking_status")
-        best[gwd] = {
-            "_has_ds": bool(ds), "gwd": gwd, "source": source, "name": (name or "")[:70],
-            "state": (ds or {}).get("state") or "unchecked",
-            "links": (ds or {}).get("links") or [],
-            "codes": (ds or {}).get("codes") or [],
-            "arrived": bool((ds or {}).get("arrived")),
-            "docs_checked": d.get("docs_checked") or "",
-            "docs_error": d.get("docs_error") or "",
-            "stale": _stale(d.get("docs_checked")),
-            "bucket": _bucket(ts) or None,
-            "label": (ts.get("label") if isinstance(ts, dict)
-                      else (str(ts)[:40] if ts else None)),
-            "gaash_deadline": d.get("gaash_deadline") or "",
-            "days_left": _days_left(d.get("gaash_deadline")),
-        }
+        row = best.get(gwd)
+        if row is None:
+            row = best[gwd] = {
+                "_has_ds": False, "_ident": False, "_dlc": "", "_tsc": "",
+                "gwd": gwd, "source": source, "name": (name or "")[:70],
+                "state": "unchecked", "links": [], "codes": [], "arrived": False,
+                "docs_checked": "", "docs_error": "", "stale": True,
+                "bucket": None, "label": None, "gaash_deadline": "", "days_left": None}
+        had_ds = row["_has_ds"]
+        # identity: a ClickUp (roster) record owns it; among board twins the
+        # last one carrying a banner wins, exactly as before
+        if ident or (not row["_ident"] and (ds is not None or not had_ds)):
+            row["source"], row["name"] = source, (name or "")[:70]
+            row["_ident"] = row["_ident"] or ident
+        # the banner: the freshest answer wins, and any answer beats none
+        chk = d.get("docs_checked") or ""
+        if ds and (not had_ds or chk > row["docs_checked"]):
+            row.update(_has_ds=True, state=ds.get("state") or "unchecked",
+                       links=ds.get("links") or [], codes=ds.get("codes") or [],
+                       arrived=bool(ds.get("arrived")) or row["arrived"],
+                       docs_checked=chk, stale=_stale(chk))
+        if (d.get("docs_error") or "") > row["docs_error"]:
+            row["docs_error"] = d.get("docs_error") or ""
+        # GAASH's deadline: the most recently READ one. Twins disagree when one
+        # was read before the box landed (a rolling number) — and the regrouped
+        # package row, which used to win outright, carries none at all, which
+        # is how the Deadline column went blank
+        dl, dlc = d.get("gaash_deadline") or "", d.get("gaash_deadline_checked") or ""
+        if dl and (not row["gaash_deadline"] or dlc > row["_dlc"]):
+            row.update(gaash_deadline=dl, _dlc=dlc)
+        ts, tsc = d.get("tracking_status"), d.get("tracking_checked") or ""
+        if ts and (row["bucket"] is None or tsc > row["_tsc"]):
+            row.update(_tsc=tsc, bucket=_bucket(ts) or None,
+                       label=(ts.get("label") if isinstance(ts, dict)
+                              else (str(ts)[:40] if ts else None)))
+        if d.get("gaash_arrival"):
+            row["arrived"] = True
 
+    # ── ClickUp itself: Le Luxe Products + IT Products (docs_roster) ──
+    roster = docs_roster.rows()
+    for g, p in roster.items():
+        if not p["open"]:
+            gone.add(g)
+            continue
+        if _past_customs(p["data"].get("tracking_status"), p["data"].get("gerizim_status"), None):
+            gone.add(g)
+            continue
+        _add(g, p["source"], ((p["cu"].get("order") or {}).get("name")
+                              or (p["cu"].get("products") or [{}])[0].get("name") or ""),
+             p["data"], ident=True)
     # ── Leluxe mirror ──
     with db.connect() as c:
         rows = c.execute("SELECT id, parent_local_id, name, kind, status, "
@@ -5223,7 +5336,7 @@ def docs_queue(names=True):
             gone.add(tn)
             continue
         _add(tn, "leluxe", onames.get(r["parent_local_id"]) or r["name"], d)
-    # ── Purchases packages ──
+    # ── Purchases packages (Otlobly — the tab hides them until asked) ──
     try:
         import purchases
         pos = (purchases.load() or {}).get("purchase_orders") or []
@@ -5245,23 +5358,54 @@ def docs_queue(names=True):
     # boards' pills already hide those, and the queue must not list them either
     out = [r for g, r in best.items()
            if g not in gone and r["state"] != "cleared"]
-    pmap = parcel_name_map() if names else {}
-    # member-aware ONLY on the UI branch (names=True): a parcel riding a
-    # grouped conversation shows 💬 not a second 📧. The 🔔 bell's 60-second
-    # names=False poll skips this entirely — zero added cost on the hot path.
-    thmap = {}
+    for r in out:
+        for k in ("_has_ds", "_ident", "_dlc", "_tsc"):
+            r.pop(k, None)
+        r["days_left"] = docs_roster.days_left(r["gaash_deadline"])
+        p = roster.get(r["gwd"])
+        cu = (p or {}).get("cu") or {}
+        r["origin"] = "clickup" if p else "board"
+        r["order"] = cu.get("order") or None
+        r["products"] = cu.get("products") or []
+        r["cu_name"] = str(cu.get("name") or "").strip()
+        r["gash_stage"] = cu.get("gash") or []
+        r["unusual"] = not re.match(r"GWD\d{9}$", r["gwd"])
+        r["deadline_skipped"] = ((p or {}).get("data") or {}).get("deadline_skipped") or ""
     if names:
+        # the name on the customs papers: the owner's pick, else ClickUp's NAME ON
+        # PACKAGEE, else the boards, else the Settings default — parcel_name's
+        # precedence, batched, with WHERE it came from so the tab can mark an
+        # assumed name instead of presenting it as fact
+        bnames, picks, dflt = _board_name_map(), picked_name_map(), _default_name()
+        # member-aware ONLY on the UI branch: a parcel riding a grouped
+        # conversation shows 💬 not a second 📧. The 🔔 bell's 60-second
+        # names=False poll skips this entirely — zero added cost on the hot path.
+        thmap = {}
         for t in threads_all():
             st = t.get("state") or ""
             for m in thread_members(t):
                 thmap.setdefault(m, st)
-    for r in out:
-        r.pop("_has_ds", None)
-        r["pname"] = pmap.get(r["gwd"], "")
-        r["thread_state"] = thmap.get(r["gwd"], "")
-    # yellow first (stalest check first — the pile most likely to have moved),
-    # then stopped, then never-checked, then the blue watchlist
-    out.sort(key=lambda r: (_DOCS_ORDER.get(r["state"], 3),
+        for r in out:
+            g = r["gwd"]
+            if picks.get(g):
+                r["pname"], r["pname_src"] = picks[g], "pick"
+            elif r["cu_name"]:
+                r["pname"], r["pname_src"] = r["cu_name"], "clickup"
+            elif bnames.get(g):
+                r["pname"], r["pname_src"] = bnames[g], "board"
+            else:
+                r["pname"], r["pname_src"] = dflt, ("default" if dflt else "")
+            r["thread_state"] = thmap.get(g, "")
+    else:
+        for r in out:
+            r["pname"], r["pname_src"], r["thread_state"] = "", "", ""
+    # yellow first, stopped last; inside each, the fewest days left first. A
+    # parcel not yet in Israel has no real deadline — any date it carries was
+    # read before arrival, GAASH's ROLLING read + 35 — so it sorts after the
+    # real ones instead of posing as the most overdue parcel on the page
+    out.sort(key=lambda r: (_DOCS_ORDER.get(r["state"], 2),
+                            r["days_left"] if (r["days_left"] is not None and r["arrived"])
+                            else 99999,
                             r["docs_checked"] or "", r["gwd"]))
     counts = {"action": 0, "stopped": 0, "unchecked": 0, "watching": 0, "noanswer": 0}
     for r in out:

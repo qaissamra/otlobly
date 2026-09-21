@@ -136,6 +136,32 @@ def main():
     check("Check all walks the rows on screen through the module's filter", "DS.gaash.docsFilter(GM.docs" in idx)
     check("the docs state pill is the registry's, and the old hand-rolled one is gone",
           "function gmDocsStatePill(" not in idx and "G.docsBadge = " in gm)
+    print("— docs: the ClickUp lists, days left, upload on every row (2026-09-21) —")
+    dcols = re.findall(r'\{ key: "(\w+)", label: "([^"]*)"', between(gm, "function docsCols(", "\n  }\n"))
+    check("Days left is the second column, right after the parcel",
+          [k for k, _ in dcols][:2] == ["gwd", "days"] and ("days", "Days left") in dcols)
+    check("Name on package, product photos and the ClickUp status each have a column",
+          ("name", "Name on package") in dcols and ("products", "Products") in dcols and ("cu", "ClickUp status") in dcols)
+    check("the table got a new id, so a layout saved for the old column order cannot hide Days left",
+          'id: "gm_docs_v2"' in gm and 'D.tableGet("gm_docs_v2")' in gm)
+    check("Upload is on EVERY row (no longer gated on GAASH handing out a link)",
+          "ctx.uploadLink" not in gm and "gmDocsUpload(${q(r.gwd)})" in gm and "function gmDocsUpload(" in idx)
+    check("...and asks first before starting GAASH's 35-day clock on a parcel not yet asked about or arrived",
+          "r.state!==\"action\"&&!r.arrived" in between(idx, "async function gmDocsUpload(", "\n}") and "DS.confirm(" in between(idx, "async function gmDocsUpload(", "\n}")
+          and "guOpen(gwd)" in between(idx, "async function gmDocsUpload(", "\n}"))
+    check("the row buttons carry words, not bare icons", 'label: "Check"' in between(gm, "function docsCols(", "\n  }\n")
+          and 'label: "Mail"' in gm and 'label: "Open mail"' in gm)
+    check("sources: Le Luxe · IT · Otlobly, Otlobly off by default and remembered",
+          '{ key: "leluxe", label: "Le Luxe" }, { key: "it", label: "IT" }, { key: "purchases", label: "Otlobly" }' in gm
+          and 'return Array.isArray(v)&&v.length?v:["leluxe","it"]' in idx and 'localStorage.setItem("otl_gmdocs_src"' in idx)
+    check("the tab opens on All (sorted by urgency), not on a filter that can hide everything",
+          'let GM_DOCS={mode:"all"' in idx)
+    check("an open tab follows ClickUp by itself: a 15-second version poll reloads in place",
+          "setInterval(gmDocsPoll,15000)" in idx and '"/api/gaash/docs_roster/version"' in idx and "gmDocsRender(true)" in idx)
+    check("a Check brings back the deadline and GAASH status too, not only the banner",
+          "const x=r.row||null;" in idx and "row.gaash_deadline=x.gaash_deadline" in idx)
+    check("the parcel number copies on click again (lost in Batch C)", "copyCtk(" in gm and ".ds-gm-copy" in css)
+    check("Refresh from ClickUp is one button away", '"gmDocsRefresh(this)"' in gm and '"/api/gaash/docs_roster/refresh"' in idx)
     check("forecast keeps queue + cases as one pane, two views",
           'onclick: "gmFcView(\'queue\')"' in gm and 'onclick: "gmFcView(\'cases\')"' in gm and "G.cases = " in gm)
     check("the prediction pills stay index.html's (tonePill/hexPill, never gaashBucketPill)",
@@ -166,7 +192,12 @@ def main():
       const rows = [{state:"a",pname_id:"1"},{state:"",pname_id:""},{app_tag:1,state:""}];
       if (G.readyFilter(rows, "blocked").length !== 2) throw new Error("readyFilter blocked");
       if (G.readyFilter(rows, "tagged").length !== 1) throw new Error("readyFilter tagged");
-      if (G.docsFilter([{state:"action"},{state:"stopped"},{state:"info"}], "action").length !== 2) throw new Error("docsFilter");
+      // 2026-09-21: "Needs upload" is the yellow rows ONLY - stopped parcels are closed by
+      // GAASH (no link) and have their own view, and the Otlobly source is opt-in
+      if (G.docsFilter([{state:"action"},{state:"stopped"},{state:"info"}], "action").length !== 1) throw new Error("docsFilter action");
+      if (G.docsFilter([{state:"action"},{state:"stopped"},{state:"info"}], "stopped").length !== 1) throw new Error("docsFilter stopped");
+      if (G.docsFilter([{state:"action",source:"it"},{state:"action",source:"purchases"}], "action", ["leluxe","it"]).length !== 1) throw new Error("docsFilter sources");
+      if (G.docsFilter([{state:"info",source:"purchases"}], "all").length !== 1) throw new Error("docsFilter no sources = all");
       if (G.fcFilter([{ok:true,overdue:true},{ok:false}], "unknown").length !== 1) throw new Error("fcFilter");
       if (G.TABS.length !== 8) throw new Error("TABS");
       console.log("node ok");

@@ -43,6 +43,7 @@ os.environ.pop("OTLOBLY_SECURE", None)
 os.environ["OTLOBLY_SECRET"] = "x"
 os.environ["OTLOBLY_WORKER_TOKEN"] = "test-worker-token"
 os.environ["LELUXE_PACE"] = "0"
+os.environ["DOCS_ROSTER_LIVE"] = "0"   # the Docs roster never reads the real ClickUp lists here
 
 import db          # noqa: E402
 import tracking    # noqa: E402

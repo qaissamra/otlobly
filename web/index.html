@@ -12965,28 +12965,85 @@ async function gmReadyTag(gwd,on){
           :T("أُزيل الوسم · tag removed"));
   gmReadyDraw();
 }
-// ── 📄 Docs queue: every open parcel's GAASH docs banner, both boards ──
-let GM_DOCS={mode:"action", busy:false, stop:false, done:0, total:0,
+// ── 📄 Docs queue: every open parcel of the two ClickUp lists (Le Luxe Products +
+// IT Products, read live by docs_roster and refreshed by ClickUp's webhook) plus
+// what the boards still carry, with GAASH's docs banner and the days left ──
+let GM_DOCS={mode:"all", busy:false, stop:false, done:0, total:0, ver:"", roster:null,
              // 🧾 by order (grouped) vs 📦 flat parcels — an explicit view
              // switch, remembered across refreshes like the page itself
              view:(function(){ try{ return localStorage.getItem("otl_gmdocs_view")||"order"; }
-                               catch(e){ return "order"; } })()};
+                               catch(e){ return "order"; } })(),
+             // which lists show: the owner runs Le Luxe + IT; Otlobly (Purchases)
+             // stays one click away, never deleted
+             src:(function(){ try{ const v=JSON.parse(localStorage.getItem("otl_gmdocs_src")||"null");
+                                   return Array.isArray(v)&&v.length?v:["leluxe","it"]; }
+                              catch(e){ return ["leluxe","it"]; } })()};
 function gmDocsView(v){
   GM_DOCS.view=v;
   try{ localStorage.setItem("otl_gmdocs_view",v); }catch(e){}
   gmDocsDraw();
 }
-async function gmDocsRender(){
-  const p=$("gmDocsPane"); if(!p) return;
-  p.innerHTML=DS.skeleton({rows:5});
-  let d; try{ d=await (await fetch("/api/gaash/docs_queue")).json(); }catch(e){ d=null; }
-  if(!d||!d.ok){ p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmDocsRender()"}}); return; }
-  // product photos come from the boards themselves (same source as Bulk search /
-  // the Workflows expansion) — a role without Leluxe access just gets no ⌚ thumbs
-  try{ await bsEnsureData(); }catch(e){}
-  GM.docs=d.rows||[];
-  if(GM_DOCS.mode==="action"&&!GM.docs.some(r=>r.state==="action"||r.state==="stopped")) GM_DOCS.mode="all";
+function gmDocsSource(k){
+  const on=GM_DOCS.src.includes(k);
+  if(on&&GM_DOCS.src.length===1) return;          // never an empty tab by accident
+  GM_DOCS.src=on?GM_DOCS.src.filter(x=>x!==k):GM_DOCS.src.concat([k]);
+  try{ localStorage.setItem("otl_gmdocs_src",JSON.stringify(GM_DOCS.src)); }catch(e){}
   gmDocsDraw();
+}
+// quiet=true: the 15-second poll saw ClickUp change — reload in place, no skeleton,
+// and say which parcels just arrived
+async function gmDocsRender(quiet){
+  const p=$("gmDocsPane"); if(!p) return;
+  if(!quiet) p.innerHTML=DS.skeleton({rows:5});
+  let d; try{ d=await (await fetch("/api/gaash/docs_queue")).json(); }catch(e){ d=null; }
+  if(!d||!d.ok){ if(!quiet) p.innerHTML=DS.errorState({text:"Couldn't load"+apiFailReason(), retry:{onclick:"gmDocsRender()"}}); return; }
+  // product photos for board-only parcels come from the boards themselves (same
+  // source as Bulk search / the Workflows expansion); ClickUp parcels bring theirs
+  try{ await bsEnsureData(); }catch(e){}
+  const before=new Set((GM.docs||[]).map(r=>r.gwd));
+  GM.docs=d.rows||[];
+  GM_DOCS.roster=d.roster||null;
+  GM_DOCS.ver=(d.roster&&d.roster.ver)||GM_DOCS.ver;
+  if(quiet&&before.size){
+    const fresh=GM.docs.filter(r=>!before.has(r.gwd)&&GM_DOCS.src.includes(r.source));
+    fresh.slice(0,3).forEach(r=>toast("📦 "+T("طرد جديد من ClickUp · new parcel from ClickUp")+": "+r.gwd
+      +" · "+({leluxe:"Le Luxe",it:"IT",purchases:"Otlobly"}[r.source]||r.source)+(r.pname?" · "+r.pname:"")));
+  }
+  gmDocsDraw();
+  gmDocsPollStart();
+}
+// ClickUp → app is a webhook (docs_roster.schedule_refresh); app → this tab is a
+// cheap version poll while the Docs pane is actually on screen
+let GM_DOCS_POLL=null;
+function gmDocsPollStart(){ if(!GM_DOCS_POLL) GM_DOCS_POLL=setInterval(gmDocsPoll,15000); }
+async function gmDocsPoll(){
+  const p=$("gmDocsPane");
+  if(!p||!p.offsetParent||document.hidden||GM_DOCS.busy) return;
+  let v=null; try{ v=await (await fetch("/api/gaash/docs_roster/version")).json(); }catch(e){ v=null; }
+  if(!v||!v.ok) return;
+  const moved=v.ver&&GM_DOCS.ver&&v.ver!==GM_DOCS.ver;
+  GM_DOCS.roster=Object.assign({},GM_DOCS.roster||{},v);
+  if(moved) await gmDocsRender(true);
+}
+async function gmDocsRefresh(btn){
+  if(btn){ btn.disabled=true; }
+  let r=null; try{ r=await post("/api/gaash/docs_roster/refresh",{}); }catch(e){ r=null; }
+  if(!r||!r.ok) toast("⚠ "+T("تعذّرت قراءة ClickUp · couldn't read ClickUp")+((r&&r.error)?" — "+r.error:""));
+  else toast("✓ ClickUp "+T("قُرئ · read")+((r.changed||[]).length?" · "+r.changed.length+" "+T("تغيّر · changed"):""));
+  await gmDocsRender(true);
+}
+// ⬆ Upload is on every row. GAASH asks for documents IN ADVANCE, so a parcel can
+// need papers before it lands — but opening their upload page is what STARTS the
+// 35-day link, so a parcel nobody asked about and not yet in Israel asks first.
+async function gmDocsUpload(gwd){
+  const r=(GM.docs||[]).find(x=>x.gwd===gwd)||{};
+  if(r.state!=="action"&&!r.arrived){
+    const ok=await DS.confirm({title:"Open GAASH's upload page now?",
+      text:"GAASH hasn't asked for documents on "+gwd+" and it hasn't reached Israel yet. Opening their upload page starts GAASH's 35-day clock today, so the parcel keeps fewer days after it lands.",
+      confirmLabel:"Open it anyway", tone:"primary"});
+    if(!ok) return;
+  }
+  guOpen(gwd);
 }
 // ═══ 🔮 Forecast: what happens next to a parcel that has cleared customs ═══
 // The dates come from OUR OWN tracking history (forecast.py) — an empirical
@@ -13117,21 +13174,26 @@ function gmDocsDraw(){
     }catch(e){ return DS.dash(); }
   };
   // which ORDER a parcel belongs to (same source ⇒ a group is inherently same-board)
+  // a ClickUp parcel knows its own order (the "Order # …" task); a board-only one
+  // is looked up on its board as before
   const keyOf=r=>{
+    if(r.order&&r.order.id) return "cu:"+r.order.id;
     const h=hitOf.get(r.gwd)||{};
     if(r.source==="purchases")
       return (h.po&&h.po.p&&h.po.p.po_id!=null)?"po:"+h.po.p.po_id:"solo:"+r.gwd;
     return (h.lx&&h.lx.order)?"lx:"+h.lx.order.id:"solo:"+r.gwd;
   };
   const grpName=r=>{
+    if(r.order&&r.order.name) return r.order.name;
     const h=hitOf.get(r.gwd)||{};
     if(r.source==="purchases") return (h.po&&h.po.p&&h.po.p.ship_to)||"";
     return (h.lx&&h.lx.order&&h.lx.order.name)||"";
   };
-  DS.gaash.docs(p, rows, { mode:GM_DOCS.mode, view:GM_DOCS.view, busy:GM_DOCS.busy, done:GM_DOCS.done, total:GM_DOCS.total,
+  DS.gaash.docs(p, rows, { mode:GM_DOCS.mode, view:GM_DOCS.view, sources:GM_DOCS.src, roster:GM_DOCS.roster,
+    busy:GM_DOCS.busy, done:GM_DOCS.done, total:GM_DOCS.total,
     thumbs, boardStatus, orderKey:keyOf, orderName:grpName,
     gaash:r=>gaashBucketPill(r.bucket,r.label,[r.label,r.bucket].filter(Boolean).join(" · ")),
-    asked:r=>docsAskedNames(r), uploadLink:r=>docsUploadLink(r), errChip:r=>docsErrChip(r) });
+    asked:r=>docsAskedNames(r), errChip:r=>docsErrChip(r) });
 }
 /* ── 🪪 Upload documents to GAASH ────────────────────────────────────────────
    Three steps, the same shape as the enroll wizard, but it ends in an UPLOAD
@@ -13441,7 +13503,7 @@ async function guSend(btn){
 // Results land per row as they arrive, so a Stop keeps everything fetched.
 async function gmDocsCheckAll(){
   if(GM_DOCS.busy) return;
-  const gwds=DS.gaash.docsFilter(GM.docs||[],GM_DOCS.mode).map(r=>r.gwd);   // the rows on screen
+  const gwds=DS.gaash.docsFilter(GM.docs||[],GM_DOCS.mode,GM_DOCS.src).map(r=>r.gwd);   // the rows on screen
   if(!gwds.length) return;
   GM_DOCS.busy=true; GM_DOCS.stop=false; GM_DOCS.done=0; GM_DOCS.total=gwds.length;
   gmDocsDraw();
@@ -13478,7 +13540,12 @@ async function gmDocsCheck(gwd,btn,quiet){
   }
   if(row){ row.state=ds.state; row.links=ds.links||[]; row.codes=ds.codes||[];
            row.arrived=!!ds.arrived; row.docs_checked=ds.checked||new Date().toISOString();
-           row.stale=false; row.docs_error=""; }
+           row.stale=false; row.docs_error="";
+           // a ClickUp parcel's check also read its timeline and (once landed) GAASH's deadline
+           const x=r.row||null;
+           if(x){ if(x.gaash_deadline){ row.gaash_deadline=x.gaash_deadline; row.days_left=x.days_left; }
+                  if(x.bucket){ row.bucket=x.bucket; row.label=x.label; }
+                  row.arrived=row.arrived||!!x.arrived; row.deadline_skipped=x.deadline_skipped||""; } }
   if(!quiet){
     toast(ds.state==="action"?"🟡 "+gwd+" — "+T("مطلوب رفع · upload asked")
       :ds.state==="stopped"?"⛔ "+gwd+" — "+T("توقف التخليص · stopped")

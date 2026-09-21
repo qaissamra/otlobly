@@ -451,6 +451,21 @@ CREATE TABLE IF NOT EXISTS flag_gwds (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_flaggwds ON flag_gwds(inbox_id, gwd);
 CREATE INDEX IF NOT EXISTS ix_flaggwds_seen ON flag_gwds(seen_at);
+
+-- 📄 The GAASH mail › Docs tab's parcels, read live from the two ClickUp lists
+-- (Le Luxe Products + IT Products) by docs_roster.py. Two writers, two columns:
+-- cu_json is what ClickUp says (only the roster refresh writes it); data_json is
+-- what GAASH says (only the checks write it — the same keys a leluxe_orders row
+-- carries: docs_state, tracking_status, gaash_arrival, gaash_deadline…).
+CREATE TABLE IF NOT EXISTS gaash_parcels (
+  gwd TEXT PRIMARY KEY,
+  source TEXT,                          -- leluxe | it
+  open INTEGER DEFAULT 1,               -- 0 = finished in ClickUp, or its number left the list
+  cu_json TEXT,
+  data_json TEXT,
+  seen_at TEXT,
+  updated_at TEXT
+);
 """
 
 
