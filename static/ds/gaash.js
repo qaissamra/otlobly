@@ -388,6 +388,9 @@
       Same thresholds as the Le Luxe board's deadline pill: over 7 grey, 7 or fewer amber,
       3 or fewer red. Before arrival there is no deadline at all (GAASH starts the 35 days
       when the box lands), and reading it early would start the clock - so the cell says so. */
+  /** GAASH's link for a landed parcel expires on its deadline (the same date their page
+      prints), so a passed deadline means the page takes no files: email is what is left. */
+  G.docsLinkClosed = (r) => !!(r && r.arrived && r.gaash_deadline && r.days_left != null && r.days_left < 0);
   G.docsDays = (r) => {
     // not in Israel yet: there is no real deadline, and a date read before arrival is
     // GAASH's ROLLING read + 35 - showing it as "Late 12 d" would be a lie
@@ -398,7 +401,11 @@
     }
     const tip = `GAASH upload deadline ${r.gaash_deadline}`;
     if (r.days_left == null) return day(r.gaash_deadline);
-    if (r.days_left < 0) return D.attention({ kind: "late", detail: `${-r.days_left} d`, title: tip });
+    // past it, GAASH's page shows "the link has expired" and takes no files, so the
+    // cell says what that means (a bare "Late" read as "hurry", and Upload then
+    // failed). Red only while GAASH is asking; otherwise it is just a fact.
+    if (G.docsLinkClosed(r)) return D.attention({ kind: "late", label: "Link closed", detail: `${-r.days_left} d ago`, tone: r.state === "action" ? "danger" : "neutral",
+      title: `GAASH's upload link expired on ${r.gaash_deadline}: their page takes no files for this parcel now.${r.state === "action" ? " Email GAASH the documents instead (Mail)." : ""}` });
     const tone = r.days_left <= 3 ? "danger" : r.days_left <= 7 ? "warning" : "neutral";
     return D.badge({ label: r.days_left === 0 ? "Today" : `${r.days_left} ${r.days_left === 1 ? "day" : "days"}`, tone, icon: "clock", title: tip });
   };
@@ -512,9 +519,19 @@
       { key: "checked", label: "Checked", w: 120, sortVal: (r) => r.docs_checked || "~",
         render: (r) => (r.docs_checked ? rel(r.docs_checked) : D.dash()) + (r.stale && r.state !== "unchecked" ? D.tag({ label: "stale", tone: "neutral", title: "The last check is old - re-check" }) : "") },
       { key: "actions", label: "", w: 300, type: "actions", pin: "end", locked: true, sortable: false,
-        render: (r) => `<span class="ds-actions">${D.button({ label: "Upload", icon: "arrow-up-tray", size: "sm", variant: r.state === "action" ? "primary" : "secondary", title: r.state === "action" ? "GAASH is asking - pick the documents, preview them, then upload" : "Pick the documents, preview them, then upload to GAASH", onclick: `gmDocsUpload(${q(r.gwd)})` })}`
+        render: (r) => {
+          // once GAASH's link has closed, Upload cannot land - email becomes the main
+          // button for a parcel they are still asking about. Upload stays: it re-reads
+          // their page, so a link they reopen is found the moment it is tried
+          const closed = G.docsLinkClosed(r), asking = r.state === "action";
+          const mailFirst = closed && asking;
+          const upTitle = closed ? `GAASH's link closed on ${r.gaash_deadline}. Upload re-checks their page, in case they reopened it`
+            : asking ? "GAASH is asking - pick the documents, preview them, then upload" : "Pick the documents, preview them, then upload to GAASH";
+          return `<span class="ds-actions">${D.button({ label: "Upload", icon: "arrow-up-tray", size: "sm", variant: asking && !closed ? "primary" : "secondary", title: upTitle, onclick: `gmDocsUpload(${q(r.gwd)})` })}`
           + `${D.button({ label: "Check", icon: "document-magnifying-glass", size: "sm", variant: "ghost", title: "Ask GAASH now: documents, status and deadline", onclick: `gmDocsCheck(${q(r.gwd)},this)` })}`
-          + `${r.thread_state ? D.button({ label: "Open mail", icon: "chat-bubble-left-right", size: "sm", variant: "ghost", title: "Open the GAASH conversation", onclick: `gmTab('conv');gmOpen(${q(r.gwd)})` }) : D.button({ label: "Mail", icon: "envelope", size: "sm", variant: "ghost", title: "Enroll in a GAASH mail workflow", onclick: `gmNewOpen([${q(r.gwd)}])` })}</span>` },
+          + `${r.thread_state ? D.button({ label: "Open mail", icon: "chat-bubble-left-right", size: "sm", variant: mailFirst ? "primary" : "ghost", title: mailFirst ? "GAASH's upload link is closed - send them the documents in this conversation" : "Open the GAASH conversation", onclick: `gmTab('conv');gmOpen(${q(r.gwd)})` })
+            : D.button({ label: "Mail", icon: "envelope", size: "sm", variant: mailFirst ? "primary" : "ghost", title: mailFirst ? "GAASH's upload link is closed - email them the documents instead" : "Enroll in a GAASH mail workflow", onclick: `gmNewOpen([${q(r.gwd)}])` })}</span>`;
+        } },
     ];
   }
 

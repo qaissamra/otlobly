@@ -64,6 +64,46 @@ class UploadError(Exception):
     """Anything the owner should read verbatim in the wizard."""
 
 
+class LinkExpired(UploadError):
+    """GAASH's page says the parcel's upload link has expired. That is their
+    35-day deadline passing, not a wrong number or a broken page: they take no
+    files for it any more, from us or from anyone. Seen live 2026-09-21 on
+    GWD004802571, whose page read «פג תוקף הקישור» the day after its date."""
+
+    def __init__(self, expired_on="", says="", url=""):
+        self.expired_on, self.says, self.url = expired_on, says, url
+        when = ""
+        if expired_on:
+            try:
+                from datetime import date
+                d = date.fromisoformat(expired_on)
+                when = f" on {d.day} {d.strftime('%b %Y')}"
+            except ValueError:
+                when = f" on {expired_on}"
+        super().__init__(f"GAASH closed this parcel's upload link{when}: the deadline "
+                         "passed, so their page takes no files for it now. Nothing was sent.")
+
+
+# Their page prints the link's expiry whether it is open or closed, and says
+# «פג תוקף הקישור» ("the link has expired") in place of the form once it is.
+EXPIRED_RE = re.compile(r"פג\s+תוקף\s+הקישור")
+EXPIRY_RE = re.compile(r"תאריך פקיעת תוקף הקישור\s*:\s*(\d{2})/(\d{2})/(\d{4})")
+
+
+def page_expiry(body):
+    """The link's expiry date printed on their page, as YYYY-MM-DD ("" if none)."""
+    m = EXPIRY_RE.search(body or "")
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else ""
+
+
+def page_message(body):
+    """GAASH's own words from a page that carries no form (its h3/h4 lines),
+    so an unexpected page is reported as what it SAYS, not as a guess."""
+    parts = re.findall(r"(?is)<h[1-4][^>]*>(.*?)</h[1-4]>", body or "")
+    txt = " ".join(re.sub(r"<[^>]+>", " ", html.unescape(p)) for p in parts)
+    return re.sub(r"\s+", " ", txt).strip()[:300]
+
+
 # --------------------------------------------------------------------------- #
 # Their page: token + the slots it opened
 # --------------------------------------------------------------------------- #
@@ -97,10 +137,15 @@ def page_info(gwd, types, timeout=25):
     except Exception as e:  # noqa - offline / DNS / timeout
         raise UploadError(f"couldn't reach GAASH's upload page ({e})") from e
 
+    expires = page_expiry(body)
     m = re.search(r'name="__RequestVerificationToken"[^>]*value="([^"]+)"', body)
     if not m:
-        raise UploadError("GAASH's page didn't hand out an upload token — "
-                          "open it in the browser and check the parcel number")
+        says = page_message(body)
+        if EXPIRED_RE.search(body):
+            raise LinkExpired(expires, says, url)
+        raise UploadError("GAASH's page didn't hand out an upload token"
+                          + (f". It says: «{says}»" if says else
+                             " — open it in the browser and check the parcel number"))
     token = html.unescape(m.group(1))
     cookie = ""
     for c in cookies:
@@ -120,7 +165,7 @@ def page_info(gwd, types, timeout=25):
              for i in sorted(got_types)]
     if not slots:
         raise UploadError("GAASH's page opened no upload slots for those types")
-    return {"url": url, "token": token, "cookie": cookie, "slots": slots}
+    return {"url": url, "token": token, "cookie": cookie, "slots": slots, "expires": expires}
 
 
 # --------------------------------------------------------------------------- #

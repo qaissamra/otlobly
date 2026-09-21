@@ -3298,17 +3298,31 @@ function lxDeadlinePill(pk,short){
 // passport). We used to take links[0] and always land on the Israeli form.
 function docsUploadLink(ds){
   const ls=(ds&&ds.links)||[];
-  const up=ls.find(l=>l&&(l.type===0||/\/fileUpload/i.test(l.url||"")));
-  return ((up||ls[0]||{}).url)||"";
+  const ups=ls.filter(l=>l&&(l.type===0||/\/fileUpload/i.test(l.url||"")));
+  const first=((ups[0]||ls[0]||{}).url)||"";
+  if(ups.length<2) return first;
+  // one ask split over two links (type=8, then type=6&type=7) opens as ONE page
+  // with every slot they named, so the ×3 on the pill is what a click delivers
+  try{ const u=new URL(first); u.searchParams.delete("type");
+       docsAskedTypes(ds).forEach(t=>u.searchParams.append("type",t)); return u.toString(); }
+  catch(e){ return first; }
 }
 // EVERY document type GAASH asked for on this parcel (6=ID, 8=passport…), read
 // off that same upload link. They REPEAT the param — …&type=6&type=7 means "ID
 // card AND goods-use declaration" — so one match is half an answer, which is
 // exactly how GWD004775212 sat in customs waiting on a paper nobody knew about.
 // [] when they didn't say.
+// …and across EVERY upload link, like gaash_mail.docs_asked_types: GAASH can send
+// the ask as two links (GWD004803012 on 2026-09-21: `type=8`, then `type=6&type=7`),
+// and reading the first one only showed "Passport" where they wanted three papers.
 function docsAskedTypes(ds){
-  const u=docsUploadLink(ds)||"", rx=/[?&]type=(\d+)/g, out=[];
-  let m; while((m=rx.exec(u))) if(!out.includes(m[1])) out.push(m[1]);
+  const out=[];
+  for(const l of ((ds&&ds.links)||[])){
+    const u=String((l&&l.url)||"");
+    if(!(l&&(l.type===0||/\/fileUpload/i.test(u)))) continue;
+    const rx=/[?&]type=(\d+)/g; let m;
+    while((m=rx.exec(u))) if(!out.includes(m[1])) out.push(m[1]);
+  }
   return out;
 }
 // those types spelled out — "هوية + إقرار استخدام البضاعة" — so the board can say
@@ -13209,6 +13223,7 @@ async function guOpen(gwd){
   $("bulkBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ سؤال غاش عن الخانات… · asking GAASH which slots it opens…")}</div>`;
   let d; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd))).json(); }catch(e){ d=null; }
   if(!GU||GU.gwd!==gwd) return;
+  if(d&&d.expired){ guExpired(gwd,d); return; }
   if(!d||!d.ok){ $("bulkBody").innerHTML=`<div class="panel" style="padding:14px;color:#b42318">⚠ ${poEsc((d&&d.error)||T("تعذّر فتح صفحة غاش · couldn't reach GAASH's page"))}</div>`; return; }
   GU.plan=d;
   GU.case=((d.gaash_case||{}).current)||"";
@@ -13219,6 +13234,26 @@ async function guOpen(gwd){
   GU.types=at.length?at:[String((d.slots[0]||{}).type||8)];
   GU.planTypes=(d.plan_types||GU.types).join(",");   // what this plan's slots were fetched for
   guRender();
+}
+// 🔒 GAASH's page said the link EXPIRED: their 35-day deadline passed, so it
+// takes no files for this parcel — from us or anyone. Seen live 2026-09-21 on
+// GWD004802571; the old message said "check the parcel number", which sent the
+// owner hunting for a typo. What is left is email, so that is the button.
+function guExpired(gwd,d){
+  const r=(GM.docs||[]).find(x=>x.gwd===gwd)||{};
+  const q=poEsc(JSON.stringify(gwd));
+  const when=d.expired_on?gmChgLabel(d.expired_on,true):"";
+  const mail=r.thread_state
+    ?`<button class="po-btn accent" onclick="bulkClose();gmTab('conv');gmOpen(${q})">✉ ${T("افتح محادثة غاش · Open the GAASH conversation")}</button>`
+    :`<button class="po-btn accent" onclick="bulkClose();gmNewOpen([${q}])">✉ ${T("أرسل المستندات لغاش بالبريد · Email GAASH the documents")}</button>`;
+  $("bulkBody").innerHTML=`<div class="en-warn" style="background:#b4231810;border:1px solid #b4231855">
+    <b style="color:#b42318">🔒 ${T("أغلقت غاش رابط رفع المستندات لهذا الطرد · GAASH closed this parcel's upload link")}${when?" — "+poEsc(when):""}</b>
+    <div style="margin-top:6px">${T("انتهت مهلة الـ35 يوماً، فصفحة غاش لا تقبل ملفات لهذا الطرد الآن، لا منّا ولا من غيرنا. لم يُرسَل شيء. · The 35-day deadline passed, so GAASH's page takes no files for this parcel now, from us or from anyone. Nothing was sent.")}</div>
+    ${d.gaash_says?`<div class="muted2" style="margin-top:6px">${T("صفحة غاش تقول · GAASH's page says")}: <span dir="rtl">«${poEsc(d.gaash_says)}»</span></div>`:""}
+    <div style="margin-top:10px"><b>${T("ما العمل · What you can do")}:</b> ${T("أرسل المستندات لغاش بالبريد واطلب منهم قبولها أو إعادة فتح الرابط. إن أعادوا فتحه يعمل زر الرفع من جديد. · Email GAASH the documents and ask them to accept them or reopen the link. If they reopen it, Upload works again.")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${mail}
+      ${d.url?`<a class="po-btn" href="${poEsc(d.url)}" target="_blank" rel="noopener">↗ ${T("افتح صفحة غاش · See GAASH's page")}</a>`:""}</div>
+  </div>`;
 }
 // every document type GAASH asked for, as strings. asked_types is the list;
 // asked_type is the derived singular, read only by a shell cached before the
@@ -13264,6 +13299,7 @@ async function guEnterReview(){
     if($("guBody")) $("guBody").innerHTML=`<div class="muted2" style="padding:16px">${T("جارِ تجهيز المراجعة… · preparing the review…")}</div>`;
     let d=null; try{ d=await (await fetch("/api/gaash/upload/plan?gwd="+encodeURIComponent(gwd)+"&types="+encodeURIComponent(want))).json(); }catch(e){}
     if(!GU||GU.gwd!==gwd) return;
+    if(d&&d.expired){ guExpired(gwd,d); return; }   // it closed while the wizard was open
     // a failed refetch keeps the old plan — the review still works, at worst
     // the extra slots miss their GAASH-label pill
     if(d&&d.ok){ GU.plan=d; GU.planTypes=want; }
@@ -13288,8 +13324,19 @@ function guRender(){
   const banner=dry
     ? `<div class="en-warn dry"><b>🧪 ${T("وضع التجربة — لن يُرفع شيء · Dry-run — nothing will be uploaded")}</b> — ${T("كل شيء يُجهَّز ويُعرض، ولا يُرسل لغاش · everything is prepared and shown, nothing reaches GAASH")}</div>`
     : `<div class="en-warn live"><b>⬆ ${T("رفع حقيقي إلى غاش · A real upload to GAASH")}</b> — ${T("المستندات ستصل سجل الجمارك فعلياً · these documents really land on the customs record")}</div>`;
-  $("bulkBody").innerHTML=strip+banner+`<div id="guBody"></div>`;
+  $("bulkBody").innerHTML=strip+banner+guExpiryLine(p)+`<div id="guBody"></div>`;
   ({1:guStepTypes,2:guStepFiles,3:guStepReview}[GU.step]||guStepTypes)();
+}
+// ⏳ how long GAASH's page stays open, as it printed it just now. Only once the
+// parcel has landed: before that the page prints a ROLLING date (today + 35).
+function guExpiryLine(p){
+  if(!p||!p.expires||!p.arrived) return "";
+  const n=new Date(), today=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  const left=Math.round((new Date(p.expires+"T00:00:00")-today)/864e5);
+  const col=left<=3?"#b42318":left<=7?"#b45309":"var(--muted)";
+  const txt=left<=0?T("اليوم آخر يوم · today is the last day")
+    :left+" "+T(left===1?"يوم متبقٍ · day left":"أيام متبقية · days left");
+  return `<div style="font-size:var(--ds-t-sm);margin:8px 2px 0;color:${col}">⏳ ${T("رابط غاش مفتوح حتى · GAASH's link is open until")} <b>${poEsc(gmChgLabel(p.expires,true))}</b> · ${txt}</div>`;
 }
 function guToggleType(t){
   t=String(t); const i=GU.types.indexOf(t);
@@ -13490,6 +13537,7 @@ async function guSend(btn){
   GU.busy=true; btn.disabled=true; btn.textContent="⏳ "+T("جارٍ… · working…");
   let r; try{ r=await post("/api/gaash/upload",{gwd:GU.gwd,docs,gaash_case:GU.case||""}); }catch(e){ r={ok:false,error:String(e)}; }
   GU.busy=false; GU.res=r||{ok:false,error:"no answer"};
+  if(r&&r.expired){ guExpired(GU.gwd,r); return; }   // closed between the plan and the send
   guRender();
   if(r&&r.ok&&!r.dry_run){
     toast("✅ "+T("رُفعت المستندات · documents uploaded"));

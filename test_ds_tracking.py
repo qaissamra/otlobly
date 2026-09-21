@@ -52,7 +52,8 @@ def main():
     check("…before gaash.js, which draws its parcel cells through it",
           "/static/ds/tracking.js" in idx and "/static/ds/gaash.js" in idx and idx.index("/static/ds/tracking.js") < idx.index("/static/ds/gaash.js"))
     check("the service worker precaches it", '"/static/ds/tracking.js"' in sw)
-    check("the offline cache was bumped for it", 'const CACHE = "otl-off-v2' in sw and 'otl-off-v21"' not in sw)
+    check("the offline cache was bumped for it",
+          int((re.search(r'const CACHE = "otl-off-v(\d+)"', sw) or ["", "0"])[1]) >= 22)
     check("it exports DS.tracking", "D.tracking = {}" in tr)
     for fn in ["modelCells", "PARCEL_COLS", "sortVal", "sortRows", "VIEWS", "inView", "rowKey", "sums", "moneyText", "chrome", "results"]:
         check(f"DS.tracking.{fn} exists", re.search(rf"\bG\.{fn} = ", tr) is not None)
