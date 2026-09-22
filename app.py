@@ -113,6 +113,11 @@ leluxe_goal.start()        # daily goal digest — no-op unless env LELUXE_DIGES
 leluxe_goal.start_autoheal()  # keep ordered_at populated (ungated — heals Render's all-NULL copy)
 import telegram_bot
 telegram_bot.start()       # owner command bot — no-op unless env LELUXE_TG_BOT=1
+import docs_nag
+docs_nag.start()           # ⏰ last-day nag: Telegram every 10 min while a GAASH
+                           # upload link dies TODAY — no-op unless env DOCS_NAG=1,
+                           # set ONLY in the Render dashboard (one host must nag,
+                           # or the Mac's stale copy doubles every message)
 import flag_machine
 flag_machine.start()       # 🚩 action-required inbox watch + flags-bot «done»
                            # loop — no-op unless env FLAG_MACHINE=1, set ONLY
@@ -3761,6 +3766,17 @@ def api_gaash_account_uses():
 # scoped (no business_id), so the leluxe feature flag keeps broker tenants
 # out, same as the gaash_* routes; the daemon only runs where FLAG_MACHINE=1
 # --------------------------------------------------------------------------- #
+@app.route("/api/gaash/nag")
+@auth.require("edit_fulfillment")
+@auth.require_feature("leluxe")
+def api_gaash_nag():
+    """⏰ Is the last-day nag armed, and whose link dies today? Read-only — the
+    owner's way to see the alarm exists BEFORE the day it matters, which is the
+    only day it ever speaks."""
+    import docs_nag
+    return jsonify({"ok": True, **docs_nag.status()})
+
+
 @app.route("/api/flags")
 @auth.require("edit_fulfillment")
 @auth.require_feature("leluxe")
