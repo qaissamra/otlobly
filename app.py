@@ -2555,11 +2555,23 @@ def api_notifications():
                                "view": "flags"})
     except Exception:  # noqa - same rule: the bell never breaks
         pass
+    # 🔕 the Telegram alarms themselves, on the host that nags (DOCS_NAG=1).
+    # 2026-09-24: Render had the chat id but no alerts-bot token, the ⏰ nag
+    # returned [] on its first line all day, and two parcels' GAASH links died
+    # without a word. An alarm that cannot speak must say so where he looks.
+    try:
+        import features
+        import docs_nag as _dn
+        if current_user.has("edit_fulfillment") and \
+                features.has(db.current_business(), "leluxe"):
+            events.extend(_dn.bell_items())
+    except Exception:  # noqa - same rule: the bell never breaks
+        pass
     events.sort(key=lambda e: e["ts"], reverse=True)
     out = events[:30]
     # standing alerts survive the recency cap: parked sync conflicts can be DAYS
     # old (that is the whole problem) — sorting by ts pushed them off the list
-    for _typ in ("lx_conflict", "gaash_docs", "flag_open"):
+    for _typ in ("lx_conflict", "gaash_docs", "flag_open", "alarm_mute", "alerts_bot_off"):
         stand = next((e for e in events if e["type"] == _typ), None)
         if stand and stand not in out:
             out.insert(0, stand)
@@ -3773,6 +3785,17 @@ def api_gaash_nag():
     """⏰ Is the last-day nag armed, and whose link dies today? Read-only — the
     owner's way to see the alarm exists BEFORE the day it matters, which is the
     only day it ever speaks."""
+    import docs_nag
+    return jsonify({"ok": True, **docs_nag.status()})
+
+
+@app.route("/api/worker/nag_status")
+def worker_nag_status():
+    """⏰ The same answer for the worker token — a deploy (or a watchdog on the
+    Mac) can ask whether the alarm can speak without a browser session. Nobody
+    opened /api/gaash/nag before 2026-09-24; it would have said telegram:false."""
+    if not _worker_ok():
+        abort(401)
     import docs_nag
     return jsonify({"ok": True, **docs_nag.status()})
 

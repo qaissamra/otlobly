@@ -29,12 +29,30 @@ It stops by itself — four ways, checked in this order:
 A live re-check per tick is what makes 1-3 honest. It costs one GAASH call per
 qualifying parcel, and on almost every day of the year there are ZERO.
 
+And a fifth, the owner's own: «done» (or «تم») in the 🚩 flags bot's chat stops
+today's reminders for every parcel already nagged today (ack_today).
+
+WHO SPEAKS — the 2026-09-24 silence. That day two IT parcels (GWD004803687 +
+GWD004803612, Jihad) sat in candidates() from the 04:20 sweep to midnight, and
+not one message went out: Render had the owner's chat id but NOT the alerts
+bot's token, so run_once returned [] on its first line — no send, no stamp, no
+log line — while the 🚩 flags bot, configured on Render and delivering
+that same week, was never asked. By 03:30 the next morning both GAASH pages
+read «פג תוקף הקישור». (The link IS open on its last day: GWD004803241's
+papers went in at 16:34 on its deadline day, 2026-09-22.) So now
+every bot that can reach the owner is a channel (channels(): the flags bot
+first, because its reply loop is what makes «done» work, then the alerts bot),
+tried in order until one delivers; and an alarm that cannot speak SAYS so —
+a loud log line every tick, docs:nag_health, status()["mute"], and a standing
+🔕 item on the bell (bell_items). A quiet alarm must never look like a quiet day.
+
 Gated by env DOCS_NAG=1 so only ONE host nags (Render), like FLAG_MACHINE —
 the Mac's launchd copy reads a stale DB and would double every message.
 Settings: docs_nag.enabled (kill switch) and docs_nag.every_min.
 """
 
 import os
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -45,6 +63,7 @@ import memlog
 import telegram
 
 SENT_KEY = "docs:nag_sent"
+HEALTH_KEY = "docs:nag_health"   # the last delivery attempt: {ok, why, channel, at}
 EVERY_MIN_DEFAULT = 10
 MIN_EVERY_MIN = 2          # a floor: this bot can be loud, not a flood
 STATE_ACTION = "action"
@@ -167,6 +186,104 @@ def handed_over(gwd):
 
 
 # --------------------------------------------------------------------------- #
+# Who can reach the owner — every bot is a channel, and silence is reported
+# --------------------------------------------------------------------------- #
+def _flags_ready():
+    try:
+        import flag_machine
+        return flag_machine.flags_configured()
+    except Exception:  # noqa: BLE001 — a broken flags module must not mute the alerts bot
+        return False
+
+
+def done_loop_on():
+    """«done» is only a promise where the flags bot's reply loop runs (the
+    flag machine's daemon, env FLAG_MACHINE — Render)."""
+    return (os.environ.get("FLAG_MACHINE") or "").strip() not in ("", "0")
+
+
+def channels():
+    """[(name, send)] — every bot that can reach the owner right now, best first.
+
+    The 🚩 flags bot leads: it is his action-required bot, the one that already
+    nags until «done», and its reply loop is what lets «done» stop this nag
+    too. The alerts bot follows as the fallback. Each send is looked up at call
+    time, so a test's stand-in for telegram.send/send_to is honoured."""
+    out = []
+    if _flags_ready():
+        import flag_machine
+        tok, chat = flag_machine._flags_token(), flag_machine._flags_chat()
+        out.append(("flags", lambda txt: telegram.send_to(chat, txt, token=tok)))
+    if telegram.configured():
+        out.append(("alerts", lambda txt: telegram.send(txt)))
+    return out
+
+
+def mute_reason(chans=None):
+    """'' while at least one bot can reach the owner; otherwise WHAT is missing,
+    by name — "not configured" once cost the flag machine an afternoon."""
+    if channels() if chans is None else chans:
+        return ""
+    miss = []
+    tok, chat = telegram._creds()
+    if not tok:
+        miss.append("TELEGRAM_BOT_TOKEN")
+    if not chat:
+        miss.append("TELEGRAM_CHAT_ID")
+    try:
+        import flag_machine
+        m = flag_machine.flags_missing()
+        if m:
+            miss.append(m)
+    except Exception:  # noqa: BLE001
+        miss.append("the flags bot")
+    return "no Telegram bot can reach the owner — missing " + ", ".join(dict.fromkeys(miss))
+
+
+def _shout(line):
+    """A log line nobody can miss, flushed — a buffered warning is a silent one."""
+    print(f"docs_nag: 🚨 {line}", flush=True)
+
+
+def _note_health(ok, why="", channel=""):
+    """Remember how the last delivery attempt went — only when it CHANGES, so a
+    loud day does not rewrite the row every tick. The bell reads it: a token
+    that dies after deploy is invisible to channels(), but not to this."""
+    cur = db.get_setting(HEALTH_KEY)
+    cur = cur if isinstance(cur, dict) else {}
+    if cur.get("ok") is ok and cur.get("why", "") == why and cur.get("channel", "") == channel:
+        return
+    db.set_setting(HEALTH_KEY, {"ok": ok, "why": why, "channel": channel,
+                                "at": db.now_iso()})
+
+
+SEND_FAILED = "every bot failed"   # health.why prefix of a REAL failed send attempt
+_TOKEN_RE = re.compile(r"\d{6,}:[A-Za-z0-9_-]{20,}")
+
+
+def _redact(s):
+    """An error string can carry the request URL — and so the bot token — when
+    a pasted token is malformed. It is stored, shown in status() and on the bell."""
+    return _TOKEN_RE.sub("<token>", str(s or ""))
+
+
+def _deliver(text_for, chans):
+    """Try each channel until one delivers → (channel, text it took, errors of
+    the bots that failed first) — or (None, "", errors) when nobody took it."""
+    errs = []
+    for name, fn in chans:
+        txt = text_for(name)
+        try:
+            r = fn(txt) or {}
+        except Exception as e:  # noqa: BLE001 — one bot failing must not stop the next
+            r = {"ok": False, "error": str(e)}
+        if r.get("ok"):
+            return name, txt, errs
+        errs.append(f"{name}: {_redact(r.get('error') or 'not ok')[:160]}")
+    return None, "", errs
+
+
+# --------------------------------------------------------------------------- #
 # The send slot — two gunicorn workers must not nag twice
 # --------------------------------------------------------------------------- #
 def _stamps():
@@ -193,6 +310,8 @@ def _claim(gwd, today_iso, gap_s):
         if not isinstance(m, dict):
             m = {}
         cur = m.get(gwd) if isinstance(m.get(gwd), dict) else {}
+        if cur.get("date") == today_iso and cur.get("done"):
+            return False                     # he said «done» — inside the same lock
         fresh = False
         if cur.get("date") == today_iso and cur.get("at"):
             try:
@@ -227,13 +346,49 @@ def _count_sent(gwd, today_iso):
         if not isinstance(m, dict):
             m = {}
         cur = m.get(gwd) if isinstance(m.get(gwd), dict) else {}
-        cur = {"date": today_iso, "at": cur.get("at") or db.now_iso(),
-               "n": int(cur.get("n") or 0) + 1}
+        if cur.get("date") != today_iso:
+            cur = {}
+        # dict(cur, …) keeps a «done» that landed between the claim and the send
+        cur = dict(cur, date=today_iso, at=cur.get("at") or db.now_iso(),
+                   n=int(cur.get("n") or 0) + 1)
         m[gwd] = cur
         c.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                   (SENT_KEY, json.dumps(m, ensure_ascii=False)))
         return cur["n"]
+
+
+def acked(gwd, today_iso):
+    cur = _stamps().get(gwd)
+    return isinstance(cur, dict) and cur.get("date") == today_iso and bool(cur.get("done"))
+
+
+def ack_today(today=None):
+    """«done»/«تم» in the flags bot's chat → stop today's reminders for every
+    parcel that was actually nagged today. Returns those GWDs. A parcel whose
+    first reminder has not gone out yet keeps its alarm: «done» answers what he
+    saw, not what he never heard about."""
+    import json
+    iso = (today or _today()).isoformat()
+    got = []
+    with db.connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r = c.execute("SELECT value FROM settings WHERE key=?", (SENT_KEY,)).fetchone()
+        try:
+            m = json.loads(r["value"]) if r else {}
+        except (ValueError, TypeError):
+            m = {}
+        if not isinstance(m, dict):
+            return []
+        for gwd, v in m.items():
+            if isinstance(v, dict) and v.get("date") == iso and int(v.get("n") or 0) > 0 \
+                    and not v.get("done"):
+                v["done"] = db.now_iso()
+                got.append(gwd)
+        if got:
+            c.execute("UPDATE settings SET value=? WHERE key=?",
+                      (json.dumps(m, ensure_ascii=False), SENT_KEY))
+    return sorted(got)
 
 
 # --------------------------------------------------------------------------- #
@@ -251,8 +406,9 @@ def _asked_for(d):
     return " + ".join(names)
 
 
-def message(gwd, r, n=1):
-    """Arabic, because the owner reads these on his phone at speed."""
+def message(gwd, r, n=1, done_hint=False):
+    """Arabic, because the owner reads these on his phone at speed. done_hint:
+    the text is going out through the flags bot, whose «done» stops it."""
     d = r.get("data") or {}
     who = _name_of(gwd, r)
     what = _asked_for(d)
@@ -264,27 +420,37 @@ def message(gwd, r, n=1):
             + f"ينتهي الرابط اليوم ({d.get('gaash_deadline')}) — بعده غاش "
               "ما بيستقبل أي ملف لهذا الطرد نهائياً.\n"
             f"🔔 تذكير رقم {n} — بيضل يوصلك كل "
-            f"{every_min()} دقائق لحد ما ترفع المستندات.")
+            f"{every_min()} دقائق لحد ما ترفع المستندات"
+            + (" أو ترد «تم» هنا · reply done to stop." if done_hint else "."))
 
 
 # --------------------------------------------------------------------------- #
 # One pass
 # --------------------------------------------------------------------------- #
-def run_once(send=telegram.send, check=None, today=None, rows=None):
-    """One nag pass → the texts actually sent. Safe to call from anywhere."""
+def run_once(send=None, check=None, today=None, rows=None):
+    """One nag pass → the texts actually sent. Safe to call from anywhere.
+    `send` (tests, manual runs) replaces the channel list with that one sink."""
     if not enabled():
         return []
-    if not telegram.configured():
-        return []
+    chans = [("sink", send)] if send else channels()
     today = today or _today()
     iso = today.isoformat()
+    todo = [(g, r) for g, r in candidates(today=today, rows=rows) if not acked(g, iso)]
+    if not chans:
+        # 2026-09-24: this used to be a bare `return []`. Two links died behind it.
+        if todo:
+            why = mute_reason(chans)
+            _note_health(False, why)
+            _shout(f"MUTE — {len(todo)} parcel(s) lose their GAASH link TODAY "
+                   f"({', '.join(g for g, _ in todo)}) and {why}")
+        return []
     gap = every_min() * 60 - 30      # 30 s of slack: a tick that runs a hair
     sent = []                        # early must not skip the whole round
     if check is None:
         def check(tn):
             import docs_roster
             return docs_roster.check(tn, with_tracking=False)
-    for gwd, r in candidates(today=today, rows=rows):
+    for gwd, r in todo:
         if handed_over(gwd):
             continue                                   # stop 1: his part is done
         if not _claim(gwd, iso, gap):
@@ -303,9 +469,15 @@ def run_once(send=telegram.send, check=None, today=None, rows=None):
         # nag anyway: a silent alarm is exactly the failure this module exists
         # to end, and the stored state still says GAASH is asking.
         n = _count_sent(gwd, iso)
-        txt = message(gwd, r, n)
-        if send(txt).get("ok"):
+        hint = done_loop_on()
+        by, txt, errs = _deliver(
+            lambda ch: message(gwd, r, n, done_hint=hint and ch == "flags"), chans)
+        if by:
             sent.append(txt)
+            _note_health(True, "; ".join(errs), by)    # errs = a bot that failed first
+        else:
+            _note_health(False, f"{SEND_FAILED} — " + "; ".join(errs))
+            _shout(f"reminder {n} for {gwd} reached NOBODY — " + "; ".join(errs))
     return sent
 
 
@@ -313,18 +485,30 @@ def run_once(send=telegram.send, check=None, today=None, rows=None):
 # Daemon
 # --------------------------------------------------------------------------- #
 _started = False
+_BOOT_TS = datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _loop():
     time.sleep(90)                   # let the app boot (and alerts go first)
+    # one line per deploy, so the log says whether this alarm can speak BEFORE
+    # the only day it matters — 2026-09-24 had no such line, and no voice
+    try:
+        why = mute_reason()
+        if why:
+            _shout(f"armed but MUTE — {why}")
+        else:
+            print("docs_nag: armed — speaks through "
+                  + " → ".join(n for n, _ in channels()), flush=True)
+    except Exception as e:  # noqa: BLE001
+        _shout(f"boot check failed ({e})")
     while True:
         try:
             with memlog.watch("docs_nag"):
                 out = run_once()
             if out:
-                print(f"docs_nag: sent {len(out)} last-day nag(s)")
+                print(f"docs_nag: sent {len(out)} last-day nag(s)", flush=True)
         except Exception as e:  # noqa: BLE001 — never let the thread die
-            print(f"docs_nag: pass failed ({e})")
+            _shout(f"pass failed ({e})")
         time.sleep(max(MIN_EVERY_MIN, every_min()) * 60)
 
 
@@ -339,14 +523,55 @@ def start():
 
 
 def status():
-    """What the owner sees in Settings: is it armed, and who is it watching."""
+    """What the owner sees in Settings: is it armed, who speaks, and who is it
+    watching. `telegram` is the alerts bot alone (kept for old readers);
+    `channels`/`mute` are what decide whether a message can go out at all."""
     try:
         cands = [g for g, _r in candidates()]
     except Exception:  # noqa: BLE001
         cands = []
     return {"env_on": env_on(), "enabled": enabled(), "every_min": every_min(),
-            "telegram": telegram.configured(), "today": _today().isoformat(),
-            "watching": cands, "sent_today": _stamps()}
+            "telegram": telegram.configured(),
+            "channels": [n for n, _ in channels()], "mute": mute_reason(),
+            "done_reply": done_loop_on(), "health": db.get_setting(HEALTH_KEY),
+            "today": _today().isoformat(), "watching": cands, "sent_today": _stamps()}
+
+
+def bell_items():
+    """Standing 🔕 items for the bell on the host that nags (env DOCS_NAG) —
+    an alarm that cannot speak has to say so where the owner already looks."""
+    if not env_on():
+        return []
+    out = []
+    chans = channels()                   # once — every lookup re-reads config.json
+    why = mute_reason(chans)
+    h = db.get_setting(HEALTH_KEY)
+    h = h if isinstance(h, dict) else {}
+    if not enabled():
+        out.append({"ts": _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
+                    "title": "منبّه غاش مطفّى من الإعدادات · the GAASH deadline alarm is switched OFF",
+                    "sub": "Settings → docs_nag.enabled is false — no parcel will be nagged",
+                    "view": "settings"})
+    elif why:
+        out.append({"ts": _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
+                    "title": "منبّه غاش ما بيقدر يبعت تلغرام · the GAASH deadline alarm can't reach Telegram",
+                    "sub": why, "view": "gaashmail"})
+    elif h.get("ok") is False and str(h.get("why") or "").startswith(SEND_FAILED):
+        # only a REAL failed send — a mute record from before the config was
+        # fixed must not keep saying "never arrived" for weeks (review, #199)
+        out.append({"ts": h.get("at") or _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
+                    "title": "آخر تذكير غاش ما وصلك · the last GAASH alarm message never arrived",
+                    "sub": (h.get("why") or "")[:160], "view": "gaashmail"})
+    if not any(n == "alerts" for n, _ in chans):
+        tok, chat = telegram._creds()
+        miss = " + ".join(k for k, v in (("TELEGRAM_BOT_TOKEN", tok), ("TELEGRAM_CHAT_ID", chat))
+                          if not v)
+        out.append({"ts": _BOOT_TS, "type": "alerts_bot_off", "icon": "🔕",
+                    "title": "بوت التنبيهات مش موصول على السيرفر · alerts bot not connected on the server",
+                    "sub": f"{miss or 'its config'} missing — the Otlobly 7/3/1 countdown and the "
+                           "database-repair notices can't send",
+                    "view": "settings"})
+    return out
 
 
 if __name__ == "__main__":

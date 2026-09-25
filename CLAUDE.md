@@ -40,6 +40,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
   parcel whether documents are requested, so the 📄 Docs tab + 🔔 bell are true
   each morning (worker-token POST /api/worker/docs_sweep, 3 parcels per call,
   loops until done, logs to docs_sweep.log)
+- docs_nag.py — ⏰ the GAASH last-day alarm: Telegram every 10 min on the day a
+  parcel's upload link expires, all three boards; env DOCS_NAG=1 on Render only.
+  It speaks through the 🚩 flags bot first (whose «done»/«تم» stops today's
+  reminders) and the alerts bot second. Since 2026-09-25 a MUTE alarm says so
+  (🚨 log line, 🔕 bell item, `GET /api/worker/nag_status`): on 2026-09-24 Render
+  had TELEGRAM_CHAT_ID but no TELEGRAM_BOT_TOKEN, run_once returned [] silently,
+  and two IT parcels' links closed with no message. 🛑 An alarm test must never
+  stub telegram.configured — that stub is how the suite stayed green
 - docs_roster.py — the 📄 GAASH mail › Docs tab's parcels, read straight from the two
   ClickUp lists (Le Luxe Products 901520351506 + IT Products 901524960550) into
   `gaash_parcels` (cu_json = what ClickUp says, data_json = what GAASH says). The goals.py
