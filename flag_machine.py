@@ -288,8 +288,18 @@ def poll_updates(get=None, send=None):
         t = " ".join(str(msg.get("text") or "").casefold().split())
         if t in DONE_WORDS:
             n = ack_all()
-            txt = (f"✅ تم — سكّرت {n} تنبيه 🚩 · closed {n} flag(s)" if n
-                   else "ما في تنبيهات 🚩 مفتوحة · no open flags")
+            # the ⏰ GAASH last-day nag speaks through this bot too (docs_nag,
+            # since 2026-09-25) — «done» is the owner's word for "I've seen it"
+            try:
+                import docs_nag
+                docs = docs_nag.ack_today()
+            except Exception as e:  # noqa: BLE001 — never let it cost the flags ack
+                print(f"flags: docs_nag ack failed ({e})", flush=True)
+                docs = []
+            parts = ([f"✅ تم — سكّرت {n} تنبيه 🚩 · closed {n} flag(s)"] if n else []) \
+                + ([f"⏰ وقّفت تذكير مستندات غاش لليوم · stopped today's GAASH "
+                    f"docs reminder: {', '.join(docs)}"] if docs else [])
+            txt = "\n".join(parts) or "ما في تنبيهات 🚩 مفتوحة · no open flags"
         else:
             txt = ("🚩 رد «done» أو «تم» هنا لإغلاق التنبيهات · "
                    "reply done/تم here to close the flags")
