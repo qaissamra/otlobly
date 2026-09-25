@@ -52,6 +52,7 @@ Settings: docs_nag.enabled (kill switch) and docs_nag.every_min.
 """
 
 import os
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -256,6 +257,16 @@ def _note_health(ok, why="", channel=""):
                                 "at": db.now_iso()})
 
 
+SEND_FAILED = "every bot failed"   # health.why prefix of a REAL failed send attempt
+_TOKEN_RE = re.compile(r"\d{6,}:[A-Za-z0-9_-]{20,}")
+
+
+def _redact(s):
+    """An error string can carry the request URL — and so the bot token — when
+    a pasted token is malformed. It is stored, shown in status() and on the bell."""
+    return _TOKEN_RE.sub("<token>", str(s or ""))
+
+
 def _deliver(text_for, chans):
     """Try each channel until one delivers → (channel, text it took, errors of
     the bots that failed first) — or (None, "", errors) when nobody took it."""
@@ -268,7 +279,7 @@ def _deliver(text_for, chans):
             r = {"ok": False, "error": str(e)}
         if r.get("ok"):
             return name, txt, errs
-        errs.append(f"{name}: {str(r.get('error') or 'not ok')[:160]}")
+        errs.append(f"{name}: {_redact(r.get('error') or 'not ok')[:160]}")
     return None, "", errs
 
 
@@ -465,7 +476,7 @@ def run_once(send=None, check=None, today=None, rows=None):
             sent.append(txt)
             _note_health(True, "; ".join(errs), by)    # errs = a bot that failed first
         else:
-            _note_health(False, "every bot failed — " + "; ".join(errs))
+            _note_health(False, f"{SEND_FAILED} — " + "; ".join(errs))
             _shout(f"reminder {n} for {gwd} reached NOBODY — " + "; ".join(errs))
     return sent
 
@@ -536,18 +547,28 @@ def bell_items():
     why = mute_reason(chans)
     h = db.get_setting(HEALTH_KEY)
     h = h if isinstance(h, dict) else {}
-    if why:
+    if not enabled():
+        out.append({"ts": _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
+                    "title": "منبّه غاش مطفّى من الإعدادات · the GAASH deadline alarm is switched OFF",
+                    "sub": "Settings → docs_nag.enabled is false — no parcel will be nagged",
+                    "view": "settings"})
+    elif why:
         out.append({"ts": _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
                     "title": "منبّه غاش ما بيقدر يبعت تلغرام · the GAASH deadline alarm can't reach Telegram",
                     "sub": why, "view": "gaashmail"})
-    elif h.get("ok") is False:
+    elif h.get("ok") is False and str(h.get("why") or "").startswith(SEND_FAILED):
+        # only a REAL failed send — a mute record from before the config was
+        # fixed must not keep saying "never arrived" for weeks (review, #199)
         out.append({"ts": h.get("at") or _BOOT_TS, "type": "alarm_mute", "icon": "🔕",
                     "title": "آخر تذكير غاش ما وصلك · the last GAASH alarm message never arrived",
                     "sub": (h.get("why") or "")[:160], "view": "gaashmail"})
     if not any(n == "alerts" for n, _ in chans):
+        tok, chat = telegram._creds()
+        miss = " + ".join(k for k, v in (("TELEGRAM_BOT_TOKEN", tok), ("TELEGRAM_CHAT_ID", chat))
+                          if not v)
         out.append({"ts": _BOOT_TS, "type": "alerts_bot_off", "icon": "🔕",
                     "title": "بوت التنبيهات مش موصول على السيرفر · alerts bot not connected on the server",
-                    "sub": "TELEGRAM_BOT_TOKEN missing — the Otlobly 7/3/1 countdown and the "
+                    "sub": f"{miss or 'its config'} missing — the Otlobly 7/3/1 countdown and the "
                            "database-repair notices can't send",
                     "view": "settings"})
     return out

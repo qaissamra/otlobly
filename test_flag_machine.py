@@ -25,6 +25,7 @@ os.environ["OTLOBLY_DATA_DIR"] = str(_TMP)
 os.environ["OTLOBLY_DB"] = str(_TMP / "t.db")
 os.environ.pop("OTLOBLY_SECURE", None)
 os.environ.pop("FLAG_MACHINE", None)          # the daemon must NOT start
+os.environ.pop("DOCS_NAG", None)              # nor the ⏰ nag — and its 🔕 bell items
 os.environ.pop("LELUXE_TG_BOT", None)         # nor the bot poll loop
 os.environ.pop("GAASH_MAILER", None)
 os.environ["OTLOBLY_SECRET"] = "x"

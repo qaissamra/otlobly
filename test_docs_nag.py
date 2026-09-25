@@ -257,6 +257,35 @@ def who_speaks():
               any(b["type"] == "alerts_bot_off" for b in bell), bell)
         check("and a host without DOCS_NAG (the Mac) rings nothing",
               getattr(docs_nag, "bell_items", lambda: [])() == [])
+
+        print("\nthe bell tells the truth AFTER a fix (second-opinion review)")
+        _bots(alerts=False, flags=False)
+        _wipe_stamps()
+        with contextlib.redirect_stdout(io.StringIO()):
+            docs_nag.run_once(check=still, today=TODAY, rows=jihad)   # a mute day, recorded
+        _bots(alerts=False, flags=True)                              # …then the token is set
+        bell = _bell()
+        check("a stale mute record does not ring 'never arrived' once a bot can speak",
+              not any(b["type"] == "alarm_mute" for b in bell), bell)
+        real_enabled = docs_nag.enabled
+        docs_nag.enabled = lambda *a, **k: False
+        bell = _bell()
+        docs_nag.enabled = real_enabled
+        check("the settings kill switch is on the bell too, not a silent return",
+              any(b["type"] == "alarm_mute" and "OFF" in b["title"] for b in bell), bell)
+        check("an error string never carries a bot token",
+              "<token>" in docs_nag._redact("InvalidURL /bot1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw/x")
+              and "AAHdq" not in docs_nag._redact("bot1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"))
+
+        print("\n«done» holds inside the lock")
+        iso_rt = rt.isoformat()
+        db.set_setting(docs_nag.SENT_KEY, {"GWD004803687": {
+            "date": iso_rt, "at": "2020-01-01T00:00:00+03:00", "n": 3, "done": "x"}})
+        check("_claim refuses a parcel he said «done» to, however old its slot",
+              docs_nag._claim("GWD004803687", iso_rt, 60) is False)
+        docs_nag._count_sent("GWD004803687", iso_rt)
+        check("_count_sent keeps the «done» it finds",
+              (db.get_setting(docs_nag.SENT_KEY) or {}).get("GWD004803687", {}).get("done") == "x")
     finally:
         telegram.send, telegram.send_to = real
         telegram.configured = lambda *a, **k: True
